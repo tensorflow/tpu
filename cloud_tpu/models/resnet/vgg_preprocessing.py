@@ -40,9 +40,6 @@ _R_MEAN = 123.68
 _G_MEAN = 116.78
 _B_MEAN = 103.94
 
-_RESIZE_SIDE_MIN = 256
-_RESIZE_SIDE_MAX = 512
-
 
 def _crop(image, offset_height, offset_width, crop_height, crop_width):
   """Crops the given image using the provided offsets and sizes.
@@ -283,11 +280,8 @@ def _aspect_preserving_resize(image, smallest_side):
   return resized_image
 
 
-def preprocess_for_train(image,
-                         output_height,
-                         output_width,
-                         resize_side_min=_RESIZE_SIDE_MIN,
-                         resize_side_max=_RESIZE_SIDE_MAX):
+def preprocess_for_train(image, output_height, output_width,
+                         resize_side_min, resize_side_max):
   """Preprocesses the given image for training.
 
   Note that the actual resizing scale is sampled from
@@ -336,8 +330,7 @@ def preprocess_for_eval(image, output_height, output_width, resize_side):
 
 
 def preprocess_image(image, output_height, output_width, is_training=False,
-                     resize_side_min=_RESIZE_SIDE_MIN,
-                     resize_side_max=_RESIZE_SIDE_MAX):
+                     resize_side_min=None, resize_side_max=None):
   """Preprocesses the given image.
 
   Args:
@@ -358,6 +351,8 @@ def preprocess_image(image, output_height, output_width, is_training=False,
     A preprocessed image.
   """
   if is_training:
+    assert resize_side_min, 'Resize min size must be specified in training'
+    assert resize_side_max, 'Resize max size must be specified in training'
     return preprocess_for_train(image, output_height, output_width,
                                 resize_side_min, resize_side_max)
   else:

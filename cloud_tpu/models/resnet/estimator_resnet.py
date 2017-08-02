@@ -65,6 +65,12 @@ tf.flags.DEFINE_float(
     'learning_rate_decay', 0.98,
     'The amount to decay the learning rate by per epoch.')
 tf.flags.DEFINE_float('momentum', 0.9, 'Momentum for MomentumOptimizer.')
+tf.flags.DEFINE_integer('resize_side_min', 256,
+                        'The minimum dimension at which the images are resized '
+                        'before crop.')
+tf.flags.DEFINE_integer('resize_side_max', 480,
+                        'The maximum dimension at which the images are resized '
+                        'before crop.')
 tf.flags.DEFINE_boolean(
     'winograd_nonfused', True,
     'Whether to use the Winograd non-fused algorithms to boost performance.')
@@ -89,6 +95,9 @@ tf.flags.DEFINE_integer('num_shards', 8,
                         'The number of shards to split the training work into.')
 tf.flags.DEFINE_integer('log_step_count_steps', 64, 'The number of steps at '
                         'which the global step information is logged.')
+tf.flags.DEFINE_integer('save_checkpoints_secs', 300,
+                        'The interval, in seconds, at which the model data '
+                        'should be checkpointed (set to 0 to disable).')
 tf.flags.DEFINE_boolean('log_device_placement', False, 'Log device placement.')
 
 cfg = None
@@ -126,8 +135,9 @@ def input_fn(params, eval_batch_size=None):
       image=image,
       output_height=cfg.network_fn.default_image_size,
       output_width=cfg.network_fn.default_image_size,
-      is_training=eval_batch_size is None)
-
+      is_training=eval_batch_size is None,
+      resize_side_min=FLAGS.resize_side_min,
+      resize_side_max=FLAGS.resize_side_max)
   images, labels = tf.train.batch(
       tensors=[image, label],
       batch_size=batch_size,
@@ -240,7 +250,7 @@ def main(unused_argv):
     hooks = [logging_hook]
 
   config = tpu_config.RunConfig(
-      save_checkpoints_secs=300,
+      save_checkpoints_secs=FLAGS.save_checkpoints_secs or None,
       save_summary_steps=FLAGS.save_summary_steps,
       log_step_count_steps=FLAGS.log_step_count_steps,
       master=FLAGS.master,
