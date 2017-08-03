@@ -22,6 +22,9 @@ from tensorflow.contrib.tpu.python.tpu import tpu_estimator
 from tensorflow.contrib.tpu.python.tpu import tpu_optimizer
 
 tf.flags.DEFINE_float("learning_rate", 0.05, "Learning rate.")
+tf.flags.DEFINE_integer("batch_size", 128,
+                        "Mini-batch size for the training. Note that this "
+                        "is the global batch size and not the per-shard batch.")
 tf.flags.DEFINE_string("train_file", "", "Path to mnist training data.")
 tf.flags.DEFINE_integer("train_steps", 1000,
                         "Total number of steps. Note that the actual number of "
@@ -128,7 +131,7 @@ def main(unused_argv):
   estimator = tpu_estimator.TPUEstimator(
       model_fn=model_fn,
       use_tpu=FLAGS.use_tpu,
-      train_batch_size=128,
+      train_batch_size=FLAGS.batch_size,
       config=run_config)
   estimator.train(input_fn=input_fn, max_steps=FLAGS.train_steps)
 
