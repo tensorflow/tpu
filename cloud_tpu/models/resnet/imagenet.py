@@ -32,13 +32,21 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import collections
 import os
+import re
 from six.moves import urllib
 import tensorflow as tf
 
 import dataset_utils
+from tensorflow.python.platform import gfile
 
 slim = tf.contrib.slim
+
+InputData = collections.namedtuple(
+    'InputData',
+    ['data_sources', 'decoder', 'num_samples', 'items_to_descriptions',
+     'num_classes', 'labels_to_names'])
 
 # TODO(nsilberman): Add tfrecord file type once the script is updated.
 _FILE_PATTERN = '%s-*'
@@ -115,9 +123,8 @@ def create_readable_names_for_imagenet_labels():
   return labels_to_names
 
 
-def get_split(split_name, dataset_dir, labels_dir=None, file_pattern=None,
-              reader=None):
-  """Gets a dataset tuple with instructions for reading ImageNet.
+def get_split(split_name, dataset_dir, labels_dir=None, file_pattern=None):
+  """Retrieves a InputData object with the parameters for reading ImageNet data.
 
   Args:
     split_name: A train/test split name.
@@ -127,10 +134,9 @@ def get_split(split_name, dataset_dir, labels_dir=None, file_pattern=None,
     file_pattern: The file pattern to use when matching the dataset sources.
       It is assumed that the pattern contains a '%s' string so that the split
       name can be inserted.
-    reader: The TensorFlow reader type.
 
   Returns:
-    A `Dataset` namedtuple.
+    An `InputData` object.
 
   Raises:
     ValueError: if `split_name` is not a valid train/test split.
@@ -141,12 +147,38 @@ def get_split(split_name, dataset_dir, labels_dir=None, file_pattern=None,
     labels_dir = dataset_dir
   if not file_pattern:
     file_pattern = _FILE_PATTERN
-  file_pattern = os.path.join(dataset_dir, file_pattern % split_name)
-
-  # Allowing None in the signature so that dataset_factory can use the default.
-  if reader is None:
-    reader = tf.TFRecordReader
-
+  file_pattern = file_pattern % split_name
+  files = []
+  # Allow for filename expansion w/out using Glob().
+  # Example: 'train-[0,1023,05d]-of-01024' to generate:
+  #   train-00000-of-01024
+  #   train-00001-of-01024
+  #   ...
+  #   train-01023-of-01024
+  m = re.match(r'(.*)\[(\d+),(\d+),([a-zA-Z0-9]+)\](.*)', file_pattern)
+  if m:
+    format_string = '%' + m.group(4)
+    for n in range(int(m.group(2)), int(m.group(3)) + 1):
+      seqstr = format_string % n
+      files.append(os.path.join(dataset_dir, m.group(1) + seqstr + m.group(5)))
+  else:
+    path = os.path.join(dataset_dir, file_pattern)
+    # If the file_pattern ends with '.list', then the file is supposed to be a
+    # file which lists the input files one per line.
+    if path.endswith('.list'):
+      with gfile.Open(path, 'r') as list_file:
+        for fpath in list_file:
+          fpath = fpath.strip()
+          if fpath:
+            files.append(fpath)
+    elif path.find('*') < 0:
+      # If the path does not contain any glob pattern, assume it is a single
+      # input file. Detection for glob patters might be more complex, but all
+      # the examples seen so far, uses '*' only.
+      files.append(path)
+    else:
+      # Otherwise we assume it is a glob-able path.
+      files = gfile.Glob(path)
   keys_to_features = {
       'image/encoded': tf.FixedLenFeature(
           (), tf.string, default_value=''),
@@ -167,7 +199,6 @@ def get_split(split_name, dataset_dir, labels_dir=None, file_pattern=None,
       'image/object/class/label': tf.VarLenFeature(
           dtype=tf.int64),
   }
-
   items_to_handlers = {
       'image': slim.tfexample_decoder.Image('image/encoded', 'image/format'),
       'label': slim.tfexample_decoder.Tensor('image/class/label'),
@@ -176,20 +207,16 @@ def get_split(split_name, dataset_dir, labels_dir=None, file_pattern=None,
           ['ymin', 'xmin', 'ymax', 'xmax'], 'image/object/bbox/'),
       'object/label': slim.tfexample_decoder.Tensor('image/object/class/label'),
   }
-
   decoder = slim.tfexample_decoder.TFExampleDecoder(
       keys_to_features, items_to_handlers)
-
   labels_to_names = None
   if dataset_utils.has_labels(labels_dir):
     labels_to_names = dataset_utils.read_label_file(labels_dir)
   else:
     labels_to_names = create_readable_names_for_imagenet_labels()
     dataset_utils.write_label_file(labels_to_names, labels_dir)
-
-  return slim.dataset.Dataset(
-      data_sources=file_pattern,
-      reader=reader,
+  return InputData(
+      data_sources=files,
       decoder=decoder,
       num_samples=_SPLITS_TO_SIZES[split_name],
       items_to_descriptions=_ITEMS_TO_DESCRIPTIONS,
