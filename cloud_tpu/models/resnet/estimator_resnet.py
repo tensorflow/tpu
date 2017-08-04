@@ -79,6 +79,7 @@ tf.flags.DEFINE_string(
 tf.flags.DEFINE_string(
     'master', 'local', 'The address of the TF server the computation should '
     'execute on.')
+# RemoveMe!
 tf.flags.DEFINE_integer('num_readers', 8,
                         'The number of readers for the data set provider.')
 tf.flags.DEFINE_integer('iterations_per_loop', 16,
@@ -86,11 +87,20 @@ tf.flags.DEFINE_integer('iterations_per_loop', 16,
 tf.flags.DEFINE_integer('save_summary_steps', 100,
                         'Number of steps which must have run before showing '
                         'the summaries.')
+# RemoveMe!
 tf.flags.DEFINE_integer('capacity', 64,
                         'The multiplier for the batch size, for the batch '
                         'queue capacity.')
+# RemoveMe!
 tf.flags.DEFINE_integer('batch_threads', 8,
                         'The number of thread for the batch reader.')
+tf.flags.DEFINE_integer('map_threads', 1,
+                        'The number of threads for the dataset map operation.')
+tf.flags.DEFINE_integer('map_buffer_size', None,
+                        'The size of the buffer for the dataset map operation.')
+tf.flags.DEFINE_integer('input_shuffle_capacity', 10000,
+                        'The number of dataset files held within the shuffle '
+                        'buffer (a value of 0 disable input file shuffling).')
 tf.flags.DEFINE_integer('num_shards', 8,
                         'The number of shards to split the training work into.')
 tf.flags.DEFINE_integer('log_step_count_steps', 64, 'The number of steps at '
@@ -122,31 +132,41 @@ class ResnetConfig(object):
 def input_fn(params, eval_batch_size=None):
   """Input function which provides a single batch training/eval data."""
   batch_size = eval_batch_size or params['batch_size']
+  is_training = eval_batch_size is None
+  input_dataset = cfg.train_dataset if is_training else cfg.eval_dataset
 
-  provider = tf.contrib.slim.dataset_data_provider.DatasetDataProvider(
-      dataset=cfg.train_dataset,
-      num_readers=FLAGS.num_readers,
-      common_queue_capacity=FLAGS.capacity * batch_size,
-      common_queue_min=(FLAGS.capacity * batch_size) / 2)
+  def parser(serialized_example):
+    image, label = input_dataset.decoder.decode(serialized_example,
+                                                ['image', 'label'])
+    image = cfg.image_preprocessing_fn(
+        image=image,
+        output_height=cfg.network_fn.default_image_size,
+        output_width=cfg.network_fn.default_image_size,
+        is_training=is_training,
+        resize_side_min=FLAGS.resize_side_min,
+        resize_side_max=FLAGS.resize_side_max)
+    return image, tf.one_hot(label, input_dataset.num_classes)
 
-  image, label = provider.get(['image', 'label'])
-
-  image = cfg.image_preprocessing_fn(
-      image=image,
-      output_height=cfg.network_fn.default_image_size,
-      output_width=cfg.network_fn.default_image_size,
-      is_training=eval_batch_size is None,
-      resize_side_min=FLAGS.resize_side_min,
-      resize_side_max=FLAGS.resize_side_max)
-  images, labels = tf.train.batch(
-      tensors=[image, label],
-      batch_size=batch_size,
-      num_threads=FLAGS.batch_threads,
-      capacity=FLAGS.capacity * batch_size)
-
-  labels = tf.contrib.layers.one_hot_encoding(
-      labels, cfg.train_dataset.num_classes)
-  return (images, labels)
+  dataset = tf.contrib.data.TFRecordDataset(input_dataset.data_sources)
+  if is_training:
+    dataset = dataset.repeat()
+  if FLAGS.input_shuffle_capacity > 0:
+    dataset = dataset.shuffle(FLAGS.input_shuffle_capacity)
+  dataset = dataset.map(
+      parser,
+      num_threads=FLAGS.map_threads,
+      output_buffer_size=FLAGS.map_buffer_size or batch_size)
+  dataset = dataset.batch(batch_size)
+  images, labels = dataset.make_one_shot_iterator().get_next()
+  images_shape = images.get_shape().as_list()
+  if images_shape[0] is None:
+    images_shape[0] = batch_size
+    images = tf.reshape(images, images_shape)
+  labels_shape = labels.get_shape().as_list()
+  if labels_shape[0] is None:
+    labels_shape[0] = batch_size
+    labels = tf.reshape(labels, labels_shape)
+  return images, labels
 
 
 def resnet_model_fn(features, labels, mode, params):
