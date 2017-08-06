@@ -79,21 +79,11 @@ tf.flags.DEFINE_string(
 tf.flags.DEFINE_string(
     'master', 'local', 'The address of the TF server the computation should '
     'execute on.')
-# RemoveMe!
-tf.flags.DEFINE_integer('num_readers', 8,
-                        'The number of readers for the data set provider.')
 tf.flags.DEFINE_integer('iterations_per_loop', 16,
                         'Number of infeed iterations per loop.')
 tf.flags.DEFINE_integer('save_summary_steps', 100,
                         'Number of steps which must have run before showing '
                         'the summaries.')
-# RemoveMe!
-tf.flags.DEFINE_integer('capacity', 64,
-                        'The multiplier for the batch size, for the batch '
-                        'queue capacity.')
-# RemoveMe!
-tf.flags.DEFINE_integer('batch_threads', 8,
-                        'The number of thread for the batch reader.')
 tf.flags.DEFINE_integer('map_threads', 1,
                         'The number of threads for the dataset map operation.')
 tf.flags.DEFINE_integer('map_buffer_size', None,
@@ -248,7 +238,7 @@ def main(unused_argv):
     raise RuntimeError('--device must be one of [CPU, GPU, TPU]')
 
   if FLAGS.input_layout not in ['NCHW', 'NHWC']:
-    raise RuntimeError('--device must be one of [NCHW, NHWC]')
+    raise RuntimeError('--input_layout must be one of [NCHW, NHWC]')
 
   if FLAGS.winograd_nonfused:
     os.environ['TF_ENABLE_WINOGRAD_NONFUSED'] = '1'
