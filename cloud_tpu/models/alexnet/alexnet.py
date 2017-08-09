@@ -13,7 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
-r"""Alexnet example using layers and TPUEstimator.
+"""Alexnet example using layers and TPUEstimator.
 
 Network specifications taken from
 https://github.com/tensorflow/models/blob/master/slim/nets/alexnet.py
@@ -65,7 +65,7 @@ FLAGS = tf.flags.FLAGS
 def model_fn(features, labels, mode, params):
   """Alexnet architecture."""
 
-  del params
+  del params  # Unused.
 
   if mode != tf.estimator.ModeKeys.TRAIN:
     raise RuntimeError("mode {} is not supported yet".format(mode))
@@ -236,7 +236,7 @@ def input_fn(params):
 
 
 def main(unused_argv):
-  del unused_argv     # Unused
+  del unused_argv  # Unused.
 
   tf.logging.set_verbosity(tf.logging.INFO)
 
