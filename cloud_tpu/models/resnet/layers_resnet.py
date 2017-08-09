@@ -162,7 +162,6 @@ def bottleneck_block(inputs, filters, is_training, projection_shortcut,
     The output tensor of the block.
   """
   shortcut = inputs
-
   inputs = batch_norm_relu(inputs, is_training)
 
   # The projection shortcut should come after the first batch norm and ReLU

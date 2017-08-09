@@ -38,7 +38,6 @@ import re
 from six.moves import urllib
 import tensorflow as tf
 
-import dataset_utils
 from tensorflow.python.platform import gfile
 
 slim = tf.contrib.slim
@@ -46,7 +45,7 @@ slim = tf.contrib.slim
 InputData = collections.namedtuple(
     'InputData',
     ['data_sources', 'decoder', 'num_samples', 'items_to_descriptions',
-     'num_classes', 'labels_to_names'])
+     'num_classes'])
 
 # TODO(nsilberman): Add tfrecord file type once the script is updated.
 _FILE_PATTERN = '%s-*'
@@ -66,71 +65,81 @@ _ITEMS_TO_DESCRIPTIONS = {
 
 _NUM_CLASSES = 1001
 
+_KEYS_TO_FEATURES = {
+    'image/encoded': tf.FixedLenFeature(
+        (), tf.string, default_value=''),
+    'image/format': tf.FixedLenFeature(
+        (), tf.string, default_value='jpeg'),
+    'image/class/label': tf.FixedLenFeature(
+        [], dtype=tf.int64, default_value=-1),
+    'image/class/text': tf.FixedLenFeature(
+        [], dtype=tf.string, default_value=''),
+    'image/object/bbox/xmin': tf.VarLenFeature(
+        dtype=tf.float32),
+    'image/object/bbox/ymin': tf.VarLenFeature(
+        dtype=tf.float32),
+    'image/object/bbox/xmax': tf.VarLenFeature(
+        dtype=tf.float32),
+    'image/object/bbox/ymax': tf.VarLenFeature(
+        dtype=tf.float32),
+    'image/object/class/label': tf.VarLenFeature(
+        dtype=tf.int64),
+}
 
-def create_readable_names_for_imagenet_labels():
-  """Create a dict mapping label id to human readable string.
+_ITEMS_TO_HANDLERS = {
+    'image': slim.tfexample_decoder.Image('image/encoded', 'image/format'),
+    'label': slim.tfexample_decoder.Tensor('image/class/label'),
+    'label_text': slim.tfexample_decoder.Tensor('image/class/text'),
+    'object/bbox': slim.tfexample_decoder.BoundingBox(
+        ['ymin', 'xmin', 'ymax', 'xmax'], 'image/object/bbox/'),
+    'object/label': slim.tfexample_decoder.Tensor('image/object/class/label'),
+}
+
+
+def get_split_slim_dataset(split_name, dataset_dir, file_pattern=None,
+                           reader=None):
+  """Gets a slim.dataset tuple with instructions for reading ImageNet.
+
+  Args:
+    split_name: A train/test split name.
+    dataset_dir: The base directory of the dataset sources.
+    file_pattern: The file pattern to use when matching the dataset sources.
+      It is assumed that the pattern contains a '%s' string so that the split
+      name can be inserted.
+    reader: The TensorFlow reader type.
 
   Returns:
-      labels_to_names: dictionary where keys are integers from to 1000
-      and values are human-readable names.
+    A `slim.Dataset` namedtuple.
 
-  We retrieve a synset file, which contains a list of valid synset labels used
-  by ILSVRC competition. There is one synset one per line, eg.
-          #   n01440764
-          #   n01443537
-  We also retrieve a synset_to_human_file, which contains a mapping from synsets
-  to human-readable names for every synset in Imagenet. These are stored in a
-  tsv format, as follows:
-          #   n02119247    black fox
-          #   n02119359    silver fox
-  We assign each synset (in alphabetical order) an integer, starting from 1
-  (since 0 is reserved for the background class).
-
-  Code is based on
-  https://github.com/tensorflow/models/blob/master/inception/inception/data/build_imagenet_data.py#L463
+  Raises:
+    ValueError: if `split_name` is not a valid train/test split.
   """
+  if split_name not in _SPLITS_TO_SIZES:
+    raise ValueError('split name %s was not recognized.' % split_name)
+  if not file_pattern:
+    file_pattern = _FILE_PATTERN
+  file_pattern = os.path.join(dataset_dir, file_pattern % split_name)
 
-  # pylint: disable=g-line-too-long
-  base_url = 'https://raw.githubusercontent.com/tensorflow/models/master/inception/inception/data/'
-  synset_url = '{}/imagenet_lsvrc_2015_synsets.txt'.format(base_url)
-  synset_to_human_url = '{}/imagenet_metadata.txt'.format(base_url)
-
-  filename, _ = urllib.request.urlretrieve(synset_url)
-  synset_list = [s.strip() for s in open(filename).readlines()]
-  num_synsets_in_ilsvrc = len(synset_list)
-  assert num_synsets_in_ilsvrc == 1000
-
-  filename, _ = urllib.request.urlretrieve(synset_to_human_url)
-  synset_to_human_list = open(filename).readlines()
-  num_synsets_in_all_imagenet = len(synset_to_human_list)
-  assert num_synsets_in_all_imagenet == 21842
-
-  synset_to_human = {}
-  for s in synset_to_human_list:
-    parts = s.strip().split('\t')
-    assert len(parts) == 2
-    synset = parts[0]
-    human = parts[1]
-    synset_to_human[synset] = human
-
-  label_index = 1
-  labels_to_names = {0: 'background'}
-  for synset in synset_list:
-    name = synset_to_human[synset]
-    labels_to_names[label_index] = name
-    label_index += 1
-
-  return labels_to_names
+  # Allowing None in the signature so that dataset_factory can use the default.
+  if reader is None:
+    reader = tf.TFRecordReader
+  decoder = slim.tfexample_decoder.TFExampleDecoder(
+      _KEYS_TO_FEATURES, _ITEMS_TO_HANDLERS)
+  return slim.dataset.Dataset(
+      data_sources=file_pattern,
+      reader=reader,
+      decoder=decoder,
+      num_samples=_SPLITS_TO_SIZES[split_name],
+      items_to_descriptions=_ITEMS_TO_DESCRIPTIONS,
+      num_classes=_NUM_CLASSES)
 
 
-def get_split(split_name, dataset_dir, labels_dir=None, file_pattern=None):
+def get_split(split_name, dataset_dir, file_pattern=None):
   """Retrieves a InputData object with the parameters for reading ImageNet data.
 
   Args:
     split_name: A train/test split name.
     dataset_dir: The base directory of the dataset sources.
-    labels_dir: The folder where the labels file is located, and where it will
-      be eventually written if missing.
     file_pattern: The file pattern to use when matching the dataset sources.
       It is assumed that the pattern contains a '%s' string so that the split
       name can be inserted.
@@ -143,8 +152,6 @@ def get_split(split_name, dataset_dir, labels_dir=None, file_pattern=None):
   """
   if split_name not in _SPLITS_TO_SIZES:
     raise ValueError('split name %s was not recognized.' % split_name)
-  if not labels_dir:
-    labels_dir = dataset_dir
   if not file_pattern:
     file_pattern = _FILE_PATTERN
   file_pattern = file_pattern % split_name
@@ -179,46 +186,11 @@ def get_split(split_name, dataset_dir, labels_dir=None, file_pattern=None):
     else:
       # Otherwise we assume it is a glob-able path.
       files = gfile.Glob(path)
-  keys_to_features = {
-      'image/encoded': tf.FixedLenFeature(
-          (), tf.string, default_value=''),
-      'image/format': tf.FixedLenFeature(
-          (), tf.string, default_value='jpeg'),
-      'image/class/label': tf.FixedLenFeature(
-          [], dtype=tf.int64, default_value=-1),
-      'image/class/text': tf.FixedLenFeature(
-          [], dtype=tf.string, default_value=''),
-      'image/object/bbox/xmin': tf.VarLenFeature(
-          dtype=tf.float32),
-      'image/object/bbox/ymin': tf.VarLenFeature(
-          dtype=tf.float32),
-      'image/object/bbox/xmax': tf.VarLenFeature(
-          dtype=tf.float32),
-      'image/object/bbox/ymax': tf.VarLenFeature(
-          dtype=tf.float32),
-      'image/object/class/label': tf.VarLenFeature(
-          dtype=tf.int64),
-  }
-  items_to_handlers = {
-      'image': slim.tfexample_decoder.Image('image/encoded', 'image/format'),
-      'label': slim.tfexample_decoder.Tensor('image/class/label'),
-      'label_text': slim.tfexample_decoder.Tensor('image/class/text'),
-      'object/bbox': slim.tfexample_decoder.BoundingBox(
-          ['ymin', 'xmin', 'ymax', 'xmax'], 'image/object/bbox/'),
-      'object/label': slim.tfexample_decoder.Tensor('image/object/class/label'),
-  }
   decoder = slim.tfexample_decoder.TFExampleDecoder(
-      keys_to_features, items_to_handlers)
-  labels_to_names = None
-  if dataset_utils.has_labels(labels_dir):
-    labels_to_names = dataset_utils.read_label_file(labels_dir)
-  else:
-    labels_to_names = create_readable_names_for_imagenet_labels()
-    dataset_utils.write_label_file(labels_to_names, labels_dir)
+      _KEYS_TO_FEATURES, _ITEMS_TO_HANDLERS)
   return InputData(
       data_sources=files,
       decoder=decoder,
       num_samples=_SPLITS_TO_SIZES[split_name],
       items_to_descriptions=_ITEMS_TO_DESCRIPTIONS,
-      num_classes=_NUM_CLASSES,
-      labels_to_names=labels_to_names)
+      num_classes=_NUM_CLASSES)

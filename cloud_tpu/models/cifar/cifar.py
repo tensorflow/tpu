@@ -30,7 +30,7 @@ tf.flags.DEFINE_integer("batch_size", 128,
                         "Mini-batch size for the computation. Note that this "
                         "is the global batch size and not the per-shard batch.")
 tf.flags.DEFINE_float("learning_rate", 0.05, "Learning rate.")
-tf.flags.DEFINE_string("train_file", "", "Path to mnist training data.")
+tf.flags.DEFINE_string("train_file", "", "Path to cifar10 training data.")
 tf.flags.DEFINE_integer("train_steps", 20,
                         "Total number of steps. Note that the actual number of "
                         "steps is the next multiple of --iterations greater "
@@ -132,11 +132,12 @@ def input_fn(params):
   dataset = tf.contrib.data.TFRecordDataset([FLAGS.train_file])
   dataset = dataset.repeat().map(parser).batch(batch_size)
   images, labels = dataset.make_one_shot_iterator().get_next()
+
   # Reshape to give inputs statically known shapes.
-  return (
-      tf.reshape(images, [batch_size, 32, 32, 3]),
-      tf.reshape(labels, [batch_size]),
-  )
+  images.set_shape([batch_size, 32, 32, 3])
+  labels.set_shape([batch_size])
+
+  return images, labels
 
 
 def main(unused_argv):

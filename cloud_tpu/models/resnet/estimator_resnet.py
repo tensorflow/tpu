@@ -29,8 +29,8 @@ import vgg_preprocessing
 from tensorflow.contrib.tpu.python.tpu import tpu_config
 from tensorflow.contrib.tpu.python.tpu import tpu_estimator
 from tensorflow.contrib.tpu.python.tpu import tpu_optimizer
+from tensorflow.python.estimator import model_fn
 from tensorflow.python.ops import array_ops
-
 
 tf.logging.set_verbosity(tf.logging.INFO)
 
@@ -43,6 +43,7 @@ tf.flags.DEFINE_string(
 tf.flags.DEFINE_string(
     'model_dir', None, 'The directory where the model check-points will be '
     'written.')
+# RemoveMe!
 tf.flags.DEFINE_string(
     'labels_dir', None, 'The directory where the ImageNet input data labels '
     'are read and written stored (must be writable).')
@@ -79,11 +80,20 @@ tf.flags.DEFINE_string(
 tf.flags.DEFINE_string(
     'master', 'local', 'The address of the TF server the computation should '
     'execute on.')
+tf.flags.DEFINE_boolean('use_slim_dataset_input', False,
+                        'Use the slim.dataset input pipeline.')
+tf.flags.DEFINE_integer('num_readers', 8,
+                        'The number of readers for the data set provider.')
 tf.flags.DEFINE_integer('iterations_per_loop', 16,
                         'Number of infeed iterations per loop.')
 tf.flags.DEFINE_integer('save_summary_steps', 100,
                         'Number of steps which must have run before showing '
                         'the summaries.')
+tf.flags.DEFINE_integer('capacity', 64,
+                        'The multiplier for the batch size, for the batch '
+                        'queue capacity.')
+tf.flags.DEFINE_integer('batch_threads', 8,
+                        'The number of thread for the batch reader.')
 tf.flags.DEFINE_integer('map_threads', 1,
                         'The number of threads for the dataset map operation.')
 tf.flags.DEFINE_integer('map_buffer_size', None,
@@ -106,17 +116,52 @@ cfg = None
 class ResnetConfig(object):
 
   def __init__(self):
-    self.train_dataset = imagenet.get_split('train', FLAGS.data_dir,
-                                            labels_dir=FLAGS.labels_dir,
-                                            file_pattern=FLAGS.file_pattern)
-    self.eval_dataset = imagenet.get_split('validation', FLAGS.data_dir,
-                                           labels_dir=FLAGS.labels_dir,
-                                           file_pattern=FLAGS.file_pattern)
+    if FLAGS.use_slim_dataset_input:
+      self.train_dataset = imagenet.get_split_slim_dataset(
+          'train',
+          FLAGS.data_dir,
+          file_pattern=FLAGS.file_pattern)
+      self.eval_dataset = imagenet.get_split_slim_dataset(
+          'validation',
+          FLAGS.data_dir,
+          file_pattern=FLAGS.file_pattern)
+    else:
+      self.train_dataset = imagenet.get_split('train', FLAGS.data_dir,
+                                              file_pattern=FLAGS.file_pattern)
+      self.eval_dataset = imagenet.get_split('validation', FLAGS.data_dir,
+                                             file_pattern=FLAGS.file_pattern)
     self.image_preprocessing_fn = vgg_preprocessing.preprocess_image
     model = layers_resnet.get_model(FLAGS.model)
     self.network_fn = model(num_classes=self.train_dataset.num_classes)
     self.batches_per_epoch = (self.train_dataset.num_samples /
                               FLAGS.batch_size)
+
+
+def slim_dataset_input_fn(params, eval_batch_size=None):
+  """Input function which provides a single batch training/eval data."""
+  batch_size = eval_batch_size or params['batch_size']
+
+  provider = tf.contrib.slim.dataset_data_provider.DatasetDataProvider(
+      dataset=cfg.train_dataset,
+      num_readers=FLAGS.num_readers,
+      common_queue_capacity=FLAGS.capacity * batch_size,
+      common_queue_min=(FLAGS.capacity * batch_size) / 2)
+  image, label = provider.get(['image', 'label'])
+  image = cfg.image_preprocessing_fn(
+      image=image,
+      output_height=cfg.network_fn.default_image_size,
+      output_width=cfg.network_fn.default_image_size,
+      is_training=eval_batch_size is None,
+      resize_side_min=FLAGS.resize_side_min,
+      resize_side_max=FLAGS.resize_side_max)
+  images, labels = tf.train.batch(
+      tensors=[image, label],
+      batch_size=batch_size,
+      num_threads=FLAGS.batch_threads,
+      capacity=FLAGS.capacity * batch_size)
+  labels = tf.contrib.layers.one_hot_encoding(
+      labels, cfg.train_dataset.num_classes)
+  return images, labels
 
 
 def input_fn(params, eval_batch_size=None):
@@ -159,9 +204,19 @@ def input_fn(params, eval_batch_size=None):
   return images, labels
 
 
+def get_input_function():
+  return slim_dataset_input_fn if FLAGS.use_slim_dataset_input else input_fn
+
+
 def resnet_model_fn(features, labels, mode, params):
   """Our model_fn for ResNet to be used with our Estimator."""
   del params
+
+  if FLAGS.device == 'GPU' and FLAGS.num_shards > 1:
+    # Unsupported for multi-GPU training at the moment
+    # TODO(b/64534612): Re-add functionality once we figure out how to do this
+    # reliably.
+    raise RuntimeError('You can only train on 1 GPU at the moment.')
 
   logits = cfg.network_fn(
       inputs=features, is_training=(mode == tf.estimator.ModeKeys.TRAIN))
@@ -169,6 +224,23 @@ def resnet_model_fn(features, labels, mode, params):
       'classes': tf.argmax(input=logits, axis=1),
       'probabilities': tf.nn.softmax(logits, name='softmax_tensor')
   }
+
+  # Get the total losses including softmax cross entropy and L2 regularization
+  tf.losses.add_loss(
+      tf.losses.softmax_cross_entropy(logits=logits, onehot_labels=labels))
+  loss = tf.losses.get_total_loss(add_regularization_losses=True)
+
+  if mode == model_fn.ModeKeys.EVAL:
+    metrics = {
+        'accuracy': tf.metrics.accuracy(
+            tf.argmax(input=labels, axis=1), predictions['classes'])
+    }
+    return tf.estimator.EstimatorSpec(
+        mode=model_fn.ModeKeys.EVAL,
+        predictions=predictions,
+        loss=loss,
+        eval_metric_ops=metrics)
+
   # Decay the learning rate by FLAGS.learning_rate_decay per epoch. We use
   # staircase=True to keep the learning rate consistent across each epoch.
   learning_rate = tf.train.exponential_decay(
@@ -181,26 +253,16 @@ def resnet_model_fn(features, labels, mode, params):
                              name='learning_rate')
   optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate,
                                          momentum=FLAGS.momentum)
-  if FLAGS.device == 'GPU' and FLAGS.num_shards > 1:
-    # Unsupported for multi-GPU training at the moment
-    # TODO: Re-add functionality once we figure out how to do this
-    # reliably.
 
-    raise RuntimeError('You can only train on 1 GPU at the moment.')
-  else:
-    # Get the total losses including softmax cross entropy and L2 regularization
-    tf.losses.add_loss(
-        tf.losses.softmax_cross_entropy(logits=logits, onehot_labels=labels))
-    loss = tf.losses.get_total_loss(add_regularization_losses=True)
-    if FLAGS.device == 'TPU' and FLAGS.num_shards > 1:
-      optimizer = tpu_optimizer.CrossShardOptimizer(optimizer)
+  if FLAGS.device == 'TPU' and FLAGS.num_shards > 1:
+    optimizer = tpu_optimizer.CrossShardOptimizer(optimizer)
 
-    train_op = tf.contrib.layers.optimize_loss(
-        loss=loss,
-        global_step=tf.train.get_global_step(),
-        learning_rate=learning_rate,
-        optimizer=optimizer,
-        summaries=['learning_rate'])
+  train_op = tf.contrib.layers.optimize_loss(
+      loss=loss,
+      global_step=tf.train.get_global_step(),
+      learning_rate=learning_rate,
+      optimizer=optimizer,
+      summaries=['learning_rate'])
   # tf.train.write_graph(train_op.graph, '/tmp', 'zzxxww')
   if FLAGS.device != 'TPU':
     # Training hooks work only on CPU,GPU for now, the TPUEstimator will add
@@ -213,18 +275,13 @@ def resnet_model_fn(features, labels, mode, params):
     ]
   else:
     hooks = None
-  metrics = {
-      'accuracy': tf.metrics.accuracy(
-          tf.argmax(input=labels, axis=1), predictions['classes'])
-  }
 
   return tf.estimator.EstimatorSpec(
       mode=mode,
       predictions=predictions,
       loss=loss,
       train_op=train_op,
-      training_hooks=hooks,
-      eval_metric_ops=metrics)
+      training_hooks=hooks)
 
 
 def main(unused_argv):
@@ -280,14 +337,15 @@ def main(unused_argv):
     train_steps = FLAGS.train_epochs * cfg.batches_per_epoch
   else:
     train_steps = FLAGS.train_steps
+  input_function = get_input_function()
   resnet_classifier.train(
-      input_fn=input_fn,
+      input_fn=input_function,
       max_steps=train_steps,
       hooks=hooks)
 
   if FLAGS.eval_steps > 0:
     def eval_input(params=None):
-      return input_fn(params=params, eval_batch_size=FLAGS.batch_size)
+      return input_function(params=params, eval_batch_size=FLAGS.batch_size)
 
     print('Starting to evaluate...')
     eval_results = resnet_classifier.evaluate(
