@@ -65,6 +65,9 @@ tf.flags.DEFINE_float(
 tf.flags.DEFINE_float(
     'learning_rate_decay', 0.98,
     'The amount to decay the learning rate by per epoch.')
+tf.flags.DEFINE_integer(
+    'num_epochs_per_decay', 30,
+    'Epochs after which learning rate decays.')
 tf.flags.DEFINE_float('momentum', 0.9, 'Momentum for MomentumOptimizer.')
 tf.flags.DEFINE_integer('resize_side_min', 256,
                         'The minimum dimension at which the images are resized '
@@ -277,7 +280,7 @@ def resnet_model_fn(features, labels, mode, params):
   learning_rate = tf.train.exponential_decay(
       learning_rate=FLAGS.initial_learning_rate,
       global_step=tf.train.get_global_step(),
-      decay_steps=cfg.batches_per_epoch,
+      decay_steps=int(cfg.batches_per_epoch * FLAGS.num_epochs_per_decay),
       decay_rate=FLAGS.learning_rate_decay,
       staircase=True)
   learning_rate = tf.maximum(learning_rate, FLAGS.final_learning_rate,
