@@ -201,12 +201,13 @@ def resnet_v2(block, layers, num_classes):
   if FLAGS.input_layout not in ['NCHW', 'NHWC']:
     raise RuntimeError('--input_layout must be one of [NCHW, NHWC]')
 
-  def model(inputs, is_training):
+  def model(inputs, is_training, inputs_transform=None):
     if FLAGS.input_layout == 'NCHW':
       # Data is coming in as 'NHWC', so if we are asked 'NCHW' we need to insert
       # a transpose on the inputs.
       inputs = tf.transpose(inputs, [0, 3, 1, 2])
-
+    if inputs_transform:
+      inputs = inputs_transform(inputs)
     inputs = conv2d_fixed_padding(
         inputs=inputs, filters=64, kernel_size=7, strides=2)
     inputs = tf.layers.max_pooling2d(

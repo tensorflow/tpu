@@ -99,8 +99,9 @@ tf.flags.DEFINE_integer('map_threads', 1,
 tf.flags.DEFINE_integer('map_buffer_size', None,
                         'The size of the buffer for the dataset map operation.')
 tf.flags.DEFINE_integer('input_shuffle_capacity', 10000,
-                        'The number of dataset files held within the shuffle '
-                        'buffer (a value of 0 disable input file shuffling).')
+                        'The number of training samples held within the'
+                        'shuffle buffer (a value of 0 disable input sample '
+                        'shuffling).')
 tf.flags.DEFINE_integer('num_shards', 8,
                         'The number of shards to split the training work into.')
 tf.flags.DEFINE_integer('log_step_count_steps', 64, 'The number of steps at '
@@ -109,6 +110,13 @@ tf.flags.DEFINE_integer('save_checkpoints_secs', 300,
                         'The interval, in seconds, at which the model data '
                         'should be checkpointed (set to 0 to disable).')
 tf.flags.DEFINE_boolean('log_device_placement', False, 'Log device placement.')
+# TODO(b/38261095): Do the proper layout matching on the CPU side, so that
+# there is no more need for the mirror transpose trick.
+tf.flags.DEFINE_boolean('tpu_mirror_transpose', True,
+                        'Whether the mirror transpose (CPU+TPU) optimization '
+                        'should be enabled.')
+tf.flags.DEFINE_boolean('per_host_input_pipeline', True,
+                        'Enable new per-host input when running on TPUs.')
 
 cfg = None
 
@@ -159,6 +167,7 @@ def slim_dataset_input_fn(params, eval_batch_size=None):
       batch_size=batch_size,
       num_threads=FLAGS.batch_threads,
       capacity=FLAGS.capacity * batch_size)
+  images = pipeline_outputs_transform(images)
   labels = tf.contrib.layers.one_hot_encoding(
       labels, cfg.train_dataset.num_classes)
   return images, labels
@@ -166,6 +175,7 @@ def slim_dataset_input_fn(params, eval_batch_size=None):
 
 def input_fn(params, eval_batch_size=None):
   """Input function which provides a single batch training/eval data."""
+
   batch_size = eval_batch_size or params['batch_size']
   is_training = eval_batch_size is None
   input_dataset = cfg.train_dataset if is_training else cfg.eval_dataset
@@ -182,9 +192,15 @@ def input_fn(params, eval_batch_size=None):
         resize_side_max=FLAGS.resize_side_max)
     return image, tf.one_hot(label, input_dataset.num_classes)
 
-  dataset = tf.contrib.data.TFRecordDataset(input_dataset.data_sources)
+  dataset = tf.contrib.data.Dataset.from_tensor_slices(
+      input_dataset.data_sources)
+  dataset = dataset.shuffle(len(input_dataset.data_sources))
   if is_training:
     dataset = dataset.repeat()
+  dataset = dataset.interleave(
+      tf.contrib.data.TFRecordDataset,
+      cycle_length=FLAGS.num_readers, block_length=1
+  )
   if FLAGS.input_shuffle_capacity > 0:
     dataset = dataset.shuffle(FLAGS.input_shuffle_capacity)
   dataset = dataset.map(
@@ -201,11 +217,24 @@ def input_fn(params, eval_batch_size=None):
   if labels_shape[0] is None:
     labels_shape[0] = batch_size
     labels = tf.reshape(labels, labels_shape)
+  images = pipeline_outputs_transform(images)
   return images, labels
 
 
 def get_input_function():
   return slim_dataset_input_fn if FLAGS.use_slim_dataset_input else input_fn
+
+
+def model_inputs_transform(inputs):
+  if FLAGS.device == 'TPU' and FLAGS.tpu_mirror_transpose:
+    return tf.transpose(inputs, [3, 0, 1, 2])
+  return inputs
+
+
+def pipeline_outputs_transform(outputs):
+  if FLAGS.device == 'TPU' and FLAGS.tpu_mirror_transpose:
+    return tf.transpose(outputs, [1, 2, 3, 0])
+  return outputs
 
 
 def resnet_model_fn(features, labels, mode, params):
@@ -219,7 +248,9 @@ def resnet_model_fn(features, labels, mode, params):
     raise RuntimeError('You can only train on 1 GPU at the moment.')
 
   logits = cfg.network_fn(
-      inputs=features, is_training=(mode == tf.estimator.ModeKeys.TRAIN))
+      inputs=features,
+      is_training=(mode == tf.estimator.ModeKeys.TRAIN),
+      inputs_transform=model_inputs_transform)
   predictions = {
       'classes': tf.argmax(input=logits, axis=1),
       'probabilities': tf.nn.softmax(logits, name='softmax_tensor')
@@ -324,7 +355,8 @@ def main(unused_argv):
       model_dir=FLAGS.model_dir,
       tpu_config=tpu_config.TPUConfig(
           iterations_per_loop=FLAGS.iterations_per_loop,
-          num_shards=FLAGS.num_shards),
+          num_shards=FLAGS.num_shards,
+          per_host_input_for_training=FLAGS.per_host_input_pipeline),
       session_config=session_config)
   resnet_classifier = tpu_estimator.TPUEstimator(
       model_fn=resnet_model_fn,

@@ -134,10 +134,10 @@ def input_fn(params):
   images, labels = dataset.make_one_shot_iterator().get_next()
 
   # Reshape to give inputs statically known shapes.
-  images.set_shape([batch_size, 32, 32, 3])
-  labels.set_shape([batch_size])
-
-  return images, labels
+  return (
+      tf.reshape(images, [batch_size, 32, 32, 3]),
+      tf.reshape(labels, [batch_size])
+  )
 
 
 def main(unused_argv):
