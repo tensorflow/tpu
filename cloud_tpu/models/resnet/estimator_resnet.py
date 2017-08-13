@@ -43,10 +43,6 @@ tf.flags.DEFINE_string(
 tf.flags.DEFINE_string(
     'model_dir', None, 'The directory where the model check-points will be '
     'written.')
-# RemoveMe!
-tf.flags.DEFINE_string(
-    'labels_dir', None, 'The directory where the ImageNet input data labels '
-    'are read and written stored (must be writable).')
 tf.flags.DEFINE_string(
     'file_pattern', None, 'The file pattern to match the data sets within '
     'data_dir. Example, \'%s-*\' or \'%s@*\'')
