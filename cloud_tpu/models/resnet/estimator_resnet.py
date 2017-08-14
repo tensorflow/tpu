@@ -43,10 +43,6 @@ tf.flags.DEFINE_string(
 tf.flags.DEFINE_string(
     'model_dir', None, 'The directory where the model check-points will be '
     'written.')
-# RemoveMe!
-tf.flags.DEFINE_string(
-    'labels_dir', None, 'The directory where the ImageNet input data labels '
-    'are read and written stored (must be writable).')
 tf.flags.DEFINE_string(
     'file_pattern', None, 'The file pattern to match the data sets within '
     'data_dir. Example, \'%s-*\' or \'%s@*\'')
@@ -120,6 +116,8 @@ tf.flags.DEFINE_boolean('tpu_mirror_transpose', True,
                         'should be enabled.')
 tf.flags.DEFINE_boolean('per_host_input_pipeline', True,
                         'Enable new per-host input when running on TPUs.')
+tf.flags.DEFINE_integer('prefetch_size', 1000,
+                        'Number of input samples per file to prefetch.')
 
 cfg = None
 
@@ -200,8 +198,15 @@ def input_fn(params, eval_batch_size=None):
   dataset = dataset.shuffle(len(input_dataset.data_sources))
   if is_training:
     dataset = dataset.repeat()
+
+  def prefetch_dataset(filename):
+    dataset = tf.contrib.data.TFRecordDataset(filename)
+    if FLAGS.prefetch_size > 0:
+      dataset = dataset.prefetch(FLAGS.prefetch_size)
+    return dataset
+
   dataset = dataset.interleave(
-      tf.contrib.data.TFRecordDataset,
+      prefetch_dataset,
       cycle_length=FLAGS.num_readers, block_length=1
   )
   if FLAGS.input_shuffle_capacity > 0:
