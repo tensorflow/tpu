@@ -57,9 +57,14 @@ def batch_norm_relu(inputs, is_training):
   """Performs a batch normalization followed by a ReLU."""
   # We set fused=True for a performance boost.
   inputs = tf.contrib.layers.batch_norm(
-      inputs=inputs, decay=FLAGS.batch_norm_decay, center=True, scale=True,
-      epsilon=FLAGS.batch_norm_epsilon, is_training=is_training,
-      fused=FLAGS.use_fused_batchnorm, data_format=FLAGS.input_layout)
+      inputs=inputs,
+      decay=FLAGS.batch_norm_decay,
+      center=True,
+      scale=True,
+      epsilon=FLAGS.batch_norm_epsilon,
+      is_training=is_training,
+      fused=FLAGS.use_fused_batchnorm,
+      data_format=FLAGS.input_layout)
   inputs = tf.nn.relu(inputs)
   return inputs
 
@@ -202,12 +207,29 @@ def resnet_v2(block, layers, num_classes):
     raise RuntimeError('--input_layout must be one of [NCHW, NHWC]')
 
   def model(inputs, is_training, inputs_transform=None):
+    """Model function that can be used with an estimator.
+
+    Args:
+      inputs: The inputs to train from.
+      is_training: A boolean to describe whether the model should be configured
+        for training, or for inference.
+      inputs_transform: [Optional] A function to transform inputs.
+
+    Returns:
+      A `tf.Tensor` corresponding to the predicted logits.
+    """
+    # TODO(b/38261095): This should be removed once proper layout alignement is
+    # implemented. Logically, ATM, this should be the first operation we do
+    # on the model input side, even though a user asking for 'NCHW' will prevent
+    # the transpose elision (with the first convolution op below) from
+    # happening. But we do the transpose elision trick only on TPU, where we do
+    # not use 'NCHW'.
+    if inputs_transform:
+      inputs = inputs_transform(inputs)
     if FLAGS.input_layout == 'NCHW':
       # Data is coming in as 'NHWC', so if we are asked 'NCHW' we need to insert
       # a transpose on the inputs.
       inputs = tf.transpose(inputs, [0, 3, 1, 2])
-    if inputs_transform:
-      inputs = inputs_transform(inputs)
     inputs = conv2d_fixed_padding(
         inputs=inputs, filters=64, kernel_size=7, strides=2)
     inputs = tf.layers.max_pooling2d(
@@ -254,6 +276,7 @@ def resnet_v2(block, layers, num_classes):
     return inputs
 
   model.default_image_size = 224
+  model.input_layout = FLAGS.input_layout
   return model
 
 
