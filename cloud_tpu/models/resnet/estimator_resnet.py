@@ -216,15 +216,19 @@ def input_fn(params, eval_batch_size=None):
       num_threads=FLAGS.map_threads,
       output_buffer_size=FLAGS.map_buffer_size or batch_size)
   dataset = dataset.batch(batch_size)
+  dataset = dataset.prefetch(2)
   images, labels = dataset.make_one_shot_iterator().get_next()
+  # TODO(xiejw,saeta): Consider removing the sharding dimension below.
   images_shape = images.get_shape().as_list()
   if images_shape[0] is None:
     images_shape[0] = batch_size
-    images = tf.reshape(images, images_shape)
+    images = tf.reshape(
+        images, images_shape, name='InputPipeline/images/reshape')
   labels_shape = labels.get_shape().as_list()
   if labels_shape[0] is None:
     labels_shape[0] = batch_size
-    labels = tf.reshape(labels, labels_shape)
+    labels = tf.reshape(
+        labels, labels_shape, name='InputPipeline/labels/reshape')
   images = pipeline_outputs_transform(images)
   return images, labels
 
@@ -234,15 +238,35 @@ def get_input_function():
 
 
 def model_inputs_transform(inputs):
+  # Device side input transformation.
   if FLAGS.device == 'TPU' and FLAGS.tpu_mirror_transpose:
-    return tf.transpose(inputs, [3, 0, 1, 2])
+    assert cfg.network_fn.input_layout == 'NHWC'
+    # See comment in pipeline_outputs_transform().
+    mini_batch_size = FLAGS.batch_size // FLAGS.num_shards
+    return (tf.transpose(inputs, [3, 0, 1, 2]) if mini_batch_size >= 64 else
+            tf.transpose(inputs, [2, 0, 1, 3]))
   return inputs
 
 
 def pipeline_outputs_transform(outputs):
+  # Host side output transformation.
   if FLAGS.device == 'TPU' and FLAGS.tpu_mirror_transpose:
-    return tf.transpose(outputs, [1, 2, 3, 0])
+    assert cfg.network_fn.input_layout == 'NHWC'
+    # We transpose the image tensor on the host, and apply the inverse transpose
+    # on the device size. But the transpose on the device side, happen to be
+    # eliding with the one that the first convolution node on the model graph
+    # wants to do, effectively saving a transpose on the device side.
+    mini_batch_size = FLAGS.batch_size // FLAGS.num_shards
+    return (tf.transpose(outputs, [1, 2, 3, 0]) if mini_batch_size >= 64 else
+            tf.transpose(outputs, [1, 2, 0, 3]))
   return outputs
+
+
+def get_image_shard_dimension():
+  if FLAGS.device == 'TPU' and FLAGS.tpu_mirror_transpose:
+    mini_batch_size = FLAGS.batch_size // FLAGS.num_shards
+    return 3 if mini_batch_size >= 64 else 2
+  return cfg.network_fn.input_layout.find('N')
 
 
 def resnet_model_fn(features, labels, mode, params):
@@ -256,8 +280,7 @@ def resnet_model_fn(features, labels, mode, params):
     raise RuntimeError('You can only train on 1 GPU at the moment.')
 
   logits = cfg.network_fn(
-      inputs=features,
-      is_training=(mode == tf.estimator.ModeKeys.TRAIN),
+      inputs=features, is_training=(mode == tf.estimator.ModeKeys.TRAIN),
       inputs_transform=model_inputs_transform)
   predictions = {
       'classes': tf.argmax(input=logits, axis=1),
@@ -364,7 +387,8 @@ def main(unused_argv):
       tpu_config=tpu_config.TPUConfig(
           iterations_per_loop=FLAGS.iterations_per_loop,
           num_shards=FLAGS.num_shards,
-          per_host_input_for_training=FLAGS.per_host_input_pipeline),
+          per_host_input_for_training=FLAGS.per_host_input_pipeline,
+          shard_dimensions=(get_image_shard_dimension(), 0)),
       session_config=session_config)
   resnet_classifier = tpu_estimator.TPUEstimator(
       model_fn=resnet_model_fn,
