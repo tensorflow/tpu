@@ -149,9 +149,11 @@ class ResnetConfig(object):
 def slim_dataset_input_fn(params, eval_batch_size=None):
   """Input function which provides a single batch training/eval data."""
   batch_size = eval_batch_size or params['batch_size']
+  is_training = eval_batch_size is None
+  input_dataset = cfg.train_dataset if is_training else cfg.eval_dataset
 
   provider = tf.contrib.slim.dataset_data_provider.DatasetDataProvider(
-      dataset=cfg.train_dataset,
+      dataset=input_dataset,
       num_readers=FLAGS.num_readers,
       common_queue_capacity=FLAGS.capacity * batch_size,
       common_queue_min=(FLAGS.capacity * batch_size) / 2)
@@ -160,7 +162,7 @@ def slim_dataset_input_fn(params, eval_batch_size=None):
       image=image,
       output_height=cfg.network_fn.default_image_size,
       output_width=cfg.network_fn.default_image_size,
-      is_training=eval_batch_size is None,
+      is_training=is_training,
       resize_side_min=FLAGS.resize_side_min,
       resize_side_max=FLAGS.resize_side_max)
   images, labels = tf.train.batch(
