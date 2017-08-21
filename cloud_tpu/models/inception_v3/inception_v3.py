@@ -23,13 +23,13 @@ import os
 
 import tensorflow as tf
 
-import google.third_party.tensorflow.contrib.slim as slim
+import tensorflow.contrib.slim as slim
 
-from google.third_party.tensorflow.contrib.slim.nets import inception
+from tensorflow.contrib.slim.nets import inception
 
-from google.third_party.tensorflow.contrib.tpu.python.tpu import tpu_config
-from google.third_party.tensorflow.contrib.tpu.python.tpu import tpu_estimator
-from google.third_party.tensorflow.contrib.tpu.python_tpu import tpu_optimizer
+from tensorflow.contrib.tpu.python.tpu import tpu_config
+from tensorflow.contrib.tpu.python.tpu import tpu_estimator
+from tensorflow.contrib.tpu.python.tpu import tpu_optimizer
 
 
 tf.flags.DEFINE_float('learning_rate', 0.02, 'Learning rate.')
@@ -54,9 +54,8 @@ tf.flags.DEFINE_integer('num_shards', 8, 'Number of shards (TPU chips).')
 tf.flags.DEFINE_integer('batch_size', 64,
                         'Global batch_size, not the per-shard batch_size')
 tf.flags.DEFINE_integer('num_labels', 1024, 'number of classes to distinguish')
-tf.flags.DEFINE_integer('width', 304, 'Batch size.')
-tf.flags.DEFINE_integer('height', 304, 'Batch size.')
-
+tf.flags.DEFINE_integer('width', 304, 'width of input image')
+tf.flags.DEFINE_integer('height', 304, 'height of input image')
 
 FLAGS = tf.flags.FLAGS
 
@@ -135,27 +134,24 @@ def model_fn(features, labels, mode, params):
                                   weights=1.0)
   loss = tf.losses.get_total_loss()
 
-  if FLAGS.use_tpu:
-    if FLAGS.optimizer == 'sgd':
-      tf.logging.info('Using SGD optimizer')
-      optimizer = tpu_optimizer.CrossShardOptimizer(
-          tf.train.GradientDescentOptimizer(
-              learning_rate=FLAGS.learning_rate))
-    elif FLAGS.optimizer == 'momentum':
-      tf.logging.info('Using Momentum optimizer')
-      optimizer = tpu_optimizer.CrossShardOptimizer(
-          tf.train.MomentumOptimizer(
-              learning_rate=FLAGS.learning_rate, momentum=0.9))
-    else:
-      tf.logging.fatal('Unknown optimizer:', FLAGS.optimizer)
-  else:
+  if FLAGS.optimizer == 'sgd':
+    tf.logging.info('Using SGD optimizer')
     optimizer = tf.train.GradientDescentOptimizer(
         learning_rate=FLAGS.learning_rate)
+  elif FLAGS.optimizer == 'momentum':
+    tf.logging.info('Using Momentum optimizer')
+    optimizer = tf.train.MomentumOptimizer(
+        learning_rate=FLAGS.learning_rate, momentum=0.9)
+  else:
+    tf.logging.fatal('Unknown optimizer:', FLAGS.optimizer)
+
+  if FLAGS.use_tpu:
+    optimizer = tpu_optimizer.CrossShardOptimizer(optimizer)
 
   train_op = optimizer.minimize(
       loss, global_step=tf.train.get_or_create_global_step())
 
-  return tf.estimator.EstimatorSpec(mode=mode, loss=loss, train_op=train_op)
+  return tpu_estimator.TPUEstimatorSpec(mode=mode, loss=loss, train_op=train_op)
 
 
 def input_fn(params):

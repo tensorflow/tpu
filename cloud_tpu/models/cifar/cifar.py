@@ -102,7 +102,7 @@ def model_fn(features, labels, mode, params):
 
   train_op = optimizer.minimize(loss, global_step=tf.train.get_global_step())
 
-  return tf.estimator.EstimatorSpec(
+  return tpu_estimator.TPUEstimatorSpec(
       mode=mode,
       loss=loss,
       train_op=train_op)
