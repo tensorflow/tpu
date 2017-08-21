@@ -337,15 +337,18 @@ def resnet_model_fn(features, labels, mode, params):
              'step': tf.train.get_global_step()},
             every_n_secs=30)
     ]
+    return tf.estimator.EstimatorSpec(
+        mode=mode,
+        predictions=predictions,
+        loss=loss,
+        train_op=train_op,
+        training_hooks=hooks)
   else:
-    hooks = None
-
-  return tf.estimator.EstimatorSpec(
-      mode=mode,
-      predictions=predictions,
-      loss=loss,
-      train_op=train_op,
-      training_hooks=hooks)
+    return tpu_estimator.TPUEstimatorSpec(
+        mode=mode,
+        predictions=predictions,
+        loss=loss,
+        train_op=train_op)
 
 
 def main(unused_argv):
@@ -389,14 +392,14 @@ def main(unused_argv):
       tpu_config=tpu_config.TPUConfig(
           iterations_per_loop=FLAGS.iterations_per_loop,
           num_shards=FLAGS.num_shards,
-          per_host_input_for_training=FLAGS.per_host_input_pipeline,
-          shard_dimensions=(get_image_shard_dimension(), 0)),
+          per_host_input_for_training=FLAGS.per_host_input_pipeline),
       session_config=session_config)
   resnet_classifier = tpu_estimator.TPUEstimator(
       model_fn=resnet_model_fn,
       use_tpu=FLAGS.device == 'TPU',
       config=config,
-      train_batch_size=FLAGS.batch_size)
+      train_batch_size=FLAGS.batch_size,
+      shard_dimensions=(get_image_shard_dimension(), 0))
 
   print('Starting to train...')
   if FLAGS.train_epochs:
