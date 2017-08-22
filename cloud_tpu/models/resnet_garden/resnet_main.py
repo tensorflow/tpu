@@ -31,43 +31,43 @@ from tensorflow.contrib.tpu.python.tpu import tpu_optimizer
 FLAGS = tf.flags.FLAGS
 
 tf.flags.DEFINE_string(
-    'master', default='local',
-    help='Location of the master.')
+    'master', default_value='local',
+    docstring='Location of the master.')
 
 tf.flags.DEFINE_string(
-    'data_dir', default='',
-    help='The directory where the ImageNet input data is stored.')
+    'data_dir', default_value='',
+    docstring='The directory where the ImageNet input data is stored.')
 
 tf.flags.DEFINE_string(
-    'model_dir', default='/tmp/resnet_model',
-    help='The directory where the model will be stored.')
+    'model_dir', default_value='/tmp/resnet_model',
+    docstring='The directory where the model will be stored.')
 
 tf.flags.DEFINE_integer(
-    'resnet_size', default=50,
-    help='The size of the ResNet model to use.')
+    'resnet_size', default_value=50,
+    docstring='The size of the ResNet model to use.')
 
 tf.flags.DEFINE_integer(
-    'train_steps', default=4800000,
-    help='The number of steps to use for training.')
+    'train_steps', default_value=4800000,
+    docstring='The number of steps to use for training.')
 
 tf.flags.DEFINE_integer(
-    'train_steps_per_eval', default=40000,
-    help='The number of training steps to run between evaluations.')
+    'train_steps_per_eval', default_value=40000,
+    docstring='The number of training steps to run between evaluations.')
 
 tf.flags.DEFINE_integer(
-    'train_batch_size', default=32, help='Batch size for training.')
+    'train_batch_size', default_value=32, docstring='Batch size for training.')
 
 tf.flags.DEFINE_integer(
-    'eval_batch_size', default=100,
-    help='Batch size for evaluation.')
+    'eval_batch_size', default_value=100,
+    docstring='Batch size for evaluation.')
 
 tf.flags.DEFINE_integer(
-    'label_classes', default=1001,
-    help='The number of label classes.')
+    'label_classes', default_value=1001,
+    docstring='The number of label classes.')
 
 tf.flags.DEFINE_float(
-    'momentum', default=0.9,
-    help='Momentum for MomentumOptimizer.')
+    'momentum', default_value=0.9,
+    docstring='Momentum for MomentumOptimizer.')
 
 # The learning rate should decay by 0.1 every 30 epochs.
 _LEARNING_RATE_DECAY = 0.1
