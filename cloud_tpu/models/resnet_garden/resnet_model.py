@@ -44,7 +44,7 @@ def batch_norm_relu(inputs, is_training):
   # We set fused=True for a performance boost.
   inputs = tf.contrib.layers.batch_norm(
       inputs=inputs, decay=_BATCH_NORM_DECAY, center=True, scale=True,
-      epsilon=_BATCH_NORM_EPSILON, is_training=is_training,
+      epsilon=_BATCH_NORM_EPSILON, is_training=is_training, fused=True,
       data_format='NCHW')
   inputs = tf.nn.relu(inputs)
   return inputs
