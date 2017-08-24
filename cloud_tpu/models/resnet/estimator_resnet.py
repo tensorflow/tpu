@@ -55,6 +55,8 @@ tf.flags.DEFINE_integer(
     'eval_steps', 500, 'The number of steps to use for evaluation.')
 tf.flags.DEFINE_integer('batch_size', 64, 'Batch size for.')
 tf.flags.DEFINE_float(
+    'weight_decay', 1e-4, 'Weight decay for convolutions.')
+tf.flags.DEFINE_float(
     'initial_learning_rate', 0.02, 'The initial learning rate.')
 tf.flags.DEFINE_float(
     'final_learning_rate', 0.0001, 'The minimum learning rate.')
@@ -264,7 +266,7 @@ def pipeline_outputs_transform(outputs):
   return outputs
 
 
-def get_image_shard_dimension():
+def get_image_batch_axis():
   if FLAGS.device == 'TPU' and FLAGS.tpu_mirror_transpose:
     mini_batch_size = FLAGS.batch_size // FLAGS.num_shards
     return 3 if mini_batch_size >= 64 else 2
@@ -290,9 +292,9 @@ def resnet_model_fn(features, labels, mode, params):
   }
 
   # Get the total losses including softmax cross entropy and L2 regularization
-  tf.losses.add_loss(
-      tf.losses.softmax_cross_entropy(logits=logits, onehot_labels=labels))
-  loss = tf.losses.get_total_loss(add_regularization_losses=True)
+  loss = tf.losses.softmax_cross_entropy(logits=logits, onehot_labels=labels)
+  loss += (FLAGS.weight_decay *
+           tf.add_n([tf.nn.l2_loss(v) for v in tf.trainable_variables()]))
 
   if mode == model_fn.ModeKeys.EVAL:
     metrics = {
@@ -399,7 +401,7 @@ def main(unused_argv):
       use_tpu=FLAGS.device == 'TPU',
       config=config,
       train_batch_size=FLAGS.batch_size,
-      shard_dimensions=(get_image_shard_dimension(), 0))
+      batch_axis=(get_image_batch_axis(), 0))
 
   print('Starting to train...')
   if FLAGS.train_epochs:

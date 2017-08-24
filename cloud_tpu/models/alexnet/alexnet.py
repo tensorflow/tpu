@@ -58,6 +58,8 @@ tf.flags.DEFINE_bool("use_tpu", True, "Use TPUs rather than plain CPUs.")
 tf.flags.DEFINE_string("master", "local",
                        "BNS name of the TensorFlow master to use.")
 tf.flags.DEFINE_integer("num_shards", 2, "Number of shards (TPU chips).")
+tf.flags.DEFINE_integer("num_preprocessing_threads", 0, "Number of preprocessed threads (on CPU).")
+tf.flags.DEFINE_integer("prefetch_buffer_size", 0, "prefetch buffer size for the data sets in input_fn.")
 
 FLAGS = tf.flags.FLAGS
 
@@ -191,8 +193,15 @@ def input_fn(params):
 
     train_files = ["%s/train-%05d-of-"
                    "01024" % (FLAGS.data_dir, num) for num in range(1024)]
-    dataset = tf.contrib.data.TFRecordDataset(train_files)
-    dataset = dataset.repeat().map(parser).batch(batch_size)
+    dataset = tf.contrib.data.TFRecordDataset(train_files).repeat()
+    if FLAGS.num_preprocessing_threads == 0:
+      dataset = dataset.map(parser)
+    else:
+      dataset = dataset.map(parser,
+                            FLAGS.num_preprocessing_threads)
+    if FLAGS.prefetch_buffer_size != 0:
+      dataset = dataset.prefetch(FLAGS.prefetch_buffer_size)
+    dataset = dataset.batch(batch_size)
     images, labels = dataset.make_one_shot_iterator().get_next()
     return (
         tf.reshape(images, [batch_size, 224, 224, 3]),
