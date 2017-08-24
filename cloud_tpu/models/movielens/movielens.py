@@ -186,7 +186,7 @@ def create_parser(parser=None):
 
   parser.add_argument(
       '--master', type=str, required=True,
-      '\'master\' argument to the Estimators RunConfig, typically an'
+      help='\'master\' argument to the Estimators RunConfig, typically an'
       ' \'IP address:port\' of the TPU.')
 
   parser.add_argument(
