@@ -42,9 +42,6 @@ tf.flags.DEFINE_float('batch_norm_decay', 0.997, 'Decay for batch norm.')
 
 tf.flags.DEFINE_float('batch_norm_epsilon', 1e-5, 'Epsilon for batch norm.')
 
-tf.flags.DEFINE_float(
-    'weight_decay', 1e-4, 'Weight decay for convolutions.')
-
 tf.flags.DEFINE_boolean(
     'use_fused_batchnorm', True, 'Use fused batch normalization.')
 
@@ -111,7 +108,6 @@ def conv2d_fixed_padding(inputs, filters, kernel_size, strides):
   return tf.layers.conv2d(
       inputs=inputs, filters=filters, kernel_size=kernel_size, strides=strides,
       padding=('SAME' if strides == 1 else 'VALID'), use_bias=False,
-      kernel_regularizer=tf.contrib.layers.l2_regularizer(FLAGS.weight_decay),
       kernel_initializer=tf.contrib.layers.variance_scaling_initializer(),
       data_format=_get_data_format())
 
@@ -270,9 +266,7 @@ def resnet_v2(block, layers, num_classes):
         inputs=inputs, pool_size=7, strides=1, padding='VALID',
         data_format=_get_data_format())
     inputs = tf.reshape(inputs, [inputs.get_shape()[0].value, -1])
-    inputs = tf.layers.dense(
-        inputs=inputs, units=num_classes,
-        kernel_regularizer=tf.contrib.layers.l2_regularizer(FLAGS.weight_decay))
+    inputs = tf.layers.dense(inputs=inputs, units=num_classes)
     return inputs
 
   model.default_image_size = 224

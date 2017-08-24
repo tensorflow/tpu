@@ -23,7 +23,7 @@ import os
 
 import tensorflow as tf
 
-import tensorflow.contrib.slim as slim
+from tensorflow.contrib import slim
 
 from tensorflow.contrib.slim.nets import inception
 
