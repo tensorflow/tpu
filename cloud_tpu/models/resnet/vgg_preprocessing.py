@@ -350,8 +350,8 @@ def preprocess_image(image, output_height, output_width, is_training=False,
   Returns:
     A preprocessed image.
   """
+  assert resize_side_min, 'Resize min size must be specified'
   if is_training:
-    assert resize_side_min, 'Resize min size must be specified in training'
     assert resize_side_max, 'Resize max size must be specified in training'
     return preprocess_for_train(image, output_height, output_width,
                                 resize_side_min, resize_side_max)

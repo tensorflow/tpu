@@ -43,7 +43,7 @@ tf.flags.DEFINE_string("master", "local",
 tf.flags.DEFINE_string("model_dir", None, "Estimator model_dir")
 tf.flags.DEFINE_integer("iterations", 20,
                         "Number of iterations per TPU training loop.")
-tf.flags.DEFINE_integer("num_shards", 2, "Number of shards (TPU chips).")
+tf.flags.DEFINE_integer("num_shards", 8, "Number of shards (TPU chips).")
 
 
 FLAGS = tf.flags.FLAGS

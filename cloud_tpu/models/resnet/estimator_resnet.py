@@ -18,6 +18,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import collections
 import os
 import sys
 
@@ -25,6 +26,8 @@ import tensorflow as tf
 
 import imagenet
 import layers_resnet
+import model_conductor
+import multi_gpu
 import vgg_preprocessing
 from tensorflow.contrib.tpu.python.tpu import tpu_config
 from tensorflow.contrib.tpu.python.tpu import tpu_estimator
@@ -52,10 +55,15 @@ tf.flags.DEFINE_integer(
     'train_epochs', None, 'The number of EPOCH to use for training. '
     'If specified, it will override the --train_steps parameter.')
 tf.flags.DEFINE_integer(
-    'eval_steps', 500, 'The number of steps to use for evaluation.')
+    'epochs_per_train', 5, 'The number of EPOCH to train before an evaluation.')
+tf.flags.DEFINE_float(
+    'target_accuracy', None, 'The accuracy at which to stop training, assuming '
+    'evaluation is enabled (eval_steps > 0).')
+tf.flags.DEFINE_integer(
+    'eval_steps', 100, 'The number of steps to use for evaluation.')
 tf.flags.DEFINE_integer('batch_size', 64, 'Batch size for.')
 tf.flags.DEFINE_float(
-    'weight_decay', 1e-4, 'Weight decay for convolutions.')
+    'weight_decay', 1e-4, 'Weight decay for for trainable variables.')
 tf.flags.DEFINE_float(
     'initial_learning_rate', 0.02, 'The initial learning rate.')
 tf.flags.DEFINE_float(
@@ -99,7 +107,7 @@ tf.flags.DEFINE_integer('map_threads', 1,
                         'The number of threads for the dataset map operation.')
 tf.flags.DEFINE_integer('map_buffer_size', None,
                         'The size of the buffer for the dataset map operation.')
-tf.flags.DEFINE_integer('input_shuffle_capacity', 10000,
+tf.flags.DEFINE_integer('input_shuffle_capacity', 100,
                         'The number of training samples held within the'
                         'shuffle buffer (a value of 0 disable input sample '
                         'shuffling).')
@@ -120,6 +128,10 @@ tf.flags.DEFINE_boolean('per_host_input_pipeline', True,
                         'Enable new per-host input when running on TPUs.')
 tf.flags.DEFINE_integer('prefetch_size', 1000,
                         'Number of input samples per file to prefetch.')
+
+ModelResults = collections.namedtuple(
+    'ModelResults', ['logits', 'loss', 'learning_rate', 'optimizer',
+                     'predictions'])
 
 cfg = None
 
@@ -174,7 +186,7 @@ def slim_dataset_input_fn(params, eval_batch_size=None):
       capacity=FLAGS.capacity * batch_size)
   images = pipeline_outputs_transform(images)
   labels = tf.contrib.layers.one_hot_encoding(
-      labels, cfg.train_dataset.num_classes)
+      labels, input_dataset.num_classes)
   return images, labels
 
 
@@ -237,7 +249,7 @@ def input_fn(params, eval_batch_size=None):
   return images, labels
 
 
-def get_input_function():
+def get_input_pipeline_fn():
   return slim_dataset_input_fn if FLAGS.use_slim_dataset_input else input_fn
 
 
@@ -273,16 +285,20 @@ def get_image_batch_axis():
   return cfg.network_fn.input_layout.find('N')
 
 
-def resnet_model_fn(features, labels, mode, params):
-  """Our model_fn for ResNet to be used with our Estimator."""
-  del params
+def get_learning_rate():
+  # Decay the learning rate by FLAGS.learning_rate_decay per epoch. We use
+  # staircase=True to keep the learning rate consistent across each epoch.
+  lr = tf.train.exponential_decay(
+      learning_rate=FLAGS.initial_learning_rate,
+      global_step=tf.train.get_global_step(),
+      decay_steps=int(cfg.batches_per_epoch * FLAGS.num_epochs_per_decay),
+      decay_rate=FLAGS.learning_rate_decay,
+      staircase=True)
+  return tf.maximum(lr, FLAGS.final_learning_rate, name='learning_rate')
 
-  if FLAGS.device == 'GPU' and FLAGS.num_shards > 1:
-    # Unsupported for multi-GPU training at the moment
-    # TODO(b/64534612): Re-add functionality once we figure out how to do this
-    # reliably.
-    raise RuntimeError('You can only train on 1 GPU at the moment.')
 
+def resnet_model_common(features, labels, mode):
+  """The common model function used by both CPU/GPU and TPU specific ones."""
   logits = cfg.network_fn(
       inputs=features, is_training=(mode == tf.estimator.ModeKeys.TRAIN),
       inputs_transform=model_inputs_transform)
@@ -290,67 +306,122 @@ def resnet_model_fn(features, labels, mode, params):
       'classes': tf.argmax(input=logits, axis=1),
       'probabilities': tf.nn.softmax(logits, name='softmax_tensor')
   }
-
   # Get the total losses including softmax cross entropy and L2 regularization
   loss = tf.losses.softmax_cross_entropy(logits=logits, onehot_labels=labels)
   loss += (FLAGS.weight_decay *
            tf.add_n([tf.nn.l2_loss(v) for v in tf.trainable_variables()]))
-
-  if mode == model_fn.ModeKeys.EVAL:
-    metrics = {
-        'accuracy': tf.metrics.accuracy(
-            tf.argmax(input=labels, axis=1), predictions['classes'])
-    }
-    return tf.estimator.EstimatorSpec(
-        mode=model_fn.ModeKeys.EVAL,
-        predictions=predictions,
-        loss=loss,
-        eval_metric_ops=metrics)
-
-  # Decay the learning rate by FLAGS.learning_rate_decay per epoch. We use
-  # staircase=True to keep the learning rate consistent across each epoch.
-  learning_rate = tf.train.exponential_decay(
-      learning_rate=FLAGS.initial_learning_rate,
-      global_step=tf.train.get_global_step(),
-      decay_steps=int(cfg.batches_per_epoch * FLAGS.num_epochs_per_decay),
-      decay_rate=FLAGS.learning_rate_decay,
-      staircase=True)
-  learning_rate = tf.maximum(learning_rate, FLAGS.final_learning_rate,
-                             name='learning_rate')
+  learning_rate = get_learning_rate()
   optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate,
                                          momentum=FLAGS.momentum)
+  return ModelResults(logits=logits,
+                      loss=loss,
+                      learning_rate=learning_rate,
+                      optimizer=optimizer,
+                      predictions=predictions)
 
-  if FLAGS.device == 'TPU' and FLAGS.num_shards > 1:
-    optimizer = tpu_optimizer.CrossShardOptimizer(optimizer)
 
-  train_op = tf.contrib.layers.optimize_loss(
-      loss=loss,
-      global_step=tf.train.get_global_step(),
-      learning_rate=learning_rate,
-      optimizer=optimizer,
-      summaries=['learning_rate'])
-  # tf.train.write_graph(train_op.graph, '/tmp', 'zzxxww')
-  if FLAGS.device != 'TPU':
-    # Training hooks work only on CPU,GPU for now, the TPUEstimator will add
-    # something similar within its traning op construction.
-    hooks = [
-        tf.train.LoggingTensorHook(
-            {'loss': array_ops.identity(loss),
-             'step': tf.train.get_global_step()},
-            every_n_secs=30)
-    ]
-    return tf.estimator.EstimatorSpec(
-        mode=mode,
-        predictions=predictions,
-        loss=loss,
-        train_op=train_op,
-        training_hooks=hooks)
-  else:
-    return tpu_estimator.TPUEstimatorSpec(
-        mode=mode,
-        predictions=predictions,
-        loss=loss,
-        train_op=train_op)
+def resnet_model_fn(features, labels, mode, params):
+  """Our model_fn for ResNet to be used with our Estimator for CPU/GPU."""
+  del params
+
+  model_result = resnet_model_common(features, labels, mode)
+
+  eval_metrics = {
+      'accuracy': tf.metrics.accuracy(
+          tf.argmax(input=labels, axis=1), model_result.predictions['classes'])
+  }
+  update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+  with tf.control_dependencies(update_ops):
+    train_op = optimizer.minimize(model_result.loss,
+                                  global_step=tf.train.get_global_step())
+  hooks = [
+      tf.train.LoggingTensorHook(
+          {
+              'loss': array_ops.identity(model_result.loss),
+              'step': tf.train.get_global_step()
+          },
+          every_n_secs=30)
+  ]
+  return tf.estimator.EstimatorSpec(
+      mode=mode,
+      predictions=model_result.predictions,
+      loss=model_result.loss,
+      train_op=train_op,
+      training_hooks=hooks,
+      eval_metric_ops=eval_metrics)
+
+
+def tpu_resnet_model_fn(features, labels, mode, params):
+  """Our model_fn for ResNet to be used with our TPUEstimator."""
+  del params
+
+  model_result = resnet_model_common(features, labels, mode)
+
+  def metric_fn(labels, logits):
+    accuracy = tf.metrics.accuracy(tf.argmax(input=labels, axis=1),
+                                   tf.argmax(input=logits, axis=1))
+    return {'accuracy': accuracy}
+
+  optimizer = tpu_optimizer.CrossShardOptimizer(model_result.optimizer)
+  update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+  with tf.control_dependencies(update_ops):
+    train_op = optimizer.minimize(model_result.loss,
+                                  global_step=tf.train.get_global_step())
+  return tpu_estimator.TPUEstimatorSpec(
+      mode=mode,
+      loss=model_result.loss,
+      predictions=model_result.predictions,
+      train_op=train_op,
+      eval_metrics=(metric_fn, [labels, model_result.logits]))
+
+
+def get_model_fn():
+  return tpu_resnet_model_fn if FLAGS.device == 'TPU' else resnet_model_fn
+
+
+def get_train_steps():
+  return (FLAGS.train_epochs * cfg.batches_per_epoch if FLAGS.train_epochs else
+          FLAGS.train_steps)
+
+
+def run_on_gpu(config):
+  """Runs the ResNet model on GPU.
+
+  Args:
+    config: The RunConfig object used to configure the Estimator used by the
+        GPU model execution.
+  """
+  pipeline_input_fn = get_input_pipeline_fn()
+
+  def wrapped_model_fn(inputs, is_training):
+    return cfg.network_fn(inputs=inputs, is_training=is_training,
+                          inputs_transform=model_inputs_transform)
+
+  def train_inputfn():
+    # The multi GPU code reads full batches and performs shard splitting.
+    params = {'batch_size': FLAGS.batch_size}
+    return pipeline_input_fn(params=params)
+
+  def eval_inputfn():
+    # The multi GPU code reads full batches and performs shard splitting.
+    params = {'batch_size': FLAGS.batch_size}
+    return pipeline_input_fn(params=params, eval_batch_size=FLAGS.batch_size)
+
+  multi_gpu.multigpu_run(
+      config=config,
+      train_inputfn=train_inputfn,
+      eval_inputfn=eval_inputfn,
+      modelfn=wrapped_model_fn,
+      num_gpus=FLAGS.num_shards,
+      batch_size=FLAGS.batch_size,
+      shard_axis=(get_image_batch_axis(), 0),
+      weight_decay=FLAGS.weight_decay,
+      momentum=FLAGS.momentum,
+      learning_rate=get_learning_rate,
+      train_steps=get_train_steps(),
+      eval_steps=FLAGS.eval_steps,
+      steps_per_train=FLAGS.epochs_per_train * cfg.batches_per_epoch,
+      target_accuracy=FLAGS.target_accuracy)
 
 
 def main(unused_argv):
@@ -359,10 +430,8 @@ def main(unused_argv):
   if layers_resnet.get_model(FLAGS.model) is None:
     raise RuntimeError('--model must be one of [' +
                        ', '.join(layers_resnet.get_available_models()) + ']')
-
   if FLAGS.device not in ['CPU', 'GPU', 'TPU']:
     raise RuntimeError('--device must be one of [CPU, GPU, TPU]')
-
   if FLAGS.input_layout not in ['NCHW', 'NHWC']:
     raise RuntimeError('--input_layout must be one of [NCHW, NHWC]')
 
@@ -378,13 +447,6 @@ def main(unused_argv):
       log_device_placement=FLAGS.log_device_placement)
   if FLAGS.device == 'GPU':
     session_config.gpu_options.allow_growth = True
-  if FLAGS.device != 'TPU':
-    # Hooks do not work on TPU at the moment.
-    tensors_to_log = {'learning_rate': 'learning_rate'}
-    logging_hook = tf.train.LoggingTensorHook(
-        tensors=tensors_to_log, every_n_iter=100)
-    hooks = [logging_hook]
-
   config = tpu_config.RunConfig(
       save_checkpoints_secs=FLAGS.save_checkpoints_secs or None,
       save_summary_steps=FLAGS.save_summary_steps,
@@ -396,33 +458,39 @@ def main(unused_argv):
           num_shards=FLAGS.num_shards,
           per_host_input_for_training=FLAGS.per_host_input_pipeline),
       session_config=session_config)
+
+  if FLAGS.device == 'GPU' and FLAGS.num_shards > 1:
+    run_on_gpu(config)
+    return
+
+  if FLAGS.device != 'TPU':
+    # Hooks do not work on TPU at the moment.
+    tensors_to_log = {'learning_rate': 'learning_rate'}
+    logging_hook = tf.train.LoggingTensorHook(
+        tensors=tensors_to_log, every_n_iter=100)
+    hooks = [logging_hook]
+
   resnet_classifier = tpu_estimator.TPUEstimator(
-      model_fn=resnet_model_fn,
+      model_fn=get_model_fn(),
       use_tpu=FLAGS.device == 'TPU',
       config=config,
       train_batch_size=FLAGS.batch_size,
+      eval_batch_size=FLAGS.batch_size,
       batch_axis=(get_image_batch_axis(), 0))
 
-  print('Starting to train...')
-  if FLAGS.train_epochs:
-    train_steps = FLAGS.train_epochs * cfg.batches_per_epoch
-  else:
-    train_steps = FLAGS.train_steps
-  input_function = get_input_function()
-  resnet_classifier.train(
-      input_fn=input_function,
-      max_steps=train_steps,
-      hooks=hooks)
+  pipeline_input_fn = get_input_pipeline_fn()
 
-  if FLAGS.eval_steps > 0:
-    def eval_input(params=None):
-      return input_function(params=params, eval_batch_size=FLAGS.batch_size)
+  def eval_input(params=None):
+    return pipeline_input_fn(params=params, eval_batch_size=FLAGS.batch_size)
 
-    print('Starting to evaluate...')
-    eval_results = resnet_classifier.evaluate(
-        input_fn=eval_input,
-        steps=FLAGS.eval_steps)
-    print(eval_results)
+  model_conductor.conduct(resnet_classifier,
+                          pipeline_input_fn,
+                          eval_input,
+                          get_train_steps(),
+                          FLAGS.epochs_per_train * cfg.batches_per_epoch,
+                          FLAGS.eval_steps,
+                          train_hooks=hooks,
+                          target_accuracy=FLAGS.target_accuracy)
 
 
 if __name__ == '__main__':
