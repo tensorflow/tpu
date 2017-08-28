@@ -37,33 +37,44 @@ FLAGS = tf.flags.FLAGS
 
 tf.flags.DEFINE_string(
     'input_layout', 'NCHW', 'The shape layout to be used for the inputs.')
-
 tf.flags.DEFINE_float('batch_norm_decay', 0.997, 'Decay for batch norm.')
-
 tf.flags.DEFINE_float('batch_norm_epsilon', 1e-5, 'Epsilon for batch norm.')
-
 tf.flags.DEFINE_boolean(
     'use_fused_batchnorm', True, 'Use fused batch normalization.')
 
 
 def _get_data_format():
-  return 'channels_first' if FLAGS.input_layout == 'NCHW' else 'channels_last'
+  """Retrieves the input data format {channels_first, channels_last}.
+
+  Note that even though many parts of the resnet code base can support other
+  input layouts, some tensorflow APIs only support 'channels_first' and
+  'channels_last'.
+  Returns:
+    The input data format. Either 'channels_first' for input layout 'NCHW',
+    or 'channels_last' for input layout 'NHWC'.
+  Raises:
+    RuntimeError: If the selected input layout is neither 'NCHW' nor 'NHWC'.
+  """
+  if FLAGS.input_layout == 'NCHW':
+    return 'channels_first'
+  if FLAGS.input_layout == 'NHWC':
+    return 'channels_last'
+  raise RuntimeError('Unsupported layout : ' + FLAGS.input_layout)
 
 
 def batch_norm_relu(inputs, is_training):
   """Performs a batch normalization followed by a ReLU."""
   # We set fused=True for a performance boost.
-  inputs = tf.contrib.layers.batch_norm(
+  inputs = tf.layers.batch_normalization(
       inputs=inputs,
-      decay=FLAGS.batch_norm_decay,
+      axis=FLAGS.input_layout.find('C'),
+      momentum=FLAGS.batch_norm_decay,
+      epsilon=FLAGS.batch_norm_epsilon,
       center=True,
       scale=True,
-      epsilon=FLAGS.batch_norm_epsilon,
-      is_training=is_training,
-      fused=FLAGS.use_fused_batchnorm,
-      data_format=FLAGS.input_layout)
-  inputs = tf.nn.relu(inputs)
-  return inputs
+      training=is_training,
+      fused=FLAGS.use_fused_batchnorm)
+  return tf.nn.relu(inputs)
 
 
 def _fixed_padding(inputs, kernel_size):
@@ -79,13 +90,14 @@ def _fixed_padding(inputs, kernel_size):
   pad_total = kernel_size - 1
   pad_beg = pad_total // 2
   pad_end = pad_total - pad_beg
-  if _get_data_format() == 'channels_first':
-    padded_inputs = tf.pad(inputs, [[0, 0], [0, 0],
-                                    [pad_beg, pad_end], [pad_beg, pad_end]])
-  else:
-    padded_inputs = tf.pad(inputs, [[0, 0], [pad_beg, pad_end],
-                                    [pad_beg, pad_end], [0, 0]])
-  return padded_inputs
+  # Pad spatial dimensions (H, W).
+  pad_shape = []
+  for dim in FLAGS.input_layout:
+    if dim in ['H', 'W']:
+      pad_shape.append([pad_beg, pad_end])
+    else:
+      pad_shape.append([0, 0])
+  return tf.pad(inputs, pad_shape)
 
 
 def conv2d_fixed_padding(inputs, filters, kernel_size, strides):
@@ -184,11 +196,45 @@ def bottleneck_block(inputs, filters, is_training, projection_shortcut,
   return inputs + shortcut
 
 
-def resnet_v2(block, layers, num_classes):
+def block_layer(inputs, filters, block_fn, blocks, strides, is_training, name):
+  """Creates one layer of blocks for the ResNet model.
+
+  Args:
+    inputs: A tensor of size [batch, channels, height, width].
+    filters: The number of filters for the first convolution of the layer.
+    block_fn: The block to use within the model, either `building_block` or
+      `bottleneck_block`.
+    blocks: The number of blocks contained in the layer.
+    strides: The stride to use for the first convolution of the layer. If
+      greater than 1, this layer will ultimately downsample the input.
+    is_training: Either True or False, whether we are currently training the
+      model. Needed for batch norm.
+    name: A string name for the tensor output of the block layer.
+
+  Returns:
+    The output tensor of the block layer.
+  """
+  # Bottleneck blocks end with 4x the number of filters as they start with
+  filters_out = 4 * filters if block_fn is bottleneck_block else filters
+
+  def projection_shortcut(inputs):
+    return conv2d_fixed_padding(
+        inputs=inputs, filters=filters_out, kernel_size=1, strides=strides)
+
+  # Only the first block per block_layer uses projection_shortcut and strides
+  inputs = block_fn(inputs, filters, is_training, projection_shortcut, strides)
+
+  for i in range(1, blocks):
+    inputs = block_fn(inputs, filters, is_training, None, 1)
+
+  return tf.identity(inputs, name)
+
+
+def resnet_v2(block_fn, layers, num_classes):
   """Generator for ResNet v2 models.
 
   Args:
-    block: The block to use within the model, either `building_block` or
+    block_fn: The block to use within the model, either `building_block` or
       `bottleneck_block`.
     layers: A length-4 array denoting the number of blocks to include in each
       layer. Each layer consists of blocks that take inputs of the same size.
@@ -228,46 +274,33 @@ def resnet_v2(block, layers, num_classes):
       inputs = tf.transpose(inputs, [0, 3, 1, 2])
     inputs = conv2d_fixed_padding(
         inputs=inputs, filters=64, kernel_size=7, strides=2)
+    inputs = tf.identity(inputs, 'initial_conv')
     inputs = tf.layers.max_pooling2d(
         inputs=inputs, pool_size=3, strides=2, padding='SAME',
         data_format=_get_data_format())
+    inputs = tf.identity(inputs, 'initial_max_pool')
 
-    def conv_layer(inputs, filters, blocks, strides, is_training):
-      # Bottleneck blocks end with 4x the number of filters as they start with
-      filters_out = 4 * filters if block is bottleneck_block else filters
-
-      def projection_shortcut(inputs):
-        return conv2d_fixed_padding(
-            inputs=inputs, filters=filters_out, kernel_size=1, strides=strides)
-
-      # Only the first block per conv_layer uses projection_shortcut and strides
-      inputs = block(inputs, filters, is_training, projection_shortcut, strides)
-
-      for _ in range(1, blocks):
-        inputs = block(inputs, filters, is_training, None, 1)
-
-      return inputs
-
-    inputs = conv_layer(
-        inputs=inputs, filters=64, blocks=layers[0], strides=1,
-        is_training=is_training)
-    inputs = conv_layer(
-        inputs=inputs, filters=128, blocks=layers[1], strides=2,
-        is_training=is_training)
-    inputs = conv_layer(
-        inputs=inputs, filters=256, blocks=layers[2], strides=2,
-        is_training=is_training)
-    inputs = conv_layer(
-        inputs=inputs, filters=512, blocks=layers[3], strides=2,
-        is_training=is_training)
+    inputs = block_layer(
+        inputs=inputs, filters=64, block_fn=block_fn, blocks=layers[0],
+        strides=1, is_training=is_training, name='block_layer1')
+    inputs = block_layer(
+        inputs=inputs, filters=128, block_fn=block_fn, blocks=layers[1],
+        strides=2, is_training=is_training, name='block_layer2')
+    inputs = block_layer(
+        inputs=inputs, filters=256, block_fn=block_fn, blocks=layers[2],
+        strides=2, is_training=is_training, name='block_layer3')
+    inputs = block_layer(
+        inputs=inputs, filters=512, block_fn=block_fn, blocks=layers[3],
+        strides=2, is_training=is_training, name='block_layer4')
 
     inputs = batch_norm_relu(inputs, is_training)
     inputs = tf.layers.average_pooling2d(
         inputs=inputs, pool_size=7, strides=1, padding='VALID',
         data_format=_get_data_format())
+    inputs = tf.identity(inputs, 'final_avg_pool')
     inputs = tf.reshape(inputs, [inputs.get_shape()[0].value, -1])
     inputs = tf.layers.dense(inputs=inputs, units=num_classes)
-    return inputs
+    return tf.identity(inputs, 'final_dense')
 
   model.default_image_size = 224
   model.input_layout = FLAGS.input_layout
