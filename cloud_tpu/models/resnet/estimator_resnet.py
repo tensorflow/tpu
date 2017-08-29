@@ -332,8 +332,8 @@ def resnet_model_fn(features, labels, mode, params):
   }
   update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
   with tf.control_dependencies(update_ops):
-    train_op = optimizer.minimize(model_result.loss,
-                                  global_step=tf.train.get_global_step())
+    train_op = model_result.optimizer.minimize(
+        model_result.loss, global_step=tf.train.get_global_step())
   hooks = [
       tf.train.LoggingTensorHook(
           {
