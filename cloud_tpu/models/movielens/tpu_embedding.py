@@ -184,7 +184,7 @@ def pad_sparse_embedding_lookup_indices(sparse_indices, sparse_weights,
 
 
 def sparse_embedding_aggregate_matmul(
-    params, (values, values_mask), name='sparse_embedding_aggregate_matmul'):
+    params, values_and_values_mask, name='sparse_embedding_aggregate_matmul'):
   """Performs embedding lookup via a matmul.
 
   The matrix to be multiplied by the embedding table Tensor is constructed
@@ -194,18 +194,20 @@ def sparse_embedding_aggregate_matmul(
 
   Args:
     params: Tensor of embedding table. Rank 2 (table_size x embedding dim)
-    values: Tensor of embedding indices. Rank 2 (batch x n_indices)
-    values_mask: Tensor of mask / weights. Rank 2 (batch x n_indices)
+    values_and_values_mask: is a two-tuple that contains:
+        values: Tensor of embedding indices. Rank 2 (batch x n_indices)
+        values_mask: Tensor of mask / weights. Rank 2 (batch x n_indices)
     name: Optional name scope for created ops
 
   Returns:
     Rank 2 tensor of aggregated (per batch element) embedding vectors.
     params: Tensor of embedding
   """
+  values, values_mask = values_and_values_mask  # unpack the two-tuple
   with ops.name_scope(name):
     n_embeddings, embedding_dim = params.get_shape().as_list()
     batch_size, padded_size = values.shape.as_list()
-    n_indices = batch_size * padded_size
+    n_indices = batch_size * padded_size  # noqa: unused variable
 
     emb_idcs = array_ops.tile(
         array_ops.reshape(values, (batch_size, padded_size, 1)), (1, 1,
@@ -227,19 +229,21 @@ def sparse_embedding_aggregate_matmul(
   return embeddings
 
 
-def sparse_embedding_aggregate_slice(params, (values, values_mask),
+def sparse_embedding_aggregate_slice(params, values_and_values_mask,
                                      name='sparse_embedding_aggregate_slice'):
   """Uses XLA's dynamic slice operations to perform embedding lookups.
 
   Args:
     params: Tensor of embedding table. Rank 2 (table_size x embedding dim)
-    values: Tensor of embedding indices. Rank 2 (batch x n_indices)
-    values_mask: Tensor of mask / weights. Rank 2 (batch x n_indices)
+    values_and_values_mask: is a two-tuple that contains:
+        values: Tensor of embedding indices. Rank 2 (batch x n_indices)
+        values_mask: Tensor of mask / weights. Rank 2 (batch x n_indices)
     name: Optional name scope for created ops
 
   Returns:
     Rank 2 tensor of aggregated (per batch element) embedding vectors.
   """
+  values, values_mask = values_and_values_mask  # unpack the two-tuple
   with ops.name_scope(name):
     embedding_table_size, embedding_dimension = params.get_shape().as_list()
     n_batch, n_indices_padded = values.get_shape().as_list()
