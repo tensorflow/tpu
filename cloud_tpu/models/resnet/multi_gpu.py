@@ -22,6 +22,7 @@ import collections
 import itertools
 import operator
 
+from six.moves import xrange
 import tensorflow as tf
 
 import model_conductor
