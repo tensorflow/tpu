@@ -23,7 +23,7 @@ import subprocess
 
 # pylint: disable=g-import-not-at-top
 try:
-  # Standard Imports.third_party.tensorflow as tf
+  import tensorflow as tf
   TF_VERSION = tf.__version__
 except ImportError:
   logging.error('Failed to import tensorflow')
