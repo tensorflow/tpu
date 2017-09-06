@@ -22,6 +22,8 @@ import collections
 import os
 import sys
 
+from six.moves import xrange
+
 import tensorflow as tf
 
 import imagenet
