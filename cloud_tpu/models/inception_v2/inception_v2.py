@@ -13,7 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
-"""Open-source TensorFlow Inception v3 Example."""
+"""Open-source TensorFlow Inception v2 Example."""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -22,11 +22,10 @@ from __future__ import print_function
 import tensorflow as tf
 
 import imagenet
+import inception_v2_tpu_model as inception
 import vgg_preprocessing
 
 # Standard Imports.third_party.tensorflow.contrib.slim as slim
-from tensorflow.contrib.slim.nets import inception
-
 from tensorflow.contrib.tpu.python.tpu import tpu_config
 from tensorflow.contrib.tpu.python.tpu import tpu_estimator
 from tensorflow.contrib.tpu.python.tpu import tpu_optimizer
@@ -103,11 +102,11 @@ tf.flags.DEFINE_integer(
     help='number of classes to distinguish')
 
 tf.flags.DEFINE_integer(
-    'width', default=304,
+    'width', default=224,
     help='width of input image')
 
 tf.flags.DEFINE_integer(
-    'height', default=304,
+    'height', default=224,
     help='height of input image')
 
 tf.flags.DEFINE_bool(
@@ -124,7 +123,7 @@ FLAGS = tf.flags.FLAGS
 _LEARNING_RATE_DECAY = 0.1
 _LEARNING_RATE_DECAY_EPOCHS = 30
 
-_RESIZE_SIDE_MIN = 328
+_RESIZE_SIDE_MIN = 256
 _RESIZE_SIDE_MAX = 512
 
 
@@ -179,19 +178,20 @@ class ImageNetInput(object):
 
 
 def inception_model_fn(features, labels, mode, params):
-  """Inception v3 model using Estimator API."""
+  """Inception v2 model using Estimator API."""
   del params
 
   num_classes = FLAGS.num_classes
   training_active = (mode == tf.estimator.ModeKeys.TRAIN)
   eval_active = (mode == tf.estimator.ModeKeys.EVAL)
 
-  with slim.arg_scope(inception.inception_v3_arg_scope()):
-    logits, end_points = inception.inception_v3(
+  with slim.arg_scope(inception.inception_v2_arg_scope()):
+    logits, _ = inception.inception_v2(
         features,
         num_classes,
         is_training=training_active,
-        depth_multiplier=FLAGS.depth_multiplier)
+        depth_multiplier=FLAGS.depth_multiplier,
+        replace_separable_convolution=True)
 
   predictions = {
       'classes': tf.argmax(input=logits, axis=1),
@@ -201,14 +201,6 @@ def inception_model_fn(features, labels, mode, params):
   if mode == tf.estimator.ModeKeys.PREDICT:
     return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions)
 
-  if 'AuxLogits' in end_points:
-    aux_loss = tf.losses.softmax_cross_entropy(
-        onehot_labels=labels,
-        logits=end_points['AuxLogits'],
-        weights=0.4,
-        label_smoothing=0.1,
-        scope='aux_loss')
-    tf.losses.add_loss(aux_loss)
   prediction_loss = tf.losses.softmax_cross_entropy(
       onehot_labels=labels,
       logits=logits,

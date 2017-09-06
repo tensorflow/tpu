@@ -26,6 +26,7 @@ import tensorflow as tf
 
 import imagenet
 import layers_resnet
+import learning_rate_schedule as lrs
 import model_conductor
 import multi_gpu
 import vgg_preprocessing
@@ -46,9 +47,16 @@ tf.flags.DEFINE_string(
 tf.flags.DEFINE_string(
     'model_dir', None, 'The directory where the model check-points will be '
     'written.')
+# RemoveMe! After the transition to train_file_pattern completed.
 tf.flags.DEFINE_string(
-    'file_pattern', None, 'The file pattern to match the data sets within '
-    'data_dir. Example, \'%s-*\' or \'%s@*\'')
+    'file_pattern', None, 'The file pattern to match the train data set '
+    'files within data_dir. Example, \'%s-*\' or \'%s@*\'')
+tf.flags.DEFINE_string(
+    'train_file_pattern', None, 'The file pattern to match the train data set '
+    'files within data_dir. Example, \'%s-*\' or \'%s@*\'')
+tf.flags.DEFINE_string(
+    'eval_file_pattern', None, 'The file pattern to match the eval data set '
+    'files within data_dir. Example, \'%s-*\' or \'%s@*\'')
 tf.flags.DEFINE_integer(
     'train_steps', 1000000, 'The number of steps to use for training.')
 tf.flags.DEFINE_integer(
@@ -107,8 +115,12 @@ tf.flags.DEFINE_integer('map_threads', 1,
                         'The number of threads for the dataset map operation.')
 tf.flags.DEFINE_integer('map_buffer_size', None,
                         'The size of the buffer for the dataset map operation.')
+tf.flags.DEFINE_integer('input_files_shuffle_capacity', 1024,
+                        'The number of data files held within the '
+                        'shuffle buffer (a value of 0 disable input files '
+                        'shuffling).')
 tf.flags.DEFINE_integer('input_shuffle_capacity', 100,
-                        'The number of training samples held within the'
+                        'The number of training samples held within the '
                         'shuffle buffer (a value of 0 disable input sample '
                         'shuffling).')
 tf.flags.DEFINE_integer('num_shards', 8,
@@ -126,14 +138,48 @@ tf.flags.DEFINE_boolean('tpu_mirror_transpose', True,
                         'should be enabled.')
 tf.flags.DEFINE_boolean('per_host_input_pipeline', True,
                         'Enable new per-host input when running on TPUs.')
-tf.flags.DEFINE_integer('prefetch_size', 1000,
-                        'Number of input samples per file to prefetch.')
+tf.flags.DEFINE_integer('prefetch_size', -1,
+                        'Number of input samples per file to prefetch. '
+                        'A negative value forces the use of batch size, while '
+                        'zero disables prefetch.')
+tf.flags.DEFINE_string(
+    'lr_losses', None, 'The comma separated set, in descending order, of '
+    'losses which defines the boundaries for the --lr_for_losses learning '
+    'rates. The number of values in --lr_losses should be one less than the '
+    'number of values is --lr_for_losses. Example: 10.2,8.7,4.9,2.1 . '
+    'The --lr_losses argument must be specified together with --lr_for_losses.')
+tf.flags.DEFINE_string(
+    'lr_for_losses', None, 'The comma separated set of learning rates which '
+    'should be scheduled according to the --lr_losses array. The number of '
+    'entries in this set must be one plus the number of entries in the '
+    '--lr_losses set. Essentially, if X is the current loss, and I is the '
+    'lowest index for which X > lr_losses[I], then the scheduled learning '
+    'rate will be lr_for_losses[I]. Example, referring to the example in '
+    'the --lr_losses comment: 0.5,0.4,0.1,0.02,0.005. If loss is 9.0, the '
+    'lowest index is 1, and the corresponding learnign rate is '
+    'lr_for_losses[1], which is 0.4 . The --lr_for_losses argument must be '
+    'specified together with --lr_losses.')
+tf.flags.DEFINE_string(
+    'lr_epochs', None, 'The comma separated set, in ascending order, of epochs '
+    'which defines the boundaries for the --lr_epoch_decay learning rate '
+    'decays. The number of values in --lr_epochs should be one less than the '
+    'number of values is --lr_epoch_decay. An example good value for this '
+    'field is: 1,2,3,4,5,30,60,120 . The --lr_epochs argument must be '
+    'specified together with --lr_epoch_decay.')
+tf.flags.DEFINE_string(
+    'lr_epoch_decay', None,
+    'The comma separated set of learning rate decays which should be scheduled '
+    'according to the --lr_epochs array. Essentially, if X is the current '
+    'epoch, and I is the highest index for which X < lr_epochs[I], then the '
+    'scheduled learning rate decay will be lr_epoch_decay[I]. An example good '
+    'value for this field is: 0.166,0.333,0.5,0.666,0.833,1,0.1,0.01,0.001 .')
 
 ModelResults = collections.namedtuple(
     'ModelResults', ['logits', 'loss', 'learning_rate', 'optimizer',
                      'predictions'])
 
-cfg = None
+_cfg = None
+_loss_decay_hook = None
 
 
 class ResnetConfig(object):
@@ -143,16 +189,20 @@ class ResnetConfig(object):
       self.train_dataset = imagenet.get_split_slim_dataset(
           'train',
           FLAGS.data_dir,
-          file_pattern=FLAGS.file_pattern)
+          file_pattern=FLAGS.file_pattern or FLAGS.train_file_pattern)
       self.eval_dataset = imagenet.get_split_slim_dataset(
           'validation',
           FLAGS.data_dir,
-          file_pattern=FLAGS.file_pattern)
+          file_pattern=FLAGS.eval_file_pattern)
     else:
-      self.train_dataset = imagenet.get_split('train', FLAGS.data_dir,
-                                              file_pattern=FLAGS.file_pattern)
-      self.eval_dataset = imagenet.get_split('validation', FLAGS.data_dir,
-                                             file_pattern=FLAGS.file_pattern)
+      self.train_dataset = imagenet.get_split(
+          'train',
+          FLAGS.data_dir,
+          file_pattern=FLAGS.file_pattern or FLAGS.train_file_pattern)
+      self.eval_dataset = imagenet.get_split(
+          'validation',
+          FLAGS.data_dir,
+          file_pattern=FLAGS.eval_file_pattern)
     self.image_preprocessing_fn = vgg_preprocessing.preprocess_image
     model = layers_resnet.get_model(FLAGS.model)
     self.network_fn = model(num_classes=self.train_dataset.num_classes)
@@ -164,7 +214,7 @@ def slim_dataset_input_fn(params, eval_batch_size=None):
   """Input function which provides a single batch training/eval data."""
   batch_size = eval_batch_size or params['batch_size']
   is_training = eval_batch_size is None
-  input_dataset = cfg.train_dataset if is_training else cfg.eval_dataset
+  input_dataset = _cfg.train_dataset if is_training else _cfg.eval_dataset
 
   provider = tf.contrib.slim.dataset_data_provider.DatasetDataProvider(
       dataset=input_dataset,
@@ -172,10 +222,10 @@ def slim_dataset_input_fn(params, eval_batch_size=None):
       common_queue_capacity=FLAGS.capacity * batch_size,
       common_queue_min=(FLAGS.capacity * batch_size) / 2)
   image, label = provider.get(['image', 'label'])
-  image = cfg.image_preprocessing_fn(
+  image = _cfg.image_preprocessing_fn(
       image=image,
-      output_height=cfg.network_fn.default_image_size,
-      output_width=cfg.network_fn.default_image_size,
+      output_height=_cfg.network_fn.default_image_size,
+      output_width=_cfg.network_fn.default_image_size,
       is_training=is_training,
       resize_side_min=FLAGS.resize_side_min,
       resize_side_max=FLAGS.resize_side_max)
@@ -195,36 +245,37 @@ def input_fn(params, eval_batch_size=None):
 
   batch_size = eval_batch_size or params['batch_size']
   is_training = eval_batch_size is None
-  input_dataset = cfg.train_dataset if is_training else cfg.eval_dataset
+  input_dataset = _cfg.train_dataset if is_training else _cfg.eval_dataset
 
   def parser(serialized_example):
     image, label = input_dataset.decoder.decode(serialized_example,
                                                 ['image', 'label'])
-    image = cfg.image_preprocessing_fn(
+    image = _cfg.image_preprocessing_fn(
         image=image,
-        output_height=cfg.network_fn.default_image_size,
-        output_width=cfg.network_fn.default_image_size,
+        output_height=_cfg.network_fn.default_image_size,
+        output_width=_cfg.network_fn.default_image_size,
         is_training=is_training,
         resize_side_min=FLAGS.resize_side_min,
         resize_side_max=FLAGS.resize_side_max)
     return image, tf.one_hot(label, input_dataset.num_classes)
 
-  dataset = tf.contrib.data.Dataset.from_tensor_slices(
-      input_dataset.data_sources)
-  dataset = dataset.shuffle(len(input_dataset.data_sources))
+  dataset = tf.contrib.data.Dataset.list_files(input_dataset.file_pattern)
   if is_training:
+    if FLAGS.input_files_shuffle_capacity > 0:
+      dataset = dataset.shuffle(FLAGS.input_files_shuffle_capacity)
     dataset = dataset.repeat()
 
   def prefetch_dataset(filename):
     dataset = tf.contrib.data.TFRecordDataset(filename)
     if FLAGS.prefetch_size > 0:
       dataset = dataset.prefetch(FLAGS.prefetch_size)
+    elif FLAGS.prefetch_size < 0:
+      dataset = dataset.prefetch(batch_size)
     return dataset
 
   dataset = dataset.interleave(
       prefetch_dataset,
-      cycle_length=FLAGS.num_readers, block_length=1
-  )
+      cycle_length=FLAGS.num_readers, block_length=batch_size)
   if FLAGS.input_shuffle_capacity > 0:
     dataset = dataset.shuffle(FLAGS.input_shuffle_capacity)
   dataset = dataset.map(
@@ -232,19 +283,12 @@ def input_fn(params, eval_batch_size=None):
       num_threads=FLAGS.map_threads,
       output_buffer_size=FLAGS.map_buffer_size or batch_size)
   dataset = dataset.batch(batch_size)
-  dataset = dataset.prefetch(2)
   images, labels = dataset.make_one_shot_iterator().get_next()
   # TODO(xiejw,saeta): Consider removing the sharding dimension below.
-  images_shape = images.get_shape().as_list()
-  if images_shape[0] is None:
-    images_shape[0] = batch_size
-    images = tf.reshape(
-        images, images_shape, name='InputPipeline/images/reshape')
-  labels_shape = labels.get_shape().as_list()
-  if labels_shape[0] is None:
-    labels_shape[0] = batch_size
-    labels = tf.reshape(
-        labels, labels_shape, name='InputPipeline/labels/reshape')
+  images.set_shape(images.get_shape().merge_with(
+      tf.TensorShape([batch_size, None, None, None])))
+  labels.set_shape(
+      labels.get_shape().merge_with(tf.TensorShape([batch_size, None])))
   images = pipeline_outputs_transform(images)
   return images, labels
 
@@ -256,7 +300,7 @@ def get_input_pipeline_fn():
 def model_inputs_transform(inputs):
   # Device side input transformation.
   if FLAGS.device == 'TPU' and FLAGS.tpu_mirror_transpose:
-    assert cfg.network_fn.input_layout == 'NHWC'
+    assert _cfg.network_fn.input_layout == 'NHWC'
     # See comment in pipeline_outputs_transform().
     mini_batch_size = FLAGS.batch_size // FLAGS.num_shards
     return (tf.transpose(inputs, [3, 0, 1, 2]) if mini_batch_size >= 64 else
@@ -267,7 +311,7 @@ def model_inputs_transform(inputs):
 def pipeline_outputs_transform(outputs):
   # Host side output transformation.
   if FLAGS.device == 'TPU' and FLAGS.tpu_mirror_transpose:
-    assert cfg.network_fn.input_layout == 'NHWC'
+    assert _cfg.network_fn.input_layout == 'NHWC'
     # We transpose the image tensor on the host, and apply the inverse transpose
     # on the device size. But the transpose on the device side, happen to be
     # eliding with the one that the first convolution node on the model graph
@@ -282,24 +326,12 @@ def get_image_batch_axis():
   if FLAGS.device == 'TPU' and FLAGS.tpu_mirror_transpose:
     mini_batch_size = FLAGS.batch_size // FLAGS.num_shards
     return 3 if mini_batch_size >= 64 else 2
-  return cfg.network_fn.input_layout.find('N')
-
-
-def get_learning_rate():
-  # Decay the learning rate by FLAGS.learning_rate_decay per epoch. We use
-  # staircase=True to keep the learning rate consistent across each epoch.
-  lr = tf.train.exponential_decay(
-      learning_rate=FLAGS.initial_learning_rate,
-      global_step=tf.train.get_global_step(),
-      decay_steps=int(cfg.batches_per_epoch * FLAGS.num_epochs_per_decay),
-      decay_rate=FLAGS.learning_rate_decay,
-      staircase=True)
-  return tf.maximum(lr, FLAGS.final_learning_rate, name='learning_rate')
+  return _cfg.network_fn.input_layout.find('N')
 
 
 def resnet_model_common(features, labels, mode):
   """The common model function used by both CPU/GPU and TPU specific ones."""
-  logits = cfg.network_fn(
+  logits = _cfg.network_fn(
       inputs=features, is_training=(mode == tf.estimator.ModeKeys.TRAIN),
       inputs_transform=model_inputs_transform)
   predictions = {
@@ -310,6 +342,8 @@ def resnet_model_common(features, labels, mode):
   loss = tf.losses.softmax_cross_entropy(logits=logits, onehot_labels=labels)
   loss += (FLAGS.weight_decay *
            tf.add_n([tf.nn.l2_loss(v) for v in tf.trainable_variables()]))
+  loss = tf.identity(loss, 'loss')
+
   learning_rate = get_learning_rate()
   optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate,
                                          momentum=FLAGS.momentum)
@@ -334,20 +368,11 @@ def resnet_model_fn(features, labels, mode, params):
   with tf.control_dependencies(update_ops):
     train_op = model_result.optimizer.minimize(
         model_result.loss, global_step=tf.train.get_global_step())
-  hooks = [
-      tf.train.LoggingTensorHook(
-          {
-              'loss': array_ops.identity(model_result.loss),
-              'step': tf.train.get_global_step()
-          },
-          every_n_secs=30)
-  ]
   return tf.estimator.EstimatorSpec(
       mode=mode,
       predictions=model_result.predictions,
       loss=model_result.loss,
       train_op=train_op,
-      training_hooks=hooks,
       eval_metric_ops=eval_metrics)
 
 
@@ -380,8 +405,69 @@ def get_model_fn():
 
 
 def get_train_steps():
-  return (FLAGS.train_epochs * cfg.batches_per_epoch if FLAGS.train_epochs else
+  return (FLAGS.train_epochs * _cfg.batches_per_epoch if FLAGS.train_epochs else
           FLAGS.train_steps)
+
+
+def setup_learning_rate_schedule():
+  global _loss_decay_hook
+
+  if FLAGS.lr_losses is not None:
+    assert FLAGS.lr_for_losses
+    tf.logging.info('Using loss based learning rate decay: '
+                    'lr_losses=[%s] lr_for_losses=[%s]',
+                    FLAGS.lr_losses, FLAGS.lr_for_losses)
+    lr_losses = [float(x) for x in FLAGS.lr_losses.split(',')]
+    lr_for_losses = [float(x) for x in FLAGS.lr_for_losses.split(',')]
+    _loss_decay_hook = lrs.LRLossDecayHook(lr_for_losses, lr_losses)
+    return
+
+
+def get_learning_rate():
+  """Retrieves the learning rate graph according to configuration."""
+  # If a loss dependent decay hook has been created, use it to get the
+  # learning rate variable to use.
+  if _loss_decay_hook is not None:
+    lr = _loss_decay_hook.get_learning_rate()
+  elif FLAGS.lr_epochs is not None:
+    # The default resnet uses a know learning rate decay pattern, and unless
+    # the user turned it off with --lr_epochs='', we set up the piece-wise
+    # constant learning rate schedule.
+    assert FLAGS.lr_epoch_decay
+    tf.logging.info('Using global step based learning rate decay: '
+                    'lr_epochs=[%s] lr_epoch_decay=[%s]',
+                    FLAGS.lr_epochs, FLAGS.lr_epoch_decay)
+    lr_steps = [int(_cfg.batches_per_epoch) * int(x)
+                for x in FLAGS.lr_epochs.split(',')]
+    assert all(lr_steps[i] < lr_steps[i + 1] for i in xrange(len(lr_steps) - 1))
+    lr_values = [FLAGS.initial_learning_rate * float(x)
+                 for x in FLAGS.lr_epoch_decay.split(',')]
+    lr = lrs.global_step_piecewise(lr_steps, lr_values)
+  else:
+    # Decay the learning rate by FLAGS.learning_rate_decay per epoch. We use
+    # staircase=True to keep the learning rate consistent across each epoch.
+    lr = tf.train.exponential_decay(
+        learning_rate=FLAGS.initial_learning_rate,
+        global_step=tf.train.get_global_step(),
+        decay_steps=int(_cfg.batches_per_epoch * FLAGS.num_epochs_per_decay),
+        decay_rate=FLAGS.learning_rate_decay,
+        staircase=True)
+    lr = tf.maximum(lr, FLAGS.final_learning_rate)
+  return tf.identity(lr, 'learning_rate')
+
+
+def get_train_hooks():
+  hooks = []
+  if FLAGS.device != 'TPU':
+    tensors_to_log = {
+        'learning_rate': 'learning_rate',
+        'loss': 'loss'
+    }
+    hooks.append(tf.train.LoggingTensorHook(
+        tensors=tensors_to_log, every_n_iter=100))
+  if _loss_decay_hook:
+    hooks.append(_loss_decay_hook)
+  return hooks
 
 
 def run_on_gpu(config):
@@ -394,8 +480,8 @@ def run_on_gpu(config):
   pipeline_input_fn = get_input_pipeline_fn()
 
   def wrapped_model_fn(inputs, is_training):
-    return cfg.network_fn(inputs=inputs, is_training=is_training,
-                          inputs_transform=model_inputs_transform)
+    return _cfg.network_fn(inputs=inputs, is_training=is_training,
+                           inputs_transform=model_inputs_transform)
 
   def train_inputfn():
     # The multi GPU code reads full batches and performs shard splitting.
@@ -420,12 +506,13 @@ def run_on_gpu(config):
       learning_rate=get_learning_rate,
       train_steps=get_train_steps(),
       eval_steps=FLAGS.eval_steps,
-      steps_per_train=FLAGS.epochs_per_train * cfg.batches_per_epoch,
-      target_accuracy=FLAGS.target_accuracy)
+      steps_per_train=FLAGS.epochs_per_train * _cfg.batches_per_epoch,
+      target_accuracy=FLAGS.target_accuracy,
+      train_hooks=get_train_hooks())
 
 
 def main(unused_argv):
-  global cfg
+  global _cfg
 
   if layers_resnet.get_model(FLAGS.model) is None:
     raise RuntimeError('--model must be one of [' +
@@ -439,8 +526,8 @@ def main(unused_argv):
     os.environ['TF_ENABLE_WINOGRAD_NONFUSED'] = '1'
   else:
     os.environ.pop('TF_ENABLE_WINOGRAD_NONFUSED', None)
-  cfg = ResnetConfig()
-  hooks = None
+  _cfg = ResnetConfig()
+  setup_learning_rate_schedule()
 
   session_config = tf.ConfigProto(
       allow_soft_placement=True,
@@ -463,13 +550,6 @@ def main(unused_argv):
     run_on_gpu(config)
     return
 
-  if FLAGS.device != 'TPU':
-    # Hooks do not work on TPU at the moment.
-    tensors_to_log = {'learning_rate': 'learning_rate'}
-    logging_hook = tf.train.LoggingTensorHook(
-        tensors=tensors_to_log, every_n_iter=100)
-    hooks = [logging_hook]
-
   resnet_classifier = tpu_estimator.TPUEstimator(
       model_fn=get_model_fn(),
       use_tpu=FLAGS.device == 'TPU',
@@ -487,9 +567,9 @@ def main(unused_argv):
                           pipeline_input_fn,
                           eval_input,
                           get_train_steps(),
-                          FLAGS.epochs_per_train * cfg.batches_per_epoch,
+                          FLAGS.epochs_per_train * _cfg.batches_per_epoch,
                           FLAGS.eval_steps,
-                          train_hooks=hooks,
+                          train_hooks=get_train_hooks(),
                           target_accuracy=FLAGS.target_accuracy)
 
 

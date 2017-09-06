@@ -242,6 +242,7 @@ def multigpu_model_fn(features, onehot_labels, mode, modelfn, num_gpus,
         'accuracy': tf.metrics.accuracy(stacked_labels, predictions['classes'])
     }
     loss = tf.reduce_mean(tower_losses, name='loss')
+    tf.summary.scalar('mean_loss', loss)
 
   return tf.estimator.EstimatorSpec(
       mode=mode,
@@ -330,8 +331,8 @@ def split_batch_input(image_batch, label_batch, batch_size, num_shards,
 
 def multigpu_run(config, train_inputfn, eval_inputfn, modelfn, num_gpus,
                  batch_size, shard_axis, weight_decay, momentum, learning_rate,
-                 train_steps, eval_steps, steps_per_train,
-                 target_accuracy=None):
+                 train_steps, eval_steps, steps_per_train, target_accuracy=None,
+                 train_hooks=None):
   """Trains and evaluates a model on GPU.
 
   Args:
@@ -355,6 +356,7 @@ def multigpu_run(config, train_inputfn, eval_inputfn, modelfn, num_gpus,
         running evaluation steps.
     target_accuracy: If specified, a given accuracy target at which to stop
         the training.
+    train_hooks: Optional hooks for the training operation.
   """
   def wrapped_modelfn(features, labels, mode):
     return multigpu_model_fn(features, labels, mode, modelfn, num_gpus,
@@ -372,13 +374,11 @@ def multigpu_run(config, train_inputfn, eval_inputfn, modelfn, num_gpus,
 
   # Hooks that add extra logging that is useful to see the loss more often in
   # the console as well as examples per second.
-  tensors_to_log = {'learning_rate': 'learning_rate',
-                    'loss': 'loss'}
-  logging_hook = tf.train.LoggingTensorHook(
-      tensors=tensors_to_log, every_n_iter=100)
   examples_sec_hook = ExamplesPerSecondHook(
       batch_size, every_n_steps=10)
-  hooks = [logging_hook, examples_sec_hook]
+  hooks = [examples_sec_hook]
+  if train_hooks:
+    hooks.extend(train_hooks)
 
   classifier = tf.estimator.Estimator(
       model_fn=wrapped_modelfn, config=config)

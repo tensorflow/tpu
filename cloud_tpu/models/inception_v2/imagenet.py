@@ -58,6 +58,11 @@ _ITEMS_TO_DESCRIPTIONS = {
 _NUM_CLASSES = 1001
 
 
+def get_split_size(set_name):
+  """Return size of train/validation set."""
+  return _SPLITS_TO_SIZES.get(set_name)
+
+
 def create_readable_names_for_imagenet_labels():
   """Create a dict mapping label id to human readable string.
 

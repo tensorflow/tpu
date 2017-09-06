@@ -21,7 +21,6 @@ import os
 
 import tensorflow as tf
 
-import imagenet
 import resnet_model
 import vgg_preprocessing
 from tensorflow.contrib.tpu.python.tpu import tpu_config
@@ -39,139 +38,197 @@ tf.flags.DEFINE_string(
     docstring='The directory where the ImageNet input data is stored.')
 
 tf.flags.DEFINE_string(
-    'model_dir', default_value='/tmp/resnet_model',
+    'model_dir', default_value='',
     docstring='The directory where the model will be stored.')
 
 tf.flags.DEFINE_integer(
-    'resnet_size', default_value=50,
-    docstring='The size of the ResNet model to use.')
+    'resnet_size', default_value=50, docstring='The size of the ResNet model to use.')
 
 tf.flags.DEFINE_integer(
-    'train_steps', default_value=4800000,
+    'train_steps', default_value=200000,
     docstring='The number of steps to use for training.')
 
 tf.flags.DEFINE_integer(
-    'train_steps_per_eval', default_value=40000,
+    'steps_per_eval', default_value=5000,
     docstring='The number of training steps to run between evaluations.')
 
 tf.flags.DEFINE_integer(
-    'train_batch_size', default_value=32, docstring='Batch size for training.')
+    'train_batch_size', default_value=1024, docstring='Batch size for training.')
 
 tf.flags.DEFINE_integer(
-    'eval_batch_size', default_value=100,
-    docstring='Batch size for evaluation.')
+    'eval_batch_size', default_value=1024, docstring='Batch size for evaluation.')
 
-tf.flags.DEFINE_integer(
-    'label_classes', default_value=1001,
-    docstring='The number of label classes.')
+_LABEL_CLASSES = 1001
+_NUM_CHANNELS = 3
 
-tf.flags.DEFINE_float(
-    'momentum', default_value=0.9,
-    docstring='Momentum for MomentumOptimizer.')
-
-# The learning rate should decay by 0.1 every 30 epochs.
-_LEARNING_RATE_DECAY = 0.1
-_LEARNING_RATE_DECAY_EPOCHS = 30
+_MOMENTUM = 0.9
+_WEIGHT_DECAY = 1e-4
 
 image_preprocessing_fn = vgg_preprocessing.preprocess_image
 
 
 class ImageNetInput(object):
+
   def __init__(self, is_training):
     self.is_training = is_training
 
+  def dataset_parser(self, value):
+    """Parse an Imagenet record from value."""
+    keys_to_features = {
+        'image/encoded':
+            tf.FixedLenFeature((), tf.string, ''),
+        'image/format':
+            tf.FixedLenFeature((), tf.string, 'jpeg'),
+        'image/class/label':
+            tf.FixedLenFeature([], tf.int64, -1),
+        'image/class/text':
+            tf.FixedLenFeature([], tf.string, ''),
+        'image/object/bbox/xmin':
+            tf.VarLenFeature(dtype=tf.float32),
+        'image/object/bbox/ymin':
+            tf.VarLenFeature(dtype=tf.float32),
+        'image/object/bbox/xmax':
+            tf.VarLenFeature(dtype=tf.float32),
+        'image/object/bbox/ymax':
+            tf.VarLenFeature(dtype=tf.float32),
+        'image/object/class/label':
+            tf.VarLenFeature(dtype=tf.int64),
+    }
+
+    parsed = tf.parse_single_example(value, keys_to_features)
+
+    image = tf.image.decode_image(
+        tf.reshape(parsed['image/encoded'], shape=[]), _NUM_CHANNELS)
+    image = tf.image.convert_image_dtype(image, dtype=tf.float32)
+
+    # TODO(shivaniagrawal): height and width of image from model
+    image = image_preprocessing_fn(
+        image=image,
+        output_height=224,
+        output_width=224,
+        is_training=self.is_training)
+
+    label = tf.cast(
+        tf.reshape(parsed['image/class/label'], shape=[]), dtype=tf.int32)
+
+    return image, tf.one_hot(label, _LABEL_CLASSES)
+
   def __call__(self, params):
     """Input function which provides a single batch for train or eval."""
-    train_dataset = imagenet.get_split('train', FLAGS.data_dir)
-    eval_dataset = imagenet.get_split('validation', FLAGS.data_dir)
-
     batch_size = params['batch_size']
-    dataset = train_dataset if self.is_training else eval_dataset
-    capacity_multiplier = 20 if self.is_training else 2
-    min_multiplier = 10 if self.is_training else 1
 
-    provider = tf.contrib.slim.dataset_data_provider.DatasetDataProvider(
-        dataset=dataset,
-        num_readers=4,
-        common_queue_capacity=capacity_multiplier * batch_size,
-        common_queue_min=min_multiplier * batch_size)
+    # Shuffle the filenames to ensure better randomization
+    file_pattern = os.path.join(
+        FLAGS.data_dir, 'train-*' if self.is_training else 'validation-*')
+    dataset = tf.contrib.data.Dataset.list_files(file_pattern)
+    if self.is_training:
+      dataset = dataset.shuffle(buffer_size=1024)
 
-    image, label = provider.get(['image', 'label'])
+    # TODO(shivaniagrawal): interleave being bottleneck, working on that in
+    # cl/166938020
+    dataset = dataset.flat_map(tf.contrib.data.TFRecordDataset)
 
-    image = image_preprocessing_fn(image=image,
-                                   output_height=224,
-                                   output_width=224,
-                                   is_training=self.is_training)
+    dataset = dataset.repeat()
 
-    images, labels = tf.train.batch(tensors=[image, label],
-                                    batch_size=batch_size,
-                                    num_threads=4,
-                                    capacity=5 * batch_size)
+    dataset = dataset.map(
+        self.dataset_parser,
+        num_parallel_calls=batch_size)
 
-    labels = tf.one_hot(labels, FLAGS.label_classes)
+    if self.is_training:
+      buffer_size = 5 * batch_size
+      dataset = dataset.shuffle(buffer_size=buffer_size)
+
+    iterator = dataset.batch(batch_size).make_one_shot_iterator()
+    images, labels = iterator.get_next()
+
+    images.set_shape(images.get_shape().merge_with(
+        tf.TensorShape([batch_size, None, None, None])))
+    labels.set_shape(
+        labels.get_shape().merge_with(tf.TensorShape([batch_size, None])))
     return images, labels
+
+
+def metric_fn(labels, logits):
+  """Evaluation metric Fn."""
+  predictions = tf.argmax(logits, axis=1)
+  accuracy = tf.metrics.accuracy(tf.argmax(labels, axis=1), predictions)
+  return {'accuracy': accuracy}
+
+
+def piecewise_constant(x, boundaries, values):
+  """Simulates the behavior of tf.train.piecewise_constant with tf.where."""
+  piecewise_value = values[0]
+
+  for i in xrange(len(boundaries)):
+    piecewise_value = tf.where(
+        x < boundaries[i], piecewise_value, values[i + 1])
+
+  return piecewise_value
 
 
 def resnet_model_fn(features, labels, mode, params):
   """Our model_fn for ResNet to be used with our Estimator."""
-  network_fn = resnet_model.resnet_v2(
-      resnet_size=FLAGS.resnet_size, num_classes=1001)
-  logits = network_fn(
+  network = resnet_model.resnet_v2(
+      resnet_size=FLAGS.resnet_size, num_classes=_LABEL_CLASSES)
+
+  logits = network(
       inputs=features, is_training=(mode == tf.estimator.ModeKeys.TRAIN))
 
-  predictions = {
-      'classes': tf.argmax(input=logits, axis=1),
-      'probabilities': tf.nn.softmax(logits, name='softmax_tensor')
-  }
-
   if mode == tf.estimator.ModeKeys.PREDICT:
+    predictions = {
+        'classes': tf.argmax(logits, axis=1),
+        'probabilities': tf.nn.softmax(logits, name='softmax_tensor')
+    }
     return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions)
 
-  # Get the total losses including softmax cross entropy and L2 regularization
-  prediction_loss = tf.losses.softmax_cross_entropy(
+  # Calculate loss, which includes softmax cross entropy and L2 regularization.
+  cross_entropy = tf.losses.softmax_cross_entropy(
       logits=logits, onehot_labels=labels)
-  prediction_loss = tf.identity(prediction_loss, name='prediction_loss')
-  tf.losses.add_loss(prediction_loss)
-  loss = tf.losses.get_total_loss(add_regularization_losses=True)
 
-  # Scale the learning rate linearly with the batch size. When the batch size is
-  # 256, the learning rate should be 0.1.
-  _INITIAL_LEARNING_RATE = 0.1 * FLAGS.train_batch_size / 256
-  _FINAL_LEARNING_RATE = 0.01 * _INITIAL_LEARNING_RATE
+  # Create a tensor named cross_entropy for logging purposes.
+  # tf.identity(cross_entropy, name='cross_entropy')
+  # tf.summary.scalar('cross_entropy', cross_entropy)
+
+  # Add weight decay to the loss. We perform weight decay on all trainable
+  # variables, which includes batch norm beta and gamma variables.
+  loss = cross_entropy + _WEIGHT_DECAY * tf.add_n(
+      [tf.nn.l2_loss(v) for v in tf.trainable_variables()])
 
   if mode == tf.estimator.ModeKeys.TRAIN:
-    # Multiply the learning rate by 0.1 every 30 epochs.
+    # Scale the learning rate linearly with the batch size. When the batch size is
+    # 256, the learning rate should be 0.1.
+    _INITIAL_LEARNING_RATE = 0.1 * FLAGS.train_batch_size / 256
+
     batches_per_epoch = 1281167 / FLAGS.train_batch_size
-    learning_rate = tf.train.exponential_decay(
-        learning_rate=_INITIAL_LEARNING_RATE,
-        global_step=tf.train.get_global_step(),
-        decay_steps=_LEARNING_RATE_DECAY_EPOCHS * batches_per_epoch,
-        decay_rate=_LEARNING_RATE_DECAY,
-        staircase=True)
+    global_step = tf.train.get_or_create_global_step()
 
-    # Set a minimum boundary for the learning rate.
-    learning_rate = tf.maximum(
-        learning_rate, _FINAL_LEARNING_RATE, name='learning_rate')
+    # Perform a gradual warmup of the learning rate, as in the paper "Training
+    # ImageNet in 1 Hour." Afterward, decay the learning rate by 0.1 at 30, 60,
+    # 120, and 150 epochs.
+    boundaries = [int(batches_per_epoch * epoch) for epoch in [
+        1, 2, 3, 4, 5, 30, 60, 120, 150]]
+    values = [_INITIAL_LEARNING_RATE * decay for decay in [
+        1.0 / 6, 2.0 / 6, 3.0 / 6, 4.0 / 6, 5.0 / 6, 1, 0.1, 0.01, 1e-3, 1e-4]]
+    learning_rate = piecewise_constant(global_step, boundaries, values)
 
-    #tf.summary.scalar('learning_rate', learning_rate)
+    # Create a tensor named learning_rate for logging purposes.
+    # tf.identity(learning_rate, name='learning_rate')
+    # tf.summary.scalar('learning_rate', learning_rate)
 
     optimizer = tf.train.MomentumOptimizer(
         learning_rate=learning_rate,
-        momentum=FLAGS.momentum)
+        momentum=_MOMENTUM)
     optimizer = tpu_optimizer.CrossShardOptimizer(optimizer)
 
+    # Batch norm requires update_ops to be added as a train_op dependency.
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
     with tf.control_dependencies(update_ops):
-      train_op = optimizer.minimize(loss, global_step=tf.train.get_global_step())
+      train_op = optimizer.minimize(loss, global_step)
   else:
     train_op = None
 
   eval_metrics = None
   if mode == tf.estimator.ModeKeys.EVAL:
-    def metric_fn(labels, logits):
-      predictions = tf.argmax(input=logits, axis=1)
-      accuracy = tf.metrics.accuracy(tf.argmax(input=labels, axis=1), predictions)
-      return {'accuracy': accuracy}
     eval_metrics = (metric_fn, [labels, logits])
 
   return tpu_estimator.TPUEstimatorSpec(
@@ -195,24 +252,15 @@ def main(unused_argv):
       train_batch_size=FLAGS.train_batch_size,
       eval_batch_size=FLAGS.eval_batch_size)
 
-  for cycle in range(FLAGS.train_steps // FLAGS.train_steps_per_eval):
-    #tensors_to_log = {
-    #    'learning_rate': 'learning_rate',
-    #    'prediction_loss': 'prediction_loss',
-    #    'train_accuracy': 'train_accuracy'
-    #}
-
-    #logging_hook = tf.train.LoggingTensorHook(
-    #    tensors=tensors_to_log, every_n_iter=100)
-
+  for cycle in range(FLAGS.train_steps // FLAGS.steps_per_eval):
     tf.logging.info('Starting a training cycle.')
     resnet_classifier.train(
-        input_fn=ImageNetInput(True), steps=FLAGS.train_steps_per_eval)
+        input_fn=ImageNetInput(True), steps=FLAGS.steps_per_eval)
 
     _EVAL_STEPS = 50000 // FLAGS.eval_batch_size
     tf.logging.info('Starting to evaluate.')
     eval_results = resnet_classifier.evaluate(
-      input_fn=ImageNetInput(False), steps=_EVAL_STEPS)
+        input_fn=ImageNetInput(False), steps=_EVAL_STEPS)
     tf.logging.info('Eval results: %s' % eval_results)
 
 
