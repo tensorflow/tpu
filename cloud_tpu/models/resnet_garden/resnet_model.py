@@ -36,16 +36,15 @@ import tensorflow as tf
 
 _BATCH_NORM_DECAY = 0.997
 _BATCH_NORM_EPSILON = 1e-5
-_WEIGHT_DECAY = 1e-4
 
 
 def batch_norm_relu(inputs, is_training):
   """Performs a batch normalization followed by a ReLU."""
-  # We set fused=True for a performance boost.
-  inputs = tf.contrib.layers.batch_norm(
-      inputs=inputs, decay=_BATCH_NORM_DECAY, center=True, scale=True,
-      epsilon=_BATCH_NORM_EPSILON, is_training=is_training, fused=True,
-      data_format='NCHW')
+  # We set fused=True for a significant performance boost.
+  inputs = tf.layers.batch_normalization(
+      inputs=inputs, axis=1, momentum=_BATCH_NORM_DECAY,
+      epsilon=_BATCH_NORM_EPSILON, center=True, scale=True,
+      training=is_training, fused=True)
   inputs = tf.nn.relu(inputs)
   return inputs
 
@@ -82,8 +81,7 @@ def conv2d_fixed_padding(inputs, filters, kernel_size, strides):
   return tf.layers.conv2d(
       inputs=inputs, filters=filters, kernel_size=kernel_size, strides=strides,
       padding=('SAME' if strides == 1 else 'VALID'), use_bias=False,
-      kernel_regularizer=tf.contrib.layers.l2_regularizer(_WEIGHT_DECAY),
-      kernel_initializer=tf.contrib.layers.variance_scaling_initializer(),
+      kernel_initializer=tf.variance_scaling_initializer(),
       data_format='channels_first')
 
 
@@ -104,7 +102,6 @@ def building_block(inputs, filters, is_training, projection_shortcut, strides):
     The output tensor of the block.
   """
   shortcut = inputs
-
   inputs = batch_norm_relu(inputs, is_training)
 
   # The projection shortcut should come after the first batch norm and ReLU
@@ -141,7 +138,6 @@ def bottleneck_block(inputs, filters, is_training, projection_shortcut,
     The output tensor of the block.
   """
   shortcut = inputs
-
   inputs = batch_norm_relu(inputs, is_training)
 
   # The projection shortcut should come after the first batch norm and ReLU
@@ -213,7 +209,7 @@ def resnet_v2_generator(block_fn, layers, num_classes):
   """
   def model(inputs, is_training):
     # Convert from channels_last (NHWC) to channels_first (NCHW). This provides
-    # a large performance boost.
+    # a large performance boost on GPU.
     inputs = tf.transpose(inputs, [0, 3, 1, 2])
 
     inputs = conv2d_fixed_padding(
@@ -242,10 +238,9 @@ def resnet_v2_generator(block_fn, layers, num_classes):
         inputs=inputs, pool_size=7, strides=1, padding='VALID',
         data_format='channels_first')
     inputs = tf.identity(inputs, 'final_avg_pool')
-    inputs = tf.reshape(inputs, [inputs.get_shape()[0].value, -1])
-    inputs = tf.layers.dense(
-        inputs=inputs, units=num_classes,
-        kernel_regularizer=tf.contrib.layers.l2_regularizer(_WEIGHT_DECAY))
+    inputs = tf.reshape(inputs,
+                        [-1, 512 if block_fn is building_block else 2048])
+    inputs = tf.layers.dense(inputs=inputs, units=num_classes)
     inputs = tf.identity(inputs, 'final_dense')
     return inputs
 

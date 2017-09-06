@@ -44,7 +44,7 @@ slim = tf.contrib.slim
 
 InputData = collections.namedtuple(
     'InputData',
-    ['data_sources', 'decoder', 'num_samples', 'items_to_descriptions',
+    ['file_pattern', 'decoder', 'num_samples', 'items_to_descriptions',
      'num_classes'])
 
 # TODO(nsilberman): Add tfrecord file type once the script is updated.
@@ -154,42 +154,11 @@ def get_split(split_name, dataset_dir, file_pattern=None):
     raise ValueError('split name %s was not recognized.' % split_name)
   if not file_pattern:
     file_pattern = _FILE_PATTERN
-  file_pattern = file_pattern % split_name
-  files = []
-  # Allow for filename expansion w/out using Glob().
-  # Example: 'train-[0,1023,05d]-of-01024' to generate:
-  #   train-00000-of-01024
-  #   train-00001-of-01024
-  #   ...
-  #   train-01023-of-01024
-  m = re.match(r'(.*)\[(\d+),(\d+),([a-zA-Z0-9]+)\](.*)', file_pattern)
-  if m:
-    format_string = '%' + m.group(4)
-    for n in range(int(m.group(2)), int(m.group(3)) + 1):
-      seqstr = format_string % n
-      files.append(os.path.join(dataset_dir, m.group(1) + seqstr + m.group(5)))
-  else:
-    path = os.path.join(dataset_dir, file_pattern)
-    # If the file_pattern ends with '.list', then the file is supposed to be a
-    # file which lists the input files one per line.
-    if path.endswith('.list'):
-      with gfile.Open(path, 'r') as list_file:
-        for fpath in list_file:
-          fpath = fpath.strip()
-          if fpath:
-            files.append(fpath)
-    elif path.find('*') < 0:
-      # If the path does not contain any glob pattern, assume it is a single
-      # input file. Detection for glob patters might be more complex, but all
-      # the examples seen so far, uses '*' only.
-      files.append(path)
-    else:
-      # Otherwise we assume it is a glob-able path.
-      files = gfile.Glob(path)
+  file_pattern = os.path.join(dataset_dir, file_pattern % split_name)
   decoder = slim.tfexample_decoder.TFExampleDecoder(
       _KEYS_TO_FEATURES, _ITEMS_TO_HANDLERS)
   return InputData(
-      data_sources=files,
+      file_pattern=file_pattern,
       decoder=decoder,
       num_samples=_SPLITS_TO_SIZES[split_name],
       items_to_descriptions=_ITEMS_TO_DESCRIPTIONS,
