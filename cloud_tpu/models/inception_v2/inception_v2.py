@@ -25,97 +25,97 @@ import imagenet
 import inception_v2_tpu_model as inception
 import vgg_preprocessing
 
-# Standard Imports.third_party.tensorflow.contrib.slim as slim
+from tensorflow.contrib import slim
 from tensorflow.contrib.tpu.python.tpu import tpu_config
 from tensorflow.contrib.tpu.python.tpu import tpu_estimator
 from tensorflow.contrib.tpu.python.tpu import tpu_optimizer
 
 
 tf.flags.DEFINE_float(
-    'learning_rate', default=0.05,
-    help='Learning rate.')
+    'learning_rate', default_value=0.05,
+    docstring='Learning rate.')
 
 tf.flags.DEFINE_float(
-    'depth_multiplier', default=1.0,
-    help='Depth Multiplier on Inception')
+    'depth_multiplier', default_value=1.0,
+    docstring='Depth Multiplier on Inception')
 
 tf.flags.DEFINE_integer(
-    'train_steps', default=4800000,
-    help='Number of steps use for training.')
+    'train_steps', default_value=4800000,
+    docstring='Number of steps use for training.')
 
 tf.flags.DEFINE_integer(
-    'train_steps_per_eval', default=40000,
-    help='Number of training steps to run between evaluations.')
+    'train_steps_per_eval', default_value=40000,
+    docstring='Number of training steps to run between evaluations.')
 
 tf.flags.DEFINE_integer(
-    'save_summary_steps', default=100,
-    help='Number of steps which must have run before showing '
+    'save_summary_steps', default_value=100,
+    docstring='Number of steps which must have run before showing '
          'the summaries.')
 
 tf.flags.DEFINE_integer(
-    'save_checkpoints_secs', default=1000,
-    help='The interval, in seconds, at which the model data '
+    'save_checkpoints_secs', default_value=1000,
+    docstring='The interval, in seconds, at which the model data '
          'should be checkpointed (set to 0 to disable).')
 
 tf.flags.DEFINE_bool(
-    'use_tpu', default=True,
-    help='Use TPUs rather than plain CPUs')
+    'use_tpu', default_value=True,
+    docstring='Use TPUs rather than plain CPUs')
 
 tf.flags.DEFINE_string(
-    'use_data', default='real',
-    help='One of "fake","real"')
+    'use_data', default_value='real',
+    docstring='One of "fake","real"')
 
 tf.flags.DEFINE_string(
-    'master', default='local',
-    help='BNS name of the TensorFlow master to use.')
+    'master', default_value='local',
+    docstring='BNS name of the TensorFlow master to use.')
 
 tf.flags.DEFINE_string(
-    'model_dir', default=None,
-    help='Directory where model output is stored')
+    'model_dir', default_value=None,
+    docstring='Directory where model output is stored')
 
 tf.flags.DEFINE_integer(
-    'iterations', default=100,
-    help='Number of iterations per TPU training loop.')
+    'iterations', default_value=100,
+    docstring='Number of iterations per TPU training loop.')
 
 tf.flags.DEFINE_string(
-    'optimizer', default='momentum',
-    help='optimizer (one of sgd, rms, momentum)')
+    'optimizer', default_value='momentum',
+    docstring='optimizer (one of sgd, rms, momentum)')
 
 tf.flags.DEFINE_integer(
-    'num_shards', default=8,
-    help='Number of shards (TPU chips).')
+    'num_shards', default_value=8,
+    docstring='Number of shards (TPU chips).')
 
 tf.flags.DEFINE_integer(
-    'train_batch_size', default=1024,
-    help='Global (not per-shard) batch size for training')
+    'train_batch_size', default_value=1024,
+    docstring='Global (not per-shard) batch size for training')
 
 tf.flags.DEFINE_integer(
-    'eval_batch_size', default=128,
-    help='Global (not per-shard) batch size for evaluation')
+    'eval_batch_size', default_value=128,
+    docstring='Global (not per-shard) batch size for evaluation')
 
 tf.flags.DEFINE_bool(
-    'eval_enabled', default=True,
-    help='Boolean to enable/disable evaluation')
+    'eval_enabled', default_value=True,
+    docstring='Boolean to enable/disable evaluation')
 
 tf.flags.DEFINE_integer(
-    'num_classes', default=1001,
-    help='number of classes to distinguish')
+    'num_classes', default_value=1001,
+    docstring='number of classes to distinguish')
 
 tf.flags.DEFINE_integer(
-    'width', default=224,
-    help='width of input image')
+    'width', default_value=224,
+    docstring='width of input image')
 
 tf.flags.DEFINE_integer(
-    'height', default=224,
-    help='height of input image')
+    'height', default_value=224,
+    docstring='height of input image')
 
 tf.flags.DEFINE_bool(
-    'log_device_placement', default=False,
-    help='Boolean to enable/disable log device placement')
+    'log_device_placement', default_value=False,
+    docstring='Boolean to enable/disable log device placement')
 
 tf.flags.DEFINE_string(
-    'data_dir', default='',
-    help='Directory where input data is stored')
+    'data_dir', default_value='',
+    docstring='Directory where input data is stored')
 
 FLAGS = tf.flags.FLAGS
 
