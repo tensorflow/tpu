@@ -125,6 +125,8 @@ tf.flags.DEFINE_integer('input_shuffle_capacity', 100,
                         'The number of training samples held within the '
                         'shuffle buffer (a value of 0 disable input sample '
                         'shuffling).')
+tf.flags.DEFINE_integer('dataset_reader_buffer_size', None,
+                        'The size of the buffer for dataset read operations.')
 tf.flags.DEFINE_integer('num_shards', 8,
                         'The number of shards to split the training work into.')
 tf.flags.DEFINE_integer('log_step_count_steps', 64, 'The number of steps at '
@@ -268,7 +270,8 @@ def input_fn(params, eval_batch_size=None):
     dataset = dataset.repeat()
 
   def prefetch_dataset(filename):
-    dataset = tf.contrib.data.TFRecordDataset(filename)
+    dataset = tf.contrib.data.TFRecordDataset(
+        filename, buffer_size=FLAGS.dataset_reader_buffer_size)
     if FLAGS.prefetch_size > 0:
       dataset = dataset.prefetch(FLAGS.prefetch_size)
     elif FLAGS.prefetch_size < 0:

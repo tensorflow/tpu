@@ -47,6 +47,8 @@ tf.flags.DEFINE_string("model_dir", None, "Estimator model_dir")
 tf.flags.DEFINE_integer("iterations", 50,
                         "Number of iterations per TPU training loop.")
 tf.flags.DEFINE_integer("num_shards", 8, "Number of shards (TPU chips).")
+tf.flags.DEFINE_integer("dataset_reader_buffer_size", None,
+                        "The size of the buffer for dataset read operations.")
 
 FLAGS = tf.flags.FLAGS
 
@@ -134,7 +136,8 @@ def get_input_fn(filename):
       label = tf.cast(features["label"], tf.int32)
       return image, label
 
-    dataset = tf.contrib.data.TFRecordDataset([filename])
+    dataset = tf.contrib.data.TFRecordDataset(
+        filename, buffer_size=FLAGS.dataset_reader_buffer_size)
     dataset = dataset.map(parser).cache().repeat().batch(batch_size)
     images, labels = dataset.make_one_shot_iterator().get_next()
     # set_shape to give inputs statically known shapes.
