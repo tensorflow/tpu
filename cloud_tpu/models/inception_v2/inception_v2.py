@@ -113,6 +113,10 @@ tf.flags.DEFINE_bool(
     'log_device_placement', default_value=False,
     docstring='Boolean to enable/disable log device placement')
 
+tf.flags.DEFINE_bool(
+    'use_fused_batchnorm', default_value=True,
+    docstring='Enable fused batchrnom')
+
 tf.flags.DEFINE_string(
     'data_dir', default_value='',
     docstring='Directory where input data is stored')
@@ -185,7 +189,8 @@ def inception_model_fn(features, labels, mode, params):
   training_active = (mode == tf.estimator.ModeKeys.TRAIN)
   eval_active = (mode == tf.estimator.ModeKeys.EVAL)
 
-  with slim.arg_scope(inception.inception_v2_arg_scope()):
+  with slim.arg_scope(inception.inception_v2_arg_scope(
+      use_fused_batchnorm=FLAGS.use_fused_batchnorm)):
     logits, _ = inception.inception_v2(
         features,
         num_classes,

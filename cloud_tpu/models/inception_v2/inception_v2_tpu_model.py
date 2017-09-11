@@ -621,7 +621,8 @@ def _reduced_kernel_size_for_small_input(input_tensor, kernel_size):
 
 
 def inception_v2_arg_scope(weight_decay=0.00004,
-                           batch_norm_var_collection='moving_vars'):
+                           batch_norm_var_collection='moving_vars',
+                           use_fused_batchnorm=True):
   """Defines the default InceptionV2 arg scope.
 
   Args:
@@ -639,6 +640,8 @@ def inception_v2_arg_scope(weight_decay=0.00004,
       'epsilon': 0.001,
       # collection containing update_ops.
       'updates_collections': ops.GraphKeys.UPDATE_OPS,
+      # Enable fused batchnorm.
+      "fused": use_fused_batchnorm,
       # collection containing the moving mean and moving variance.
       'variables_collections': {
           'beta': None,
