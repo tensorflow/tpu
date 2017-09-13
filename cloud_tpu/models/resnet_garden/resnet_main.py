@@ -60,6 +60,11 @@ tf.flags.DEFINE_integer(
 tf.flags.DEFINE_integer(
     'eval_batch_size', default_value=1024, docstring='Batch size for evaluation.')
 
+tf.flags.DEFINE_integer("num_shards", 8, "Number of shards (TPU chips).")
+
+tf.flags.DEFINE_integer("iterations_per_loop", 100,
+                        "Number of iterations per TPU training loop.")
+
 _LABEL_CLASSES = 1001
 _NUM_CHANNELS = 3
 
@@ -246,8 +251,8 @@ def main(unused_argv):
       evaluation_master=FLAGS.master,
       model_dir=FLAGS.model_dir,
       tpu_config=tpu_config.TPUConfig(
-          iterations_per_loop=100,
-          num_shards=8))
+          iterations_per_loop=FLAGS.iterations_per_loop,
+          num_shards=FLAGS.num_shards))
   resnet_classifier = tpu_estimator.TPUEstimator(
       model_fn=resnet_model_fn,
       config=config,
