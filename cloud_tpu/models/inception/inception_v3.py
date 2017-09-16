@@ -83,6 +83,24 @@ tf.flags.DEFINE_string(
     docstring='optimizer (one of sgd, rms, momentum)')
 
 tf.flags.DEFINE_integer(
+    'map_threads', default_value=1,
+    docstring='The number of threads for the dataset map operation')
+
+tf.flags.DEFINE_integer(
+    'input_files_shuffle_capacity', default_value=1024,
+    docstring='Number of data files held within the shuffle '
+         'buffer (set to 0 to disable)')
+
+tf.flags.DEFINE_integer(
+    'input_shuffle_capacity', default_value=100,
+    docstring='The number of training samples held within the shuffle '
+         'buffer (set to 0 to disable)')
+
+tf.flags.DEFINE_integer(
+    'dataset_reader_buffer_size', default_value=None,
+    docstring='Size of buffer for dataset read operations')
+
+tf.flags.DEFINE_integer(
     'num_shards', default_value=8,
     docstring='Number of shards (TPU chips).')
 
@@ -115,6 +133,32 @@ tf.flags.DEFINE_bool(
     docstring='Boolean to enable/disable log device placement')
 
 tf.flags.DEFINE_bool(
+    'use_slim', default_value=False,
+    docstring='Boolean to choose between slim.dataset.Datasets and '
+         'data.Datasets for input pipeline')
+
+tf.flags.DEFINE_integer(
+    'num_readers', default_value=8,
+    docstring='Number of readers for data set provider')
+
+tf.flags.DEFINE_bool(
+    'prefetch_enabled', default_value=True,
+    docstring='Boolean to decide whether to prefetch or not')
+
+tf.flags.DEFINE_integer(
+    'prefetch_size', default_value=0,
+    docstring='Number of input samples per file to prefetch. '
+         'A zero means use batch size samples')
+
+tf.flags.DEFINE_string(
+    'input_layout', default_value='NHWC',
+    docstring='Assumed input shape layout')
+
+tf.flags.DEFINE_bool(
+    'transpose_enabled', default_value=True,
+    docstring='Boolean to enable/disable explicit I/O transpose')
+
+tf.flags.DEFINE_bool(
     'use_fused_batchnorm', default_value=True,
     docstring='Enable fused batchrnom')
 
@@ -140,7 +184,7 @@ class ImageNetInput(object):
   def __call__(self, params):
     """Input function which provides a single batch for train or eval."""
     batch_size = params['batch_size']
-    if FLAGS.use_data == 'real':
+    if FLAGS.use_data == 'real' and FLAGS.use_slim:
       train_dataset = imagenet.get_split('train', FLAGS.data_dir)
       eval_dataset = imagenet.get_split('validation', FLAGS.data_dir)
 
@@ -171,6 +215,58 @@ class ImageNetInput(object):
                                       capacity=5 * batch_size)
 
       labels = tf.one_hot(labels, FLAGS.num_classes)
+
+    elif FLAGS.use_data == 'real' and not FLAGS.use_slim:
+      train_dataset = imagenet.get_split(
+          'train', FLAGS.data_dir, use_slim=False)
+      eval_dataset = imagenet.get_split(
+          'validation', FLAGS.data_dir, use_slim=False)
+      dataset = train_dataset if self.is_training else eval_dataset
+      decoder = imagenet.get_decoder()
+
+      def prefetch_dataset(filename):
+        size = (FLAGS.prefetch_size if FLAGS.prefetch_size > 0
+                else batch_size)
+        return tf.contrib.data.TFRecordDataset(
+            filename,
+            buffer_size=FLAGS.dataset_reader_buffer_size).prefetch(size)
+
+      if FLAGS.input_files_shuffle_capacity > 0:
+        dataset = dataset.shuffle(FLAGS.input_files_shuffle_capacity)
+      dataset = dataset.repeat()
+
+      if FLAGS.prefetch_enabled:
+        dataset = dataset.interleave(
+            prefetch_dataset,
+            cycle_length=FLAGS.num_readers, block_length=batch_size)
+
+      if FLAGS.input_shuffle_capacity > 0:
+        dataset = dataset.shuffle(FLAGS.input_shuffle_capacity)
+
+      def parser(serialized_example):
+        image, label = decoder.decode(serialized_example, ['image', 'label'])
+        image = vgg_preprocessing.preprocess_image(
+            image=image,
+            output_height=FLAGS.height,
+            output_width=FLAGS.width,
+            is_training=self.is_training,
+            resize_side_min=_RESIZE_SIDE_MIN,
+            resize_side_max=_RESIZE_SIDE_MAX)
+        return image, tf.one_hot(label, FLAGS.num_classes)
+
+      dataset = dataset.map(
+          parser,
+          num_threads=FLAGS.map_threads,
+          output_buffer_size=batch_size)
+
+      dataset = dataset.batch(batch_size)
+      images, labels = dataset.make_one_shot_iterator().get_next()
+
+      # TODO(xiejw,saeta): Consider removing the sharding dimension below.
+      images.set_shape(images.get_shape().merge_with(
+          tf.TensorShape([batch_size, None, None, None])))
+      labels.set_shape(
+          labels.get_shape().merge_with(tf.TensorShape([batch_size, None])))
     else:
       images = tf.random_uniform(
           [batch_size, FLAGS.height, FLAGS.width, 3],
@@ -179,7 +275,47 @@ class ImageNetInput(object):
           [batch_size], minval=0, maxval=999, dtype=tf.int32)
       labels = tf.one_hot(labels, FLAGS.num_classes)
 
+    output_transform_fn = TensorTranspose(batch_size, is_input=False)
+    images = output_transform_fn(images)
     return images, labels
+
+
+class TensorTranspose(object):
+  """Transpose class.
+
+  This class is used to transpose an image tensor on the host and then
+  perform an inverse transpose on the TPU. The transpose on the TPU gets
+  effectively elided thus voiding any associated computational cost.
+
+  NOTE: Eventually the compiler will be able to detect when this kind of
+  operation may prove beneficial and perform these types of transformations
+  implicitly, voiding the need for user intervention
+  """
+
+  def __init__(self, batch_size, is_input=True):
+    self.transpose_enabled = (FLAGS.transpose_enabled and
+                              FLAGS.input_layout == 'NHWC')
+    self.batchsize_per_shard = batch_size
+
+    if is_input:
+      # Device side input transformation.
+      self.perm = ([3, 0, 1, 2] if self.batchsize_per_shard >= 64 else
+                   [2, 0, 1, 3])
+    else:
+      # Host side output transformation.
+      self.perm = ([1, 2, 3, 0] if self.batchsize_per_shard >= 64 else
+                   [1, 2, 0, 3])
+
+  def __call__(self, data):
+    if self.transpose_enabled:
+      return tf.transpose(data, self.perm)
+    return data
+
+
+def get_batch_axis(batch_size_per_shard):
+  if FLAGS.transpose_enabled and FLAGS.input_layout == 'NHWC':
+    return 3 if batch_size_per_shard >= 64 else 2
+  return FLAGS.input_layout.find('N')
 
 
 def inception_model_fn(features, labels, mode, params):
@@ -189,6 +325,13 @@ def inception_model_fn(features, labels, mode, params):
   num_classes = FLAGS.num_classes
   training_active = (mode == tf.estimator.ModeKeys.TRAIN)
   eval_active = (mode == tf.estimator.ModeKeys.EVAL)
+
+  if training_active:
+    size = FLAGS.train_batch_size // FLAGS.num_shards
+  else:
+    size = FLAGS.eval_batch_size
+  input_transform_fn = TensorTranspose(size, is_input=True)
+  features = input_transform_fn(features)
 
   with slim.arg_scope(inception.inception_v3_arg_scope(
       use_fused_batchnorm=FLAGS.use_fused_batchnorm)):
@@ -214,6 +357,7 @@ def inception_model_fn(features, labels, mode, params):
         label_smoothing=0.1,
         scope='aux_loss')
     tf.losses.add_loss(aux_loss)
+
   prediction_loss = tf.losses.softmax_cross_entropy(
       onehot_labels=labels,
       logits=logits,
@@ -278,6 +422,9 @@ def inception_model_fn(features, labels, mode, params):
 def main(unused_argv):
   del unused_argv  # Unused
 
+  if FLAGS.input_layout not in ['NCHW', 'NHWC']:
+    raise RuntimeError('--input_layout must be one of [NCHW, NHWC]')
+
   run_config = tpu_config.RunConfig(
       master=FLAGS.master,
       evaluation_master=FLAGS.master,
@@ -296,7 +443,9 @@ def main(unused_argv):
       use_tpu=FLAGS.use_tpu,
       config=run_config,
       train_batch_size=FLAGS.train_batch_size,
-      eval_batch_size=FLAGS.eval_batch_size)
+      eval_batch_size=FLAGS.eval_batch_size,
+      batch_axis=(get_batch_axis(
+          FLAGS.train_batch_size // FLAGS.num_shards), 0))
 
   for cycle in range(FLAGS.train_steps // FLAGS.train_steps_per_eval):
     # tensors_to_log = {

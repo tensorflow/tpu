@@ -57,6 +57,36 @@ _ITEMS_TO_DESCRIPTIONS = {
 
 _NUM_CLASSES = 1001
 
+_KEYS_TO_FEATURES = {
+    'image/encoded': tf.FixedLenFeature(
+        (), tf.string, default_value=''),
+    'image/format': tf.FixedLenFeature(
+        (), tf.string, default_value='jpeg'),
+    'image/class/label': tf.FixedLenFeature(
+        [], dtype=tf.int64, default_value=-1),
+    'image/class/text': tf.FixedLenFeature(
+        [], dtype=tf.string, default_value=''),
+    'image/object/bbox/xmin': tf.VarLenFeature(
+        dtype=tf.float32),
+    'image/object/bbox/ymin': tf.VarLenFeature(
+        dtype=tf.float32),
+    'image/object/bbox/xmax': tf.VarLenFeature(
+        dtype=tf.float32),
+    'image/object/bbox/ymax': tf.VarLenFeature(
+        dtype=tf.float32),
+    'image/object/class/label': tf.VarLenFeature(
+        dtype=tf.int64),
+}
+
+_ITEMS_TO_HANDLERS = {
+    'image': slim.tfexample_decoder.Image('image/encoded', 'image/format'),
+    'label': slim.tfexample_decoder.Tensor('image/class/label'),
+    'label_text': slim.tfexample_decoder.Tensor('image/class/text'),
+    'object/bbox': slim.tfexample_decoder.BoundingBox(
+        ['ymin', 'xmin', 'ymax', 'xmax'], 'image/object/bbox/'),
+    'object/label': slim.tfexample_decoder.Tensor('image/object/class/label'),
+}
+
 
 def get_split_size(set_name):
   """Return size of train/validation set."""
@@ -119,7 +149,13 @@ def create_readable_names_for_imagenet_labels():
   return labels_to_names
 
 
-def get_split(split_name, dataset_dir, file_pattern=None, reader=None):
+def get_decoder():
+  return slim.tfexample_decoder.TFExampleDecoder(
+      _KEYS_TO_FEATURES, _ITEMS_TO_HANDLERS)
+
+
+def get_split(split_name, dataset_dir, file_pattern=None,
+              reader=None, use_slim=True):
   """Gets a dataset tuple with instructions for reading ImageNet.
 
   Args:
@@ -129,6 +165,7 @@ def get_split(split_name, dataset_dir, file_pattern=None, reader=None):
       It is assumed that the pattern contains a '%s' string so that the split
       name can be inserted.
     reader: The TensorFlow reader type.
+    use_slim: Boolean to decide dataset type
 
   Returns:
     A `Dataset` namedtuple.
@@ -143,47 +180,19 @@ def get_split(split_name, dataset_dir, file_pattern=None, reader=None):
     file_pattern = _FILE_PATTERN
   file_pattern = os.path.join(dataset_dir, file_pattern % split_name)
 
-  # Allowing None in the signature so that dataset_factory can use the default.
-  if reader is None:
-    reader = tf.TFRecordReader
+  if use_slim:
+    # Allowing None in signature so that dataset_factory can use the default
+    if reader is None:
+      reader = tf.TFRecordReader
 
-  keys_to_features = {
-      'image/encoded': tf.FixedLenFeature(
-          (), tf.string, default_value=''),
-      'image/format': tf.FixedLenFeature(
-          (), tf.string, default_value='jpeg'),
-      'image/class/label': tf.FixedLenFeature(
-          [], dtype=tf.int64, default_value=-1),
-      'image/class/text': tf.FixedLenFeature(
-          [], dtype=tf.string, default_value=''),
-      'image/object/bbox/xmin': tf.VarLenFeature(
-          dtype=tf.float32),
-      'image/object/bbox/ymin': tf.VarLenFeature(
-          dtype=tf.float32),
-      'image/object/bbox/xmax': tf.VarLenFeature(
-          dtype=tf.float32),
-      'image/object/bbox/ymax': tf.VarLenFeature(
-          dtype=tf.float32),
-      'image/object/class/label': tf.VarLenFeature(
-          dtype=tf.int64),
-  }
+    dataset = slim.dataset.Dataset(
+        data_sources=file_pattern,
+        reader=reader,
+        decoder=get_decoder(),
+        num_samples=_SPLITS_TO_SIZES[split_name],
+        items_to_descriptions=_ITEMS_TO_DESCRIPTIONS,
+        num_classes=_NUM_CLASSES)
+  else:
+    dataset = tf.contrib.data.Dataset.list_files(file_pattern)
 
-  items_to_handlers = {
-      'image': slim.tfexample_decoder.Image('image/encoded', 'image/format'),
-      'label': slim.tfexample_decoder.Tensor('image/class/label'),
-      'label_text': slim.tfexample_decoder.Tensor('image/class/text'),
-      'object/bbox': slim.tfexample_decoder.BoundingBox(
-          ['ymin', 'xmin', 'ymax', 'xmax'], 'image/object/bbox/'),
-      'object/label': slim.tfexample_decoder.Tensor('image/object/class/label'),
-  }
-
-  decoder = slim.tfexample_decoder.TFExampleDecoder(
-      keys_to_features, items_to_handlers)
-
-  return slim.dataset.Dataset(
-      data_sources=file_pattern,
-      reader=reader,
-      decoder=decoder,
-      num_samples=_SPLITS_TO_SIZES[split_name],
-      items_to_descriptions=_ITEMS_TO_DESCRIPTIONS,
-      num_classes=_NUM_CLASSES)
+  return dataset
