@@ -629,6 +629,7 @@ def inception_v2_arg_scope(weight_decay=0.00004,
     weight_decay: The weight decay to use for regularizing the model.
     batch_norm_var_collection: The name of the collection for the batch norm
       variables.
+    use_fused_batchnorm: Enable fused batchnorm.
 
   Returns:
     An `arg_scope` to use for the inception v3 model.
@@ -641,7 +642,7 @@ def inception_v2_arg_scope(weight_decay=0.00004,
       # collection containing update_ops.
       'updates_collections': ops.GraphKeys.UPDATE_OPS,
       # Enable fused batchnorm.
-      "fused": use_fused_batchnorm,
+      'fused': use_fused_batchnorm,
       # collection containing the moving mean and moving variance.
       'variables_collections': {
           'beta': None,
