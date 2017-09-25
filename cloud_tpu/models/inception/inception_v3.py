@@ -32,77 +32,25 @@ from tensorflow.contrib.tpu.python.tpu import tpu_estimator
 from tensorflow.contrib.tpu.python.tpu import tpu_optimizer
 
 
-tf.flags.DEFINE_float(
-    'learning_rate', default_value=0.05,
-    docstring='Learning rate.')
-
-tf.flags.DEFINE_float(
-    'depth_multiplier', default_value=1.0,
-    docstring='Depth Multiplier on Inception')
-
-tf.flags.DEFINE_integer(
-    'train_steps', default_value=4800000,
-    docstring='Number of steps use for training.')
-
-tf.flags.DEFINE_integer(
-    'train_steps_per_eval', default_value=40000,
-    docstring='Number of training steps to run between evaluations.')
-
-tf.flags.DEFINE_integer(
-    'save_summary_steps', default_value=100,
-    docstring='Number of steps which must have run before showing '
-         'the summaries.')
-
-tf.flags.DEFINE_integer(
-    'save_checkpoints_secs', default_value=1000,
-    docstring='The interval, in seconds, at which the model data '
-         'should be checkpointed (set to 0 to disable).')
-
-tf.flags.DEFINE_bool(
-    'use_tpu', default_value=True,
-    docstring='Use TPUs rather than plain CPUs')
-
-tf.flags.DEFINE_string(
-    'use_data', default_value='real',
-    docstring='One of "fake","real"')
-
 tf.flags.DEFINE_string(
     'master', default_value='local',
     docstring='BNS name of the TensorFlow master to use.')
+
+tf.flags.DEFINE_string(
+    'data_dir', default_value='',
+    docstring='Directory where input data is stored')
 
 tf.flags.DEFINE_string(
     'model_dir', default_value=None,
     docstring='Directory where model output is stored')
 
 tf.flags.DEFINE_integer(
-    'iterations', default_value=100,
-    docstring='Number of iterations per TPU training loop.')
-
-tf.flags.DEFINE_string(
-    'optimizer', default_value='momentum',
-    docstring='optimizer (one of sgd, rms, momentum)')
-
-tf.flags.DEFINE_integer(
-    'map_threads', default_value=1,
-    docstring='The number of threads for the dataset map operation')
-
-tf.flags.DEFINE_integer(
-    'input_files_shuffle_capacity', default_value=1024,
-    docstring='Number of data files held within the shuffle '
-         'buffer (set to 0 to disable)')
-
-tf.flags.DEFINE_integer(
-    'input_shuffle_capacity', default_value=100,
-    docstring='The number of training samples held within the shuffle '
-         'buffer (set to 0 to disable)')
-
-tf.flags.DEFINE_integer(
-    'dataset_reader_buffer_size', default_value=None,
-    docstring='Size of buffer for dataset read operations')
-
-tf.flags.DEFINE_integer(
     'num_shards', default_value=8,
     docstring='Number of shards (TPU chips).')
+
+tf.flags.DEFINE_integer(
+    'iterations', default_value=100,
+    docstring='Number of iterations per TPU training loop.')
 
 tf.flags.DEFINE_integer(
     'train_batch_size', default_value=1024,
@@ -117,38 +65,48 @@ tf.flags.DEFINE_bool(
     docstring='Boolean to enable/disable evaluation')
 
 tf.flags.DEFINE_integer(
+    'train_steps', default_value=4800000,
+    docstring='Number of steps use for training.')
+
+tf.flags.DEFINE_integer(
+    'train_steps_per_eval', default_value=40000,
+    docstring='Number of training steps to run between evaluations.')
+
+tf.flags.DEFINE_bool(
+    'use_tpu', default_value=True,
+    docstring='Use TPUs rather than plain CPUs')
+
+tf.flags.DEFINE_boolean(
+    'per_host_input_for_training', default_value=True,
+    docstring='If true, input_fn is invoked per host rather than per shard.')
+
+tf.flags.DEFINE_string(
+    'use_data', default_value='real',
+    docstring='One of "fake","real"')
+
+tf.flags.DEFINE_float(
+    'learning_rate', default_value=0.05,
+    docstring='Learning rate.')
+
+tf.flags.DEFINE_float(
+    'depth_multiplier', default_value=1.0,
+    docstring='Depth Multiplier on Inception')
+
+tf.flags.DEFINE_string(
+    'optimizer', default_value='momentum',
+    docstring='Optimizer (one of sgd, rms, momentum)')
+
+tf.flags.DEFINE_integer(
     'num_classes', default_value=1001,
-    docstring='number of classes to distinguish')
+    docstring='Number of classes to distinguish')
 
 tf.flags.DEFINE_integer(
     'width', default_value=304,
-    docstring='width of input image')
+    docstring='Width of input image')
 
 tf.flags.DEFINE_integer(
     'height', default_value=304,
-    docstring='height of input image')
-
-tf.flags.DEFINE_bool(
-    'log_device_placement', default_value=False,
-    docstring='Boolean to enable/disable log device placement')
-
-tf.flags.DEFINE_bool(
-    'use_slim', default_value=False,
-    docstring='Boolean to choose between slim.dataset.Datasets and '
-         'data.Datasets for input pipeline')
-
-tf.flags.DEFINE_integer(
-    'num_readers', default_value=8,
-    docstring='Number of readers for data set provider')
-
-tf.flags.DEFINE_bool(
-    'prefetch_enabled', default_value=True,
-    docstring='Boolean to decide whether to prefetch or not')
-
-tf.flags.DEFINE_integer(
-    'prefetch_size', default_value=0,
-    docstring='Number of input samples per file to prefetch. '
-         'A zero means use batch size samples')
+    docstring='Height of input image')
 
 tf.flags.DEFINE_string(
     'input_layout', default_value='NHWC',
@@ -162,9 +120,61 @@ tf.flags.DEFINE_bool(
     'use_fused_batchnorm', default_value=True,
     docstring='Enable fused batchrnom')
 
-tf.flags.DEFINE_string(
-    'data_dir', default_value='',
-    docstring='Directory where input data is stored')
+tf.flags.DEFINE_bool(
+    'log_device_placement', default_value=False,
+    docstring='Boolean to enable/disable log device placement')
+
+tf.flags.DEFINE_integer(
+    'save_summary_steps', default_value=100,
+    docstring='Number of steps which must have run before showing summaries.')
+
+tf.flags.DEFINE_integer(
+    'save_checkpoints_secs', default_value=1000,
+    docstring='Interval (in seconds) at which the model data '
+         'should be checkpointed. Set to 0 to disable.')
+
+# Dataset specific paramenters
+tf.flags.DEFINE_bool(
+    'prefetch_enabled', default_value=True,
+    docstring='Boolean to enable/disable prefetching')
+
+tf.flags.DEFINE_integer(
+    'prefetch_size', default_value=None,
+    docstring='Maximum number of elements that will be buffered by prefetch '
+         'function if prefetch_enabled is True. None means use batch size '
+         'samples')
+
+tf.flags.DEFINE_integer(
+    'prefetch_dataset_buffer_size', default_value=256*1024*1024,
+    docstring='Number of bytes in read buffer. 0 means no buffering.')
+
+tf.flags.DEFINE_integer(
+    'cycle_length', default_value=64,
+    docstring='Number of elements from dataset to process concurrently '
+         '(by interleaver)')
+
+tf.flags.DEFINE_integer(
+    'block_length', default_value=None,
+    docstring='Number of consecutive elements to produce from each input element '
+         'before cycling to another input element (by interleaver). '
+         'If set to None, block_length defaults to batch_size')
+
+tf.flags.DEFINE_integer(
+    'num_parallel_calls', default_value=128,
+    docstring='Number of elements to process in parallel (by mapper)')
+
+tf.flags.DEFINE_integer(
+    'initial_shuffle_buffer_size', default_value=1024,
+    docstring='Number of elements from dataset that shuffler will sample from. '
+         'This shuffling is done before any other operations. '
+         'Set to 0 to disable')
+
+tf.flags.DEFINE_integer(
+    'followup_shuffle_buffer_size', default_value=128,
+    docstring='Number of elements from dataset that shuffler will sample from. '
+         'This shuffling is done after prefetching is done. '
+         'Set to 0 to disable')
+
 
 FLAGS = tf.flags.FLAGS
 
@@ -184,65 +194,42 @@ class ImageNetInput(object):
   def __call__(self, params):
     """Input function which provides a single batch for train or eval."""
     batch_size = params['batch_size']
-    if FLAGS.use_data == 'real' and FLAGS.use_slim:
-      train_dataset = imagenet.get_split('train', FLAGS.data_dir)
-      eval_dataset = imagenet.get_split('validation', FLAGS.data_dir)
 
-      dataset = train_dataset if self.is_training else eval_dataset
+    if FLAGS.use_data == 'real':
+      if self.is_training:
+        dataset =  imagenet.get_split(
+            'train', FLAGS.data_dir, use_slim=False)
+      else:
+        dataset =  imagenet.get_split(
+            'validation', FLAGS.data_dir, use_slim=False)
 
-      capacity_multiplier = 20 if self.is_training else 2
-      min_multiplier = 10 if self.is_training else 1
-
-      provider = tf.contrib.slim.dataset_data_provider.DatasetDataProvider(
-          dataset=dataset,
-          num_readers=4,
-          common_queue_capacity=capacity_multiplier * batch_size,
-          common_queue_min=min_multiplier * batch_size)
-
-      image, label = provider.get(['image', 'label'])
-
-      image = vgg_preprocessing.preprocess_image(
-          image=image,
-          output_height=FLAGS.height,
-          output_width=FLAGS.width,
-          is_training=self.is_training,
-          resize_side_min=_RESIZE_SIDE_MIN,
-          resize_side_max=_RESIZE_SIDE_MAX)
-
-      images, labels = tf.train.batch(tensors=[image, label],
-                                      batch_size=batch_size,
-                                      num_threads=4,
-                                      capacity=5 * batch_size)
-
-      labels = tf.one_hot(labels, FLAGS.num_classes)
-
-    elif FLAGS.use_data == 'real' and not FLAGS.use_slim:
-      train_dataset = imagenet.get_split(
-          'train', FLAGS.data_dir, use_slim=False)
-      eval_dataset = imagenet.get_split(
-          'validation', FLAGS.data_dir, use_slim=False)
-      dataset = train_dataset if self.is_training else eval_dataset
       decoder = imagenet.get_decoder()
 
-      def prefetch_dataset(filename):
-        size = (FLAGS.prefetch_size if FLAGS.prefetch_size > 0
-                else batch_size)
+      # the set of operations that follow are based on guidelines
+      # discussed in new pipeline best usage presentation.
+      if FLAGS.initial_shuffle_buffer_size > 0:
+        dataset = dataset.shuffle(
+            buffer_size=FLAGS.initial_shuffle_buffer_size)
+      dataset = dataset.repeat()
+
+      # use interleave() and prefetch() to read many files concurrently
+      def prefetch_map_fn(filename):
         return tf.contrib.data.TFRecordDataset(
             filename,
-            buffer_size=FLAGS.dataset_reader_buffer_size).prefetch(size)
-
-      if FLAGS.input_files_shuffle_capacity > 0:
-        dataset = dataset.shuffle(FLAGS.input_files_shuffle_capacity)
-      dataset = dataset.repeat()
+            buffer_size=FLAGS.prefetch_dataset_buffer_size).prefetch(
+                FLAGS.prefetch_size or batch_size)
 
       if FLAGS.prefetch_enabled:
         dataset = dataset.interleave(
-            prefetch_dataset,
-            cycle_length=FLAGS.num_readers, block_length=batch_size)
+            prefetch_map_fn,
+            cycle_length=FLAGS.cycle_length,
+            block_length=FLAGS.block_length or batch_size)
 
-      if FLAGS.input_shuffle_capacity > 0:
-        dataset = dataset.shuffle(FLAGS.input_shuffle_capacity)
+      if FLAGS.followup_shuffle_buffer_size > 0:
+        dataset = dataset.shuffle(
+            buffer_size=FLAGS.followup_shuffle_buffer_size)
 
+      # use num_parallel_calls to parallelize map()
       def parser(serialized_example):
         image, label = decoder.decode(serialized_example, ['image', 'label'])
         image = vgg_preprocessing.preprocess_image(
@@ -252,86 +239,73 @@ class ImageNetInput(object):
             is_training=self.is_training,
             resize_side_min=_RESIZE_SIDE_MIN,
             resize_side_max=_RESIZE_SIDE_MAX)
-        return image, tf.one_hot(label, FLAGS.num_classes)
+        return image, label
 
       dataset = dataset.map(
           parser,
-          num_threads=FLAGS.map_threads,
+          num_parallel_calls=FLAGS.num_parallel_calls,
           output_buffer_size=batch_size)
 
       dataset = dataset.batch(batch_size)
-      images, labels = dataset.make_one_shot_iterator().get_next()
 
-      # TODO(xiejw,saeta): Consider removing the sharding dimension below.
-      images.set_shape(images.get_shape().merge_with(
-          tf.TensorShape([batch_size, None, None, None])))
-      labels.set_shape(
-          labels.get_shape().merge_with(tf.TensorShape([batch_size, None])))
+      # use prefetch to overlap producer and consumer
+      dataset = dataset.prefetch(1)
+
+      images, labels = dataset.make_one_shot_iterator().get_next()
+      labels = tf.one_hot(labels, FLAGS.num_classes, dtype=tf.int32)
+
+      if FLAGS.input_layout == 'NHWC':
+        images.set_shape([batch_size, FLAGS.height, FLAGS.width, 3])
+      else:
+        images.set_shape([batch_size, 3, FLAGS.height, FLAGS.width])
+      labels.set_shape([batch_size, FLAGS.num_classes])
+
     else:
-      images = tf.random_uniform(
-          [batch_size, FLAGS.height, FLAGS.width, 3],
-          minval=-1, maxval=1)
+      if FLAGS.input_layout == 'NHWC':
+        images = tf.random_uniform(
+            [batch_size, FLAGS.height, FLAGS.width, 3], minval=-1, maxval=1)
+      else:
+        images = tf.random_uniform(
+            [batch_size, 3, FLAGS.height, FLAGS.width], minval=-1, maxval=1)
+
       labels = tf.random_uniform(
           [batch_size], minval=0, maxval=999, dtype=tf.int32)
       labels = tf.one_hot(labels, FLAGS.num_classes)
 
-    output_transform_fn = TensorTranspose(batch_size, is_input=False)
-    images = output_transform_fn(images)
+    images = tensor_transform_fn(images, params['output_perm'])
     return images, labels
 
 
-class TensorTranspose(object):
-  """Transpose class.
+def tensor_transform_fn(data, perm):
+  """Transpose function.
 
-  This class is used to transpose an image tensor on the host and then
+  This function is used to transpose an image tensor on the host and then
   perform an inverse transpose on the TPU. The transpose on the TPU gets
   effectively elided thus voiding any associated computational cost.
 
   NOTE: Eventually the compiler will be able to detect when this kind of
   operation may prove beneficial and perform these types of transformations
   implicitly, voiding the need for user intervention
+
+  Args:
+    data: Tensor to be transposed
+    perm: Permutation of the dimensions of a
+
+  Returns:
+    Transposed tensor
   """
-
-  def __init__(self, batch_size, is_input=True):
-    self.transpose_enabled = (FLAGS.transpose_enabled and
-                              FLAGS.input_layout == 'NHWC')
-    self.batchsize_per_shard = batch_size
-
-    if is_input:
-      # Device side input transformation.
-      self.perm = ([3, 0, 1, 2] if self.batchsize_per_shard >= 64 else
-                   [2, 0, 1, 3])
-    else:
-      # Host side output transformation.
-      self.perm = ([1, 2, 3, 0] if self.batchsize_per_shard >= 64 else
-                   [1, 2, 0, 3])
-
-  def __call__(self, data):
-    if self.transpose_enabled:
-      return tf.transpose(data, self.perm)
-    return data
-
-
-def get_batch_axis(batch_size_per_shard):
-  if FLAGS.transpose_enabled and FLAGS.input_layout == 'NHWC':
-    return 3 if batch_size_per_shard >= 64 else 2
-  return FLAGS.input_layout.find('N')
+  if FLAGS.transpose_enabled:
+    return tf.transpose(data, perm)
+  return data
 
 
 def inception_model_fn(features, labels, mode, params):
   """Inception v3 model using Estimator API."""
-  del params
-
   num_classes = FLAGS.num_classes
   training_active = (mode == tf.estimator.ModeKeys.TRAIN)
   eval_active = (mode == tf.estimator.ModeKeys.EVAL)
 
-  if training_active:
-    size = FLAGS.train_batch_size // FLAGS.num_shards
-  else:
-    size = FLAGS.eval_batch_size
-  input_transform_fn = TensorTranspose(size, is_input=True)
-  features = input_transform_fn(features)
+  features = tensor_transform_fn(features, params['input_perm'])
 
   with slim.arg_scope(inception.inception_v3_arg_scope(
       use_fused_batchnorm=FLAGS.use_fused_batchnorm)):
@@ -425,6 +399,23 @@ def main(unused_argv):
   if FLAGS.input_layout not in ['NCHW', 'NHWC']:
     raise RuntimeError('--input_layout must be one of [NCHW, NHWC]')
 
+  batch_size_per_shard = FLAGS.train_batch_size // FLAGS.num_shards
+  params = {
+      'input_perm': [0, 1, 2, 3],
+      'output_perm': [0, 1, 2, 3],
+  }
+
+  batch_axis = 0
+  if FLAGS.transpose_enabled and FLAGS.input_layout == 'NHWC':
+    if batch_size_per_shard >= 64:
+      params['input_perm'] = [3, 0, 1, 2]
+      params['output_perm'] = [1, 2, 3, 0]
+      batch_axis = 3
+    else:
+      params['input_perm'] = [2, 0, 1, 3]
+      params['output_perm'] = [1, 2, 0, 3]
+      batch_axis = 2
+
   run_config = tpu_config.RunConfig(
       master=FLAGS.master,
       evaluation_master=FLAGS.master,
@@ -436,16 +427,17 @@ def main(unused_argv):
           log_device_placement=FLAGS.log_device_placement),
       tpu_config=tpu_config.TPUConfig(
           iterations_per_loop=FLAGS.iterations,
-          num_shards=FLAGS.num_shards))
+          num_shards=FLAGS.num_shards,
+          per_host_input_for_training=FLAGS.per_host_input_for_training))
 
   inception_classifier = tpu_estimator.TPUEstimator(
       model_fn=inception_model_fn,
       use_tpu=FLAGS.use_tpu,
       config=run_config,
+      params=params,
       train_batch_size=FLAGS.train_batch_size,
       eval_batch_size=FLAGS.eval_batch_size,
-      batch_axis=(get_batch_axis(
-          FLAGS.train_batch_size // FLAGS.num_shards), 0))
+      batch_axis=(batch_axis, 0))
 
   for cycle in range(FLAGS.train_steps // FLAGS.train_steps_per_eval):
     # tensors_to_log = {
