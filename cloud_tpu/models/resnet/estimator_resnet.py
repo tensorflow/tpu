@@ -19,6 +19,7 @@ from __future__ import division
 from __future__ import print_function
 
 import collections
+import math
 import os
 import sys
 
@@ -32,6 +33,7 @@ import learning_rate_schedule as lrs
 import model_conductor
 import multi_gpu
 import vgg_preprocessing
+from tensorflow.contrib.data.python.ops import sloppy_ops
 from tensorflow.contrib.tpu.python.tpu import tpu_config
 from tensorflow.contrib.tpu.python.tpu import tpu_estimator
 from tensorflow.contrib.tpu.python.tpu import tpu_optimizer
@@ -68,9 +70,13 @@ tf.flags.DEFINE_integer(
     'epochs_per_train', 5, 'The number of EPOCH to train before an evaluation.')
 tf.flags.DEFINE_float(
     'target_accuracy', None, 'The accuracy at which to stop training, assuming '
-    'evaluation is enabled (eval_steps > 0).')
+    'evaluation is enabled (eval_steps != 0).')
 tf.flags.DEFINE_integer(
-    'eval_steps', 100, 'The number of steps to use for evaluation.')
+    'eval_steps', -1, 'The number of steps to use for evaluation. The number '
+    'of eval steps will be limited by the number of samples within the eval '
+    'set. If eval_steps is zero, evaluation is disabled, while if it is -1 '
+    'the number of eval steps is automatically calculated according to the '
+    'eval set size.')
 tf.flags.DEFINE_integer('batch_size', 64, 'Batch size for.')
 tf.flags.DEFINE_float(
     'weight_decay', 1e-4, 'Weight decay for for trainable variables.')
@@ -140,7 +146,7 @@ tf.flags.DEFINE_boolean('log_device_placement', False, 'Log device placement.')
 tf.flags.DEFINE_boolean('tpu_mirror_transpose', True,
                         'Whether the mirror transpose (CPU+TPU) optimization '
                         'should be enabled.')
-tf.flags.DEFINE_boolean('per_host_input_pipeline', True,
+tf.flags.DEFINE_boolean('per_host_input_for_training', True,
                         'Enable new per-host input when running on TPUs.')
 tf.flags.DEFINE_integer('prefetch_size', -1,
                         'Number of input samples per file to prefetch. '
@@ -210,8 +216,8 @@ class ResnetConfig(object):
     self.image_preprocessing_fn = vgg_preprocessing.preprocess_image
     model = layers_resnet.get_model(FLAGS.model)
     self.network_fn = model(num_classes=self.train_dataset.num_classes)
-    self.batches_per_epoch = (self.train_dataset.num_samples /
-                              FLAGS.batch_size)
+    self.train_batches_per_epoch = (self.train_dataset.num_samples /
+                                    FLAGS.batch_size)
 
 
 def slim_dataset_input_fn(params, eval_batch_size=None):
@@ -267,7 +273,9 @@ def input_fn(params, eval_batch_size=None):
   if is_training:
     if FLAGS.input_files_shuffle_capacity > 0:
       dataset = dataset.shuffle(FLAGS.input_files_shuffle_capacity)
-    dataset = dataset.repeat()
+  # We do repeat even in eval mode, but we limit the number of eval steps
+  # according to the size of the eval data.
+  dataset = dataset.repeat()
 
   def prefetch_dataset(filename):
     dataset = tf.contrib.data.TFRecordDataset(
@@ -278,9 +286,12 @@ def input_fn(params, eval_batch_size=None):
       dataset = dataset.prefetch(batch_size)
     return dataset
 
-  dataset = dataset.interleave(
-      prefetch_dataset,
-      cycle_length=FLAGS.num_readers, block_length=batch_size)
+  dataset = dataset.apply(
+      tf.contrib.data.sloppy_interleave(
+          prefetch_dataset,
+          cycle_length=FLAGS.num_readers,
+          block_length=1))
+
   if FLAGS.input_shuffle_capacity > 0:
     dataset = dataset.shuffle(FLAGS.input_shuffle_capacity)
   dataset = dataset.map(
@@ -410,8 +421,16 @@ def get_model_fn():
 
 
 def get_train_steps():
-  return (FLAGS.train_epochs * _cfg.batches_per_epoch if FLAGS.train_epochs else
-          FLAGS.train_steps)
+  return (FLAGS.train_epochs * _cfg.train_batches_per_epoch
+          if FLAGS.train_epochs else FLAGS.train_steps)
+
+
+def get_eval_steps():
+  # We do a ceil() here, to allow all the samples in the eval set to be
+  # considered. We match this with a dataset.repeat() call in the input
+  # pipeline, so we won't have any issues with incomplete last batch shape.
+  max_steps = int(math.ceil(_cfg.eval_dataset.num_samples / FLAGS.batch_size))
+  return max_steps if FLAGS.eval_steps < 0 else min(FLAGS.eval_steps, max_steps)
 
 
 def setup_learning_rate_schedule():
@@ -442,7 +461,7 @@ def get_learning_rate():
     tf.logging.info('Using global step based learning rate decay: '
                     'lr_epochs=[%s] lr_epoch_decay=[%s]',
                     FLAGS.lr_epochs, FLAGS.lr_epoch_decay)
-    lr_steps = [int(_cfg.batches_per_epoch) * int(x)
+    lr_steps = [int(_cfg.train_batches_per_epoch) * int(x)
                 for x in FLAGS.lr_epochs.split(',')]
     assert all(lr_steps[i] < lr_steps[i + 1] for i in xrange(len(lr_steps) - 1))
     lr_values = [FLAGS.initial_learning_rate * float(x)
@@ -454,7 +473,8 @@ def get_learning_rate():
     lr = tf.train.exponential_decay(
         learning_rate=FLAGS.initial_learning_rate,
         global_step=tf.train.get_global_step(),
-        decay_steps=int(_cfg.batches_per_epoch * FLAGS.num_epochs_per_decay),
+        decay_steps=int(_cfg.train_batches_per_epoch *
+                        FLAGS.num_epochs_per_decay),
         decay_rate=FLAGS.learning_rate_decay,
         staircase=True)
     lr = tf.maximum(lr, FLAGS.final_learning_rate)
@@ -510,8 +530,8 @@ def run_on_gpu(config):
       momentum=FLAGS.momentum,
       learning_rate=get_learning_rate,
       train_steps=get_train_steps(),
-      eval_steps=FLAGS.eval_steps,
-      steps_per_train=FLAGS.epochs_per_train * _cfg.batches_per_epoch,
+      eval_steps=get_eval_steps(),
+      steps_per_train=FLAGS.epochs_per_train * _cfg.train_batches_per_epoch,
       target_accuracy=FLAGS.target_accuracy,
       train_hooks=get_train_hooks())
 
@@ -544,11 +564,12 @@ def main(unused_argv):
       save_summary_steps=FLAGS.save_summary_steps,
       log_step_count_steps=FLAGS.log_step_count_steps,
       master=FLAGS.master,
+      evaluation_master=FLAGS.master,
       model_dir=FLAGS.model_dir,
       tpu_config=tpu_config.TPUConfig(
           iterations_per_loop=FLAGS.iterations_per_loop,
           num_shards=FLAGS.num_shards,
-          per_host_input_for_training=FLAGS.per_host_input_pipeline),
+          per_host_input_for_training=FLAGS.per_host_input_for_training),
       session_config=session_config)
 
   if FLAGS.device == 'GPU' and FLAGS.num_shards > 1:
@@ -572,8 +593,8 @@ def main(unused_argv):
                           pipeline_input_fn,
                           eval_input,
                           get_train_steps(),
-                          FLAGS.epochs_per_train * _cfg.batches_per_epoch,
-                          FLAGS.eval_steps,
+                          FLAGS.epochs_per_train * _cfg.train_batches_per_epoch,
+                          get_eval_steps(),
                           train_hooks=get_train_hooks(),
                           target_accuracy=FLAGS.target_accuracy)
 
