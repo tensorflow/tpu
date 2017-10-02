@@ -34,6 +34,10 @@ from __future__ import print_function
 
 import tensorflow as tf
 
+_R_MEAN = 123.68 / 255
+_G_MEAN = 116.78 / 255
+_B_MEAN = 103.94 / 255
+
 _RESIZE_SIDE_MIN = 256
 _RESIZE_SIDE_MAX = 512
 
@@ -307,7 +311,7 @@ def preprocess_for_train(image,
   image.set_shape([output_height, output_width, 3])
   image = tf.to_float(image)
   image = tf.image.random_flip_left_right(image)
-  return tf.image.per_image_standardization(image)
+  return _mean_image_subtraction(image, [_R_MEAN, _G_MEAN, _B_MEAN])
 
 
 def preprocess_for_eval(image, output_height, output_width, resize_side):
@@ -326,7 +330,7 @@ def preprocess_for_eval(image, output_height, output_width, resize_side):
   image = _central_crop([image], output_height, output_width)[0]
   image.set_shape([output_height, output_width, 3])
   image = tf.to_float(image)
-  return tf.image.per_image_standardization(image)
+  return _mean_image_subtraction(image, [_R_MEAN, _G_MEAN, _B_MEAN])
 
 
 def preprocess_image(image, output_height, output_width, is_training=False,

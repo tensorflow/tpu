@@ -29,9 +29,6 @@ from tensorflow.python.ops import string_ops
 # https://github.com/tensorflow/tensorflow/blob/master/tensorflow/contrib/layers/python/layers/feature_column.py
 
 tf.logging.set_verbosity(tf.logging.INFO)
-tf.flags.adopt_module_key_flags(tpu_config)
-tf.flags.adopt_module_key_flags(tpu_estimator)
-tf.flags.adopt_module_key_flags(tpu_optimizer)
 
 FLAGS = tf.flags.FLAGS
 
