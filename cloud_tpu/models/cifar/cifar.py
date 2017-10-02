@@ -130,7 +130,9 @@ def input_fn(params):
     return image, label
 
   dataset = tf.contrib.data.TFRecordDataset([FLAGS.train_file])
-  dataset = dataset.repeat().map(parser).batch(batch_size)
+  dataset = dataset.map(parser, num_parallel_calls=batch_size)
+  dataset = dataset.prefetch(4 * batch_size).cache().repeat()
+  dataset = dataset.batch(batch_size).prefetch(1)
   images, labels = dataset.make_one_shot_iterator().get_next()
 
   # Reshape to give inputs statically known shapes.
