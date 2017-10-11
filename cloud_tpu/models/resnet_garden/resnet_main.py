@@ -47,7 +47,7 @@ tf.flags.DEFINE_integer(
     'resnet_size', default_value=50, docstring='The size of the ResNet model to use.')
 
 tf.flags.DEFINE_integer(
-    'train_steps', default_value=200000,
+    'train_steps', default_value=120000,
     docstring='The number of steps to use for training.')
 
 tf.flags.DEFINE_boolean(
@@ -69,6 +69,8 @@ tf.flags.DEFINE_integer("num_shards", 8, "Number of shards (TPU chips).")
 tf.flags.DEFINE_integer("iterations_per_loop", 100,
                         "Number of iterations per TPU training loop.")
 
+tf.flags.DEFINE_integer("shuffle_buffer_size", 1000,
+                        "Size of the shuffle buffer used to randomize ordering")
 
 _LABEL_CLASSES = 1001
 _NUM_CHANNELS = 3
@@ -134,23 +136,27 @@ class ImageNetInput(object):
         FLAGS.data_dir, 'train-*' if self.is_training else 'validation-*')
     dataset = tf.contrib.data.Dataset.list_files(file_pattern)
     if self.is_training:
-      dataset = dataset.shuffle(buffer_size=1024)
+      dataset = dataset.shuffle(buffer_size=1024)  # 1024 files in dataset
 
     if self.is_training:
       dataset = dataset.repeat()
 
     def prefetch_dataset(filename):
-      dataset = tf.contrib.data.TFRecordDataset(filename, buffer_size=268435456)
-      dataset = dataset.prefetch(batch_size)
+      buffer_size = 256 * 1024 * 1024  # 256 MB
+      dataset = tf.contrib.data.TFRecordDataset(filename,
+                                                buffer_size=buffer_size)
       return dataset
 
-    dataset = dataset.interleave(prefetch_dataset, cycle_length=2)
+    dataset = dataset.apply(
+        tf.contrib.data.sloppy_interleave(prefetch_dataset, cycle_length=32))
+    dataset = dataset.shuffle(FLAGS.shuffle_buffer_size)
 
     dataset = dataset.map(
         self.dataset_parser,
-        num_parallel_calls=16,
-        output_buffer_size=batch_size)
+        num_parallel_calls=128)
+    dataset = dataset.prefetch(batch_size)
     dataset = dataset.batch(batch_size)
+    dataset = dataset.prefetch(2)  # Prefetch overlaps in-feed with training
     images, labels = dataset.make_one_shot_iterator().get_next()
 
     images.set_shape(images.get_shape().merge_with(
@@ -216,9 +222,9 @@ def resnet_model_fn(features, labels, mode, params):
 
     # Perform a gradual warmup of the learning rate, as in the paper "Training
     # ImageNet in 1 Hour." Afterward, decay the learning rate by 0.1 at 30, 60,
-    # 120, and 150 epochs.
+    # 80, and 90 epochs.
     boundaries = [int(batches_per_epoch * epoch) for epoch in [
-        1, 2, 3, 4, 5, 30, 60, 120, 150]]
+        1, 2, 3, 4, 5, 30, 60, 80, 90]]
     values = [_INITIAL_LEARNING_RATE * decay for decay in [
         1.0 / 6, 2.0 / 6, 3.0 / 6, 4.0 / 6, 5.0 / 6, 1, 0.1, 0.01, 1e-3, 1e-4]]
     learning_rate = piecewise_constant(global_step, boundaries, values)
@@ -257,7 +263,8 @@ def main(unused_argv):
       model_dir=FLAGS.model_dir,
       tpu_config=tpu_config.TPUConfig(
           iterations_per_loop=FLAGS.iterations_per_loop,
-          num_shards=FLAGS.num_shards))
+          num_shards=FLAGS.num_shards,
+          per_host_input_for_training=True))
   resnet_classifier = tpu_estimator.TPUEstimator(
       model_fn=resnet_model_fn,
       config=config,

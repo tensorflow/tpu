@@ -84,8 +84,13 @@ tf.flags.DEFINE_string(
     docstring='One of "fake","real"')
 
 tf.flags.DEFINE_float(
-    'learning_rate', default_value=0.05,
+    'learning_rate', default_value=0.1,
     docstring='Learning rate.')
+
+tf.flags.DEFINE_boolean(
+    'use_piecewise_rate_adaptation', default_value=True,
+    docstring='If true, learning rate is modified using piecewise table, '
+         'otherwise, exponential decay is used')
 
 tf.flags.DEFINE_float(
     'depth_multiplier', default_value=1.0,
@@ -148,7 +153,7 @@ tf.flags.DEFINE_integer(
     docstring='Number of bytes in read buffer. 0 means no buffering.')
 
 tf.flags.DEFINE_integer(
-    'cycle_length', default_value=64,
+    'cycle_length', default_value=16,
     docstring='Number of elements from dataset to process concurrently '
          '(by interleaver)')
 
@@ -159,7 +164,7 @@ tf.flags.DEFINE_integer(
          'If set to None, block_length defaults to batch_size')
 
 tf.flags.DEFINE_integer(
-    'num_parallel_calls', default_value=256,
+    'num_parallel_calls', default_value=48,
     docstring='Number of elements to process in parallel (by mapper)')
 
 tf.flags.DEFINE_integer(
@@ -169,7 +174,7 @@ tf.flags.DEFINE_integer(
          'Set to 0 to disable')
 
 tf.flags.DEFINE_integer(
-    'followup_shuffle_buffer_size', default_value=128,
+    'followup_shuffle_buffer_size', default_value=0,
     docstring='Number of elements from dataset that shuffler will sample from. '
          'This shuffling is done after prefetching is done. '
          'Set to 0 to disable')
@@ -177,9 +182,9 @@ tf.flags.DEFINE_integer(
 
 FLAGS = tf.flags.FLAGS
 
-# The learning rate should decay by 0.1 every 30 epochs.
-_LEARNING_RATE_DECAY = 0.1
-_LEARNING_RATE_DECAY_EPOCHS = 30
+# Learning rate exponential decay adaption parameters
+_LEARNING_RATE_DECAY = 0.94
+_LEARNING_RATE_DECAY_EPOCHS = 3
 
 _RESIZE_SIDE_MIN = 256
 _RESIZE_SIDE_MAX = 512
@@ -206,7 +211,7 @@ class ImageNetInput(object):
 
       # the set of operations that follow are based on guidelines
       # discussed in new pipeline best usage presentation.
-      if FLAGS.initial_shuffle_buffer_size > 0:
+      if self.is_training and FLAGS.initial_shuffle_buffer_size > 0:
         dataset = dataset.shuffle(
             buffer_size=FLAGS.initial_shuffle_buffer_size)
       dataset = dataset.repeat()
@@ -242,8 +247,7 @@ class ImageNetInput(object):
 
       dataset = dataset.map(
           parser,
-          num_parallel_calls=FLAGS.num_parallel_calls,
-          output_buffer_size=batch_size)
+          num_parallel_calls=FLAGS.num_parallel_calls).prefetch(batch_size)
 
       dataset = dataset.batch(batch_size)
 
@@ -298,6 +302,17 @@ def tensor_transform_fn(data, perm):
   return data
 
 
+def piecewise_constant(x, boundaries, values):
+  """Simulates the behavior of tf.train.piecewise_constant with tf.where."""
+  piecewise_value = values[0]
+
+  for i in xrange(len(boundaries)):
+    piecewise_value = tf.where(
+        x < boundaries[i], piecewise_value, values[i + 1])
+
+  return piecewise_value
+
+
 def inception_model_fn(features, labels, mode, params):
   """Inception v2 model using Estimator API."""
   num_classes = FLAGS.num_classes
@@ -308,7 +323,7 @@ def inception_model_fn(features, labels, mode, params):
 
   with slim.arg_scope(inception.inception_v2_arg_scope(
       use_fused_batchnorm=FLAGS.use_fused_batchnorm)):
-    logits, _ = inception.inception_v2(
+    logits, end_points = inception.inception_v2(
         features,
         num_classes,
         is_training=training_active,
@@ -328,7 +343,6 @@ def inception_model_fn(features, labels, mode, params):
       logits=logits,
       weights=1.0,
       label_smoothing=0.1)
-  tf.losses.add_loss(prediction_loss)
   loss = tf.losses.get_total_loss(add_regularization_losses=True)
 
   initial_learning_rate = FLAGS.learning_rate * FLAGS.train_batch_size / 256
@@ -336,19 +350,30 @@ def inception_model_fn(features, labels, mode, params):
 
   train_op = None
   if training_active:
-    # Multiply the learning rate by 0.1 every 30 epochs.
     training_set_len = imagenet.get_split_size('train')
     batches_per_epoch = training_set_len // FLAGS.train_batch_size
-    learning_rate = tf.train.exponential_decay(
-        learning_rate=initial_learning_rate,
-        global_step=tf.train.get_global_step(),
-        decay_steps=_LEARNING_RATE_DECAY_EPOCHS * batches_per_epoch,
-        decay_rate=_LEARNING_RATE_DECAY,
-        staircase=True)
+    global_step = tf.train.get_or_create_global_step()
 
-    # Set a minimum boundary for the learning rate.
-    learning_rate = tf.maximum(
-        learning_rate, final_learning_rate, name='learning_rate')
+    if FLAGS.use_piecewise_rate_adaptation:
+      # Perform a gradual warmup of the learning rate, as in the paper "Training
+      # ImageNet in 1 Hour." Afterward, decay the learning rate by 0.1 at 30, 60,
+      # 120, and 150 epochs.
+      boundaries = [int(batches_per_epoch * epoch) for epoch in [
+          1, 2, 3, 4, 5, 30, 60, 120, 150]]
+      values = [initial_learning_rate * decay for decay in [
+          1.0 / 6, 2.0 / 6, 3.0 / 6, 4.0 / 6, 5.0 / 6, 1, 0.1, 0.01, 1e-3, 1e-4]]
+      learning_rate = piecewise_constant(global_step, boundaries, values)
+    else:
+      learning_rate = tf.train.exponential_decay(
+          learning_rate=initial_learning_rate,
+          global_step=global_step,
+          decay_steps=_LEARNING_RATE_DECAY_EPOCHS * batches_per_epoch,
+          decay_rate=_LEARNING_RATE_DECAY,
+          staircase=True)
+
+      # Set a minimum boundary for the learning rate.
+      learning_rate = tf.maximum(
+          learning_rate, final_learning_rate, name='learning_rate')
 
     # tf.summary.scalar('learning_rate', learning_rate)
 
@@ -378,7 +403,7 @@ def inception_model_fn(features, labels, mode, params):
       accuracy = tf.metrics.accuracy(tf.argmax(input=labels, axis=1),
                                      predictions)
       return {'accuracy': accuracy}
-    eval_metrics = (metric_fn, [labels, logits])
+    eval_metrics = (metric_fn, [labels, end_points['Predictions']])
 
   return tpu_estimator.TPUEstimatorSpec(
       mode=mode, loss=loss, train_op=train_op, eval_metrics=eval_metrics)
