@@ -110,7 +110,9 @@ def model_fn(features, labels, mode, params):
 
 def input_fn(params):
   """A simple input_fn using the experimental input pipeline."""
-
+  # Retrieves the batch size for the current shard. The # of shards is
+  # computed according to the input pipeline deployment. See
+  # `tf.contrib.tpu.RunConfig` for details.
   batch_size = params["batch_size"]
 
   def parser(serialized_example):

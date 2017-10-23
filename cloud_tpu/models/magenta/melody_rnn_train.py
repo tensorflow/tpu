@@ -72,6 +72,9 @@ def input_fn_by_record_files(
   """Creates a `input_fn` reading from TFRecord files with Dataset."""
   def _input_fn(params):
     """A `input_fn` returning features and labels."""
+    # Retrieves the batch size for the current shard. The # of shards is
+    # computed according to the input pipeline deployment. See
+    # `tf.contrib.tpu.RunConfig` for details.
     batch_size = params['batch_size']
     inputs, labels, lengths = sequence_example_lib.get_padded_batch(
         file_paths, batch_size, input_size, padding_length)
