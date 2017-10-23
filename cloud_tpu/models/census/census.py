@@ -246,6 +246,9 @@ def get_input_fn(filename):
       Tensors, and indices is a single Tensor of label indices.
     """
     if FLAGS.use_tpu:
+      # Retrieves the batch size for the current shard. The # of shards is
+      # computed according to the input pipeline deployment. See
+      # `tf.contrib.tpu.RunConfig` for details.
       batch_size = params['batch_size']
     else:
       batch_size = FLAGS.train_batch_size

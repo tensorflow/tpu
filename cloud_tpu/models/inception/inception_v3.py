@@ -154,18 +154,12 @@ tf.flags.DEFINE_integer(
     docstring='Number of bytes in read buffer. 0 means no buffering.')
 
 tf.flags.DEFINE_integer(
-    'cycle_length', default_value=16,
+    'cycle_length', default_value=32,
     docstring='Number of elements from dataset to process concurrently '
          '(by interleaver)')
 
 tf.flags.DEFINE_integer(
-    'block_length', default_value=None,
-    docstring='Number of consecutive elements to produce from each input element '
-         'before cycling to another input element (by interleaver). '
-         'If set to None, block_length defaults to batch_size')
-
-tf.flags.DEFINE_integer(
-    'num_parallel_calls', default_value=48,
+    'num_parallel_calls', default_value=128,
     docstring='Number of elements to process in parallel (by mapper)')
 
 tf.flags.DEFINE_integer(
@@ -198,6 +192,9 @@ class ImageNetInput(object):
 
   def __call__(self, params):
     """Input function which provides a single batch for train or eval."""
+    # Retrieves the batch size for the current shard. The # of shards is
+    # computed according to the input pipeline deployment. See
+    # `tf.contrib.tpu.RunConfig` for details.
     batch_size = params['batch_size']
 
     if FLAGS.use_data == 'real':
@@ -225,10 +222,15 @@ class ImageNetInput(object):
                 FLAGS.prefetch_size or batch_size)
 
       if FLAGS.prefetch_enabled:
-        dataset = dataset.interleave(
-            prefetch_map_fn,
-            cycle_length=FLAGS.cycle_length,
-            block_length=FLAGS.block_length or batch_size)
+        if self.is_training:
+          dataset = dataset.apply(
+              tf.contrib.data.sloppy_interleave(
+                  prefetch_map_fn,
+                  cycle_length=FLAGS.cycle_length))
+        else:
+          dataset = dataset.interleave(
+              prefetch_map_fn,
+              cycle_length=FLAGS.cycle_length)
 
       if FLAGS.followup_shuffle_buffer_size > 0:
         dataset = dataset.shuffle(

@@ -119,6 +119,9 @@ def make_input_fn(
                     else data_file_pattern)
     features = tf.contrib.learn.io.read_batch_features(
         file_pattern=file_pattern,
+        # Retrieves the batch size for the current shard. The # of shards is
+        # computed according to the input pipeline deployment. See
+        # `tf.contrib.tpu.RunConfig` for details.
         batch_size=params['batch_size'],
         features=feature_spec,
         reader=_gzip_reader_fn,

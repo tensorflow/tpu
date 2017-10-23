@@ -27,20 +27,11 @@ tf.flags.DEFINE_integer("batch_size", 128,
                         "is the global batch size and not the per-shard batch.")
 tf.flags.DEFINE_string("train_file", "", "Path to mnist training data.")
 tf.flags.DEFINE_integer("train_steps", 1000,
-                        "Total number of training steps. "
-                        "Note that the actual number of steps is the next "
-                        "multiple of --iterations greater than this value.")
+                        "Total number of training steps.")
 tf.flags.DEFINE_string("eval_file", "", "Path to mnist evaluation data.")
 tf.flags.DEFINE_integer("eval_steps", 0,
                         "Total number of evaluation steps. If `0`, evaluation "
-                        "after training is skipped. "
-                        "Note that the actual number of steps is the next "
-                        "multiple of --iterations greater than this value. "
-                        "Also note that --save_checkpoints_secs must be not "
-                        "`None` to have checkpoint saved during training.")
-tf.flags.DEFINE_integer("save_checkpoints_secs", None,
-                        "Seconds between checkpoint saves. If `None`, "
-                        "checkpoint will not be saved.")
+                        "after training is skipped.")
 tf.flags.DEFINE_bool("use_tpu", True, "Use TPUs rather than plain CPUs")
 tf.flags.DEFINE_string("master", "local", "GRPC URL of the Cloud TPU instance.")
 tf.flags.DEFINE_string("model_dir", None, "Estimator model_dir")
@@ -119,6 +110,9 @@ def get_input_fn(filename):
 
   def input_fn(params):
     """A simple input_fn using the experimental input pipeline."""
+    # Retrieves the batch size for the current shard. The # of shards is
+    # computed according to the input pipeline deployment. See
+    # `tf.contrib.tpu.RunConfig` for details.
     batch_size = params["batch_size"]
 
     def parser(serialized_example):
@@ -136,13 +130,12 @@ def get_input_fn(filename):
       label = tf.cast(features["label"], tf.int32)
       return image, label
 
-    dataset = tf.contrib.data.TFRecordDataset(
+    dataset = tf.data.TFRecordDataset(
         filename, buffer_size=FLAGS.dataset_reader_buffer_size)
-    dataset = dataset.map(parser).cache().repeat().batch(batch_size)
+    dataset = dataset.map(parser).cache().repeat()
+    dataset = dataset.apply(
+        tf.contrib.data.batch_and_drop_remainder(batch_size))
     images, labels = dataset.make_one_shot_iterator().get_next()
-    # set_shape to give inputs statically known shapes.
-    images.set_shape([batch_size, 28 * 28])
-    labels.set_shape([batch_size])
     return images, labels
   return input_fn
 
@@ -151,14 +144,6 @@ def main(unused_argv):
   del unused_argv  # Unused
 
   tf.logging.set_verbosity(tf.logging.INFO)
-
-  if not FLAGS.save_checkpoints_secs:
-    if not FLAGS.eval_steps:
-      tf.logging.info(
-          "If checkpoint is expected, please set --save_checkpoints_secs.")
-    else:
-      tf.logging.fatal(
-          "Flag --save_checkpoints_secs must be set for evaluation. Aborting.")
 
   if not FLAGS.train_file:
     tf.logging.fatal("Flag --train_file must be set for training. Aborting.")
@@ -170,7 +155,6 @@ def main(unused_argv):
       master=FLAGS.master,
       evaluation_master=FLAGS.master,
       model_dir=FLAGS.model_dir,
-      save_checkpoints_secs=FLAGS.save_checkpoints_secs,
       session_config=tf.ConfigProto(
           allow_soft_placement=True, log_device_placement=True),
       tpu_config=tpu_config.TPUConfig(FLAGS.iterations, FLAGS.num_shards),)
