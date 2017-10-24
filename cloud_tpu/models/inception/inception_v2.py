@@ -30,6 +30,8 @@ from tensorflow.contrib.tpu.python.tpu import tpu_config
 from tensorflow.contrib.tpu.python.tpu import tpu_estimator
 from tensorflow.contrib.tpu.python.tpu import tpu_optimizer
 
+from six.moves import xrange
+
 
 tf.flags.DEFINE_string(
     'master', default_value='local',
