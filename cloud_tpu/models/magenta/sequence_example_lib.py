@@ -102,7 +102,7 @@ def get_padded_batch(file_list, batch_size, input_size, padding_length):
     lengths: A tensor of shape [batch_size] of int32s. The lengths of each
         SequenceExample before padding.
   """
-  dataset = tf.contrib.data.TFRecordDataset(file_list)
+  dataset = tf.data.TFRecordDataset(file_list)
   return _generate_data_from_dataset(dataset, batch_size, input_size,
                                      padding_length)
 
@@ -155,7 +155,7 @@ def get_fake_data_batch(batch_size, input_size,
       _make_example_proto(inputs_data[i], labels_data[i]).SerializeToString()
       for i in range(len(inputs_data))])
 
-  dataset = tf.contrib.data.Dataset.from_tensor_slices(proto_string_tensor)
+  dataset = tf.data.Dataset.from_tensor_slices(proto_string_tensor)
 
   return _generate_data_from_dataset(dataset, batch_size, input_size,
                                      padding_length)

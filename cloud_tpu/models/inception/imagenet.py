@@ -193,6 +193,6 @@ def get_split(split_name, dataset_dir, file_pattern=None,
         items_to_descriptions=_ITEMS_TO_DESCRIPTIONS,
         num_classes=_NUM_CLASSES)
   else:
-    dataset = tf.contrib.data.Dataset.list_files(file_pattern)
+    dataset = tf.data.Dataset.list_files(file_pattern)
 
   return dataset

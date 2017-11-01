@@ -126,8 +126,9 @@ image_preprocessing_fn = vgg_preprocessing.preprocess_image
 class ImageNetInput(object):
   """Wrapper class that acts as the input_fn to TPUEstimator."""
 
-  def __init__(self, is_training):
+  def __init__(self, is_training, data_dir=None):
     self.is_training = is_training
+    self.data_dir = data_dir if data_dir else FLAGS.data_dir
 
   def dataset_parser(self, value):
     """Parse an Imagenet record from value."""
@@ -179,7 +180,7 @@ class ImageNetInput(object):
 
     # Shuffle the filenames to ensure better randomization
     file_pattern = os.path.join(
-        FLAGS.data_dir, 'train-*' if self.is_training else 'validation-*')
+        self.data_dir, 'train-*' if self.is_training else 'validation-*')
     dataset = tf.data.Dataset.list_files(file_pattern)
     if self.is_training:
       dataset = dataset.shuffle(buffer_size=1024)  # 1024 files in dataset

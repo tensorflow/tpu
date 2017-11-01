@@ -254,7 +254,7 @@ def input_fn(params):
         os.path.join(data_dir, 'train-%05d-of-01024' % i)
         for i in xrange(0, 984)
     ]
-    dataset = tf.contrib.data.TFRecordDataset(filenames)
+    dataset = tf.data.TFRecordDataset(filenames)
     dataset = dataset.repeat().map(parser).batch(batch_size)
     images, labels = dataset.make_one_shot_iterator().get_next()
   else:
