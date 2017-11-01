@@ -246,14 +246,14 @@ def input_fn(params):
       return final_image, final_label
 
     file_pattern = os.path.join(FLAGS.data_dir, "train-*")
-    dataset = tf.contrib.data.Dataset.list_files(file_pattern)
+    dataset = tf.data.Dataset.list_files(file_pattern)
 
     if FLAGS.filename_shuffle_buffer_size > 0:
       dataset = dataset.shuffle(buffer_size=FLAGS.filename_shuffle_buffer_size)
     dataset = dataset.repeat()
 
     def prefetch_map_fn(filename):
-      dataset = tf.contrib.data.TFRecordDataset(
+      dataset = tf.data.TFRecordDataset(
           filename, buffer_size=FLAGS.dataset_reader_buffer_size)
       if FLAGS.prefetch_size is None:
         dataset = dataset.prefetch(batch_size)

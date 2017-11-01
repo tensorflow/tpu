@@ -33,11 +33,12 @@ tf.flags.DEFINE_string("data_source", "real",
                        "Data source to use - real/random")
 tf.flags.DEFINE_string("train_file", "", "Path to ptb training data.")
 tf.flags.DEFINE_integer("batch_size", 128, "Size of input batch.")
-tf.flags.DEFINE_float("learning_rate", 0.1, "Learning rate.")
+tf.flags.DEFINE_float("learning_rate", 20.0, "Learning rate.")
 tf.flags.DEFINE_float("learning_rate_decay", 0.9, "Learning rate decay rate.")
 tf.flags.DEFINE_float("steps_before_decay", 10000,
                       "Number of steps after which learning rate decay is "
                       "applied.")
+tf.flags.DEFINE_float("clip_ratio", 0.25, "Gradient clipping ratio.")
 tf.flags.DEFINE_integer("iterations", 30,
                         "Number of iterations per TPU training loop.")
 tf.flags.DEFINE_integer("train_steps", 600,
@@ -45,14 +46,14 @@ tf.flags.DEFINE_integer("train_steps", 600,
                         "steps is the next multiple of --iterations greater "
                         "than this value.")
 tf.flags.DEFINE_integer("vocab_size", 10000, "Size of vocabulary.")
-tf.flags.DEFINE_integer("embedding_size", 650, "Size of word embeddings.")
+tf.flags.DEFINE_integer("embedding_size", 200, "Size of word embeddings.")
 tf.flags.DEFINE_integer("num_layers", 2, "Number of layers of LSTM cell.")
 # Though the original paper (https://arxiv.org/abs/1409.2329) talks about
 # unrolling 35 steps, there is no need to do that if the model works with 1
 # unrolled step.
 tf.flags.DEFINE_integer("num_unrolled_steps", 1,
                         "Number of unrolled steps of the LSTM.")
-tf.flags.DEFINE_float("dropout_prob", 0.35, "Dropout rate.")
+tf.flags.DEFINE_float("dropout_prob", 0.2, "Dropout rate.")
 tf.flags.DEFINE_integer("save_checkpoints_secs", None,
                         "Seconds between checkpoint saves.")
 tf.flags.DEFINE_string("master", "local",
@@ -67,65 +68,55 @@ FLAGS = tf.flags.FLAGS
 def model_fn(features, labels, mode, params):
   """LSTM model implementation to run on the PTB dataset."""
 
+  _ = params
   if mode != tf.estimator.ModeKeys.TRAIN:
     raise RuntimeError("mode {} is not supported yet".format(mode))
 
-  batch_size = params["batch_size"]
   embedding_size = FLAGS.embedding_size
   vocab_size = FLAGS.vocab_size
   num_unrolled_steps = FLAGS.num_unrolled_steps
 
+  features = tf.transpose(features)
+  labels = tf.transpose(labels)
+
   embeddings = tf.get_variable(
-      "embeddings", [vocab_size, embedding_size], dtype=tf.float32)
+      "embeddings", [vocab_size, embedding_size], dtype=tf.float32,
+      initializer=tf.random_uniform_initializer(-0.1, 0.1),
+      trainable=True)
 
-  input_embeddings = tf.nn.embedding_lookup(embeddings, features)
+  inputs = tf.nn.embedding_lookup(embeddings, features)
+  if mode == tf.estimator.ModeKeys.TRAIN:
+    inputs = tf.nn.dropout(inputs, 1 - FLAGS.dropout_prob)
 
-  def lstm_with_dropout_cell():
-    cell = tf.contrib.rnn.BasicLSTMCell(
-        embedding_size,
-        forget_bias=0.0,
-        state_is_tuple=True)
-    if FLAGS.dropout_prob > 0:
-      return tf.contrib.rnn.DropoutWrapper(
-          cell, output_keep_prob=1-FLAGS.dropout_prob)
-    else:
-      return cell
-
-  cell_network = tf.contrib.rnn.MultiRNNCell(
-      [lstm_with_dropout_cell() for _ in range(FLAGS.num_layers)],
-      state_is_tuple=True)
-  network_zero_state = cell_network.zero_state(batch_size, dtype=tf.float32)
-
-  # Unstacking inputs for unrolled LSTM steps.
-  unstacked_inputs = tf.unstack(
-      input_embeddings, num=num_unrolled_steps, axis=1)
-
-  outputs, _ = tf.contrib.rnn.static_rnn(
-      cell_network,
-      unstacked_inputs,
-      initial_state=network_zero_state)
+  for l in range(FLAGS.num_layers):
+    with tf.variable_scope("rnn_%d" % l):
+      unstacked_inputs = tf.unstack(
+          inputs, num=num_unrolled_steps, axis=0)
+      cell = tf.nn.rnn_cell.BasicLSTMCell(embedding_size)
+      outputs, _ = tf.nn.static_rnn(cell,
+                                    unstacked_inputs,
+                                    dtype=tf.float32)
+      inputs = tf.stack(outputs, axis=0)
+      if mode == tf.estimator.ModeKeys.TRAIN:
+        inputs = tf.nn.dropout(inputs, 1 - FLAGS.dropout_prob)
 
   # tf.stack converts from [num_unrolled_steps, batch_size, ..] to
   # [batch_size, num_unrolled_steps, ..] which is then reshaped to align with
   # labels.
-  output = tf.reshape(tf.stack(outputs, axis=1), [-1, embedding_size])
+  output = tf.reshape(inputs, [-1, embedding_size])
 
   # Final layer.
   softmax_w = tf.get_variable(
-      "softmax_w", [embedding_size, vocab_size], dtype=tf.float32)
-  softmax_b = tf.get_variable("softmax_b", [vocab_size], dtype=tf.float32)
-  product = tf.matmul(output, softmax_w) + softmax_b
-  logits = tf.reshape(product, [batch_size, num_unrolled_steps, vocab_size])
+      "softmax_w", [embedding_size, vocab_size], dtype=tf.float32,
+      initializer=tf.random_uniform_initializer(-0.1, 0.1))
+  softmax_b = tf.get_variable("softmax_b", [vocab_size], dtype=tf.float32,
+                              initializer=tf.zeros_initializer())
+  logits = tf.matmul(output, softmax_w) + softmax_b
 
   # Calculating the loss.
-  loss = tf.contrib.seq2seq.sequence_loss(
-      logits,
-      labels,
-      tf.ones([batch_size, num_unrolled_steps], dtype=tf.float32),
-      average_across_timesteps=False,
-      average_across_batch=True
-  )
-  total_loss = tf.reduce_sum(loss)
+  loss = tf.nn.sparse_softmax_cross_entropy_with_logits(
+      labels=tf.reshape(labels, [-1]), logits=logits)
+  total_loss = tf.reduce_mean(loss)
 
   # Configuring the optimization step.
   learning_rate = tf.train.exponential_decay(
@@ -139,9 +130,11 @@ def model_fn(features, labels, mode, params):
   else:
     optimizer = tf.train.GradientDescentOptimizer(learning_rate=learning_rate)
 
-  train_op = optimizer.minimize(
-      total_loss,
-      global_step=tf.train.get_global_step())
+  grads_and_vars = optimizer.compute_gradients(total_loss)
+  gradients, variables = zip(*grads_and_vars)
+  clipped, _ = tf.clip_by_global_norm(gradients, FLAGS.clip_ratio)
+  train_op = optimizer.apply_gradients(
+      zip(clipped, variables), global_step=tf.train.get_global_step())
 
   return tpu_estimator.TPUEstimatorSpec(
       mode=mode,
@@ -183,7 +176,7 @@ def input_fn(params):
       label = tf.cast(features["label"], tf.int32)
       return word_id, label
 
-    dataset = tf.contrib.data.TFRecordDataset([FLAGS.train_file])
+    dataset = tf.data.TFRecordDataset([FLAGS.train_file])
     dataset = dataset.repeat().map(parser).batch(
         batch_size * num_unrolled_steps)
     word_ids, labels = dataset.make_one_shot_iterator().get_next()

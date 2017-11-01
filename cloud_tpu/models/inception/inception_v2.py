@@ -212,7 +212,7 @@ class ImageNetInput(object):
 
       # use interleave() and prefetch() to read many files concurrently
       def prefetch_map_fn(filename):
-        return tf.contrib.data.TFRecordDataset(
+        return tf.data.TFRecordDataset(
             filename,
             buffer_size=FLAGS.prefetch_dataset_buffer_size)
 

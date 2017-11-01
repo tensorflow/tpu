@@ -254,7 +254,7 @@ def get_input_fn(filename):
       batch_size = FLAGS.train_batch_size
     shuffle = True
 
-    dataset = tf.contrib.data.TextLineDataset([filename])
+    dataset = tf.data.TextLineDataset([filename])
     dataset = dataset.cache().repeat(FLAGS.num_epochs)
     if shuffle:
       dataset = dataset.shuffle(batch_size * 10)

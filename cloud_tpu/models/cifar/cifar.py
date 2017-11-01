@@ -131,7 +131,7 @@ def input_fn(params):
     label = tf.cast(features["label"], tf.int32)
     return image, label
 
-  dataset = tf.contrib.data.TFRecordDataset([FLAGS.train_file])
+  dataset = tf.data.TFRecordDataset([FLAGS.train_file])
   dataset = dataset.map(parser, num_parallel_calls=batch_size)
   dataset = dataset.prefetch(4 * batch_size).cache().repeat()
   dataset = dataset.batch(batch_size).prefetch(1)
