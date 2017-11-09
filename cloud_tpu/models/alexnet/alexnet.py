@@ -32,84 +32,84 @@ from tensorflow.contrib.tpu.python.tpu import tpu_optimizer
 
 # Model specific paramenters
 tf.flags.DEFINE_string(
-    "master", default_value="local", docstring="Location of the master.")
+    "master", default="local", help="Location of the master.")
 tf.flags.DEFINE_string(
     "data_source",
     "real",
-    docstring="Data source to be real or fake. Fake data uses randomly generated "
+    help="Data source to be real or fake. Fake data uses randomly generated "
     "numbers.")
 
 tf.flags.DEFINE_bool(
-    "preprocessed", False, docstring="Is the data preprocessed to 224x224 images?")
+    "preprocessed", False, help="Is the data preprocessed to 224x224 images?")
 tf.flags.DEFINE_string(
     "data_dir",
     "",
-    docstring="Path to the directory that contains the 1024 TFRecord "
+    help="Path to the directory that contains the 1024 TFRecord "
     "Imagenet training data files.")
-tf.flags.DEFINE_float("learning_rate", 0.03, docstring="Learning rate.")
+tf.flags.DEFINE_float("learning_rate", 0.03, help="Learning rate.")
 tf.flags.DEFINE_integer(
     "batch_size",
     512,
-    docstring="Mini-batch size for the computation. Note that this "
+    help="Mini-batch size for the computation. Note that this "
     "is the global batch size and not the per-shard batch.")
 tf.flags.DEFINE_integer(
-    "num_classes", 1000, docstring="Number of distinct labels in the data.")
+    "num_classes", 1000, help="Number of distinct labels in the data.")
 tf.flags.DEFINE_integer(
-    "iterations", 30, docstring="Number of iterations per TPU training loop.")
+    "iterations", 30, help="Number of iterations per TPU training loop.")
 tf.flags.DEFINE_float(
-    "dropout_keep_prob", 0.5, docstring="Keep probability of the dropout layers.")
+    "dropout_keep_prob", 0.5, help="Keep probability of the dropout layers.")
 tf.flags.DEFINE_integer(
     "train_steps",
     600,
-    docstring="Total number of steps. Note that the actual number of "
+    help="Total number of steps. Note that the actual number of "
     "steps is the next multiple of --iterations greater "
     "than this value.")
 tf.flags.DEFINE_integer(
-    "save_checkpoints_secs", None, docstring="Seconds between checkpoint saves")
-tf.flags.DEFINE_string("model_dir", None, docstring="Estimator model_dir")
-tf.flags.DEFINE_bool("use_tpu", True, docstring="Use TPUs rather than plain CPUs.")
+    "save_checkpoints_secs", None, help="Seconds between checkpoint saves")
+tf.flags.DEFINE_string("model_dir", None, help="Estimator model_dir")
+tf.flags.DEFINE_bool("use_tpu", True, help="Use TPUs rather than plain CPUs.")
 
-tf.flags.DEFINE_integer("num_shards", 8, docstring="Number of shards (TPU chips).")
+tf.flags.DEFINE_integer("num_shards", 8, help="Number of shards (TPU chips).")
 
 # Dataset specific paramenters
 tf.flags.DEFINE_integer(
     "prefetch_size",
-    default_value=None,
-    docstring="The number of elements buffered by prefetch function. Default is the "
+    default=None,
+    help="The number of elements buffered by prefetch function. Default is the "
     "batch size. Any positive integer sets the buffer size at such a value."
     "Any other value disables prefetch.")
 
 tf.flags.DEFINE_integer(
     "dataset_reader_buffer_size",
-    default_value=256 * 1024 * 1024,
-    docstring="The number of bytes in read buffer. A value of zero means no "
+    default=256 * 1024 * 1024,
+    help="The number of bytes in read buffer. A value of zero means no "
     "buffering.")
 
 tf.flags.DEFINE_bool(
     "use_sloppy_interleave",
-    default_value=False,
-    docstring="Use sloppy interleave or not. Default set to False.")
+    default=False,
+    help="Use sloppy interleave or not. Default set to False.")
 
 tf.flags.DEFINE_integer(
     "cycle_length",
-    default_value=16,
-    docstring="The number of files to read concurrently by interleave function.")
+    default=16,
+    help="The number of files to read concurrently by interleave function.")
 
 tf.flags.DEFINE_integer(
     "num_parallel_calls",
-    default_value=128,
-    docstring="The number of elements to process in parallel by mapper.")
+    default=128,
+    help="The number of elements to process in parallel by mapper.")
 
 tf.flags.DEFINE_integer(
     "filename_shuffle_buffer_size",
-    default_value=1024,
-    docstring="The number of data files in the shuffle buffer. A value of zero "
+    default=1024,
+    help="The number of data files in the shuffle buffer. A value of zero "
     "disables input-file shuffling)")
 
 tf.flags.DEFINE_integer(
     "element_shuffle_buffer_size",
-    default_value=1024,
-    docstring="The number of training samples in the shuffle buffer. A value of zero"
+    default=1024,
+    help="The number of training samples in the shuffle buffer. A value of zero"
     " disables input-sample shuffling).")
 
 FLAGS = tf.flags.FLAGS

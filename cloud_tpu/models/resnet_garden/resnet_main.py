@@ -33,45 +33,45 @@ from tensorflow.python.estimator import estimator
 FLAGS = tf.flags.FLAGS
 
 tf.flags.DEFINE_string(
-    'master', default_value='local',
-    docstring='Location of the master.')
+    'master', default='local',
+    help='Location of the master.')
 
 tf.flags.DEFINE_string(
-    'data_dir', default_value='',
-    docstring='The directory where the ImageNet input data is stored.')
+    'data_dir', default='',
+    help='The directory where the ImageNet input data is stored.')
 
 tf.flags.DEFINE_string(
-    'model_dir', default_value='',
-    docstring='The directory where the model will be stored.')
+    'model_dir', default='',
+    help='The directory where the model will be stored.')
 
 tf.flags.DEFINE_integer(
-    'resnet_size', default_value=50, docstring='The size of the ResNet model to use.')
+    'resnet_size', default=50, help='The size of the ResNet model to use.')
 
 tf.flags.DEFINE_integer(
-    'train_steps', default_value=130000,    # Roughly 100 epochs
-    docstring='The number of steps to use for training.')
+    'train_steps', default=130000,    # Roughly 100 epochs
+    help='The number of steps to use for training.')
 
 tf.flags.DEFINE_integer(
-    'train_batch_size', default_value=1024, docstring='Batch size for training.')
+    'train_batch_size', default=1024, help='Batch size for training.')
 
 tf.flags.DEFINE_integer(
-    'eval_batch_size', default_value=1024, docstring='Batch size for evaluation.')
+    'eval_batch_size', default=1024, help='Batch size for evaluation.')
 
 tf.flags.DEFINE_integer(
-    'num_shards', default_value=8,
-    docstring='Number of shards (TPU chips).')
+    'num_shards', default=8,
+    help='Number of shards (TPU cores).')
 
 # For mode=train_and_eval, evaluation occurs at each steps_per_checkpoint
 # Note: independently of steps_per_checkpoint, estimator will save the most
 # recent checkpoint every 10 minutes by default for train_and_eval
 tf.flags.DEFINE_string(
-    'mode', default_value='train_and_eval',
-    docstring=('Mode to run: train, eval, train_and_eval '
+    'mode', default='train_and_eval',
+    help=('Mode to run: train, eval, train_and_eval '
           '(default, interleaved train & eval).'))
 
 tf.flags.DEFINE_integer(
-    'iterations_per_loop', default_value=None,
-    docstring=('Number of interior TPU cycles to run before returning to the host. '
+    'iterations_per_loop', default=None,
+    help=('Number of interior TPU cycles to run before returning to the host. '
           'This is different from the number of steps run before each eval '
           'and should primarily be used only if you need more incremental '
           'logging during training. Setting this to None (default) will '
@@ -83,20 +83,20 @@ tf.flags.DEFINE_integer('shuffle_buffer_size', 1000,
 
 # For mode=train and mode=train_and_eval
 tf.flags.DEFINE_integer(
-    'steps_per_checkpoint', default_value=1000,
-    docstring=('Controls how often checkpoints are generated. More steps per '
+    'steps_per_checkpoint', default=1000,
+    help=('Controls how often checkpoints are generated. More steps per '
           'checkpoint = higher utilization of TPU and generally higher '
           'steps/sec'))
 
 # For mode=eval
 tf.flags.DEFINE_integer(
-    'min_eval_interval', default_value=180,
-    docstring='Minimum seconds between evaluations.')
+    'min_eval_interval', default=180,
+    help='Minimum seconds between evaluations.')
 
 # For mode=eval
 tf.flags.DEFINE_integer(
-    'eval_timeout', default_value=None,
-    docstring='Maximum seconds between checkpoints before evaluation terminates.')
+    'eval_timeout', default=None,
+    help='Maximum seconds between checkpoints before evaluation terminates.')
 
 # Dataset constants
 _LABEL_CLASSES = 1001
