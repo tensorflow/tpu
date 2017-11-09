@@ -20,72 +20,95 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import json
+import os
+
+import numpy as np
 import tensorflow as tf
 
 
 FLAGS = tf.flags.FLAGS
-tf.flags.DEFINE_string('input_dir', '', 'Directory where data is located.')
-tf.flags.DEFINE_string('input_file', '', 'Name of input file in data dir.')
-tf.flags.DEFINE_string('output_map_file', '',
-                    'Name of file to put word to id map in.')
-tf.flags.DEFINE_string('output_ids_file', '',
-                    'Name of file to put the corresponding word ids in.')
+tf.flags.DEFINE_integer('unroll_steps', 35, 'Steps to unroll.')
+tf.flags.DEFINE_string('input_path', '', 'Input data file path.')
+tf.flags.DEFINE_string('output_path', '', 'Output data file path.')
 
 
-def _int64_feature(value):
-  return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
+def _int64_feature(values):
+  return tf.train.Feature(int64_list=tf.train.Int64List(value=values))
 
 
-def _bytes_feature(value):
-  return tf.train.Feature(bytes_list=tf.train.BytesList(value=[str(value)]))
+class Corpus(object):
+  """Processed form of the Penn Treebank dataset."""
 
+  def __init__(self, path):
+    """Load the Penn Treebank dataset.
 
-def read_words(filename):
-  with tf.gfile.FastGFile(FLAGS.input_dir+ '/' + filename, 'r') as f:
-    words = f.read().replace('\n', '<eop>').split()
-    return words
+    Args:
+      path: Path to the data/ directory of the dataset from from Tomas Mikolov's
+        webpage - http://www.fit.vutbr.cz/~imikolov/rnnlm/simple-examples.tgz
+    """
 
+    self.word2idx = {}  # string -> integer id
+    self.idx2word = []  # integer id -> word string
+    # Files represented as a list of integer ids (as opposed to list of string
+    # words).
+    self.train = self.tokenize(os.path.join(path, 'train.txt'))
+    self.valid = self.tokenize(os.path.join(path, 'valid.txt'))
+    self.test = self.tokenize(os.path.join(path, 'test.txt'))
 
-def build_word_to_id_map(word_list):
-  counter = 0
-  word_to_id_map = {}
-  for word in word_list:
-    if word not in word_to_id_map:
-      word_to_id_map[word] = counter
-      counter += 1
-  return word_to_id_map
+  def vocab_size(self):
+    return len(self.idx2word)
+
+  def add(self, word):
+    if word not in self.word2idx:
+      self.idx2word.append(word)
+      self.word2idx[word] = len(self.idx2word) - 1
+
+  def tokenize(self, path):
+    """Read text file in path and return a list of integer token ids."""
+    tokens = 0
+    with tf.gfile.Open(path, 'r') as f:
+      for line in f:
+        words = line.split() + ['<eos>']
+        tokens += len(words)
+        for word in words:
+          self.add(word)
+
+    # Tokenize file content
+    with tf.gfile.Open(path, 'r') as f:
+      ids = np.zeros(tokens).astype(np.int64)
+      token = 0
+      for line in f:
+        words = line.split() + ['<eos>']
+        for word in words:
+          ids[token] = self.word2idx[word]
+          token += 1
+
+    return ids
 
 
 def main(argv):
   del argv  # Unused.
 
-  filename = FLAGS.input_file
-  word_list = read_words(filename)
-  word_to_id_map = build_word_to_id_map(word_list)
-
-  # Saving word to id map
-  map_filename = FLAGS.output_map_file
-  with tf.gfile.FastGFile(FLAGS.input_dir + '/' + map_filename, 'w') as f:
-    json.dump(word_to_id_map, f)
-
+  corpus = Corpus(FLAGS.input_path)
   # Saving ids as TFRecords
-  output_ids_filename = FLAGS.output_ids_file
-  record_writer = tf.python_io.TFRecordWriter(
-      FLAGS.input_dir + '/' + output_ids_filename)
-  for i in range(len(word_list) - 1):
-    word = word_list[i]
-    example = tf.train.Example(
-        features=tf.train.Features(feature={
-            'id': _int64_feature(word_to_id_map[word]),
-            'word': _bytes_feature(word),
-            'label': _int64_feature(word_to_id_map[word_list[i+1]])
-        }))
-    record_writer.write(example.SerializeToString())
-
-  record_writer.close()
-
-  print('Done writing.')
+  for basename, data in zip(['train.tfrecords', 'valid.tfrecords'],
+                            [corpus.train, corpus.valid]):
+    record_writer = tf.python_io.TFRecordWriter(
+        os.path.join(FLAGS.output_path, basename))
+    count = 0
+    for i in range(0, len(data) - FLAGS.unroll_steps - 1,
+                   FLAGS.unroll_steps):
+      count += 1
+      inputs = data[i:i + FLAGS.unroll_steps]
+      labels = data[i + 1:i + FLAGS.unroll_steps + 1]
+      example = tf.train.Example(
+          features=tf.train.Features(feature={
+              'inputs': _int64_feature(inputs),
+              'labels': _int64_feature(labels)
+          }))
+      record_writer.write(example.SerializeToString())
+    record_writer.close()
+    print('Done writing %s. examples: %d' % (basename, count))
 
 if __name__ == '__main__':
   tf.app.run(main)
