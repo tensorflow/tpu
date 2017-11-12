@@ -309,8 +309,7 @@ def main(unused_argv):
         save_checkpoints_steps=steps_per_checkpoint,
         tpu_config=tpu_config.TPUConfig(
             iterations_per_loop=iterations_per_loop,
-            num_shards=FLAGS.num_shards,
-            per_host_input_for_training=FLAGS.num_shards <= 8))
+            num_shards=FLAGS.num_shards))
     # TODO(b/67051042): enable per_host when multi-host pipeline is supported
 
     resnet_classifier = tpu_estimator.TPUEstimator(
