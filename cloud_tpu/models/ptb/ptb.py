@@ -207,7 +207,8 @@ def main(unused_argv):
   for train_steps in range(epoch_size, FLAGS.train_steps, epoch_size):
     estimator.train(input_fn=get_input_fn(FLAGS.train_file),
                     max_steps=train_steps)
-    estimator.evaluate(input_fn=get_input_fn(FLAGS.valid_file), steps=15)
+    if FLAGS.valid_file:
+      estimator.evaluate(input_fn=get_input_fn(FLAGS.valid_file), steps=15)
 
 
 if __name__ == "__main__":
