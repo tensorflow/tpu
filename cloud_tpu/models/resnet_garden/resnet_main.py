@@ -239,10 +239,11 @@ def resnet_model_fn(features, labels, mode, params):
   cross_entropy = tf.losses.softmax_cross_entropy(
       logits=logits, onehot_labels=labels)
 
-  # Add weight decay to the loss. We perform weight decay on all trainable
-  # variables, which includes batch norm beta and gamma variables.
+  # Add weight decay to the loss. We exclude weight decay on the batch
+  # normalization variables because it slightly improves accuracy.
   loss = cross_entropy + _WEIGHT_DECAY * tf.add_n(
-      [tf.nn.l2_loss(v) for v in tf.trainable_variables()])
+      [tf.nn.l2_loss(v) for v in tf.trainable_variables()
+       if 'batch_normalization' not in v.name])
 
   global_step = tf.train.get_global_step()
   current_epoch = (tf.cast(global_step, tf.float32) /
@@ -307,10 +308,10 @@ def main(unused_argv):
         evaluation_master=FLAGS.master,
         model_dir=FLAGS.model_dir,
         save_checkpoints_steps=steps_per_checkpoint,
+        log_step_count_steps=iterations_per_loop,
         tpu_config=tpu_config.TPUConfig(
             iterations_per_loop=iterations_per_loop,
-            num_shards=FLAGS.num_shards,
-            per_host_input_for_training=FLAGS.num_shards <= 8))
+            num_shards=FLAGS.num_shards))
     # TODO(b/67051042): enable per_host when multi-host pipeline is supported
 
     resnet_classifier = tpu_estimator.TPUEstimator(
@@ -331,6 +332,7 @@ def main(unused_argv):
         master=FLAGS.master,
         evaluation_master=FLAGS.master,
         model_dir=FLAGS.model_dir,
+        log_step_count_steps=iterations_per_loop,
         tpu_config=tpu_config.TPUConfig(
             iterations_per_loop=iterations_per_loop,
             num_shards=FLAGS.num_shards))
@@ -369,6 +371,7 @@ def main(unused_argv):
         master=FLAGS.master,
         evaluation_master=FLAGS.master,
         model_dir=FLAGS.model_dir,
+        log_step_count_steps=iterations_per_loop,
         tpu_config=tpu_config.TPUConfig(
             iterations_per_loop=eval_steps,  # Perform all eval in one loop
             num_shards=FLAGS.num_shards))
