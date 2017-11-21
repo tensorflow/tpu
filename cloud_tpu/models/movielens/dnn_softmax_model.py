@@ -25,24 +25,20 @@ import tensorflow as tf
 import model_common
 import tpu_embedding
 from consts import *
-from tensorflow.contrib.tpu.python.tpu import tpu
 from tensorflow.contrib.tpu.python.tpu import tpu_optimizer
 from tensorflow.python.estimator.model_fn import EstimatorSpec
 
 
 def truncated_normal_initializer():
-  with tpu.outside_all_rewrites():
-    return tf.truncated_normal_initializer(stddev=0.1)
+  return tf.truncated_normal_initializer(stddev=0.1)
 
 
 def xavier_initializer():
-  with tpu.outside_all_rewrites():
-    return tf.contrib.layers.xavier_initializer()
+  return tf.contrib.layers.xavier_initializer()
 
 
 def zeros_initializer():
-  with tpu.outside_all_rewrites():
-    return tf.zeros_initializer()
+  return tf.zeros_initializer()
 
 
 def get_pad_and_model_fns(hparams):
