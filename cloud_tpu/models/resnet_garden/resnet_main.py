@@ -194,7 +194,10 @@ class ImageNetInput(object):
       return dataset
 
     dataset = dataset.apply(
-        tf.contrib.data.sloppy_interleave(prefetch_dataset, cycle_length=32))
+        tf.contrib.data.parallel_interleave(
+            prefetch_dataset,
+            cycle_length=32,
+            sloppy=True))
     dataset = dataset.shuffle(FLAGS.shuffle_buffer_size)
 
     dataset = dataset.map(
