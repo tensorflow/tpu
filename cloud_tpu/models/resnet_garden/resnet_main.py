@@ -98,6 +98,13 @@ tf.flags.DEFINE_integer(
     'eval_timeout', default=None,
     help='Maximum seconds between checkpoints before evaluation terminates.')
 
+# For training data infeed parallelism.
+tf.flags.DEFINE_integer(
+    'num_files_infeed',
+    default=32,
+    help='The number of training files to read in parallel.')
+
+
 # Dataset constants
 _LABEL_CLASSES = 1001
 _NUM_CHANNELS = 3
@@ -195,9 +202,7 @@ class ImageNetInput(object):
 
     dataset = dataset.apply(
         tf.contrib.data.parallel_interleave(
-            prefetch_dataset,
-            cycle_length=32,
-            sloppy=True))
+            prefetch_dataset, cycle_length=FLAGS.num_files_infeed, sloppy=True))
     dataset = dataset.shuffle(FLAGS.shuffle_buffer_size)
 
     dataset = dataset.map(
@@ -415,4 +420,3 @@ def main(unused_argv):
 if __name__ == '__main__':
   tf.logging.set_verbosity(tf.logging.INFO)
   tf.app.run()
-
