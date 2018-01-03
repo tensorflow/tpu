@@ -32,6 +32,8 @@ from tensorflow.python.estimator import estimator
 
 FLAGS = tf.flags.FLAGS
 
+tf.flags.DEFINE_bool('use_tpu', True, help='Use TPUs rather than plain CPUs.')
+
 tf.flags.DEFINE_string(
     'master', default='local',
     help='Location of the master.')
@@ -271,7 +273,8 @@ def resnet_model_fn(features, labels, mode, params):
     optimizer = tf.train.MomentumOptimizer(
         learning_rate=learning_rate,
         momentum=_MOMENTUM)
-    optimizer = tpu_optimizer.CrossShardOptimizer(optimizer)
+    if FLAGS.use_tpu:
+      optimizer = tpu_optimizer.CrossShardOptimizer(optimizer)
 
     # Batch norm requires update_ops to be added as a train_op dependency.
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
@@ -323,6 +326,7 @@ def main(unused_argv):
     # TODO(b/67051042): enable per_host when multi-host pipeline is supported
 
     resnet_classifier = tpu_estimator.TPUEstimator(
+        use_tpu=FLAGS.use_tpu,
         model_fn=resnet_model_fn,
         config=config,
         train_batch_size=FLAGS.train_batch_size,
@@ -346,6 +350,7 @@ def main(unused_argv):
             num_shards=FLAGS.num_shards))
 
     resnet_classifier = tpu_estimator.TPUEstimator(
+        use_tpu=FLAGS.use_tpu,
         model_fn=resnet_model_fn,
         config=config,
         train_batch_size=FLAGS.train_batch_size,
@@ -385,6 +390,7 @@ def main(unused_argv):
             num_shards=FLAGS.num_shards))
     # Eval is only supported on a single 2x2 TPU, so num_shards = 8
     resnet_classifier = tpu_estimator.TPUEstimator(
+        use_tpu=FLAGS.use_tpu,
         model_fn=resnet_model_fn,
         config=config,
         train_batch_size=FLAGS.train_batch_size,
