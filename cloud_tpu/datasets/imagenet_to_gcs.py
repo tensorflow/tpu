@@ -410,22 +410,21 @@ def upload_to_gcs(training_records, validation_records):
   client = storage.Client(project=FLAGS.project)
   bucket = client.get_bucket(bucket_name)
 
-  def _upload_files(filenames, subdirectory):
+  def _upload_files(filenames):
     """Upload a list of files into a specifc subdirectory."""
     for i, filename in enumerate(sorted(filenames)):
-      blob = bucket.blob(key_prefix + subdirectory + '/' +
-                         os.path.basename(filename))
+      blob = bucket.blob(key_prefix + os.path.basename(filename))
       blob.upload_from_filename(filename)
       if not i % 20:
         tf.logging.info('Finished uploading file: %s' % filename)
 
   # Upload training dataset
   tf.logging.info('Uploading the training data.')
-  _upload_files(training_records, TRAINING_DIRECTORY)
+  _upload_files(training_records)
 
   # Upload validation dataset
   tf.logging.info('Uploading the validation data.')
-  _upload_files(validation_records, VALIDATION_DIRECTORY)
+  _upload_files(validation_records)
 
 
 def main(argv):  # pylint: disable=unused-argument
