@@ -333,10 +333,7 @@ def preprocess_for_eval(image, output_height, output_width, resize_side):
   return _mean_image_subtraction(image, [_R_MEAN, _G_MEAN, _B_MEAN])
 
 
-def preprocess_image(image,
-                     output_height=224,
-                     output_width=224,
-                     is_training=False,
+def preprocess_image(image, output_height, output_width, is_training=False,
                      resize_side_min=_RESIZE_SIDE_MIN,
                      resize_side_max=_RESIZE_SIDE_MAX):
   """Preprocesses the given image.

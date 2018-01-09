@@ -22,110 +22,48 @@ from __future__ import division
 from __future__ import print_function
 
 # Standard Imports
-import numpy as np
 import tensorflow as tf
 
+import densenet_model
 from tensorflow.contrib.tpu.python.tpu import tpu_config
 from tensorflow.contrib.tpu.python.tpu import tpu_estimator
 from tensorflow.contrib.tpu.python.tpu import tpu_optimizer
 
-tf.flags.DEFINE_integer("batch_size", 1024,
-                        "Mini-batch size for the computation. Note that this "
-                        "is the global batch size and not the per-shard batch.")
-tf.flags.DEFINE_string("train_file", "", "Path to cifar10 training data.")
-tf.flags.DEFINE_integer("train_epochs", 40000 * 200,
-                        "Number of epochs to train for.")
-tf.flags.DEFINE_integer("save_checkpoints_secs", None,
-                        "Seconds between checkpoint saves")
-tf.flags.DEFINE_bool("use_tpu", True, "Use TPUs rather than plain CPUs")
-tf.flags.DEFINE_string("master", "local",
-                       "BNS name of the TensorFlow master to use.")
-tf.flags.DEFINE_string("model_dir", None, "Estimator model_dir")
-tf.flags.DEFINE_integer("num_shards", 8, "Number of shards (TPU chips).")
-
 FLAGS = tf.flags.FLAGS
 
-# From resnet-50
-_BATCH_NORM_DECAY = 0.997
-_BATCH_NORM_EPSILON = 1e-5
+tf.flags.DEFINE_string("train_file", "", "Path to cifar10 training data.")
+tf.flags.DEFINE_integer("train_epochs", 200, "Number of epochs to train for.")
+tf.flags.DEFINE_bool("use_tpu", True, "Use TPUs rather than plain CPUs")
 
+tf.flags.DEFINE_string(
+    "master", default="local", help="Location of the master.")
 
-def conv(image, filters, strides=(1, 1), kernel_size=(3, 3)):
-  """Convolution with default options from the densenet paper."""
-  # Use initialization from https://arxiv.org/pdf/1502.01852.pdf
-  return tf.layers.conv2d(
-      inputs=image,
-      filters=filters,
-      kernel_size=kernel_size,
-      strides=strides,
-      activation=tf.identity,
-      use_bias=False,
-      padding="same",
-      kernel_initializer=tf.random_normal_initializer(
-          stddev=2.0 / np.product(kernel_size) / filters),
-      kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-4),
-  )
+tf.flags.DEFINE_string(
+    "data_dir",
+    default="",
+    help="The directory where the ImageNet input data is stored.")
 
+tf.flags.DEFINE_string(
+    "model_dir",
+    default="",
+    help="The directory where the model will be stored.")
 
-def dense_block(image, filters, is_training):
-  """Standard BN+Relu+conv block for DenseNet."""
-  image = tf.layers.batch_normalization(
-      inputs=image,
-      axis=-1,
-      training=is_training,
-      fused=True,
-      center=True,
-      scale=True,
-      momentum=_BATCH_NORM_DECAY,
-      epsilon=_BATCH_NORM_EPSILON,
-  )
+tf.flags.DEFINE_integer(
+    "train_batch_size", default=1024, help="Batch size for training.")
 
-  image = tf.nn.relu(image)
-  return conv(image, filters)
+tf.flags.DEFINE_integer(
+    "eval_batch_size", default=1024, help="Batch size for evaluation.")
 
+tf.flags.DEFINE_integer(
+    "num_shards", default=8, help="Number of shards (TPU cores).")
 
-def dense_module(image, k, count, is_training):
-  """Build a single dense module with `count` batch-norm/relu/conv layers."""
-  current_input = image
-  for i in range(count):
-    with tf.variable_scope("conv-%d" % i):
-      output = dense_block(current_input, k, is_training)
-      current_input = tf.concat([current_input, output], axis=3)
-
-  return current_input
-
-
-def _int_shape(layer):
-  return layer.get_shape().as_list()
-
-
-def transition_layer(image):
-  conv_img = conv(image, filters=_int_shape(image)[3], kernel_size=(1, 1))
-  return tf.layers.average_pooling2d(conv_img, pool_size=(2, 2), strides=(1, 1))
-
-
-def densenet_model(image, k, layers, num_blocks, is_training):
-  """Construct a DenseNet with the specified growth size and layers."""
-  layers_per_block = int((layers - 4) / num_blocks)
-
-  v = conv(image, filters=16, strides=(1, 1), kernel_size=(3, 3))
-  for i in range(num_blocks):
-    with tf.variable_scope("block-%d" % i):
-      v = dense_module(v, k, layers_per_block, is_training)
-    with tf.variable_scope("transition-%d" % i):
-      v = transition_layer(v)
-
-  global_pool = tf.reduce_sum(v, axis=(2, 3), name="global_pool")
-  logits = tf.layers.dense(
-      global_pool,
-      units=10,
-      activation=tf.identity,
-      kernel_initializer=tf.random_normal_initializer(stddev=2.0 / (
-          _int_shape(global_pool)[1] * 10)),
-      kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-4),
-      bias_regularizer=tf.contrib.layers.l2_regularizer(1e-4),
-  )
-  return logits
+# For mode=train and mode=train_and_eval
+tf.flags.DEFINE_integer(
+    "steps_per_checkpoint",
+    default=1000,
+    help=("Controls how often checkpoints are generated. More steps per "
+          "checkpoint = higher utilization of TPU and generally higher "
+          "steps/sec"))
 
 
 def _train_test_split(dataset, train_shards, test_shards):
@@ -149,7 +87,7 @@ def _train_test_split(dataset, train_shards, test_shards):
   return _filter(dataset, _train), _filter(dataset, _test)
 
 
-# TPUEstimator doesn"t indicate the training state to the input function.
+# TPUEstimator doesn't indicate the training state to the input function.
 # work around this by using a callable object.
 class InputReader(object):
 
@@ -158,7 +96,7 @@ class InputReader(object):
     self._train_file = train_file
 
   def __call__(self, params):
-    batch_size = params["batch_size"]
+    train_batch_size = params["batch_size"]
 
     def _parser(serialized_example):
       """Parse and normalize a single CIFAR example."""
@@ -176,16 +114,16 @@ class InputReader(object):
       return image, label
 
     dataset = tf.data.TFRecordDataset(self._train_file)
-    dataset = dataset.map(_parser, num_parallel_calls=batch_size)
-    dataset = dataset.prefetch(4 * batch_size).cache().repeat()
+    dataset = dataset.map(_parser, num_parallel_calls=train_batch_size)
+    dataset = dataset.prefetch(4 * train_batch_size).cache().repeat()
 
     train, test = _train_test_split(dataset, 4, 1)
 
     def _batch_and_prefetch(ds):
-      ds = dataset.batch(batch_size).prefetch(1)
+      ds = dataset.batch(train_batch_size).prefetch(1)
       images, labels = ds.make_one_shot_iterator().get_next()
-      return (tf.reshape(images, [batch_size, 32, 32, 3]),
-              tf.reshape(labels, [batch_size]))
+      return (tf.reshape(images, [train_batch_size, 32, 32, 3]),
+              tf.reshape(labels, [train_batch_size]))
 
     if self._is_training:
       return _batch_and_prefetch(train)
@@ -202,20 +140,22 @@ def metric_fn(labels, logits):
 
 def model_fn(features, labels, mode, params):
   """Define a Densenet model."""
-  logits = densenet_model(
+  logits = densenet_model.densenet_cifar_model(
       features,
       params["growth_rate"],
       params["layers"],
-      params["blocks"],
-      is_training=(mode == tf.estimator.ModeKeys.TRAIN))
+      is_training=(mode == tf.estimator.ModeKeys.TRAIN),
+      num_blocks=params["blocks"])
 
   loss = tf.reduce_mean(
       tf.nn.sparse_softmax_cross_entropy_with_logits(
           logits=logits, labels=labels))
 
   learning_rate = tf.train.exponential_decay(
-      0.00001, tf.train.get_or_create_global_step(),
-      decay_steps=200, decay_rate=0.5)
+      0.00001,
+      tf.train.get_or_create_global_step(),
+      decay_steps=200,
+      decay_rate=0.5)
 
   optimizer = tf.train.MomentumOptimizer(
       learning_rate=learning_rate, momentum=0.9, use_nesterov=True)
@@ -240,6 +180,7 @@ def model_fn(features, labels, mode, params):
       eval_metrics=(metric_fn, [labels, logits]),
   )
 
+
 # The small CIFAR model from the DenseNet paper.
 # Test precision should converge to ~93%.
 CIFAR_SMALL_PARAMS = {
@@ -251,17 +192,19 @@ CIFAR_SMALL_PARAMS = {
 
 def main(argv):
   del argv
-  training_examples = FLAGS.train_epochs * 40000
+  training_examples = (FLAGS.train_epochs * 40000)
   eval_examples = 10000
+  iterations_per_loop = ((training_examples // 10) // FLAGS.train_batch_size)
 
   run_config = tpu_config.RunConfig(
       master=FLAGS.master,
       model_dir=FLAGS.model_dir,
-      save_checkpoints_secs=FLAGS.save_checkpoints_secs,
+      save_checkpoints_steps=FLAGS.steps_per_checkpoint,
+      log_step_count_steps=iterations_per_loop,
       session_config=tf.ConfigProto(
           allow_soft_placement=True, log_device_placement=True),
       tpu_config=tpu_config.TPUConfig(
-          iterations_per_loop=training_examples // 10 // FLAGS.batch_size,
+          iterations_per_loop=iterations_per_loop,
           num_shards=FLAGS.num_shards,
       ),
   )
@@ -270,20 +213,23 @@ def main(argv):
       model_fn=model_fn,
       use_tpu=FLAGS.use_tpu,
       config=run_config,
-      train_batch_size=FLAGS.batch_size,
-      eval_batch_size=FLAGS.batch_size,
+      train_batch_size=FLAGS.train_batch_size,
+      eval_batch_size=FLAGS.eval_batch_size,
       params=dict(CIFAR_SMALL_PARAMS, use_tpu=FLAGS.use_tpu),
   )
 
-  # Evaluate the test set after 10% of training examples are finished.
-  for _ in range(10):
+  # Evaluate the test set after 5% of training examples are finished.
+  for cycle in range(10):
+    tf.logging.info("Starting %d train steps" %
+                    (training_examples // 10 // FLAGS.train_batch_size))
     estimator.train(
         input_fn=InputReader(FLAGS.train_file, is_training=True),
-        steps=training_examples // 10)
+        steps=training_examples // 10 // FLAGS.train_batch_size)
 
+    tf.logging.info("Starting evaluation cycle %d ." % cycle)
     print(estimator.evaluate(
         input_fn=InputReader(FLAGS.train_file, is_training=False),
-        steps=eval_examples,
+        steps=eval_examples // FLAGS.eval_batch_size,
     ))
 
 
