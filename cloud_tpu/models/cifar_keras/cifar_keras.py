@@ -18,11 +18,32 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import absl.logging as _logging  # pylint: disable=unused-import
 import tensorflow as tf
 
 from tensorflow.contrib.tpu.python.tpu import tpu_config
 from tensorflow.contrib.tpu.python.tpu import tpu_estimator
 from tensorflow.contrib.tpu.python.tpu import tpu_optimizer
+
+# Cloud TPU Cluster Resolvers
+tf.flags.DEFINE_string(
+    "gcp_project", default=None,
+    help="Project name for the Cloud TPU-enabled project. If not specified, we "
+    "will attempt to automatically detect the GCE project from metadata.")
+tf.flags.DEFINE_string(
+    "tpu_zone", default=None,
+    help="GCE zone where the Cloud TPU is located in. If not specified, we "
+    "will attempt to automatically detect the GCE project from metadata.")
+tf.flags.DEFINE_string(
+    "tpu_name", default=None,
+    help="Name of the Cloud TPU for Cluster Resolvers. You must specify either "
+    "this flag or --master.")
+
+# Model specific paramenters
+tf.flags.DEFINE_string(
+    "master", default=None,
+    help="GRPC URL of the master (e.g. grpc://ip.address.of.tpu:8470). You "
+    "must specify either this flag or --tpu_name.")
 
 tf.flags.DEFINE_integer("batch_size", 128,
                         "Mini-batch size for the computation. Note that this "
@@ -34,10 +55,8 @@ tf.flags.DEFINE_integer("train_steps", 100000,
                         "steps is the next multiple of --iterations greater "
                         "than this value.")
 tf.flags.DEFINE_bool("use_tpu", True, "Use TPUs rather than plain CPUs")
-tf.flags.DEFINE_string("master", "",
-                       "BNS name of the TensorFlow master to use.")
 tf.flags.DEFINE_string("model_dir", None, "Estimator model_dir")
-tf.flags.DEFINE_integer("iterations", 100,
+tf.flags.DEFINE_integer("iterations_per_loop", 100,
                         "Number of iterations per TPU training loop.")
 tf.flags.DEFINE_integer("num_shards", 8, "Number of shards (TPU chips).")
 
@@ -123,14 +142,31 @@ def input_fn(params):
 def main(argv):
   del argv  # Unused.
 
+  if FLAGS.master is None and FLAGS.tpu_name is None:
+    raise RuntimeError("You must specify either --master or --tpu_name.")
+
+  if FLAGS.master is not None:
+    if FLAGS.tpu_name is not None:
+      tf.logging.warn("Both --master and --tpu_name are set. Ignoring "
+                      "--tpu_name and using --master.")
+    tpu_grpc_url = FLAGS.master
+  else:
+    tpu_cluster_resolver = (
+        tf.contrib.cluster_resolver.python.training.TPUClusterResolver(
+            tpu_names=[FLAGS.tpu_name],
+            zone=FLAGS.tpu_zone,
+            project=FLAGS.gcp_project))
+    tpu_grpc_url = tpu_cluster_resolver.get_master()
+
   run_config = tpu_config.RunConfig(
-      master=FLAGS.master,
+      master=tpu_grpc_url,
       model_dir=FLAGS.model_dir,
       save_checkpoints_secs=3600,
       session_config=tf.ConfigProto(
           allow_soft_placement=True, log_device_placement=True),
       tpu_config=tpu_config.TPUConfig(
-          iterations_per_loop=FLAGS.iterations, num_shards=FLAGS.num_shards),
+          iterations_per_loop=FLAGS.iterations_per_loop,
+          num_shards=FLAGS.num_shards),
   )
 
   estimator = tpu_estimator.TPUEstimator(
