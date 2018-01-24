@@ -22,6 +22,7 @@ from __future__ import division
 from __future__ import print_function
 
 import os
+import absl.logging as _logging  # pylint: disable=unused-import
 import tensorflow as tf
 
 import densenet_model
@@ -33,8 +34,25 @@ from tensorflow.contrib.training.python.training import evaluation
 
 FLAGS = tf.flags.FLAGS
 
+# Cloud TPU Cluster Resolvers
 tf.flags.DEFINE_string(
-    "master", default="local", help="Location of the master.")
+    "gcp_project", default=None,
+    help="Project name for the Cloud TPU-enabled project. If not specified, we "
+    "will attempt to automatically detect the GCE project from metadata.")
+tf.flags.DEFINE_string(
+    "tpu_zone", default=None,
+    help="GCE zone where the Cloud TPU is located in. If not specified, we "
+    "will attempt to automatically detect the GCE project from metadata.")
+tf.flags.DEFINE_string(
+    "tpu_name", default=None,
+    help="Name of the Cloud TPU for Cluster Resolvers. You must specify either "
+    "this flag or --master.")
+
+# Model specific paramenters
+tf.flags.DEFINE_string(
+    "master", default=None,
+    help="GRPC URL of the master (e.g. grpc://ip.address.of.tpu:8470). You "
+    "must specify either this flag or --tpu_name.")
 
 tf.flags.DEFINE_string(
     "data_dir",
@@ -286,6 +304,22 @@ def model_fn(features, labels, mode, params):
 
 
 def main(unused_argv):
+  if FLAGS.master is None and FLAGS.tpu_name is None:
+    raise RuntimeError("You must specify either --master or --tpu_name.")
+
+  if FLAGS.master is not None:
+    if FLAGS.tpu_name is not None:
+      tf.logging.warn("Both --master and --tpu_name are set. Ignoring "
+                      "--tpu_name and using --master.")
+    tpu_grpc_url = FLAGS.master
+  else:
+    tpu_cluster_resolver = (
+        tf.contrib.cluster_resolver.python.training.TPUClusterResolver(
+            tpu_names=[FLAGS.tpu_name],
+            zone=FLAGS.tpu_zone,
+            project=FLAGS.gcp_project))
+    tpu_grpc_url = tpu_cluster_resolver.get_master()
+
   batches_per_epoch = _NUM_TRAIN_IMAGES / FLAGS.train_batch_size
   steps_per_checkpoint = FLAGS.steps_per_checkpoint
   iterations_per_loop = FLAGS.iterations_per_loop
@@ -299,8 +333,8 @@ def main(unused_argv):
   }
 
   config = tpu_config.RunConfig(
-      master=FLAGS.master,
-      evaluation_master=FLAGS.master,
+      master=tpu_grpc_url,
+      evaluation_master=tpu_grpc_url,
       model_dir=FLAGS.model_dir,
       save_checkpoints_steps=steps_per_checkpoint,
       log_step_count_steps=iterations_per_loop,
