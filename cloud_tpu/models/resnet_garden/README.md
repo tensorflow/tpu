@@ -16,5 +16,4 @@ python resnet_main.py\
 You can create the ImageNet dataset in the correct format using this [script](https://github.com/tensorflow/tpu-demos/blob/master/cloud_tpu/datasets/imagenet_to_gcs.py).
 
 ### Running the model with Fake Data
-If you do not have ImageNet dataset prepared, you can use a randomly generated fake dataset to test the model. It is located at `gs://cloud-tpu-test-datasets/fake_imagenet`. The dataset is created using the [script here](https://github.com/tensorflow/tpu-demos/blob/master/cloud_tpu/datasets/fake_data_generator.py).
-
+If you do not have ImageNet dataset prepared, you can use a randomly generated fake dataset to test the model. It is located at `gs://cloud-tpu-test-datasets/fake_imagenet`. You can pass this path as your `data_dir` to the `resnet_main.py`.

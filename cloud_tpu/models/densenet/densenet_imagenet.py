@@ -83,6 +83,13 @@ tf.flags.DEFINE_integer(
           "set the iterations_per_loop to be as large as possible (i.e. "
           "perform every call to train in a single TPU loop."))
 
+tf.flags.DEFINE_integer(
+    "prefetch_dataset_buffer_size", 8 * 1024 * 1024,
+    "Number of bytes prefetched in read buffer. 0 means no buffering.")
+
+tf.flags.DEFINE_integer("num_files_infeed", 8,
+                        "Number of training files to read in parallel.")
+
 tf.flags.DEFINE_integer("shuffle_buffer_size", 1000,
                         "Size of the shuffle buffer used to randomize ordering")
 
@@ -210,13 +217,13 @@ class ImageNetInput(object):
       dataset = dataset.repeat()
 
     def prefetch_dataset(filename):
-      buffer_size = 256 * 1024 * 1024  # 256 MB
+      buffer_size = FLAGS.prefetch_dataset_buffer_size
       dataset = tf.data.TFRecordDataset(filename, buffer_size=buffer_size)
       return dataset
 
     dataset = dataset.apply(
         tf.contrib.data.parallel_interleave(
-            prefetch_dataset, cycle_length=32, sloppy=True))
+            prefetch_dataset, cycle_length=FLAGS.num_files_infeed, sloppy=True))
     dataset = dataset.shuffle(FLAGS.shuffle_buffer_size)
 
     dataset = dataset.map(self.dataset_parser, num_parallel_calls=128)
