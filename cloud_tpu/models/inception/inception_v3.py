@@ -140,7 +140,7 @@ tf.flags.DEFINE_integer(
     'Height of input image')
 
 tf.flags.DEFINE_bool(
-    'transpose_enabled', True,
+    'transpose_enabled', False,
     'Boolean to enable/disable explicit I/O transpose')
 
 tf.flags.DEFINE_bool(
@@ -242,15 +242,32 @@ RMSPROP_EPSILON = 1.0              # Epsilon term for RMSProp.
 MOVING_AVERAGE_DECAY = 0.995
 
 # Batchnorm moving mean/variance parameters
-BATCH_NORM_DECAY = 0.9976
+BATCH_NORM_DECAY = 0.996
 BATCH_NORM_EPSILON = 1e-3
 
 
 class InputPipeline(object):
-  """Wrapper class that acts as the input_fn to TPUEstimator."""
+  """Generates ImageNet input_fn for training or evaluation.
 
-  def __init__(self, is_training):
+  The training data is assumed to be in TFRecord format with keys as specified
+  in the dataset_parser below, sharded across 1024 files, named sequentially:
+      train-00000-of-01024
+      train-00001-of-01024
+      ...
+      train-01023-of-01024
+
+  The validation data is in the same format but sharded in 128 files.
+
+  The fortmat of the data required is created by the script at:
+      https://github.com/tensorflow/tpu-demos/blob/master/cloud_tpu/datasets/imagenet_to_gcs.py
+
+  Args:
+    is_training: `bool` for whether the input is for training
+  """
+
+  def __init__(self, is_training, data_dir):
     self.is_training = is_training
+    self.data_dir = data_dir
 
   def dataset_parser(self, serialized_proto):
     """Parse an Imagenet record from value."""
@@ -317,13 +334,22 @@ class InputPipeline(object):
 
     return image, label
 
-  def __call__(self, params):
-    """Input function which provides a single batch for train or eval."""
+  def input_fn(self, params):
+    """Input function which provides a single batch for train or eval.
+
+    Args:
+      params: `dict` of parameters passed from the `TPUEstimator`.
+          `params['batch_size']` is always provided and should be used as the
+          effective batch size.
+
+    Returns:
+      A (images, labels) tuple of `Tensor`s for a batch of samples.
+    """
     batch_size = params['batch_size']
 
     if FLAGS.use_data == 'real':
       file_pattern = os.path.join(
-          FLAGS.data_dir, 'train-*' if self.is_training else 'validation-*')
+          self.data_dir, 'train-*' if self.is_training else 'validation-*')
       dataset = tf.data.Dataset.list_files(file_pattern)
 
       # the set of operations that follow are based on guidelines
@@ -448,14 +474,14 @@ def inception_model_fn(features, labels, mode, params):
   one_hot_labels = tf.one_hot(labels, FLAGS.num_classes, dtype=tf.int32)
 
   if 'AuxLogits' in end_points:
-    aux_loss = tf.losses.softmax_cross_entropy(
+    tf.losses.softmax_cross_entropy(
         onehot_labels=one_hot_labels,
         logits=end_points['AuxLogits'],
         weights=0.4,
         label_smoothing=0.1,
         scope='aux_loss')
 
-  prediction_loss = tf.losses.softmax_cross_entropy(
+  tf.losses.softmax_cross_entropy(
       onehot_labels=one_hot_labels,
       logits=logits,
       weights=1.0,
@@ -623,6 +649,15 @@ def main(unused_argv):
       eval_batch_size=eval_batch_size,
       batch_axis=(batch_axis, 0))
 
+  # Input pipelines are slightly different (with regards to shuffling and
+  # preprocessing) between training and evaluation.
+  imagenet_train = InputPipeline(
+      is_training=True,
+      data_dir=FLAGS.data_dir)
+  imagenet_eval = InputPipeline(
+      is_training=False,
+      data_dir=FLAGS.data_dir)
+
   if FLAGS.moving_average:
     eval_hooks = [LoadEMAHook(FLAGS.model_dir)]
   else:
@@ -645,7 +680,7 @@ def main(unused_argv):
       tf.logging.info('Starting to evaluate.')
       try:
         eval_results = inception_classifier.evaluate(
-            input_fn=InputPipeline(False),
+            input_fn=imagenet_eval.input_fn,
             steps=eval_steps,
             hooks=eval_hooks,
             checkpoint_path=checkpoint)
@@ -658,17 +693,17 @@ def main(unused_argv):
     for cycle in range(FLAGS.train_steps // FLAGS.train_steps_per_eval):
       tf.logging.info('Starting training cycle %d.' % cycle)
       inception_classifier.train(
-          input_fn=InputPipeline(True), steps=FLAGS.train_steps_per_eval)
+          input_fn=imagenet_train.input_fn, steps=FLAGS.train_steps_per_eval)
 
       tf.logging.info('Starting evaluation cycle %d .' % cycle)
       eval_results = inception_classifier.evaluate(
-          input_fn=InputPipeline(False), steps=eval_steps, hooks=eval_hooks)
+          input_fn=imagenet_eval.input_fn, steps=eval_steps, hooks=eval_hooks)
       tf.logging.info('Evaluation results: %s' % eval_results)
 
   else:
     tf.logging.info('Starting training ...')
     inception_classifier.train(
-        input_fn=InputPipeline(True), steps=FLAGS.train_steps)
+        input_fn=imagenet_train.input_fn, steps=FLAGS.train_steps)
 
 
 if __name__ == '__main__':
