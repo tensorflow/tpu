@@ -148,7 +148,7 @@ def distorted_bounding_box_crop(image,
                                 min_object_covered=0.1,
                                 aspect_ratio_range=(3./4., 4./3.),
                                 area_range=(0.05, 1.0),
-                                max_attempts=10,
+                                max_attempts=100,
                                 scope=None):
   """Generates cropped_image using a one of the bboxes randomly distorted.
 
