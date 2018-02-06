@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-
-"""Open-source TensorFlow Inception v3 Example."""
+"""Open-source TensorFlow Inception V4 Example."""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -24,15 +23,14 @@ import absl.logging as _logging  # pylint: disable=unused-import
 import tensorflow as tf
 
 import inception_preprocessing
+import inception_v4_model as inception
 import vgg_preprocessing
 
 from tensorflow.contrib.framework.python.ops import arg_scope
-from tensorflow.contrib.slim.nets import inception
 from tensorflow.contrib.tpu.python.tpu import tpu_config
 from tensorflow.contrib.tpu.python.tpu import tpu_estimator
 from tensorflow.contrib.tpu.python.tpu import tpu_optimizer
 from tensorflow.contrib.training.python.training import evaluation
-
 
 # Cloud TPU Cluster Resolvers
 tf.flags.DEFINE_string(
@@ -54,161 +52,114 @@ tf.flags.DEFINE_string(
     help='GRPC URL of the master (e.g. grpc://ip.address.of.tpu:8470). You '
     'must specify either this flag or --tpu_name.')
 
-tf.flags.DEFINE_string(
-    'data_dir', '',
-    'Directory where input data is stored')
+tf.flags.DEFINE_string('data_dir', '', 'Directory where input data is stored')
 
-tf.flags.DEFINE_string(
-    'model_dir', None,
-    'Directory where model output is stored')
+tf.flags.DEFINE_string('model_dir', None,
+                       'Directory where model output is stored')
 
-tf.flags.DEFINE_integer(
-    'num_shards', 8,
-    'Number of shards (workers).')
+tf.flags.DEFINE_integer('num_shards', 8, 'Number of shards (workers).')
 
-tf.flags.DEFINE_integer(
-    'iterations', 100,
-    'Number of iterations per TPU training loop.')
+tf.flags.DEFINE_integer('iterations', 100,
+                        'Number of iterations per TPU training loop.')
 
-tf.flags.DEFINE_integer(
-    'train_batch_size', 1024,
-    'Global (not per-shard) batch size for training')
+tf.flags.DEFINE_integer('train_batch_size', 256,
+                        'Global (not per-shard) batch size for training')
 
 tf.flags.DEFINE_integer(
     'eval_total_size', 0,
     'Total batch size for evaluation, use the entire validation set if 0')
 
-tf.flags.DEFINE_integer(
-    'eval_batch_size', 1024,
-    'Global (not per-shard) batch size for evaluation')
+tf.flags.DEFINE_integer('eval_batch_size', 1024,
+                        'Global (not per-shard) batch size for evaluation')
 
-tf.flags.DEFINE_integer(
-    'train_steps', 8000000,
-    'Number of steps use for training.')
+tf.flags.DEFINE_integer('train_steps', 8000000,
+                        'Number of steps use for training.')
 
-tf.flags.DEFINE_integer(
-    'train_steps_per_eval', 2000,
-    'Number of training steps to run between evaluations.')
+tf.flags.DEFINE_integer('train_steps_per_eval', 2000,
+                        'Number of training steps to run between evaluations.')
 
-tf.flags.DEFINE_string(
-    'mode', 'train_and_eval',
-    'Mode to run: train, eval, train_and_eval')
+tf.flags.DEFINE_string('mode', 'train_and_eval',
+                       'Mode to run: train, eval, train_and_eval')
 
-tf.flags.DEFINE_integer(
-    'min_eval_interval', 180,
-    'Minimum number of seconds between evaluations')
+tf.flags.DEFINE_integer('min_eval_interval', 180,
+                        'Minimum number of seconds between evaluations')
 
-tf.flags.DEFINE_integer(
-    'eval_timeout', None,
-    'Evaluation timeout: Maximum number of seconds that '
-    'may elapse while no new checkpoints are observed')
+tf.flags.DEFINE_integer('eval_timeout', None,
+                        'Evaluation timeout: Maximum number of seconds that '
+                        'may elapse while no new checkpoints are observed')
 
-tf.flags.DEFINE_bool(
-    'use_tpu', True,
-    'Use TPUs rather than plain CPUs')
+tf.flags.DEFINE_bool('use_tpu', True, 'Use TPUs rather than plain CPUs')
 
 tf.flags.DEFINE_boolean(
     'per_host_input_for_training', True,
     'If true, input_fn is invoked per host rather than per shard.')
 
-tf.flags.DEFINE_string(
-    'use_data', 'real',
-    'One of "fake","real"')
+tf.flags.DEFINE_string('use_data', 'real', 'One of "fake","real"')
 
-tf.flags.DEFINE_float(
-    'learning_rate', 0.165,
-    'Learning rate.')
+tf.flags.DEFINE_float('learning_rate', 0.15, 'Learning rate.')
 
-tf.flags.DEFINE_float(
-    'depth_multiplier', 1.0,
-    'Depth Multiplier on Inception')
+tf.flags.DEFINE_float('depth_multiplier', 1.0, 'Depth Multiplier on Inception')
 
-tf.flags.DEFINE_string(
-    'optimizer', 'RMS',
-    'Optimizer (one of sgd, RMS, momentum)')
+tf.flags.DEFINE_string('optimizer', 'RMS',
+                       'Optimizer (one of sgd, RMS, momentum)')
 
-tf.flags.DEFINE_integer(
-    'num_classes', 1001,
-    'Number of classes to distinguish')
+tf.flags.DEFINE_integer('num_classes', 1001, 'Number of classes to distinguish')
 
-tf.flags.DEFINE_integer(
-    'width', 299,
-    'Width of input image')
+tf.flags.DEFINE_integer('width', 299, 'Width of input image')
 
-tf.flags.DEFINE_integer(
-    'height', 299,
-    'Height of input image')
+tf.flags.DEFINE_integer('height', 299, 'Height of input image')
 
-tf.flags.DEFINE_bool(
-    'transpose_enabled', False,
-    'Boolean to enable/disable explicit I/O transpose')
+tf.flags.DEFINE_bool('transpose_enabled', True,
+                     'Boolean to enable/disable explicit I/O transpose')
 
-tf.flags.DEFINE_bool(
-    'use_fused_batchnorm', True,
-    'Enable fused batchrnom')
-
-tf.flags.DEFINE_bool(
-    'log_device_placement', False,
-    'Boolean to enable/disable log device placement')
+tf.flags.DEFINE_bool('log_device_placement', False,
+                     'Boolean to enable/disable log device placement')
 
 tf.flags.DEFINE_integer(
     'save_summary_steps', 100,
     'Number of steps which must have run before showing summaries.')
 
-tf.flags.DEFINE_integer(
-    'save_checkpoints_secs', 1000,
-    'Interval (in seconds) at which the model data '
-    'should be checkpointed. Set to 0 to disable.')
+tf.flags.DEFINE_integer('save_checkpoints_secs', 1000,
+                        'Interval (in seconds) at which the model data '
+                        'should be checkpointed. Set to 0 to disable.')
 
 tf.flags.DEFINE_bool(
     'moving_average', True,
     'Whether to enable moving average computation on variables')
 
-tf.flags.DEFINE_string(
-    'preprocessing', 'inception',
-    'Preprocessing stage to use: one of inception or vgg')
+tf.flags.DEFINE_string('preprocessing', 'inception',
+                       'Preprocessing stage to use: one of inception or vgg')
 
 tf.flags.DEFINE_bool(
-    'use_annotated_bbox', False,
+    'use_annotated_bbox', True,
     'If true, use annotated bounding box as input to cropping function, '
     'else use full image size')
 
-tf.flags.DEFINE_float(
-    'learning_rate_decay', 0.94,
-    'Exponential decay rate used in learning rate adjustment')
+tf.flags.DEFINE_float('learning_rate_decay', 0.94,
+                      'Exponential decay rate used in learning rate adjustment')
 
 tf.flags.DEFINE_integer(
-    'learning_rate_decay_epochs', 3,
+    'learning_rate_decay_epochs', 2,
     'Exponential decay epochs used in learning rate adjustment')
 
-tf.flags.DEFINE_bool(
-    'use_logits', True,
-    'Use logits if true, else use predictions')
+tf.flags.DEFINE_bool('use_logits', True,
+                     'Use logits if true, else use predictions')
 
-tf.flags.DEFINE_bool(
-    'display_tensors', False,
-    'Whether to dump prediction tensors for comparison')
-
-tf.flags.DEFINE_bool(
-    'clear_update_collections', True,
-    'Set batchnorm update_collections to None if true, else use default value')
+tf.flags.DEFINE_bool('display_tensors', False,
+                     'Whether to dump prediction tensors for comparison')
 
 # Dataset specific paramenters
-tf.flags.DEFINE_bool(
-    'prefetch_enabled', True,
-    'Boolean to enable/disable prefetching')
+tf.flags.DEFINE_bool('prefetch_enabled', True,
+                     'Boolean to enable/disable prefetching')
 
-tf.flags.DEFINE_integer(
-    'prefetch_dataset_buffer_size', 8*1024*1024,
-    'Number of bytes in read buffer. 0 means no buffering.')
+tf.flags.DEFINE_integer('prefetch_dataset_buffer_size', 8 * 1024 * 1024,
+                        'Number of bytes in read buffer. 0 means no buffering.')
 
-tf.flags.DEFINE_integer(
-    'num_files_infeed', 8,
-    'Number of training files to read in parallel.')
+tf.flags.DEFINE_integer('num_files_infeed', 8,
+                        'Number of training files to read in parallel.')
 
-tf.flags.DEFINE_integer(
-    'num_parallel_calls', 64,
-    'Number of elements to process in parallel (by mapper)')
+tf.flags.DEFINE_integer('num_parallel_calls', 64,
+                        'Number of elements to process in parallel (by mapper)')
 
 tf.flags.DEFINE_integer(
     'initial_shuffle_buffer_size', 1024,
@@ -222,6 +173,16 @@ tf.flags.DEFINE_integer(
     'This shuffling is done after prefetching is done. '
     'Set to 0 to disable')
 
+tf.flags.DEFINE_float('cold_learning_rate', 0.001, 'Very initial learning rate')
+
+tf.flags.DEFINE_integer('cold_epochs', 1, 'Epochs with cold learning rate')
+
+tf.flags.DEFINE_integer('warmup_epochs', 2,
+                        'Number of epochs of warmup at low learning rates')
+
+tf.flags.DEFINE_bool(
+    'clear_update_collections', True,
+    'Set batchnorm update_collections to None if true, else use default value')
 
 FLAGS = tf.flags.FLAGS
 
@@ -234,36 +195,43 @@ _RESIZE_SIDE_MIN = 300
 _RESIZE_SIDE_MAX = 600
 
 # Constants dictating the learning rate schedule.
-RMSPROP_DECAY = 0.9                # Decay term for RMSProp.
-RMSPROP_MOMENTUM = 0.9             # Momentum in RMSProp.
-RMSPROP_EPSILON = 1.0              # Epsilon term for RMSProp.
+RMSPROP_DECAY = 0.9  # Decay term for RMSProp.
+RMSPROP_MOMENTUM = 0.9  # Momentum in RMSProp.
+RMSPROP_EPSILON = 1.0  # Epsilon term for RMSProp.
 
 # Constants dictating moving average.
 MOVING_AVERAGE_DECAY = 0.995
 
 # Batchnorm moving mean/variance parameters
-BATCH_NORM_DECAY = 0.996
+BATCH_NORM_DECAY = 0.9976
 BATCH_NORM_EPSILON = 1e-3
 
 
-class InputPipeline(object):
-  """Generates ImageNet input_fn for training or evaluation.
+def tensor_transform_fn(data, perm):
+  """Transpose function.
 
-  The training data is assumed to be in TFRecord format with keys as specified
-  in the dataset_parser below, sharded across 1024 files, named sequentially:
-      train-00000-of-01024
-      train-00001-of-01024
-      ...
-      train-01023-of-01024
+  This function is used to transpose an image tensor on the host and then
+  perform an inverse transpose on the TPU. The transpose on the TPU gets
+  effectively elided thus voiding any associated computational cost.
 
-  The validation data is in the same format but sharded in 128 files.
-
-  The fortmat of the data required is created by the script at:
-      https://github.com/tensorflow/tpu-demos/blob/master/cloud_tpu/datasets/imagenet_to_gcs.py
+  NOTE: Eventually the compiler will be able to detect when this kind of
+  operation may prove beneficial and perform these types of transformations
+  implicitly, voiding the need for user intervention
 
   Args:
-    is_training: `bool` for whether the input is for training
+    data: Tensor to be transposed
+    perm: New ordreing of dimensions
+
+  Returns:
+    Transposed tensor
   """
+  if FLAGS.transpose_enabled:
+    return tf.transpose(data, perm)
+  return data
+
+
+class InputPipeline(object):
+  """Wrapper class that acts as the input_fn to TPUEstimator."""
 
   def __init__(self, is_training, data_dir):
     self.is_training = is_training
@@ -327,36 +295,27 @@ class InputPipeline(object):
           output_height=FLAGS.height,
           output_width=FLAGS.width,
           is_training=self.is_training,
-          bbox=bbox)
+          bbox=bbox,
+          fast_mode=False)
 
     label = tf.cast(
         tf.reshape(features['image/class/label'], shape=[]), dtype=tf.int32)
 
     return image, label
 
-  def input_fn(self, params):
-    """Input function which provides a single batch for train or eval.
-
-    Args:
-      params: `dict` of parameters passed from the `TPUEstimator`.
-          `params['batch_size']` is always provided and should be used as the
-          effective batch size.
-
-    Returns:
-      A (images, labels) tuple of `Tensor`s for a batch of samples.
-    """
+  def __call__(self, params):
+    """Input function which provides a single batch for train or eval."""
     batch_size = params['batch_size']
 
     if FLAGS.use_data == 'real':
-      file_pattern = os.path.join(
-          self.data_dir, 'train-*' if self.is_training else 'validation-*')
+      file_pattern = os.path.join(FLAGS.data_dir, 'train-*'
+                                  if self.is_training else 'validation-*')
       dataset = tf.data.Dataset.list_files(file_pattern)
 
       # the set of operations that follow are based on guidelines
       # discussed in new pipeline best usage presentation.
       if self.is_training and FLAGS.initial_shuffle_buffer_size > 0:
-        dataset = dataset.shuffle(
-            buffer_size=FLAGS.initial_shuffle_buffer_size)
+        dataset = dataset.shuffle(buffer_size=FLAGS.initial_shuffle_buffer_size)
 
       if self.is_training:
         dataset = dataset.repeat()
@@ -377,8 +336,7 @@ class InputPipeline(object):
             buffer_size=FLAGS.followup_shuffle_buffer_size)
 
       dataset = dataset.map(
-          self.dataset_parser,
-          num_parallel_calls=FLAGS.num_parallel_calls)
+          self.dataset_parser, num_parallel_calls=FLAGS.num_parallel_calls)
 
       dataset = dataset.prefetch(batch_size)
 
@@ -388,74 +346,47 @@ class InputPipeline(object):
       dataset = dataset.prefetch(2)  # Prefetch overlaps in-feed with training
 
       images, labels = dataset.make_one_shot_iterator().get_next()
+
+      images.set_shape([batch_size, FLAGS.height, FLAGS.width, 3])
+      labels = tf.cast(labels, tf.int32)
+      labels.set_shape([batch_size])
+
     else:
       images = tf.random_uniform(
           [batch_size, FLAGS.height, FLAGS.width, 3], minval=-1, maxval=1)
       labels = tf.random_uniform(
           [batch_size], minval=0, maxval=999, dtype=tf.int32)
 
-    images = tensor_transform_fn(images, params['output_perm'])
+    images = tensor_transform_fn(images, params['pipeline_transpose_dims'])
     return images, labels
 
 
-def tensor_transform_fn(data, perm):
-  """Transpose function.
-
-  This function is used to transpose an image tensor on the host and then
-  perform an inverse transpose on the TPU. The transpose on the TPU gets
-  effectively elided thus voiding any associated computational cost.
-
-  NOTE: Eventually the compiler will be able to detect when this kind of
-  operation may prove beneficial and perform these types of transformations
-  implicitly, voiding the need for user intervention
-
-  Args:
-    data: Tensor to be transposed
-    perm: Permutation of the dimensions of a
-
-  Returns:
-    Transposed tensor
-  """
-  if FLAGS.transpose_enabled:
-    return tf.transpose(data, perm)
-  return data
-
-
 def inception_model_fn(features, labels, mode, params):
-  """Inception v3 model using Estimator API."""
+  """Inception v4 model using Estimator API."""
   num_classes = FLAGS.num_classes
-  training_active = (mode == tf.estimator.ModeKeys.TRAIN)
-  eval_active = (mode == tf.estimator.ModeKeys.EVAL)
-
-  features = tensor_transform_fn(features, params['input_perm'])
+  is_training = (mode == tf.estimator.ModeKeys.TRAIN)
+  features = tensor_transform_fn(features, params['model_transpose_dims'])
 
   if FLAGS.clear_update_collections:
-    # updates_collections must be set to None in order to use fused batchnorm
-    with arg_scope(inception.inception_v3_arg_scope(
-        batch_norm_decay=BATCH_NORM_DECAY,
-        batch_norm_epsilon=BATCH_NORM_EPSILON,
-        updates_collections=None,
-        use_fused_batchnorm=FLAGS.use_fused_batchnorm)):
-      logits, end_points = inception.inception_v3(
-          features,
-          num_classes,
-          is_training=training_active,
-          depth_multiplier=FLAGS.depth_multiplier)
+    with arg_scope(
+        inception.inception_v4_arg_scope(
+            batch_norm_decay=BATCH_NORM_DECAY,
+            batch_norm_epsilon=BATCH_NORM_EPSILON,
+            updates_collections=None)):
+      logits, end_points = inception.inception_v4(
+          features, num_classes, is_training=is_training)
   else:
-    with arg_scope(inception.inception_v3_arg_scope(
-        batch_norm_decay=BATCH_NORM_DECAY,
-        batch_norm_epsilon=BATCH_NORM_EPSILON,
-        use_fused_batchnorm=FLAGS.use_fused_batchnorm)):
-      logits, end_points = inception.inception_v3(
-          features,
-          num_classes,
-          is_training=training_active,
-          depth_multiplier=FLAGS.depth_multiplier)
+    with arg_scope(
+        inception.inception_v4_arg_scope(
+            batch_norm_decay=BATCH_NORM_DECAY,
+            batch_norm_epsilon=BATCH_NORM_EPSILON)):
+      logits, end_points = inception.inception_v4(
+          features, num_classes, is_training=is_training)
 
-  predictions = {
-      'classes': tf.argmax(input=logits, axis=1),
-      'probabilities': tf.nn.softmax(logits, name='softmax_tensor')
-  }
+    predictions = {
+        'classes': tf.argmax(input=logits, axis=1),
+        'probabilities': tf.nn.softmax(logits, name='softmax_tensor')
+    }
 
   if mode == tf.estimator.ModeKeys.PREDICT:
     return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions)
@@ -472,7 +403,6 @@ def inception_model_fn(features, labels, mode, params):
           labels, [labels], summarize=FLAGS.eval_batch_size, message='label: ')
 
   one_hot_labels = tf.one_hot(labels, FLAGS.num_classes, dtype=tf.int32)
-
   if 'AuxLogits' in end_points:
     tf.losses.softmax_cross_entropy(
         onehot_labels=one_hot_labels,
@@ -489,19 +419,33 @@ def inception_model_fn(features, labels, mode, params):
   loss = tf.losses.get_total_loss(add_regularization_losses=True)
 
   initial_learning_rate = FLAGS.learning_rate * FLAGS.train_batch_size / 256
+  # Adjust the initial learning rate for warmup
+  initial_learning_rate /= (
+      FLAGS.learning_rate_decay**((FLAGS.warmup_epochs + FLAGS.cold_epochs) /
+                                  FLAGS.learning_rate_decay_epochs))
   final_learning_rate = 0.0001 * initial_learning_rate
 
   train_op = None
-  if training_active:
+  if is_training:
     batches_per_epoch = _NUM_TRAIN_IMAGES // FLAGS.train_batch_size
     global_step = tf.train.get_or_create_global_step()
+    cur_epoch = tf.cast((tf.cast(global_step, tf.float32) / batches_per_epoch),
+                        tf.int32)
 
-    learning_rate = tf.train.exponential_decay(
-        learning_rate=initial_learning_rate,
-        global_step=global_step,
-        decay_steps=FLAGS.learning_rate_decay_epochs * batches_per_epoch,
-        decay_rate=FLAGS.learning_rate_decay,
-        staircase=True)
+    clr = FLAGS.cold_learning_rate
+    wlr = initial_learning_rate / (FLAGS.warmup_epochs + FLAGS.cold_epochs)
+    learning_rate = tf.where(
+        tf.greater_equal(cur_epoch, FLAGS.cold_epochs), (tf.where(
+            tf.greater_equal(cur_epoch,
+                             FLAGS.warmup_epochs + FLAGS.cold_epochs),
+            tf.train.exponential_decay(
+                learning_rate=initial_learning_rate,
+                global_step=global_step,
+                decay_steps=FLAGS.learning_rate_decay_epochs *
+                batches_per_epoch,
+                decay_rate=FLAGS.learning_rate_decay,
+                staircase=True), tf.multiply(
+                    tf.cast(cur_epoch, tf.float32), wlr))), clr)
 
     # Set a minimum boundary for the learning rate.
     learning_rate = tf.maximum(
@@ -509,8 +453,7 @@ def inception_model_fn(features, labels, mode, params):
 
     if FLAGS.optimizer == 'sgd':
       tf.logging.info('Using SGD optimizer')
-      optimizer = tf.train.GradientDescentOptimizer(
-          learning_rate=learning_rate)
+      optimizer = tf.train.GradientDescentOptimizer(learning_rate=learning_rate)
     elif FLAGS.optimizer == 'momentum':
       tf.logging.info('Using Momentum optimizer')
       optimizer = tf.train.MomentumOptimizer(
@@ -534,13 +477,14 @@ def inception_model_fn(features, labels, mode, params):
     if FLAGS.moving_average:
       ema = tf.train.ExponentialMovingAverage(
           decay=MOVING_AVERAGE_DECAY, num_updates=global_step)
-      variables_to_average = (tf.trainable_variables() +
-                              tf.moving_average_variables())
+      variables_to_average = (
+          tf.trainable_variables() + tf.moving_average_variables())
       with tf.control_dependencies([train_op]), tf.name_scope('moving_average'):
         train_op = ema.apply(variables_to_average)
 
   eval_metrics = None
-  if eval_active:
+  if mode == tf.estimator.ModeKeys.EVAL:
+
     def metric_fn(labels, predictions):
       accuracy = tf.metrics.accuracy(labels, tf.argmax(
           input=predictions, axis=1))
@@ -558,7 +502,7 @@ def inception_model_fn(features, labels, mode, params):
 
 
 class LoadEMAHook(tf.train.SessionRunHook):
-  """Hook to load EMA into their corresponding variables."""
+  """Load Exponential Moving Averages into their corresponding variables."""
 
   def __init__(self, model_dir):
     super(LoadEMAHook, self).__init__()
@@ -571,7 +515,7 @@ class LoadEMAHook(tf.train.SessionRunHook):
         tf.train.latest_checkpoint(self._model_dir), variables_to_restore)
 
   def after_create_session(self, sess, coord):
-    tf.logging.info('Reloading EMA...')
+    tf.logging.info('Reloading Exponential Moving Averages...')
     self._load_ema(sess)
 
 
@@ -594,31 +538,42 @@ def main(unused_argv):
             project=FLAGS.gcp_project))
     tpu_grpc_url = tpu_cluster_resolver.get_master()
 
+  batch_size_per_shard = FLAGS.train_batch_size // FLAGS.num_shards
   params = {
-      'input_perm': [0, 1, 2, 3],
-      'output_perm': [0, 1, 2, 3],
+      'model_transpose_dims': [0, 1, 2, 3],
+      'pipeline_transpose_dims': [0, 1, 2, 3],
   }
 
   batch_axis = 0
   if FLAGS.transpose_enabled:
-    params['input_perm'] = [3, 0, 1, 2]
-    params['output_perm'] = [1, 2, 3, 0]
-    batch_axis = 3
+    # On the TPU, convolutions are executed with a different leading
+    # dimension when batch size per shard is less than 64. By
+    # default images are loaded in NHWC order. For optimal performance,
+    # we want to use CHWN order while training wjem batch size per
+    # worker is smaller than 64 per shard.
 
+    if batch_size_per_shard >= 64:
+      params['model_transpose_dims'] = [3, 0, 1, 2]
+      params['pipeline_transpose_dims'] = [1, 2, 3, 0]
+      batch_axis = 3
+    else:
+      params['model_transpose_dims'] = [2, 0, 1, 3]
+      params['pipeline_transpose_dims'] = [1, 2, 0, 3]
+      batch_axis = 2
+
+  eval_steps = _NUM_EVAL_IMAGES // FLAGS.eval_batch_size
   if FLAGS.eval_total_size > 0:
     eval_size = FLAGS.eval_total_size
   else:
     eval_size = _NUM_EVAL_IMAGES
   eval_steps = eval_size // FLAGS.eval_batch_size
 
-  iterations = (eval_steps if FLAGS.mode == 'eval' else
-                FLAGS.iterations)
+  iterations = (eval_steps if FLAGS.mode == 'eval' else FLAGS.iterations)
 
-  eval_batch_size = (None if FLAGS.mode == 'train' else
-                     FLAGS.eval_batch_size)
+  eval_batch_size = (None if FLAGS.mode == 'train' else FLAGS.eval_batch_size)
 
-  per_host_input_for_training = (FLAGS.num_shards <= 8 if
-                                 FLAGS.mode == 'train' else True)
+  per_host_input_for_training = (
+      FLAGS.num_shards <= 8 if FLAGS.mode == 'train' else True)
 
   run_config = tpu_config.RunConfig(
       master=tpu_grpc_url,
@@ -643,21 +598,13 @@ def main(unused_argv):
       eval_batch_size=eval_batch_size,
       batch_axis=(batch_axis, 0))
 
-  # Input pipelines are slightly different (with regards to shuffling and
-  # preprocessing) between training and evaluation.
-  imagenet_train = InputPipeline(
-      is_training=True,
-      data_dir=FLAGS.data_dir)
-  imagenet_eval = InputPipeline(
-      is_training=False,
-      data_dir=FLAGS.data_dir)
-
   if FLAGS.moving_average:
     eval_hooks = [LoadEMAHook(FLAGS.model_dir)]
   else:
     eval_hooks = []
 
   if FLAGS.mode == 'eval':
+
     def terminate_eval():
       tf.logging.info('%d seconds without new checkpoints have elapsed '
                       '... terminating eval' % FLAGS.eval_timeout)
@@ -674,7 +621,7 @@ def main(unused_argv):
       tf.logging.info('Starting to evaluate.')
       try:
         eval_results = inception_classifier.evaluate(
-            input_fn=imagenet_eval.input_fn,
+            input_fn=InputPipeline(False, data_dir=FLAGS.data_dir),
             steps=eval_steps,
             hooks=eval_hooks,
             checkpoint_path=checkpoint)
@@ -687,17 +634,21 @@ def main(unused_argv):
     for cycle in range(FLAGS.train_steps // FLAGS.train_steps_per_eval):
       tf.logging.info('Starting training cycle %d.' % cycle)
       inception_classifier.train(
-          input_fn=imagenet_train.input_fn, steps=FLAGS.train_steps_per_eval)
+          input_fn=InputPipeline(True, data_dir=FLAGS.data_dir),
+          steps=FLAGS.train_steps_per_eval)
 
       tf.logging.info('Starting evaluation cycle %d .' % cycle)
       eval_results = inception_classifier.evaluate(
-          input_fn=imagenet_eval.input_fn, steps=eval_steps, hooks=eval_hooks)
+          input_fn=InputPipeline(False, data_dir=FLAGS.data_dir),
+          steps=eval_steps,
+          hooks=eval_hooks)
       tf.logging.info('Evaluation results: %s' % eval_results)
 
   else:
     tf.logging.info('Starting training ...')
     inception_classifier.train(
-        input_fn=imagenet_train.input_fn, steps=FLAGS.train_steps)
+        input_fn=InputPipeline(True, data_dir=FLAGS.data_dir),
+        steps=FLAGS.train_steps)
 
 
 if __name__ == '__main__':
