@@ -85,7 +85,7 @@ def metric_fn(labels, logits, learning_rate):
   predictions = tf.cast(tf.argmax(logits, 1), tf.int32)
   labels = tf.cast(labels, tf.int64)
   return {
-      "precision": tf.metrics.precision(labels, predictions),
+      "accuracy": tf.metrics.accuracy(labels, predictions),
       "recall_at_5": tf.metrics.recall_at_k(labels, logits, 5),
       "recall_at_1": tf.metrics.recall_at_k(labels, logits, 1),
       "learning_rate": tf.metrics.mean(learning_rate),
