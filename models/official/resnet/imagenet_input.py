@@ -25,6 +25,28 @@ import tensorflow as tf
 import resnet_preprocessing
 
 
+def image_serving_input_fn():
+  """Serving input fn for raw images."""
+
+  def _preprocess_image(image_bytes):
+    """Preprocess a single raw image."""
+    image = tf.image.decode_image(tf.reshape(image_bytes, shape=[]), 3)
+    image = tf.image.convert_image_dtype(image, dtype=tf.float32)
+
+    image = resnet_preprocessing.preprocess_image(
+        image=image, is_training=False)
+    return image
+
+  image_bytes_list = tf.placeholder(
+      shape=[None],
+      dtype=tf.string,
+  )
+  images = tf.map_fn(
+      _preprocess_image, image_bytes_list, back_prop=False, dtype=tf.float32)
+  return tf.estimator.export.ServingInputReceiver(
+      images, {'image_bytes': image_bytes_list})
+
+
 class ImageNetInput(object):
   """Generates ImageNet input_fn for training or evaluation.
 
