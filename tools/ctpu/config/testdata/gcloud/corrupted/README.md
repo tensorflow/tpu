@@ -1,0 +1,3 @@
+# Corrupted configuration environment #
+
+The gcloud active config does not exist under configurations/...
