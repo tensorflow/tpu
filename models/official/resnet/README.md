@@ -100,6 +100,12 @@ created by CPU/GPU and TPU are all identical so it is possible to train on one
 type of device and then evaluate/predict using the trained model on a different
 device.
 
+### Serve the exported model on CPU/GPU
+
+To serve the exported model on CPU, set the flag --data_format='channels_last'
+as inference on CPU only supports 'channels_last'. Inference on GPU supports
+both 'channels_first' and 'channels_last'.
+
 ### Using different ResNet configurations
 
 The default ResNet-50 has been carefully tested with the default flags but
