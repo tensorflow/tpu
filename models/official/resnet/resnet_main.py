@@ -113,6 +113,18 @@ tf.flags.DEFINE_integer(
     help=('Number of TPU cores. For a single TPU device, this is 8 because each'
           ' TPU has 4 chips each with 2 cores.'))
 
+tf.flags.DEFINE_string(
+    'data_format',
+    default='channels_first',
+    help=('A flag to override the data format used in the model. The value '
+          'is either channels_first or channels_last. To run the network on '
+          'CPU, channels_last should be used.'))
+
+tf.flags.DEFINE_string(
+    'export_dir',
+    default=None,
+    help=('The directory where the exported SavedModel will be stored.'))
+
 # Dataset constants
 LABEL_CLASSES = 1000
 NUM_TRAIN_IMAGES = 1281167
@@ -167,27 +179,39 @@ def resnet_model_fn(features, labels, mode, params):
   Returns:
     A `TPUEstimatorSpec` for the model
   """
-  # If necessary, in the model_fn, use params['batch_size'] instead the batch
-  # size flags (--train_batch_size or --eval_batch_size).
-  batch_size = params['batch_size']   # pylint: disable=unused-variable
+  if isinstance(features, dict):
+    features = features['feature']
 
-  # Use NCHW data format instead of NHWC for a significant performance boost on
-  # GPU. On TPU, XLA will determine the optimal data format automatically so no
-  # user action is required. To run the network on CPU, change data_format to
-  # "channels_last" and remove the transpose since the pooling operations are
-  # only supported on NHWC.
-  if FLAGS.use_tpu or test.is_gpu_available():
-    data_format = 'channels_first'
+  # In most cases, the default data format NCHW instead of NHWC should be
+  # used for a significant performance boost on GPU/TPU. NHWC should be used
+  # only if the network needs to be run on CPU since the pooling operations
+  # are only supported on NHWC.
+  if FLAGS.data_format == 'channels_first':
     features = tf.transpose(features, [0, 3, 1, 2])
-  else:
-    data_format = 'channels_last'
 
   network = resnet_model.resnet_v1(
-      resnet_depth=FLAGS.resnet_depth, num_classes=LABEL_CLASSES,
-      data_format=data_format)
+      resnet_depth=FLAGS.resnet_depth,
+      num_classes=LABEL_CLASSES,
+      data_format=FLAGS.data_format)
 
   logits = network(
       inputs=features, is_training=(mode == tf.estimator.ModeKeys.TRAIN))
+
+  if mode == tf.estimator.ModeKeys.PREDICT:
+    predictions = {
+        'classes': tf.argmax(logits, axis=1),
+        'probabilities': tf.nn.softmax(logits, name='softmax_tensor')
+    }
+    return tf.estimator.EstimatorSpec(
+        mode=mode,
+        predictions=predictions,
+        export_outputs={
+            'classify': tf.estimator.export.PredictOutput(predictions)
+        })
+
+  # If necessary, in the model_fn, use params['batch_size'] instead the batch
+  # size flags (--train_batch_size or --eval_batch_size).
+  batch_size = params['batch_size']   # pylint: disable=unused-variable
 
   # Calculate loss, which includes softmax cross entropy and L2 regularization.
   one_hot_labels = tf.one_hot(labels, LABEL_CLASSES)
@@ -379,6 +403,14 @@ def main(unused_argv):
         input_fn=imagenet_eval.input_fn,
         steps=NUM_EVAL_IMAGES // FLAGS.eval_batch_size)
     tf.logging.info('Eval results: %s' % eval_results)
+
+  if FLAGS.export_dir is not None:
+    # The guide to serve a exported TensorFlow model is at:
+    #    https://www.tensorflow.org/serving/serving_basic
+    tf.logging.info('Starting to export model.')
+    resnet_classifier.export_savedmodel(
+        export_dir_base=FLAGS.export_dir,
+        serving_input_receiver_fn=imagenet_input.image_serving_input_fn)
 
 
 if __name__ == '__main__':
