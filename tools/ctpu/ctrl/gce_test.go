@@ -26,7 +26,6 @@ func TestMakeCreateInstance(t *testing.T) {
 	cfg := config.TestConfig{
 		ActiveConfigurationVal: "ctpu9",
 		FlockNameVal:           "testFlock",
-		IPRangeVal:             "10.240.0.0/16",
 		ProjectVal:             "ctpu-test-project",
 		ZoneVal:                "us-central1-c",
 	}

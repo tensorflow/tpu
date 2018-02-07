@@ -29,7 +29,7 @@ import (
 	"github.com/tensorflow/tpu/tools/ctpu/ctrl"
 )
 
-const version = "0.2"
+const version = "0.3"
 
 var logRequests bool
 
@@ -52,7 +52,6 @@ func main() {
 	flag.Parse()
 
 	subcommands.ImportantFlag("name")
-	subcommands.ImportantFlag("ip-range")
 	subcommands.ImportantFlag("project")
 	subcommands.ImportantFlag("zone")
 

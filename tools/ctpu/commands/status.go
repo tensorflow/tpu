@@ -18,6 +18,7 @@ package commands
 import (
 	"fmt"
 	"log"
+	"strings"
 
 	"context"
 	"flag"
@@ -127,21 +128,45 @@ func (s *statusCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...in
 	Cloud TPU:  %s
 `, s.flockStatus(vm, tpu), s.vmStatus(vm), s.tpuStatus(tpu))
 
-	vmIP := "--"
-	if vm != nil && len(vm.NetworkInterfaces) > 0 {
-		vmIP = vm.NetworkInterfaces[0].NetworkIP
+	vmIP, vmCreated, machineType := "--", "--", "--"
+	if vm != nil {
+		if len(vm.NetworkInterfaces) > 0 {
+			vmIP = vm.NetworkInterfaces[0].NetworkIP
+		}
+		// TODO(saeta): Print delta between now and creation time.
+		vmCreated = vm.CreationTimestamp
+
+		machineTypeParts := strings.Split(vm.MachineType, "/")
+		machineType = machineTypeParts[len(machineTypeParts)-1]
 	}
 
-	tpuIP := "--"
-	if tpu != nil && len(tpu.NetworkEndpoints) > 0 {
-		tpuIP = tpu.NetworkEndpoints[0].IpAddress
+	tpuType, tpuIP, tpuVer, tpuSA, tpuCreated, tpuState, tpuHealth := "--", "--", "--", "--", "--", "--", "--"
+	if tpu != nil {
+		tpuType = tpu.AcceleratorType
+		if len(tpu.NetworkEndpoints) > 0 {
+			tpuIP = tpu.NetworkEndpoints[0].IpAddress
+		}
+		tpuVer = tpu.TensorflowVersion
+		tpuSA = tpu.ServiceAccount
+		// TODO(saeta): Print delta between now and creation time.
+		tpuCreated = tpu.CreateTime
+		tpuState = tpu.State
+		tpuHealth = tpu.Health
 	}
 
 	if s.details {
 		fmt.Printf(`
-GCE IP Address: %s
-TPU IP Address: %s
-`, vmIP, tpuIP)
+GCE IP Address:        %s
+GCE Created:           %s
+GCE Machine Type:      %s
+TPU Accelerator Type:  %s
+TPU IP Address:        %s
+TPU TF Version:        %s
+TPU Service Acct:      %s
+TPU Created:           %s
+TPU State:             %s
+TPU Health:            %s
+`, vmIP, vmCreated, machineType, tpuType, tpuIP, tpuVer, tpuSA, tpuCreated, tpuState, tpuHealth)
 	}
 	return subcommands.ExitSuccess
 }

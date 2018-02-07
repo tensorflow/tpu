@@ -25,7 +25,7 @@ import (
 )
 
 const loggingRole = "roles/logging.logWriter"
-const storageRole = "roles/storage.objectAdmin"
+const storageRole = "roles/storage.admin" // Note storage.objectAdmin does not work in certain cases, and thus we need roles/storage.admin.
 
 // ResourceManagementCP contains an abstract representation of the Cloud Resource Manager, and related ACL's
 //
