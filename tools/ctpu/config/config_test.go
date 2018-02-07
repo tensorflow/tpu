@@ -129,19 +129,3 @@ func TestFlagConfigProject(t *testing.T) {
 		t.Errorf("f.Project() = '%s', want: 'my-other-tpu-project'", f.Project())
 	}
 }
-
-func TestFlagConfigIpRange(t *testing.T) {
-	if nil != validateCidrRange() {
-		t.Fatal("Could not validate the default network range", validateCidrRange())
-	}
-
-	ipRange = "0.0.0.0/0"
-	if nil == validateCidrRange() {
-		t.Error("Empty network range allowed through!")
-	}
-
-	ipRange = "192.168.3.3/32"
-	if nil == validateCidrRange() {
-		t.Error("Single-IP address range allowed through!")
-	}
-}

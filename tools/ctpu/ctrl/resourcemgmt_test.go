@@ -81,7 +81,7 @@ func TestBindingAbsent(t *testing.T) {
 				},
 			},
 			&cloudresourcemanager.Binding{
-				Role: "roles/storage.objectAdmin",
+				Role: "roles/storage.admin",
 				Members: []string{
 					"domain:example.com",
 				},
@@ -108,12 +108,12 @@ func TestBindingAbsent(t *testing.T) {
 			t.Errorf("Members for roles/editor incorrect, got: %#v, want: [user:user2@example.com]", b.Members)
 		}
 	}
-	b = findBindingForRole(modifiedPolicy, "roles/storage.objectAdmin")
+	b = findBindingForRole(modifiedPolicy, "roles/storage.admin")
 	if b == nil {
-		t.Errorf("No roles/storage.objectAdmin found in modified policy: %#v", modifiedPolicy)
+		t.Errorf("No roles/storage.admin found in modified policy: %#v", modifiedPolicy)
 	} else {
 		if b.Members == nil || len(b.Members) != 2 || b.Members[0] != "domain:example.com" || b.Members[1] != "serviceAccount:"+sampleTPUServiceAccount {
-			t.Errorf("Members for roles/storage.objectAdmin incorrect, got: %#v, want: [domain:example.com, serviceAccount:compute-123987@compute.gserviceaccounts.com]", b.Members)
+			t.Errorf("Members for roles/storage.admin incorrect, got: %#v, want: [domain:example.com, serviceAccount:compute-123987@compute.gserviceaccounts.com]", b.Members)
 		}
 	}
 	b = findBindingForRole(modifiedPolicy, "roles/logging.logWriter")
