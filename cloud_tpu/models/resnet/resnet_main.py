@@ -317,7 +317,7 @@ def main(unused_argv):
       tpu_grpc_url = FLAGS.master
     else:
       tpu_cluster_resolver = (
-          tf.contrib.cluster_resolver.python.training.TPUClusterResolver(
+          tf.contrib.cluster_resolver.TPUClusterResolver(
               tpu_names=[FLAGS.tpu_name],
               zone=FLAGS.tpu_zone,
               project=FLAGS.gcp_project))
