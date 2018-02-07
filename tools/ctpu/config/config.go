@@ -18,7 +18,7 @@ package config
 
 import (
 	"errors"
-	"net"
+	"log"
 	"os/user"
 	"regexp"
 
@@ -31,8 +31,6 @@ type Config interface {
 	ActiveConfiguration() string
 	// The "flock" name to use when creating the VMs and TPUs
 	FlockName() string
-	// The IP address range to choose from when creating a TPU.
-	IPRange() string
 	// The GCP project we will use to allocate / deallocate TPUs and VMs.
 	Project() string
 	// The GCE Zone we will use to allocate / deallocate TPUs and VMs.
@@ -45,9 +43,11 @@ type Config interface {
 	//   - quiet config?
 }
 
+const defaultZone = "us-central1-c"
+
 // Flag overrides
 var (
-	flockOverride, ipRange, projectOverride, zoneOverride string
+	flockOverride, projectOverride, zoneOverride string
 )
 
 // RegisterFlags registers the flags with the flags package.
@@ -56,8 +56,6 @@ var (
 func RegisterFlags() {
 	flag.StringVar(&flockOverride, "name", "",
 		"Override the name to use for VMs and TPUs (defaults to your username).")
-	flag.StringVar(&ipRange, "ip-range", "10.250.0.0/16",
-		"Specify the IP-range where TPUs will be allocated from.")
 	flag.StringVar(&projectOverride, "project", "",
 		`Override the GCP project name to use when allocating VMs and TPUs.
        By default, it picks a reasonable value from either your gcloud
@@ -111,14 +109,12 @@ func (f *flagOverrideConfig) validate() error {
 	if len(f.FlockName()) == 0 {
 		return errors.New("no flock name specified, please set one on the command line --name=NAME")
 	}
-	if len(f.IPRange()) == 0 {
-		return errors.New("no IP Range specified, please set one on the command line --ip-range 10.240.0.0/16")
-	}
 	if len(f.Project()) == 0 {
 		return errors.New("no project specified, please set one on the command line --project $PROJECT_NAME")
 	}
 	if len(f.Zone()) == 0 {
-		return errors.New("no zone specified, please set one on the command line --zone us-central1-c")
+		zoneOverride = defaultZone
+		log.Printf("WARNING: Setting zone to %q", defaultZone)
 	}
 	return nil
 }
@@ -143,34 +139,12 @@ func computeFlockName(e *envConfig) (flockName string, err error) {
 	return
 }
 
-func validateCidrRange() error {
-	ipAddr, ipRange, err := net.ParseCIDR(ipRange)
-	if err != nil {
-		return err
-	}
-	if ipAddr.IsMulticast() {
-		return errors.New("invalid network specification")
-	}
-	ones, bits := ipRange.Mask.Size()
-	if ones == 0 || bits == 0 {
-		return errors.New("invalid network specification")
-	}
-	if bits-ones < 8 {
-		return errors.New("please specify a larger IP address range")
-	}
-	return nil
-}
-
 func (f *flagOverrideConfig) ActiveConfiguration() string {
 	return f.e.activeConfiguration
 }
 
 func (f *flagOverrideConfig) FlockName() string {
 	return f.flockName
-}
-
-func (f *flagOverrideConfig) IPRange() string {
-	return ipRange
 }
 
 func (f *flagOverrideConfig) Project() string {
@@ -191,7 +165,6 @@ func (f *flagOverrideConfig) Zone() string {
 type TestConfig struct {
 	ActiveConfigurationVal string
 	FlockNameVal           string
-	IPRangeVal             string
 	ProjectVal             string
 	ZoneVal                string
 }
@@ -204,11 +177,6 @@ func (t *TestConfig) ActiveConfiguration() string {
 // FlockName returns the flock name
 func (t *TestConfig) FlockName() string {
 	return t.FlockNameVal
-}
-
-// IPRange returns the IP-range to use when allocating the TPU
-func (t *TestConfig) IPRange() string {
-	return t.IPRangeVal
 }
 
 // Project returns the GCP project to use
