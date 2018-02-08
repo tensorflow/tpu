@@ -18,7 +18,7 @@ package ctrl
 import (
 	"testing"
 
-	"cmp"
+	"github.com/google/go-cmp/cmp"
 	"github.com/tensorflow/tpu/tools/ctpu/config"
 )
 

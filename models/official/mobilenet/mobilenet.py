@@ -12,489 +12,571 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Mobilenet model for TPU.
 
-This is a mostly direct port of the code from:
+"""Training harness for MobileNet v1.
 
-https://github.com/tensorflow/models/blob/master/research/slim/nets/mobilenet_v1.py
-
-Paper: https://arxiv.org/pdf/1704.04861.pdf
+This demonstrates how to train the Mobilenet model without any modifications to
+the original model definition.
 """
 
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import collections
-# Standard Imports
-
+import os
 import absl.logging as _logging  # pylint: disable=unused-import
 import tensorflow as tf
 
-import data_pipeline
+import inception_preprocessing
+import mobilenet_model as mobilenet_v1
+import vgg_preprocessing
+
+from tensorflow.contrib.framework.python.ops import arg_scope
 from tensorflow.contrib.tpu.python.tpu import tpu_config
 from tensorflow.contrib.tpu.python.tpu import tpu_estimator
 from tensorflow.contrib.tpu.python.tpu import tpu_optimizer
-from tensorflow.python.keras._impl.keras.utils import conv_utils
+from tensorflow.contrib.training.python.training import evaluation
+
 
 # Cloud TPU Cluster Resolvers
 tf.flags.DEFINE_string(
-    "gcp_project", default=None,
-    help="Project name for the Cloud TPU-enabled project. If not specified, we "
-    "will attempt to automatically detect the GCE project from metadata.")
+    'gcp_project', default=None,
+    help='Project name for the Cloud TPU-enabled project. If not specified, we '
+    'will attempt to automatically detect the GCE project from metadata.')
 tf.flags.DEFINE_string(
-    "tpu_zone", default=None,
-    help="GCE zone where the Cloud TPU is located in. If not specified, we "
-    "will attempt to automatically detect the GCE project from metadata.")
+    'tpu_zone', default=None,
+    help='GCE zone where the Cloud TPU is located in. If not specified, we '
+    'will attempt to automatically detect the GCE project from metadata.')
 tf.flags.DEFINE_string(
-    "tpu_name", default=None,
-    help="Name of the Cloud TPU for Cluster Resolvers. You must specify either "
-    "this flag or --master.")
+    'tpu_name', default=None,
+    help='Name of the Cloud TPU for Cluster Resolvers. You must specify either '
+    'this flag or --master.')
 
 # Model specific paramenters
 tf.flags.DEFINE_string(
-    "master", default=None,
-    help="GRPC URL of the master (e.g. grpc://ip.address.of.tpu:8470). You "
-    "must specify either this flag or --tpu_name.")
+    'master', default=None,
+    help='GRPC URL of the master (e.g. grpc://ip.address.of.tpu:8470). You '
+    'must specify either this flag or --tpu_name.')
 
-tf.flags.DEFINE_bool("use_tpu", True, "")
-tf.flags.DEFINE_string("model_dir", None, "")
-tf.flags.DEFINE_string("data_dir", None, "")
-tf.flags.DEFINE_integer("batch_size", 1024, "")
-tf.flags.DEFINE_integer("num_shards", 8, "")
-tf.flags.DEFINE_integer("num_epochs", 300, "")
-tf.flags.DEFINE_integer("save_checkpoints_secs", 3600, "")
-tf.flags.DEFINE_integer("num_examples_per_epoch", 1300 * 1000,
-                        "Training examples in a single epoch.")
-tf.flags.DEFINE_integer("num_eval_examples", 50 * 1000,
-                        "Number of validation examples.")
+tf.flags.DEFINE_string(
+    'data_dir', '',
+    'Directory where input data is stored')
 
-# Training parameters
-tf.flags.DEFINE_string("hparams", "",
-                       "Comma separated list of key=value pairs. "
-                       "Overrides the default hyperparameters.")
+tf.flags.DEFINE_string(
+    'model_dir', None,
+    'Directory where model output is stored')
 
-Conv = collections.namedtuple("Conv", ["kernel", "stride", "depth"])
-DepthSepConv = collections.namedtuple("DepthSepConv",
-                                      ["kernel", "stride", "depth"])
+tf.flags.DEFINE_integer(
+    'num_shards', 8,
+    'Number of shards (workers).')
 
-# Configuration of the MobileNet "blocks" (depthwise conv, batch norm, relu)
-# (strides, filters)
-NET_CONFIG = [
-    Conv(kernel=[3, 3], stride=2, depth=32),
-    DepthSepConv(kernel=[3, 3], stride=1, depth=64),
-    DepthSepConv(kernel=[3, 3], stride=2, depth=128),
-    DepthSepConv(kernel=[3, 3], stride=1, depth=128),
-    DepthSepConv(kernel=[3, 3], stride=2, depth=256),
-    DepthSepConv(kernel=[3, 3], stride=1, depth=256),
-    DepthSepConv(kernel=[3, 3], stride=2, depth=512),
-    DepthSepConv(kernel=[3, 3], stride=1, depth=512),
-    DepthSepConv(kernel=[3, 3], stride=1, depth=512),
-    DepthSepConv(kernel=[3, 3], stride=1, depth=512),
-    DepthSepConv(kernel=[3, 3], stride=1, depth=512),
-    DepthSepConv(kernel=[3, 3], stride=1, depth=512),
-    DepthSepConv(kernel=[3, 3], stride=2, depth=1024),
-    DepthSepConv(kernel=[3, 3], stride=1, depth=1024)
-]
+tf.flags.DEFINE_integer(
+    'iterations', 100,
+    'Number of iterations per TPU training loop.')
+
+tf.flags.DEFINE_integer(
+    'train_batch_size', 1024,
+    'Global (not per-shard) batch size for training')
+
+tf.flags.DEFINE_integer(
+    'eval_total_size', 0,
+    'Total batch size for evaluation, use the entire validation set if 0')
+
+tf.flags.DEFINE_integer(
+    'eval_batch_size', 1024,
+    'Global (not per-shard) batch size for evaluation')
+
+tf.flags.DEFINE_integer(
+    'train_steps', 8000000,
+    'Number of steps use for training.')
+
+tf.flags.DEFINE_integer(
+    'train_steps_per_eval', 2000,
+    'Number of training steps to run between evaluations.')
+
+tf.flags.DEFINE_string(
+    'mode', 'train_and_eval',
+    'Mode to run: train, eval, train_and_eval')
+
+tf.flags.DEFINE_integer(
+    'min_eval_interval', 180,
+    'Minimum number of seconds between evaluations')
+
+tf.flags.DEFINE_integer(
+    'eval_timeout', None,
+    'Evaluation timeout: Maximum number of seconds that '
+    'may elapse while no new checkpoints are observed')
+
+tf.flags.DEFINE_bool(
+    'use_tpu', True,
+    'Use TPUs rather than plain CPUs')
+
+tf.flags.DEFINE_boolean(
+    'per_host_input_for_training', True,
+    'If true, input_fn is invoked per host rather than per shard.')
+
+tf.flags.DEFINE_string(
+    'use_data', 'real',
+    'One of "fake","real"')
+
+tf.flags.DEFINE_float(
+    'learning_rate', 0.165,
+    'Learning rate.')
+
+tf.flags.DEFINE_float(
+    'depth_multiplier', 1.0,
+    'Depth Multiplier on Inception')
+
+tf.flags.DEFINE_string(
+    'optimizer', 'RMS',
+    'Optimizer (one of sgd, RMS, momentum)')
+
+tf.flags.DEFINE_integer(
+    'num_classes', 1001,
+    'Number of classes to distinguish')
+
+tf.flags.DEFINE_integer(
+    'width', 224,
+    'Width of input image')
+
+tf.flags.DEFINE_integer(
+    'height', 224,
+    'Height of input image')
+
+tf.flags.DEFINE_bool(
+    'transpose_enabled', False,
+    'Boolean to enable/disable explicit I/O transpose')
+
+tf.flags.DEFINE_bool(
+    'use_fused_batchnorm', True,
+    'Enable fused batchrnom')
+
+tf.flags.DEFINE_bool(
+    'log_device_placement', False,
+    'Boolean to enable/disable log device placement')
+
+tf.flags.DEFINE_integer(
+    'save_summary_steps', 100,
+    'Number of steps which must have run before showing summaries.')
+
+tf.flags.DEFINE_integer(
+    'save_checkpoints_secs', 1000,
+    'Interval (in seconds) at which the model data '
+    'should be checkpointed. Set to 0 to disable.')
+
+tf.flags.DEFINE_bool(
+    'moving_average', True,
+    'Whether to enable moving average computation on variables')
+
+tf.flags.DEFINE_string(
+    'preprocessing', 'inception',
+    'Preprocessing stage to use: one of inception or vgg')
+
+tf.flags.DEFINE_bool(
+    'use_annotated_bbox', False,
+    'If true, use annotated bounding box as input to cropping function, '
+    'else use full image size')
+
+tf.flags.DEFINE_float(
+    'learning_rate_decay', 0.94,
+    'Exponential decay rate used in learning rate adjustment')
+
+tf.flags.DEFINE_integer(
+    'learning_rate_decay_epochs', 3,
+    'Exponential decay epochs used in learning rate adjustment')
+
+tf.flags.DEFINE_bool(
+    'use_logits', True,
+    'Use logits if true, else use predictions')
+
+tf.flags.DEFINE_bool(
+    'display_tensors', False,
+    'Whether to dump prediction tensors for comparison')
+
+tf.flags.DEFINE_bool(
+    'clear_update_collections', True,
+    'Set batchnorm update_collections to None if true, else use default value')
+
+# Dataset specific paramenters
+tf.flags.DEFINE_bool(
+    'prefetch_enabled', True,
+    'Boolean to enable/disable prefetching')
+
+tf.flags.DEFINE_integer(
+    'prefetch_dataset_buffer_size', 8*1024*1024,
+    'Number of bytes in read buffer. 0 means no buffering.')
+
+tf.flags.DEFINE_integer(
+    'num_files_infeed', 8,
+    'Number of training files to read in parallel.')
+
+tf.flags.DEFINE_integer(
+    'num_parallel_calls', 64,
+    'Number of elements to process in parallel (by mapper)')
+
+tf.flags.DEFINE_integer(
+    'initial_shuffle_buffer_size', 1024,
+    'Number of elements from dataset that shuffler will sample from. '
+    'This shuffling is done before any other operations. '
+    'Set to 0 to disable')
+
+tf.flags.DEFINE_integer(
+    'followup_shuffle_buffer_size', 1000,
+    'Number of elements from dataset that shuffler will sample from. '
+    'This shuffling is done after prefetching is done. '
+    'Set to 0 to disable')
+
 
 FLAGS = tf.flags.FLAGS
 
+# Dataset constants
+_NUM_TRAIN_IMAGES = 1281167
+_NUM_EVAL_IMAGES = 50000
 
-def mobilenet_hparams():
-  return tf.contrib.training.HParams(
-      optimizer="rmsprop",
-      decay_mode="exponential",
-      num_epochs=FLAGS.num_epochs,
-      momentum=0.9,
-      learning_rate=0.045,
-      learning_rate_decay=0.985,
-      rmsprop_epsilon=1.0,
-      rmsprop_decay=0.9,
-      dropout=0.001,
-  )
+# Random cropping constants
+_RESIZE_SIDE_MIN = 256
+_RESIZE_SIDE_MAX = 512
 
+# Constants dictating the learning rate schedule.
+RMSPROP_DECAY = 0.9                # Decay term for RMSProp.
+RMSPROP_MOMENTUM = 0.9             # Momentum in RMSProp.
+RMSPROP_EPSILON = 1.0              # Epsilon term for RMSProp.
 
-def _convert_data_format(data_format):
-  """Convert data format string (not exposed by tf.layers)."""
-  if data_format == "channels_first":
-    return "NCHW"
-  else:
-    return "NHWC"
+# Constants dictating moving average.
+MOVING_AVERAGE_DECAY = 0.995
+
+# Batchnorm moving mean/variance parameters
+BATCH_NORM_DECAY = 0.996
+BATCH_NORM_EPSILON = 1e-3
 
 
-class DepthwiseConv2D(tf.layers.Conv2D):
-  """Depthwise 2D convolution.
+class InputPipeline(object):
+  """Generates ImageNet input_fn for training or evaluation.
 
-  This implementation differs from the implementation in `tf.layers`.
-  The `tf.layers.SeparableConv2D` performs a depthwis convolution which is
-  immediately followed by a normal convolution.
+  The training data is assumed to be in TFRecord format with keys as specified
+  in the dataset_parser below, sharded across 1024 files, named sequentially:
+      train-00000-of-01024
+      train-00001-of-01024
+      ...
+      train-01023-of-01024
 
-  The mobilenet construction requires a batch-normalization and activation to
-  be applied after the spatial convolution.  This layer performs just the
-  depthwise convolution.
-  Arguments:
-    filters: Integer, the dimensionality of the output space (i.e. the number
-      of filters in the convolution).
-    kernel_size: A tuple or list of 2 integers specifying the spatial
-      dimensions of the filters. Can be a single integer to specify the same
-      value for all spatial dimensions.
-    strides: A tuple or list of 2 positive integers specifying the strides
-      of the convolution. Can be a single integer to specify the same value for
-      all spatial dimensions.
-      Specifying any `stride` value != 1 is incompatible with specifying
-      any `dilation_rate` value != 1.
-    padding: One of `"valid"` or `"same"` (case-insensitive).
-    data_format: A string, one of `channels_last` (default) or `channels_first`.
-      The ordering of the dimensions in the inputs.
-      `channels_last` corresponds to inputs with shape
-      `(batch, height, width, channels)` while `channels_first` corresponds to
-      inputs with shape `(batch, channels, height, width)`.
-    dilation_rate: An integer or tuple/list of 2 integers, specifying
-      the dilation rate to use for dilated convolution.
-      Can be a single integer to specify the same value for
-      all spatial dimensions.
-      Currently, specifying any `dilation_rate` value != 1 is
-      incompatible with specifying any stride value != 1.
-    depth_multiplier: The number of depthwise convolution output channels for
-      each input channel. The total number of depthwise convolution output
-      channels will be equal to `num_filters_in * depth_multiplier`.
-    activation: Activation function. Set it to None to maintain a
-      linear activation.
-    use_bias: Boolean, whether the layer uses a bias.
-    kernel_initializer: An initializer for the depthwise convolution kernel.
-    bias_initializer: An initializer for the bias vector. If None, no bias will
-      be applied.
-    kernel_regularizer: Optional regularizer for the depthwise
-      convolution kernel.
-    bias_regularizer: Optional regularizer for the bias vector.
-    activity_regularizer: Optional regularizer function for the output.
-    kernel_constraint: Optional projection function to be applied to the
-        depthwise kernel after being updated by an `Optimizer` (e.g. used for
-        norm constraints or value constraints for layer weights). The function
-        must take as input the unprojected variable and must return the
-        projected variable (which must have the same shape). Constraints are
-        not safe to use when doing asynchronous distributed training.
-    bias_constraint: Optional projection function to be applied to the
-        bias after being updated by an `Optimizer`.
-    trainable: Boolean, if `True` also add variables to the graph collection
-      `GraphKeys.TRAINABLE_VARIABLES` (see `tf.Variable`).
-    name: A string, the name of the layer.
+  The validation data is in the same format but sharded in 128 files.
+
+  The fortmat of the data required is created by the script at:
+      https://github.com/tensorflow/tpu-demos/blob/master/cloud_tpu/datasets/imagenet_to_gcs.py
+
+  Args:
+    is_training: `bool` for whether the input is for training
   """
 
-  def __init__(self,
-               filters,
-               kernel_size,
-               strides=(1, 1),
-               padding="valid",
-               data_format="channels_last",
-               dilation_rate=(1, 1),
-               depth_multiplier=1,
-               activation=None,
-               use_bias=True,
-               kernel_initializer=None,
-               bias_initializer=tf.zeros_initializer(),
-               kernel_regularizer=None,
-               bias_regularizer=None,
-               activity_regularizer=None,
-               kernel_constraint=None,
-               bias_constraint=None,
-               trainable=True,
-               name=None,
-               **kwargs):
-    super(DepthwiseConv2D, self).__init__(
-        filters=filters,
-        kernel_size=kernel_size,
-        strides=strides,
-        padding=padding,
-        data_format=data_format,
-        dilation_rate=dilation_rate,
-        activation=activation,
-        use_bias=use_bias,
-        bias_regularizer=bias_regularizer,
-        activity_regularizer=activity_regularizer,
-        bias_constraint=bias_constraint,
-        trainable=trainable,
-        name=name,
-        **kwargs)
-    self.data_format = data_format
-    self.depth_multiplier = depth_multiplier
-    self.kernel_initializer = kernel_initializer
-    self.kernel_regularizer = kernel_regularizer
-    self.kernel_constraint = kernel_constraint
+  def __init__(self, is_training, data_dir):
+    self.is_training = is_training
+    self.data_dir = data_dir
 
-  def build(self, input_shape):
-    if len(input_shape) < 4:
-      raise ValueError("Inputs to `SeparableConv2D` should have rank 4. "
-                       "Received input shape:", str(input_shape))
-    if self.data_format == "channels_first":
-      channel_axis = 1
+  def dataset_parser(self, serialized_proto):
+    """Parse an Imagenet record from value."""
+    keys_to_features = {
+        'image/encoded':
+            tf.FixedLenFeature((), tf.string, default_value=''),
+        'image/format':
+            tf.FixedLenFeature((), tf.string, default_value='jpeg'),
+        'image/class/label':
+            tf.FixedLenFeature([], dtype=tf.int64, default_value=-1),
+        'image/class/text':
+            tf.FixedLenFeature([], dtype=tf.string, default_value=''),
+        'image/object/bbox/xmin':
+            tf.VarLenFeature(dtype=tf.float32),
+        'image/object/bbox/ymin':
+            tf.VarLenFeature(dtype=tf.float32),
+        'image/object/bbox/xmax':
+            tf.VarLenFeature(dtype=tf.float32),
+        'image/object/bbox/ymax':
+            tf.VarLenFeature(dtype=tf.float32),
+        'image/object/class/label':
+            tf.VarLenFeature(dtype=tf.int64),
+    }
+
+    features = tf.parse_single_example(serialized_proto, keys_to_features)
+
+    bbox = None
+    if FLAGS.use_annotated_bbox:
+      xmin = tf.expand_dims(features['image/object/bbox/xmin'].values, 0)
+      ymin = tf.expand_dims(features['image/object/bbox/ymin'].values, 0)
+      xmax = tf.expand_dims(features['image/object/bbox/xmax'].values, 0)
+      ymax = tf.expand_dims(features['image/object/bbox/ymax'].values, 0)
+
+      # Note that we impose an ordering of (y, x) just to make life difficult.
+      bbox = tf.concat([ymin, xmin, ymax, xmax], 0)
+
+      # Force the variable number of bounding boxes into the shape
+      # [1, num_boxes, coords].
+      bbox = tf.expand_dims(bbox, 0)
+      bbox = tf.transpose(bbox, [0, 2, 1])
+
+    image = features['image/encoded']
+    image = tf.image.decode_jpeg(image, channels=3)
+    image = tf.image.convert_image_dtype(image, dtype=tf.float32)
+
+    if FLAGS.preprocessing == 'vgg':
+      image = vgg_preprocessing.preprocess_image(
+          image=image,
+          output_height=FLAGS.height,
+          output_width=FLAGS.width,
+          is_training=self.is_training,
+          resize_side_min=_RESIZE_SIDE_MIN,
+          resize_side_max=_RESIZE_SIDE_MAX)
+    elif FLAGS.preprocessing == 'inception':
+      image = inception_preprocessing.preprocess_image(
+          image=image,
+          output_height=FLAGS.height,
+          output_width=FLAGS.width,
+          is_training=self.is_training,
+          bbox=bbox)
     else:
-      channel_axis = 3
-    if input_shape[channel_axis] is None:
-      raise ValueError("The channel dimension of the inputs to "
-                       "`SeparableConv2D` "
-                       "should be defined. Found `None`.")
-    input_dim = int(input_shape[channel_axis])
-    self.input_spec = tf.layers.InputSpec(
-        ndim=4, axes={
-            channel_axis: input_dim
-        })
-    kernel_shape = (self.kernel_size[0], self.kernel_size[1], input_dim,
-                    self.depth_multiplier)
+      assert False, 'Unknown preprocessing type: %s' % FLAGS.preprocessing
 
-    self.kernel = self.add_variable(
-        name="depthwise_kernel",
-        shape=kernel_shape,
-        initializer=self.kernel_initializer,
-        regularizer=self.kernel_regularizer,
-        constraint=self.kernel_constraint,
-        trainable=True,
-        dtype=self.dtype)
+    label = tf.cast(
+        tf.reshape(features['image/class/label'], shape=[]), dtype=tf.int32)
 
-    if self.use_bias:
-      self.bias = self.add_variable(
-          name="bias",
-          shape=(self.filters,),
-          initializer=self.bias_initializer,
-          regularizer=self.bias_regularizer,
-          constraint=self.bias_constraint,
-          trainable=True,
-          dtype=self.dtype)
+    return image, label
+
+  def input_fn(self, params):
+    """Input function which provides a single batch for train or eval.
+
+    Args:
+      params: `dict` of parameters passed from the `TPUEstimator`.
+          `params['batch_size']` is always provided and should be used as the
+          effective batch size.
+
+    Returns:
+      A (images, labels) tuple of `Tensor`s for a batch of samples.
+    """
+    batch_size = params['batch_size']
+
+    if FLAGS.use_data == 'real':
+      file_pattern = os.path.join(
+          self.data_dir, 'train-*' if self.is_training else 'validation-*')
+      dataset = tf.data.Dataset.list_files(file_pattern)
+
+      # the set of operations that follow are based on guidelines
+      # discussed in new pipeline best usage presentation.
+      if self.is_training and FLAGS.initial_shuffle_buffer_size > 0:
+        dataset = dataset.shuffle(
+            buffer_size=FLAGS.initial_shuffle_buffer_size)
+
+      if self.is_training:
+        dataset = dataset.repeat()
+
+      def prefetch_dataset(filename):
+        dataset = tf.data.TFRecordDataset(
+            filename, buffer_size=FLAGS.prefetch_dataset_buffer_size)
+        return dataset
+
+      dataset = dataset.apply(
+          tf.contrib.data.parallel_interleave(
+              prefetch_dataset,
+              cycle_length=FLAGS.num_files_infeed,
+              sloppy=True))
+
+      if FLAGS.followup_shuffle_buffer_size > 0:
+        dataset = dataset.shuffle(
+            buffer_size=FLAGS.followup_shuffle_buffer_size)
+
+      dataset = dataset.map(
+          self.dataset_parser,
+          num_parallel_calls=FLAGS.num_parallel_calls)
+
+      dataset = dataset.prefetch(batch_size)
+
+      dataset = dataset.apply(
+          tf.contrib.data.batch_and_drop_remainder(batch_size))
+
+      dataset = dataset.prefetch(2)  # Prefetch overlaps in-feed with training
+
+      images, labels = dataset.make_one_shot_iterator().get_next()
+      images.set_shape([batch_size, FLAGS.height, FLAGS.width, 3])
     else:
-      self.bias = None
-    self.built = True
+      images = tf.random_uniform(
+          [batch_size, FLAGS.height, FLAGS.width, 3], minval=-1, maxval=1)
+      labels = tf.random_uniform(
+          [batch_size], minval=0, maxval=999, dtype=tf.int32)
 
-  def call(self, inputs):
-    # Apply the actual ops.
-    if self.data_format == "channels_last":
-      strides = (1,) + self.strides + (1,)
-    else:
-      strides = (1, 1) + self.strides
-    outputs = tf.nn.depthwise_conv2d(
-        inputs,
-        self.kernel,
-        strides=strides,
-        padding=self.padding.upper(),
-        rate=self.dilation_rate,
-        data_format=_convert_data_format(self.data_format))
-
-    if self.use_bias:
-      outputs = tf.nn.bias_add(
-          outputs,
-          self.bias,
-          data_format=_convert_data_format(self.data_format))
-
-    if self.activation is not None:
-      return self.activation(outputs)
-    return outputs
-
-  def _compute_output_shape(self, input_shape):
-    input_shape = tf.TensorShape(input_shape).as_list()
-    if self.data_format == "channels_first":
-      rows = input_shape[2]
-      cols = input_shape[3]
-    else:
-      rows = input_shape[1]
-      cols = input_shape[2]
-
-    rows = conv_utils.conv_output_length(rows, self.kernel_size[0],
-                                         self.padding, self.strides[0])
-    cols = conv_utils.conv_output_length(cols, self.kernel_size[1],
-                                         self.padding, self.strides[1])
-    if self.data_format == "channels_first":
-      return tf.TensorShape([input_shape[0], self.filters, rows, cols])
-    else:
-      return tf.TensorShape([input_shape[0], rows, cols, self.filters])
+    images = tensor_transform_fn(images, params['output_perm'])
+    return images, labels
 
 
-def depthwise_conv2d(images, *args, **kw):
-  """Functional interface to DepthwiseConv2D."""
-  return DepthwiseConv2D(*args, **kw)(images)  # pylint: disable=not-callable
+def tensor_transform_fn(data, perm):
+  """Transpose function.
 
+  This function is used to transpose an image tensor on the host and then
+  perform an inverse transpose on the TPU. The transpose on the TPU gets
+  effectively elided thus voiding any associated computational cost.
 
-def _batch_norm(images, is_training):
-  """Batch norm with common params."""
-  return tf.layers.batch_normalization(
-      images,
-      center=True,
-      scale=True,
-      momentum=0.9997,
-      epsilon=0.001,
-      training=is_training,
-  )
+  NOTE: Eventually the compiler will be able to detect when this kind of
+  operation may prove beneficial and perform these types of transformations
+  implicitly, voiding the need for user intervention
 
+  Args:
+    data: Tensor to be transposed
+    perm: Permutation of the dimensions of a
 
-def _conv_block(images, kernel_size, strides, filters, is_training):
-  """Conv/norm/relu with default initialization parameters."""
-  images = tf.layers.conv2d(
-      images,
-      filters=filters,
-      kernel_size=kernel_size,
-      strides=strides,
-      padding="same",
-      use_bias=False,
-      kernel_initializer=tf.truncated_normal_initializer(stddev=0.09),
-      kernel_regularizer=tf.contrib.layers.l2_regularizer(0.00004),
-  )
-
-  images = _batch_norm(images, is_training)
-  images = tf.nn.relu6(images)
-  return images
-
-
-def _depth_sep_conv_block(images, kernel_size, strides, filters, is_training):
-  """depthwise/norm/relu with default initialization parameters."""
-  images = depthwise_conv2d(
-      images,
-      filters=filters,
-      kernel_size=kernel_size,
-      strides=strides,
-      padding="same",
-      use_bias=False,
-      kernel_initializer=tf.truncated_normal_initializer(stddev=0.09),
-  )
-  images = _batch_norm(images, is_training)
-  images = tf.nn.relu6(images)
-
-  images = tf.layers.conv2d(
-      images,
-      filters=filters,
-      kernel_size=(1, 1),
-      strides=(1, 1),
-      padding="same",
-      use_bias=False,
-      kernel_initializer=tf.truncated_normal_initializer(stddev=0.09),
-      kernel_regularizer=tf.contrib.layers.l2_regularizer(0.00004),
-  )
-  images = _batch_norm(images, is_training)
-  images = tf.nn.relu6(images)
-  return images
-
-
-def predict_fn(features, mode, params):
-  """MobileNet prediction function."""
-  is_training = mode == tf.estimator.ModeKeys.TRAIN
-
-  d = features
-
-  for i, conv_def in enumerate(NET_CONFIG):
-    kernel_size, stride, depth = conv_def
-    tf.logging.info("Layer: %d, shape: %s", i, d)
-    if isinstance(conv_def, Conv):
-      d = _conv_block(d,
-                      filters=depth,
-                      kernel_size=kernel_size,
-                      strides=(stride, stride),
-                      is_training=is_training)
-    else:
-      d = _depth_sep_conv_block(
-          d,
-          filters=depth,
-          kernel_size=kernel_size,
-          strides=(stride, stride),
-          is_training=is_training)
-
-  d = tf.layers.average_pooling2d(
-      d, pool_size=(7, 7), strides=(1, 1), padding="valid", name="avg-pool")
-  d = tf.layers.dropout(d, rate=params["dropout"])
-
-  # This would generally be written as a dense layer, but using a conv2d to
-  # mimic the original code.
-  logits = tf.layers.conv2d(
-      d,
-      filters=1001,
-      kernel_size=(1, 1),
-      kernel_initializer=tf.truncated_normal_initializer(stddev=0.09),
-      kernel_regularizer=tf.contrib.layers.l2_regularizer(0.00004))
-
-  logits = tf.squeeze(logits, [1, 2])
-  return logits
-
-
-def metric_fn(labels, logits, learning_rate):
-  predictions = tf.cast(tf.argmax(logits, 1), tf.int32)
-  labels = tf.cast(labels, tf.int64)
-  return {
-      "precision": tf.metrics.precision(labels, predictions),
-      "recall_at_5": tf.metrics.recall_at_k(labels, logits, 5),
-      "recall_at_1": tf.metrics.recall_at_k(labels, logits, 1),
-      "accuracy": tf.metrics.accuracy(labels, predictions),
-      "learning_rate": tf.metrics.mean(learning_rate),
-  }
+  Returns:
+    Transposed tensor
+  """
+  if FLAGS.transpose_enabled:
+    return tf.transpose(data, perm)
+  return data
 
 
 def model_fn(features, labels, mode, params):
-  """TPUEstimator model_fn for MobileNet."""
-  logits = predict_fn(features, mode, params)
+  """Mobilenet v1 model using Estimator API."""
+  num_classes = FLAGS.num_classes
+  training_active = (mode == tf.estimator.ModeKeys.TRAIN)
+  eval_active = (mode == tf.estimator.ModeKeys.EVAL)
 
-  loss = tf.reduce_mean(
-      tf.nn.sparse_softmax_cross_entropy_with_logits(
-          logits=logits, labels=labels))
+  features = tensor_transform_fn(features, params['input_perm'])
 
-  # decay once per epoch
-  steps_per_epoch = params["num_batches_per_epoch"]
-
-  if params["decay_mode"] == "piecewise":
-    learning_rate = params["learning_rate"] * tf.train.piecewise_constant(
-        tf.train.get_or_create_global_step(),
-        [steps_per_epoch * 30, steps_per_epoch * 60], [1.0, 0.1, 0.01])
+  if FLAGS.clear_update_collections:
+    # updates_collections must be set to None in order to use fused batchnorm
+    with arg_scope(mobilenet_v1.mobilenet_v1_arg_scope()):
+      logits, end_points = mobilenet_v1.mobilenet_v1(
+          features,
+          num_classes,
+          is_training=training_active,
+          depth_multiplier=FLAGS.depth_multiplier)
   else:
+    with arg_scope(mobilenet_v1.mobilenet_v1_arg_scope()):
+      logits, end_points = mobilenet_v1.mobilenet_v1(
+          features,
+          num_classes,
+          is_training=training_active,
+          depth_multiplier=FLAGS.depth_multiplier)
+
+  predictions = {
+      'classes': tf.argmax(input=logits, axis=1),
+      'probabilities': tf.nn.softmax(logits, name='softmax_tensor')
+  }
+
+  if mode == tf.estimator.ModeKeys.PREDICT:
+    return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions)
+
+  if mode == tf.estimator.ModeKeys.EVAL and FLAGS.display_tensors and (
+      not FLAGS.use_tpu):
+    with tf.control_dependencies([
+        tf.Print(
+            predictions['classes'], [predictions['classes']],
+            summarize=FLAGS.eval_batch_size,
+            message='prediction: ')
+    ]):
+      labels = tf.Print(
+          labels, [labels], summarize=FLAGS.eval_batch_size, message='label: ')
+
+  one_hot_labels = tf.one_hot(labels, FLAGS.num_classes, dtype=tf.int32)
+
+  tf.losses.softmax_cross_entropy(
+      onehot_labels=one_hot_labels,
+      logits=logits,
+      weights=1.0,
+      label_smoothing=0.1)
+  loss = tf.losses.get_total_loss(add_regularization_losses=True)
+
+  initial_learning_rate = FLAGS.learning_rate * FLAGS.train_batch_size / 256
+  final_learning_rate = 0.0001 * initial_learning_rate
+
+  train_op = None
+  if training_active:
+    batches_per_epoch = _NUM_TRAIN_IMAGES // FLAGS.train_batch_size
+    global_step = tf.train.get_or_create_global_step()
+
     learning_rate = tf.train.exponential_decay(
-        params["learning_rate"],
-        tf.train.get_or_create_global_step(),
-        decay_rate=params["learning_rate_decay"],
-        decay_steps=steps_per_epoch,
-    )
+        learning_rate=initial_learning_rate,
+        global_step=global_step,
+        decay_steps=FLAGS.learning_rate_decay_epochs * batches_per_epoch,
+        decay_rate=FLAGS.learning_rate_decay,
+        staircase=True)
 
-  if params["optimizer"] == "rmsprop":
-    optimizer = tf.train.RMSPropOptimizer(
-        learning_rate=learning_rate,
-        momentum=params["momentum"],
-        epsilon=params["rmsprop_epsilon"],
-        decay=params["rmsprop_decay"],
-    )
-  else:
-    optimizer = tf.train.MomentumOptimizer(
-        learning_rate=learning_rate,
-        momentum=params["momentum"],
-        use_nesterov=True)
+    # Set a minimum boundary for the learning rate.
+    learning_rate = tf.maximum(
+        learning_rate, final_learning_rate, name='learning_rate')
 
-  if params["use_tpu"]:
-    optimizer = tpu_optimizer.CrossShardOptimizer(optimizer)
+    if FLAGS.optimizer == 'sgd':
+      tf.logging.info('Using SGD optimizer')
+      optimizer = tf.train.GradientDescentOptimizer(
+          learning_rate=learning_rate)
+    elif FLAGS.optimizer == 'momentum':
+      tf.logging.info('Using Momentum optimizer')
+      optimizer = tf.train.MomentumOptimizer(
+          learning_rate=learning_rate, momentum=0.9)
+    elif FLAGS.optimizer == 'RMS':
+      tf.logging.info('Using RMS optimizer')
+      optimizer = tf.train.RMSPropOptimizer(
+          learning_rate,
+          RMSPROP_DECAY,
+          momentum=RMSPROP_MOMENTUM,
+          epsilon=RMSPROP_EPSILON)
+    else:
+      tf.logging.fatal('Unknown optimizer:', FLAGS.optimizer)
 
-  # Batch norm requires update_ops to be added as a train_op dependency.
-  update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
-  with tf.control_dependencies(update_ops):
-    train_op = optimizer.minimize(loss, tf.train.get_global_step())
+    if FLAGS.use_tpu:
+      optimizer = tpu_optimizer.CrossShardOptimizer(optimizer)
 
-  # TODO(power): Hack copied from resnet: remove when summaries are working.
-  lr_repeat = tf.reshape(
-      tf.tile(tf.expand_dims(learning_rate, 0), [
-          params["batch_size"],
-      ]), [params["batch_size"], 1])
+    update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+    with tf.control_dependencies(update_ops):
+      train_op = optimizer.minimize(loss, global_step=global_step)
+    if FLAGS.moving_average:
+      ema = tf.train.ExponentialMovingAverage(
+          decay=MOVING_AVERAGE_DECAY, num_updates=global_step)
+      variables_to_average = (tf.trainable_variables() +
+                              tf.moving_average_variables())
+      with tf.control_dependencies([train_op]), tf.name_scope('moving_average'):
+        train_op = ema.apply(variables_to_average)
+
+  eval_metrics = None
+  if eval_active:
+    def metric_fn(labels, predictions):
+      accuracy = tf.metrics.accuracy(labels, tf.argmax(
+          input=predictions, axis=1))
+      return {'accuracy': accuracy}
+
+    if FLAGS.use_logits:
+      eval_predictions = logits
+    else:
+      eval_predictions = end_points['Predictions']
+
+    eval_metrics = (metric_fn, [labels, eval_predictions])
 
   return tpu_estimator.TPUEstimatorSpec(
-      mode=mode,
-      loss=loss,
-      train_op=train_op,
-      predictions={
-          "classes": tf.argmax(input=logits, axis=1),
-          "probabilities": tf.nn.softmax(logits, name="softmax_tensor")
-      },
-      eval_metrics=(metric_fn, [labels, logits, lr_repeat]),
-  )
+      mode=mode, loss=loss, train_op=train_op, eval_metrics=eval_metrics)
 
 
-def main(argv):
-  del argv
+class LoadEMAHook(tf.train.SessionRunHook):
+  """Hook to load EMA into their corresponding variables."""
+
+  def __init__(self, model_dir):
+    super(LoadEMAHook, self).__init__()
+    self._model_dir = model_dir
+
+  def begin(self):
+    ema = tf.train.ExponentialMovingAverage(MOVING_AVERAGE_DECAY)
+    variables_to_restore = ema.variables_to_restore()
+    self._load_ema = tf.contrib.framework.assign_from_checkpoint_fn(
+        tf.train.latest_checkpoint(self._model_dir), variables_to_restore)
+
+  def after_create_session(self, sess, coord):
+    tf.logging.info('Reloading EMA...')
+    self._load_ema(sess)
+
+
+def main(unused_argv):
+  del unused_argv  # Unused
 
   if FLAGS.master is None and FLAGS.tpu_name is None:
-    raise RuntimeError("You must specify either --master or --tpu_name.")
+    raise RuntimeError('You must specify either --master or --tpu_name.')
 
   if FLAGS.master is not None:
     if FLAGS.tpu_name is not None:
-      tf.logging.warn("Both --master and --tpu_name are set. Ignoring "
-                      "--tpu_name and using --master.")
+      tf.logging.warn('Both --master and --tpu_name are set. Ignoring '
+                      '--tpu_name and using --master.')
     tpu_grpc_url = FLAGS.master
   else:
     tpu_cluster_resolver = (
@@ -504,64 +586,118 @@ def main(argv):
             project=FLAGS.gcp_project))
     tpu_grpc_url = tpu_cluster_resolver.get_master()
 
-  # Hyperparameters derived from the paper
-  hparams = mobilenet_hparams()
-  hparams.parse(FLAGS.hparams)
+  batch_size_per_shard = FLAGS.train_batch_size // FLAGS.num_shards
+  params = {
+      'input_perm': [0, 1, 2, 3],
+      'output_perm': [0, 1, 2, 3],
+  }
 
-  params = dict(
-      hparams.values(),
-      num_eval_examples=FLAGS.num_eval_examples,
-      num_examples_per_epoch=FLAGS.num_examples_per_epoch,
-      num_shards=FLAGS.num_shards,
-      num_batches_per_epoch=FLAGS.num_examples_per_epoch / FLAGS.batch_size,
-  )
+  batch_axis = 0
+  if FLAGS.transpose_enabled:
+    if batch_size_per_shard >= 64:
+      params['input_perm'] = [3, 0, 1, 2]
+      params['output_perm'] = [1, 2, 3, 0]
+      batch_axis = 3
+    else:
+      params['input_perm'] = [2, 0, 1, 3]
+      params['output_perm'] = [1, 2, 0, 3]
+      batch_axis = 2
 
-  with tf.gfile.GFile(FLAGS.model_dir + "/hparams.json", "w") as f:
-    tf.gfile.MakeDirs(FLAGS.model_dir)
-    f.write(hparams.to_json())
+  if FLAGS.eval_total_size > 0:
+    eval_size = FLAGS.eval_total_size
+  else:
+    eval_size = _NUM_EVAL_IMAGES
+  eval_steps = eval_size // FLAGS.eval_batch_size
 
-  num_training_examples = FLAGS.num_examples_per_epoch * params["num_epochs"]
-  num_eval_batches = FLAGS.num_eval_examples // FLAGS.batch_size
-  num_training_batches = num_training_examples // FLAGS.batch_size
+  iterations = (eval_steps if FLAGS.mode == 'eval' else
+                FLAGS.iterations)
+
+  eval_batch_size = (None if FLAGS.mode == 'train' else
+                     FLAGS.eval_batch_size)
+
+  per_host_input_for_training = (FLAGS.num_shards <= 8 if
+                                 FLAGS.mode == 'train' else True)
 
   run_config = tpu_config.RunConfig(
       master=tpu_grpc_url,
+      evaluation_master=tpu_grpc_url,
       model_dir=FLAGS.model_dir,
       save_checkpoints_secs=FLAGS.save_checkpoints_secs,
+      save_summary_steps=FLAGS.save_summary_steps,
       session_config=tf.ConfigProto(
-          allow_soft_placement=True, log_device_placement=False),
+          allow_soft_placement=True,
+          log_device_placement=FLAGS.log_device_placement),
       tpu_config=tpu_config.TPUConfig(
-          iterations_per_loop=100,
+          iterations_per_loop=iterations,
           num_shards=FLAGS.num_shards,
-      ),
-  )
+          per_host_input_for_training=per_host_input_for_training))
 
-  estimator = tpu_estimator.TPUEstimator(
+  inception_classifier = tpu_estimator.TPUEstimator(
       model_fn=model_fn,
       use_tpu=FLAGS.use_tpu,
       config=run_config,
-      train_batch_size=FLAGS.batch_size,
-      eval_batch_size=FLAGS.batch_size,
-      params=dict(params, use_tpu=FLAGS.use_tpu),
-  )
+      params=params,
+      train_batch_size=FLAGS.train_batch_size,
+      eval_batch_size=eval_batch_size,
+      batch_axis=(batch_axis, 0))
 
-  # Evaluate the test set after each epoch of the training set is processed.
-  for _ in range(FLAGS.num_epochs):
-    tf.logging.info("Training one epoch: %s steps",
-                    num_training_batches // FLAGS.num_epochs)
-    estimator.train(
-        input_fn=data_pipeline.InputReader(FLAGS.data_dir, is_training=True),
-        steps=num_training_batches // FLAGS.num_epochs)
+  # Input pipelines are slightly different (with regards to shuffling and
+  # preprocessing) between training and evaluation.
+  imagenet_train = InputPipeline(
+      is_training=True,
+      data_dir=FLAGS.data_dir)
+  imagenet_eval = InputPipeline(
+      is_training=False,
+      data_dir=FLAGS.data_dir)
 
-    tf.logging.info("Running evaluation")
-    tf.logging.info("%s",
-                    estimator.evaluate(
-                        input_fn=data_pipeline.InputReader(
-                            FLAGS.data_dir, is_training=False),
-                        steps=num_eval_batches,
-                    ))
+  if FLAGS.moving_average:
+    eval_hooks = [LoadEMAHook(FLAGS.model_dir)]
+  else:
+    eval_hooks = []
+
+  if FLAGS.mode == 'eval':
+    def terminate_eval():
+      tf.logging.info('%d seconds without new checkpoints have elapsed '
+                      '... terminating eval' % FLAGS.eval_timeout)
+      return True
+
+    def get_next_checkpoint():
+      return evaluation.checkpoints_iterator(
+          FLAGS.model_dir,
+          min_interval_secs=FLAGS.min_eval_interval,
+          timeout=FLAGS.eval_timeout,
+          timeout_fn=terminate_eval)
+
+    for checkpoint in get_next_checkpoint():
+      tf.logging.info('Starting to evaluate.')
+      try:
+        eval_results = inception_classifier.evaluate(
+            input_fn=imagenet_eval.input_fn,
+            steps=eval_steps,
+            hooks=eval_hooks,
+            checkpoint_path=checkpoint)
+        tf.logging.info('Evaluation results: %s' % eval_results)
+      except tf.errors.NotFoundError:
+        # skip checkpoint if it gets deleted prior to evaluation
+        tf.logging.info('Checkpoint %s no longer exists ... skipping')
+
+  elif FLAGS.mode == 'train_and_eval':
+    for cycle in range(FLAGS.train_steps // FLAGS.train_steps_per_eval):
+      tf.logging.info('Starting training cycle %d.' % cycle)
+      inception_classifier.train(
+          input_fn=imagenet_train.input_fn, steps=FLAGS.train_steps_per_eval)
+
+      tf.logging.info('Starting evaluation cycle %d .' % cycle)
+      eval_results = inception_classifier.evaluate(
+          input_fn=imagenet_eval.input_fn, steps=eval_steps, hooks=eval_hooks)
+      tf.logging.info('Evaluation results: %s' % eval_results)
+
+  else:
+    tf.logging.info('Starting training ...')
+    inception_classifier.train(
+        input_fn=imagenet_train.input_fn, steps=FLAGS.train_steps)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
   tf.logging.set_verbosity(tf.logging.INFO)
-  tf.app.run(main)
+  tf.app.run()
