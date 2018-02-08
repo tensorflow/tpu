@@ -38,8 +38,7 @@ func (GCloudCLI) IsGcloudInstalled() bool {
 // PrintInstallInstructions prints instructions for how to install gcloud to the console.
 func (GCloudCLI) PrintInstallInstructions() {
 	fmt.Println(`Error: gcloud does not appear to be installed. Please see https://cloud.google.com/sdk/downloads for instructions on how to install the gcloud CLI.
-If you recently installed gcloud and you're still encountering this error, ensure your path has been set correctly and try running the ctpu tool in a fresh shell.
-`)
+If you recently installed gcloud and you're still encountering this error, ensure your path has been set correctly and try running the ctpu tool in a fresh shell.`)
 }
 
 func (g GCloudCLI) makeExecCommand(forwardPorts, forwardAgent bool, tpuInstance *TPUInstance) []string {
@@ -56,13 +55,17 @@ func (g GCloudCLI) makeExecCommand(forwardPorts, forwardAgent bool, tpuInstance 
 	if forwardPorts || forwardAgent {
 		command = append(command, "--")
 	}
-	if forwardAgent {
+	if forwardAgent && g.Config.Environment() != "devshell" {
 		command = append(command, "-A")
 	}
 	if forwardPorts {
-		command = append(command, "-L", "6006:localhost:6006", "-L", "8888:localhost:8888")
-		if tpuInstance != nil {
-			command = append(command, "-L", "8470:"+tpuInstance.NetworkEndpoints[0].IpAddress+":8470", "-L", "8466:"+tpuInstance.NetworkEndpoints[0].IpAddress+":8466")
+		if g.Config.Environment() == "devshell" {
+			command = append(command, "-L", "8080:localhost:6006", "-L", "8081:localhost:8888")
+		} else {
+			command = append(command, "-L", "6006:localhost:6006", "-L", "8888:localhost:8888")
+			if tpuInstance != nil {
+				command = append(command, "-L", "8470:"+tpuInstance.NetworkEndpoints[0].IpAddress+":8470", "-L", "8466:"+tpuInstance.NetworkEndpoints[0].IpAddress+":8466")
+			}
 		}
 	}
 	return command

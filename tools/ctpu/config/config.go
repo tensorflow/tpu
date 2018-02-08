@@ -27,6 +27,8 @@ import (
 
 // Config encapsulates all common configuration required to execute a command.
 type Config interface {
+	// Environment is the current environment ctpu is running in
+	Environment() string
 	// The current active configuration we are using as default.
 	ActiveConfiguration() string
 	// The "flock" name to use when creating the VMs and TPUs
@@ -161,12 +163,17 @@ func (f *flagOverrideConfig) Zone() string {
 	return f.e.zone
 }
 
+func (f *flagOverrideConfig) Environment() string {
+	return f.e.environment
+}
+
 // TestConfig is a `Config` that can be easily used in tests.
 type TestConfig struct {
 	ActiveConfigurationVal string
 	FlockNameVal           string
 	ProjectVal             string
 	ZoneVal                string
+	EnvironmentVal         string
 }
 
 // ActiveConfiguration returns the active configuration
@@ -187,4 +194,12 @@ func (t *TestConfig) Project() string {
 // Zone returns the GCE zone to use
 func (t *TestConfig) Zone() string {
 	return t.ZoneVal
+}
+
+// Environment returns the current environment
+func (t *TestConfig) Environment() string {
+	if t.EnvironmentVal == "" {
+		return "gcloud"
+	}
+	return t.EnvironmentVal
 }

@@ -32,6 +32,7 @@ import (
 const appDefaultFile = "application_default_credentials.json"
 
 type envConfig struct {
+	environment         string
 	activeConfiguration string
 	account             string
 	project             string
@@ -39,6 +40,9 @@ type envConfig struct {
 }
 
 func buildEnvConfig() (*envConfig, error) {
+	if isDevshell() {
+		return devshellConfig()
+	}
 	user, err := user.Current()
 	if err != nil {
 		return nil, err
@@ -84,6 +88,7 @@ func buildGcloudEnvConfig(configDir string) (*envConfig, error) {
 	zone, _ := ini.SectionGet("compute", "zone")
 
 	return &envConfig{
+		environment:         "gcloud",
 		activeConfiguration: activeConfig,
 		account:             account,
 		project:             project,

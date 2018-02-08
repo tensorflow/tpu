@@ -20,7 +20,7 @@ import (
 	"sort"
 	"testing"
 
-	"cmp"
+	"github.com/google/go-cmp/cmp"
 	"github.com/tensorflow/tpu/tools/ctpu/config"
 	"github.com/tensorflow/tpu/tools/ctpu/ctrl"
 	"google.golang.org/api/compute/v1"

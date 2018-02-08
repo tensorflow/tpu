@@ -452,10 +452,11 @@ def inception_model_fn(features, labels, mode, params):
           is_training=training_active,
           depth_multiplier=FLAGS.depth_multiplier)
 
-  predictions = {
+  predictions = end_points
+  predictions.update({
       'classes': tf.argmax(input=logits, axis=1),
       'probabilities': tf.nn.softmax(logits, name='softmax_tensor')
-  }
+  })
 
   if mode == tf.estimator.ModeKeys.PREDICT:
     return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions)
