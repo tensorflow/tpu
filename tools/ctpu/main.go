@@ -29,7 +29,7 @@ import (
 	"github.com/tensorflow/tpu/tools/ctpu/ctrl"
 )
 
-const version = "0.4-dev"
+const version = "0.4"
 
 var logRequests bool
 
@@ -65,6 +65,7 @@ func main() {
 	subcommands.Register(commands.ListCommand(), "configuration")
 	subcommands.Register(commands.TFVersionsCommand(), "configuration")
 	subcommands.Register(commands.TPULocationsCommand(), "configuration")
+	subcommands.Register(commands.QuotaCommand(), "configuration")
 
 	subcommands.Register(subcommands.HelpCommand(), "usage")
 	subcommands.Register(subcommands.FlagsCommand(), "usage")

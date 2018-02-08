@@ -73,7 +73,7 @@ tf.flags.DEFINE_string(
     'Data directory of validation data (e.g., COCO val2017 set)')
 tf.flags.DEFINE_string(
     'val_json_file',
-    '/namespace/vale-project/datasets/mscoco/raw/instances_val2017.json',
+    '',
     'COCO validation JSON containing golden bounding boxes.')
 tf.flags.DEFINE_integer('num_examples_per_epoch', 120000,
                         'Number of examples in one epoch')
@@ -94,6 +94,7 @@ FLAGS = tf.flags.FLAGS
 def main(argv):
   del argv  # Unused.
 
+  # Check flag values
   if FLAGS.master is None and FLAGS.tpu_name is None:
     raise RuntimeError('You must specify either --master or --tpu_name.')
 
@@ -109,11 +110,19 @@ def main(argv):
             zone=FLAGS.tpu_zone,
             project=FLAGS.gcp_project))
     tpu_grpc_url = tpu_cluster_resolver.get_master()
+  tf.Session.reset(tpu_grpc_url)
 
+  if FLAGS.mode is 'train' and FLAGS.train_data_dir is None:
+    raise RuntimeError('You must specify --train_data_dir for training.')
+  if FLAGS.mode is 'eval':
+    if FLAGS.valid_data_dir is None:
+      raise RuntimeError('You must specify --valid_data_dir for evaluation.')
+    if FLAGS.val_json_file is None:
+      raise RuntimeError('You must specify --val_json_file for evaluation.')
+
+  # Parse hparams
   hparams = retinanet_model.default_hparams()
   hparams.parse(FLAGS.hparams)
-
-  tf.Session.reset(tpu_grpc_url)
 
   params = dict(
       hparams.values(),
@@ -203,4 +212,5 @@ def main(argv):
     tf.logging.info('Mode not found.')
 
 if __name__ == '__main__':
+  tf.logging.set_verbosity(tf.logging.INFO)
   tf.app.run(main)

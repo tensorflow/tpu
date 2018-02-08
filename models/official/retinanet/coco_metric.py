@@ -29,7 +29,7 @@ import numpy as np
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
 
-import tensorflow.google as tf
+import tensorflow as tf
 
 FLAGS = flags.FLAGS
 

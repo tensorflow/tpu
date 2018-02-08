@@ -152,7 +152,7 @@ class InputReader(object):
 def metric_fn(labels, logits):
   predictions = tf.argmax(logits, 1)
   return {
-      "precision": tf.metrics.precision(labels=labels, predictions=predictions),
+      "accuracy": tf.metrics.accuracy(labels=labels, predictions=predictions),
   }
 
 

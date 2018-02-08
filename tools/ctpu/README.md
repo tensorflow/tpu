@@ -247,6 +247,21 @@ how to customize the security posture.
    less, you will have to manually set a flock name on the command line with the
    `-name` global flag.
 
+### Stability ###
+
+`ctpu` is an *experimental* tool and thus is not guaranteed to be stable,
+including, but not limited to, the following ways:
+
+ - **TF version**: When `ctpu` creates a Cloud TPU and GCE VM, it will create it
+   with the latest stable TensorFlow version. As new TensorFlow versions are
+   released, you will need to upgrade the installed TensorFlow on your VMs, or
+   delete your GCE VM (after appropriately saving your work!) and re-create it
+   using `ctpu up`.
+ - **Commands & Output**: Do not rely on the presence of particular subcommands,
+   flags, or the format of their output. It can change without warning.
+ - **The existence of ctpu itself**: It is entirely possible that `ctpu` as it
+   exists today will be gone tomorrow!
+
 ## Contributing ##
 
 _Contributions are welcome to the `ctpu` tool!_
@@ -287,4 +302,20 @@ to ensure there are no regressions in functionality in the future. Unit tests
 must not depend on anything in the environment, and must not make any network
 connections.
 
-> TODO(saeta): Document development workflow.
+#### Developer Workflow ####
+
+`ctpu` is developed as a standard [go](https://golang.org/) project. To check
+out the code for development purposes, execute:
+
+```
+go get -t github.com/tensorflow/tpu/tools/ctpu/...
+go test github.com/tensorflow/tpu/tools/ctpu/...
+```
+
+Once you're in this directory, you can use `go build` and `go test`.
+
+For additional background on standard `go` idioms, check out:
+
+ - [How to Write Go Code](https://golang.org/doc/code.html)
+ - [Effective Go](https://golang.org/doc/effective_go.html)
+ - [Go FAQ](https://golang.org/doc/faq)
