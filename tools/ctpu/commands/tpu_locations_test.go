@@ -18,7 +18,7 @@ package commands
 import (
 	"testing"
 
-	"cmp"
+	"github.com/google/go-cmp/cmp"
 	"google.golang.org/api/tpu/v1alpha1"
 )
 

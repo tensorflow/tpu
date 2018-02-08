@@ -109,7 +109,7 @@ tf.flags.DEFINE_integer('width', 299, 'Width of input image')
 
 tf.flags.DEFINE_integer('height', 299, 'Height of input image')
 
-tf.flags.DEFINE_bool('transpose_enabled', True,
+tf.flags.DEFINE_bool('transpose_enabled', False,
                      'Boolean to enable/disable explicit I/O transpose')
 
 tf.flags.DEFINE_bool('log_device_placement', False,
@@ -308,7 +308,7 @@ class InputPipeline(object):
     batch_size = params['batch_size']
 
     if FLAGS.use_data == 'real':
-      file_pattern = os.path.join(FLAGS.data_dir, 'train-*'
+      file_pattern = os.path.join(self.data_dir, 'train-*'
                                   if self.is_training else 'validation-*')
       dataset = tf.data.Dataset.list_files(file_pattern)
 
@@ -346,10 +346,6 @@ class InputPipeline(object):
       dataset = dataset.prefetch(2)  # Prefetch overlaps in-feed with training
 
       images, labels = dataset.make_one_shot_iterator().get_next()
-
-      images.set_shape([batch_size, FLAGS.height, FLAGS.width, 3])
-      labels = tf.cast(labels, tf.int32)
-      labels.set_shape([batch_size])
 
     else:
       images = tf.random_uniform(

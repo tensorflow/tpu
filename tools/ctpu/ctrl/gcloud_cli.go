@@ -38,8 +38,7 @@ func (GCloudCLI) IsGcloudInstalled() bool {
 // PrintInstallInstructions prints instructions for how to install gcloud to the console.
 func (GCloudCLI) PrintInstallInstructions() {
 	fmt.Println(`Error: gcloud does not appear to be installed. Please see https://cloud.google.com/sdk/downloads for instructions on how to install the gcloud CLI.
-If you recently installed gcloud and you're still encountering this error, ensure your path has been set correctly and try running the ctpu tool in a fresh shell.
-`)
+If you recently installed gcloud and you're still encountering this error, ensure your path has been set correctly and try running the ctpu tool in a fresh shell.`)
 }
 
 func (g GCloudCLI) makeExecCommand(forwardPorts, forwardAgent bool, tpuInstance *TPUInstance) []string {
