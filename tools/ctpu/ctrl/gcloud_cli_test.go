@@ -177,3 +177,39 @@ func TestMakeExecCommandWithTPUAndAgentForwarding(t *testing.T) {
 		t.Errorf("incorrect command, got: %v, want: %v", cmd, expected)
 	}
 }
+
+func TestMakeExecCommandInDevshell(t *testing.T) {
+	cfg := &config.TestConfig{
+		FlockNameVal:   "testuser321",
+		ProjectVal:     "otherTestProject",
+		ZoneVal:        "us-central1-x",
+		EnvironmentVal: "devshell",
+	}
+	tpu := &TPUInstance{&tpu.Node{
+		NetworkEndpoints: []*tpu.NetworkEndpoint{
+			{
+				IpAddress: "10.123.210.25",
+			},
+		},
+	}}
+	cli := GCloudCLI{cfg}
+	cmd := cli.makeExecCommand(true, true, tpu)
+	expected := []string{
+		"gcloud",
+		"compute",
+		"ssh",
+		"--zone",
+		"us-central1-x",
+		"--project",
+		"otherTestProject",
+		"testuser321",
+		"--",
+		"-L",
+		"8080:localhost:6006",
+		"-L",
+		"8081:localhost:8888",
+	}
+	if !cmp.Equal(cmd, expected) {
+		t.Errorf("incorrect command, got: %v, want: %v", cmd, expected)
+	}
+}

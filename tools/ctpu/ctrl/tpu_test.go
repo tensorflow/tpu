@@ -48,6 +48,10 @@ func (t *testConfig) Zone() string {
 	return t.zone
 }
 
+func (t *testConfig) Environment() string {
+	return ""
+}
+
 func TestCreateParentPath(t *testing.T) {
 	cfg := testConfig{"testProject", "us-central1-f", "alice"}
 	cp := TPUCP{config: &cfg}

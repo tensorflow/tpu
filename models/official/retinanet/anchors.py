@@ -26,7 +26,7 @@ from __future__ import print_function
 
 from collections import OrderedDict
 import numpy as np
-import tensorflow.google as tf
+import tensorflow as tf
 from object_detection import argmax_matcher
 from object_detection import box_list
 from object_detection import faster_rcnn_box_coder
