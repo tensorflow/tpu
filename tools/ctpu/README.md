@@ -9,9 +9,35 @@ model development. Check out the below for a walk through of how to use `ctpu`.
 
 ## Install `ctpu` ##
 
-> Coming soon!
+### Cloud Shell ###
 
-### Configuration ###
+The easiest way to start using Cloud TPUs with `ctpu` is via Google Cloud shell.
+Click on the button below to follow a tutorial that will walk you through
+getting everything set up.
+
+[![Open in Cloud Shell](http://gstatic.com/cloudssh/images/open-btn.svg)](https://console.cloud.google.com/cloudshell/open?git_repo=https%3A%2F%2Fgithub.com%2Ftensorflow%2Ftpu&page=shell&tutorial=tools%2Fctpu%2Ftutorial.md)
+
+### Local Machine ###
+
+You can also use `ctpu` from your local machine. Follow the instructions below
+to install and configure `ctpu` locally.
+
+#### Download ####
+
+Download `ctpu` with one of following commands:
+
+ * **Linux**: `wget https://dl.google.com/cloud_tpu/ctpu/latest/linux/ctpu && chmod a+x ctpu`
+ * **Mac**: `wget https://dl.google.com/cloud_tpu/ctpu/latest/darwin/ctpu && chmod a+x ctpu`
+ * **Windows**: _Coming soon!_
+
+#### Install ####
+
+While you can use `ctpu` in your local directory (by prefixing all commands with
+`./`; ex: `./ctpu config`), we recommend installing it somewhere on your
+`$PATH`. (e.g. `cp ctpu ~/bin` to install for just yourself,
+`sudo cp ctpu /usr/bin` for all users of your machine.)
+
+#### Configuration ####
 
 In order to use `ctpu` you need to provide it with a bit of additional
 information.
@@ -94,7 +120,9 @@ TPU and GCE VM.
 
 ## Code Lab ##
 
-This code lab walks through how to use the `ctpu` tool to use a Cloud TPU.
+This code lab walks through how to use the `ctpu` tool to use a Cloud TPU from
+your local machine. (If you're using Cloud Shell, please follow the
+[tutorial](https://console.cloud.google.com/cloudshell/open?git_repo=https%3A%2F%2Fgithub.com%2Ftensorflow%2Ftpu&page=shell&tutorial=tools%2Fctpu%2Ftutorial.md))
 
 ### Prerequisites ###
 
