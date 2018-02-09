@@ -83,7 +83,7 @@ class EvaluationMetric(object):
       detections = np.array(self.detections)
       image_ids = list(set(detections[:, 0]))
       coco_dt = self.coco_gt.loadRes(detections)
-      coco_eval = COCOeval(self.coco_gt, coco_dt)
+      coco_eval = COCOeval(self.coco_gt, coco_dt, iouType='bbox')
       coco_eval.params.imgIds = image_ids
       coco_eval.evaluate()
       coco_eval.accumulate()
