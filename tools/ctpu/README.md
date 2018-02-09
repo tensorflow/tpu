@@ -2,16 +2,43 @@
 
 `ctpu` is an **experimental** tool that helps manage setting up a Cloud TPU. It
 is focused on supporting data scientists using Cloud TPUs for their research and
-model development. Check out the below for a walk through of how to use `ctpu`.
+model development.
 
-> Pro tip: power users and/or users wishing to perform parallel hyperparameter
-> search should consider scripting their work or using tools such as GKE.
+There are 4 main subcommands to know when using `ctpu`:
+
+ - **status**: `ctpu status` will query the GCP APIs to determine the current
+   status of your Cloud TPU and GCE VM.
+ - **up**: `ctpu up` will create a GCE VM with TensorFlow pre-installed, and
+   create a corresponding Cloud TPU. If necessary, it will enable the
+   appropriate GCP APIs, and configure default access levels. Finally, it will
+   `ssh` into your GCE VM so you're all ready to start developing!
+ - **pause**: `ctpu pause` will stop your GCE VM, and delete your Cloud TPU. Use
+   this command when you'd like to go to lunch or when you're done for the night
+   to save money. (No need to pay for a Cloud TPU or GCE VM if you're not using
+   them.) When you're ready to get back going again, just run `ctpu up`, and
+   you can pick back up right where you left off! *Note: you will still be
+   charged for the disk space consumed by your GCE VM while it's paused.*
+ - **delete**: `ctpu delete` will delete your GCE VM and Cloud TPU. Use this
+   command if you're done using Cloud TPUs for a while or want to clean up your
+   allocated resources.
+
+> Pro tip: `ctpu` makes simplifying assumptions on your behalf and thus may not
+> be suitable for power users. For example, if you're executing a parallel
+> hyperparameter search, consider scripting calls to `gcloud` instead.
 
 ## Install `ctpu` ##
 
+You can get started using `ctpu` in one of two ways:
+
+1. Using Google Cloud Shell. This is the fastest and easiest way to get started,
+   and comes with a tutorial to walk you through all the steps.
+2. Using your local machine. You can download and run `ctpu` on your local
+   machine
+
+Follow the appropriate instructions below to get started.
+
 ### Cloud Shell ###
 
-The easiest way to start using Cloud TPUs with `ctpu` is via Google Cloud shell.
 Click on the button below to follow a tutorial that will walk you through
 getting everything set up.
 
@@ -33,7 +60,7 @@ Download `ctpu` with one of following commands:
 #### Install ####
 
 While you can use `ctpu` in your local directory (by prefixing all commands with
-`./`; ex: `./ctpu config`), we recommend installing it somewhere on your
+`./`; ex: `./ctpu print-config`), we recommend installing it somewhere on your
 `$PATH`. (e.g. `cp ctpu ~/bin` to install for just yourself,
 `sudo cp ctpu /usr/bin` for all users of your machine.)
 
@@ -55,24 +82,7 @@ information.
     with your desired project and zone. If you are using multiple projects, you
     can group your default values using `gcloud config configurations`.
 
-## Usage Instructions ##
-
-There are 4 main subcommands to know when using `ctpu`:
-
- - **up**: `ctpu up` will create a GCE VM with TensorFlow pre-installed, and
-   create a corresponding Cloud TPU. If necessary, it will enable the
-   appropriate GCP APIs, and include
- - **pause**: `ctpu pause` will stop your GCE VM, and delete your Cloud TPU. Use
-   this command when you'd like to go to lunch or when you're done for the night
-   to save money. (No need to pay for a Cloud TPU or GCE VM if you're not using
-   them.) When you're ready to get back going again, just run `ctpu up`, and
-   you can pick back up right where you left off! *Note: you will still be
-   charged for the disk space consumed by your GCE VM while it's paused.*
- - **delete**: `ctpu delete` will delete your GCE VM and Cloud TPU. Use this
-   command if you're done using Cloud TPUs for a while or want to clean up your
-   allocated resources.
- - **status**: `ctpu status` will query the GCP APIs to determine the current
-   status of your Cloud TPU and GCE VM.
+## Usage Details ##
 
 ### Global Flags ###
 
@@ -114,7 +124,7 @@ to learn more about a particular subcommand, run `ctpu help $SUBCOMMAND` (for
 example: `ctpu help up`). If you'd simply like a list of all the available
 subcommands, simply execute `ctpu commands`.
 
-If you're having problems getting your credentials right, use the `ctpu config`
+If you're having problems getting your credentials right, use the `ctpu print-config`
 command to print out the configuration `ctpu` would use when creating your Cloud
 TPU and GCE VM.
 
@@ -131,11 +141,11 @@ your local machine. (If you're using Cloud Shell, please follow the
 
 ### Check Configuration ###
 
-Run `ctpu config` to view the name of the GCE VM and Cloud TPU `ctpu` will
+Run `ctpu print-config` to view the name of the GCE VM and Cloud TPU `ctpu` will
 create. For example:
 
 ```
-saeta@saeta:~$ ctpu config
+saeta@saeta:~$ ctpu print-config
 ctpu configuration:
         name: saeta
         project: ctpu-test-project
@@ -301,7 +311,7 @@ It will be most helpful if you include:
 
  1. The full output when running the command with the `-log-http` global flag
     set to true
- 2. The output of `ctpu config`, `ctpu version`, and `ctpu list` both before
+ 2. The output of `ctpu print-config`, `ctpu version`, and `ctpu list` both before
     and after the failing command.
  3. Steps to reproduce the issue on a clean GCP project.
 

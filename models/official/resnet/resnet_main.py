@@ -30,7 +30,6 @@ from tensorflow.contrib.tpu.python.tpu import tpu_config
 from tensorflow.contrib.tpu.python.tpu import tpu_estimator
 from tensorflow.contrib.tpu.python.tpu import tpu_optimizer
 from tensorflow.python.estimator import estimator
-from tensorflow.python.platform import test
 
 FLAGS = tf.flags.FLAGS
 
@@ -246,15 +245,17 @@ def resnet_model_fn(features, labels, mode, params):
     with tf.control_dependencies(update_ops):
       train_op = optimizer.minimize(loss, global_step)
 
-    # To log the current learning rate and epoch for Tensorboard, the summary op
-    # needs to be run on the host CPU via host_call. host_call expects
-    # [batch_size, ...] Tensors, thus reshape to introduce a batch dimension.
-    # These Tensors are implicitly broadcasted to [params['batch_size'], ].
+    # To log the loss, current learning rate, and epoch for Tensorboard, the
+    # summary op needs to be run on the host CPU via host_call. host_call
+    # expects [batch_size, ...] Tensors, thus reshape to introduce a batch
+    # dimension. These Tensors are implicitly broadcasted to
+    # [params['batch_size'], ].
+    gs_t = tf.reshape(tf.cast(global_step, tf.int32), [1])
     loss_t = tf.reshape(loss, [1])
     lr_t = tf.reshape(learning_rate, [1])
     ce_t = tf.reshape(current_epoch, [1])
 
-    def host_call_fn(loss, lr, ce):
+    def host_call_fn(gs, loss, lr, ce):
       """Training host call. Creates scalar summaries for training metrics.
 
       This function is executed on the CPU and should not directly reference
@@ -267,6 +268,7 @@ def resnet_model_fn(features, labels, mode, params):
       element in the tuple passed to `host_call`.
 
       Args:
+        gs: `Tensor with shape `[batch, ]` for the global_step
         loss: `Tensor` with shape `[batch, ]` for the training loss.
         lr: `Tensor` with shape `[batch, ]` for the learning_rate.
         ce: `Tensor` with shape `[batch, ]` for the current_epoch.
@@ -274,15 +276,17 @@ def resnet_model_fn(features, labels, mode, params):
       Returns:
         List of summary ops to run on the CPU host.
       """
+      # Outfeed supports int32 but global_step is expected to be int64.
+      gs = tf.cast(tf.reduce_mean(gs), tf.int64)
       with summary.create_file_writer(FLAGS.model_dir).as_default():
         with summary.always_record_summaries():
-          summary.scalar('loss', tf.reduce_mean(loss))
-          summary.scalar('learning_rate', tf.reduce_mean(lr))
-          summary.scalar('current_epoch', tf.reduce_mean(ce))
+          summary.scalar('loss', tf.reduce_mean(loss), step=gs)
+          summary.scalar('learning_rate', tf.reduce_mean(lr), step=gs)
+          summary.scalar('current_epoch', tf.reduce_mean(ce), step=gs)
 
           return summary.all_summary_ops()
 
-    host_call = (host_call_fn, [loss_t, lr_t, ce_t])
+    host_call = (host_call_fn, [gs_t, loss_t, lr_t, ce_t])
 
   else:
     train_op = None

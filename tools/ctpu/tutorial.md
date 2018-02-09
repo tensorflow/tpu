@@ -1,4 +1,4 @@
-# `ctpu` quickstart #
+# ctpu quickstart #
 
 ## Introduction ##
 
@@ -20,49 +20,62 @@ will:
 1. View performance and other metrics using [TensorBoard](https://www.tensorflow.org/programmers_guide/summaries_and_tensorboard).
 1. Clean everything up!
 
+Before you get started, be sure you have created a GCP Project with billing
+enabled. Once you have the project ID (the "short name" found on the cloud
+console's main landing page) in hand, click "Continue" to get started!
+
 ## Download `ctpu` ##
 
 `ctpu` is available from <https://dl.google.com/cloud_tpu/ctpu/latest>. Execute
 the following commands to get your copy:
 
 ```bash
-wget https://dl.google.com/cloud_tpu/ctpu/latest/linux/ctpu && chmod a+x ctpu
+cd && \
+  wget https://dl.google.com/cloud_tpu/ctpu/latest/linux/ctpu && \
+  chmod a+x ctpu
 ```
 
-After these commands complete, you should be able to execute the following command successfully:
+After these commands complete, you should be able to execute the following
+command successfully:
 
 ```bash
-./ctpu version
+ctpu version
 ```
 
 You can see all available subcommands by running:
 
 ```bash
-./ctpu
+ctpu
 ```
 
-## `ctpu` Configuration ##
+You should see a list of commands and a brief description of each one. Click
+"Continue" to learn about how `ctpu` is configured.
+
+## Configuration `ctpu` ##
 
 `ctpu` is integrated with the Google Cloud Shell environment and should
-automatically determine your username, and your project. You can view this
-configuration information by executing:
+automatically determine your username.
+
+When you launch cloud shell within the context of a project, `ctpu`
+automatically determines the project. However, Cloud Shell tutorials are not
+created within the context of a project. Therefore, for this tutorial we need
+to set the project environment variable. Execute:
 
 ```bash
-./ctpu config
+export DEVSHELL_PROJECT_ID=<fill_in_your_project_id>
 ```
 
-If you would like to override the inferred configuration for one command
-invocation, you may do so on the command line:
+You can view the configuration inferred by `ctpu` by executing:
 
 ```bash
-./ctpu --name ilovetpus --project thisprojectdoesntexist config
+ctpu config
 ```
 
 Before we go any further, let's verify that we will be able to launch a Cloud
 TPU in the next step. Execute:
 
 ```bash
-./ctpu quota
+ctpu quota
 ```
 
 and navigate to the resulting URL. You should ensure that you can allocate at
@@ -72,10 +85,14 @@ If you do not have available quota, please request quota at <https://goo.gl/TODO
 
 ## Launch your Cloud TPU Flock ##
 
+It's now time to create your GCP resources.
+
+### Launch your flock ###
+
 Launch your Cloud TPU flock by executing:
 
 ```bash
-./ctpu up
+ctpu up
 ```
 
 This subcommand may take a few minutes to run. On your behalf, `ctpu` will:
@@ -88,18 +105,25 @@ This subcommand may take a few minutes to run. On your behalf, `ctpu` will:
 1. Perform a number of other checks.
 1. Log you in to your new GCE VM.
 
-While the `./ctpu up` command is running, let's prepare oen additional resource: GCS.
+> Note: the first time you run `ctpu up` on a project, it takes longer than
+> normal, including ssh key propagation and API turn-up. Later invocations
+> should be much faster.
 
-Navigate to <https://console.cloud.google.com/storage/browser> and create a new bucket. Pick a unique name,
-select the *Regional* default storage class, and select `us-central1` as the region location.
+### Create your GCS Bucket ###
 
-Be sure to remember the name, as we'll need it in the next steps! Substitute the bucket name whenever you see `$GCS_BUCKET_NAME`.
+While the `ctpu up` command is running, let's prepare one additional resource: GCS.
 
-After you have created your GCS bucket and the `./ctpu up` command has finished executing, click "Continue" to train your first model on a Cloud TPU!
+Navigate to <https://console.cloud.google.com/storage/browser> and create a new
+bucket. Pick a unique name, select the *Regional* default storage class, and
+select `us-central1` as the region location.
 
-## Recognizing handwritten digits using a Cloud TPU ##
+Be sure to remember the name, as we'll need it in the next steps!
 
-You should now be logged into your GCE VM. Verify TensorFlow is installed by executing:
+### Verify your GCE resources ###
+
+Once the `ctpu up` command has finished executing, you should now be logged into
+your GCE VM. (Your shell prompt should change from `username@project` to
+`username@username`.) Verify TensorFlow is installed by executing:
 
 ```bash
 python -c "import tensorflow; print(tensorflow.__version__)"
@@ -107,9 +131,24 @@ python -c "import tensorflow; print(tensorflow.__version__)"
 
 You should see a version number printed (e.g. `1.6.0`).
 
+### Set environment variables ###
+
+To make it easier to run subsequent commands, set an environment variable with
+the name of the GCS bucket you just created.
+
+```bash
+export GCS_BUCKET_NAME=<fill_me_in>
+```
+
+After you have configured your GCS bucket, click "Continue" to train your first
+model on a Cloud TPU!
+
+## Recognizing handwritten digits using a Cloud TPU ##
+
+
 > TODO(saeta): Insert the `convert_to_records.py` preprocessing instructions.
 
-Upload the preprocessed records to your GCS bucket (be sure to substitute in the name of the bucket you created in the last step!):
+Upload the preprocessed records to your GCS bucket:
 
 ```bash
 gsutil cp -r mnist_data gs://$GCS_BUCKET_NAME/mnist
@@ -126,38 +165,53 @@ python /usr/share/tpu/models/official/mnist/mnist_tpu.py \
 
 ### What's happening? ###
 
-This [python script](https://github.com/tensorflow/models/blob/master/official/mnist/mnist_tpu.py) creates a
-[`TPUEstimator`](https://www.tensorflow.org/versions/master/api_docs/python/tf/contrib/tpu/TPUEstimator) and then invokes `estimator.train(...)`.
+This [python script](https://github.com/tensorflow/models/blob/master/official/mnist/mnist_tpu.py)
+creates a
+[`TPUEstimator`](https://www.tensorflow.org/versions/master/api_docs/python/tf/contrib/tpu/TPUEstimator)
+and then invokes `estimator.train(...)`.
 
-`TPUEstimator` connects to the Cloud TPU, initializes the device, and begins training the model on the TFRecords stored in GCS.
+`TPUEstimator` connects to the Cloud TPU, initializes the device, and begins
+training the model on the TFRecords stored in GCS.
 
-
-Congratulations! You have now successfully trained a model on a Cloud TPU. Next, let's run a bigger model and try out TensorBoard.
+Congratulations! You have now successfully trained a model on a Cloud TPU. Next,
+let's run a bigger model and try out TensorBoard.
 
 ## ResNet-50 on a Cloud TPU ##
 
-[ResNet-50](https://github.com/tensorflow/tpu/tree/master/models/official/resnet) (published in [Dec 2015](https://arxiv.org/abs/1512.03385))
-is a popular image classification model, and is one of the
-[officially supported models](https://github.com/tensorflow/tpu/tree/master/models/official) on Cloud TPUs.
+[ResNet-50](https://github.com/tensorflow/tpu/tree/master/models/official/resnet)
+(published in [Dec 2015](https://arxiv.org/abs/1512.03385)) is a popular image
+classification model, and is one of the
+[officially supported models](https://github.com/tensorflow/tpu/tree/master/models/official)
+on Cloud TPUs.
 
-> Note: we will train on a fake dataset composed of random tensors available at `gs://cloud-tpu-test-datasets/fake_imagenet`. If you would like to train on
-the true ImageNet data, follow the [instructions to download and preprocess the ImageNet data](https://cloud.google.com/tpu/docs/tutorials/resnet#download_and_convert_the_imagenet_data),
-and be sure to substitute in the bucket where you've uploaded the preprocessed files instead of `gs://cloud-tpu-test-datasets/fake_imagenet` in the commands below.
+> Note: we will train on a fake dataset composed of random tensors available at
+> `gs://cloud-tpu-test-datasets/fake_imagenet`. If you would like to train on
+> the true ImageNet data, follow the [instructions to download and preprocess
+> the ImageNet data](https://cloud.google.com/tpu/docs/tutorials/resnet#download_and_convert_the_imagenet_data),
+> and be sure to substitute in the bucket where you've uploaded the preprocessed
+> files instead of `gs://cloud-tpu-test-datasets/fake_imagenet` in the commands
+> below.
 
 ### Start TensorBoard ###
 
-Before training the model (which will take a while), first start TensorBoard in the background so you can visualize your training program's progress.
+Before training the model (which takes hours to complete), first start
+TensorBoard in the background so you can visualize your training program's
+progress.
 
 ```bash
 tensorboard -logdir gs://$GCS_BUCKET_NAME/resnet &
 ```
 
-`ctpu` automatically set up special port forwarding for the Cloud Shell environment to make TensorBoard available.
-All you need to do is click on `walkthrough spotlight-pointer devshell-web-preview-button "Web Preview"`, and select port `8080`.
+`ctpu` automatically set up special port forwarding for the Cloud Shell
+environment to make TensorBoard available.
+All you need to do is click on
+`walkthrough spotlight-pointer devshell-web-preview-button "Web Preview"`, and
+select port `8080`.
 
 ### Start Training ###
 
-The [ResNet](https://github.com/tensorflow/tpu/tree/master/models/official/resnet) model is pre-loaded on your GCE VM. To start training ResNet-50, execute:
+The [ResNet](https://github.com/tensorflow/tpu/tree/master/models/official/resnet)
+model is pre-loaded on your GCE VM. To start training ResNet-50, execute:
 
 ```bash
 python /usr/share/tpu/models/official/resnet/resnet_main.py \
@@ -166,20 +220,37 @@ python /usr/share/tpu/models/official/resnet/resnet_main.py \
   --tpu_name=$USER
 ```
 
-`resnet_main.py` alternates between training on the labeled data for a few epochs, and performing a full pass over the evaluation dataset. While the loss and accuracy won't improve when
-training on the fake dataset, ResNet-50 on the ImageNet dataset should achieve > 76% top-1 accuracy on the validation dataset in 90 epochs.
+`resnet_main.py` alternates between training on the labeled data for a few
+epochs, and performing a full pass over the evaluation dataset. While the loss
+and accuracy won't improve when training on the fake dataset, ResNet-50 on the
+ImageNet dataset should achieve > 76% top-1 accuracy on the validation dataset
+in 90 epochs.
 
 Be sure to flip back to TensorBoard to watch metrics about your training run.
 
+You can cancel training at any time by hitting `ctrl+c` or deleting your TPU
+and/or GCE VM. Checkpoints are saved in your GCS bucket. To resume training from
+the latest checkpoint, just re-run the `python` command from above passing in
+the same `--model_dir` value.
+
 ## Clean up ##
 
-To clean up, open a new Cloud shell window, and execute `./ctpu delete`. This will terminate and delete your GCE VM and your Cloud TPU. Then, go to GCS and delete your bucket.
+To clean up, stop training and  sign out of your GCE VM (use `exit`). Then,
+in your cloud shell (your prompt should be `user@projectname`) execute
+`ctpu delete`. This will delete your GCE VM and your Cloud TPU. Then, go to GCS
+and delete your bucket (if desired).
+
+You can run `ctpu status` to make sure you have no instances allocated, although
+note that deletion may take a minute or two.
 
 ## Congratulations ##
 
 `walkthrough conclusion-trophy`
 
-You've successfully training a modern image classification model using a Cloud TPU.
+You've successfully started training a modern image classification model using a
+Cloud TPU.
 
-To learn more, head over to the [Cloud TPU docs](https://cloud.google.com/tpu/docs/how-to). Check out the [Cloud TPU Tools](https://cloud.google.com/tpu/docs/cloud-tpu-tools) to visualize and debug performance, or check to see if your model is TPU-compatible.
-
+To learn more, head over to the [Cloud TPU docs](https://cloud.google.com/tpu/docs/how-to).
+Check out the [Cloud TPU Tools](https://cloud.google.com/tpu/docs/cloud-tpu-tools)
+to visualize and debug performance, or check to see if your model is
+TPU-compatible.
