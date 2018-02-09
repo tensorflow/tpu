@@ -32,7 +32,7 @@ func ConfigCommand() subcommands.Command {
 }
 
 func (configCmd) Name() string {
-	return "config"
+	return "print-config"
 }
 
 func (c *configCmd) SetFlags(f *flag.FlagSet) {
@@ -42,7 +42,7 @@ func (configCmd) Synopsis() string {
 	return "prints out configuration."
 }
 func (configCmd) Usage() string {
-	return `ctpu config
+	return `ctpu print-config
 `
 }
 
@@ -54,7 +54,10 @@ func (c *configCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...in
 	}
 	fmt.Printf("ctpu configuration:\n\tname: %s\n\tproject: %s\n\tzone: %s\n",
 		libs.cfg.FlockName(), libs.cfg.Project(), libs.cfg.Zone())
-	fmt.Printf("If you would like to change the configuration for a single command invocation, please use the command line flags. If you would like to change the configuration generally, see `gcloud config configurations`.\n")
+	fmt.Printf("If you would like to change the configuration for a single command invocation, please use the command line flags.\n")
+	if libs.cfg.Environment() == "gcloud" {
+		fmt.Printf("If you would like to change the configuration generally, see `gcloud config configurations`.\n")
+	}
 
 	if !libs.cli.IsGcloudInstalled() {
 		libs.cli.PrintInstallInstructions()

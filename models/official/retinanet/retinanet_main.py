@@ -66,11 +66,11 @@ tf.flags.DEFINE_integer('eval_steps', 5000, 'evaluation steps')
 tf.flags.DEFINE_integer(
     'iterations_per_loop', 100, 'Number of iterations per TPU training loop')
 tf.flags.DEFINE_string(
-    'train_data_dir', None,
-    'Data directory of training data (e.g., COCO train - minival set)')
+    'training_file_pattern', None,
+    'Glob for training data files (e.g., COCO train - minival set)')
 tf.flags.DEFINE_string(
-    'valid_data_dir', None,
-    'Data directory of validation data (e.g., COCO val2017 set)')
+    'validation_file_pattern', None,
+    'Glob for evaluation tfrecords (e.g., COCO val2017 set)')
 tf.flags.DEFINE_string(
     'val_json_file',
     '',
@@ -112,8 +112,8 @@ def main(argv):
     tpu_grpc_url = tpu_cluster_resolver.get_master()
   tf.Session.reset(tpu_grpc_url)
 
-  if FLAGS.mode is 'train' and FLAGS.train_data_dir is None:
-    raise RuntimeError('You must specify --train_data_dir for training.')
+  if FLAGS.mode is 'train' and FLAGS.training_file_pattern is None:
+    raise RuntimeError('You must specify --training_file_pattern for training.')
   if FLAGS.mode is 'eval':
     if FLAGS.valid_data_dir is None:
       raise RuntimeError('You must specify --valid_data_dir for evaluation.')
@@ -151,12 +151,16 @@ def main(argv):
         config=run_config,
         params=params)
     estimator.train(
-        input_fn=dataloader.InputReader(FLAGS.train_data_dir, is_training=True),
+        input_fn=dataloader.InputReader(FLAGS.training_file_pattern,
+                                        is_training=True),
         steps=int((FLAGS.num_epochs * FLAGS.num_examples_per_epoch) /
                   FLAGS.train_batch_size))
 
   elif FLAGS.mode == 'eval':
     # eval only runs on CPU or GPU host with batch_size = 1
+
+    # Override the default options: disable randomization in the input pipeline
+    # and don't run on the TPU.
     eval_params = dict(
         params,
         use_tpu=False,
@@ -187,7 +191,7 @@ def main(argv):
       tf.logging.info('Starting to evaluate.')
       try:
         eval_results = estimator_eval.evaluate(
-            input_fn=dataloader.InputReader(FLAGS.valid_data_dir,
+            input_fn=dataloader.InputReader(FLAGS.validation_file_pattern,
                                             is_training=False),
             steps=FLAGS.eval_steps)
         tf.logging.info('Eval results: %s' % eval_results)
