@@ -46,8 +46,8 @@ def _normalize_image(image):
 class InputReader(object):
   """Input reader for the MSCOCO dataset."""
 
-  def __init__(self, data_dir, is_training):
-    self._data_dir = data_dir
+  def __init__(self, file_pattern, is_training):
+    self._file_pattern = file_pattern
     self._is_training = is_training
 
   def __call__(self, params):
@@ -58,12 +58,6 @@ class InputReader(object):
                                     params['image_size'])
     anchor_labeler = anchors.AnchorLabeler(input_anchors, params['num_classes'])
     example_decoder = tf_example_decoder.TfExampleDecoder()
-
-    def get_dataset_for_mode(data_dir, is_training):
-      """Return the location of input samples for a given mode."""
-      if is_training:
-        return '%s/coco_train2017_nocrowd-*' % data_dir
-      return '%s/coco_val2017-*' % data_dir
 
     def _dataset_parser(value):
       """Parse data to a fixed dimension input image and learning targets."""
@@ -103,8 +97,7 @@ class InputReader(object):
 
     batch_size = params['batch_size']
 
-    data_file_pattern = get_dataset_for_mode(self._data_dir, self._is_training)
-    dataset = tf.data.Dataset.list_files(data_file_pattern)
+    dataset = tf.data.Dataset.list_files(self._file_pattern)
 
     dataset = dataset.shuffle(buffer_size=1024)
     if self._is_training:

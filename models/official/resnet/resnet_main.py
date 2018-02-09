@@ -101,7 +101,7 @@ tf.flags.DEFINE_integer(
           ' after finishing the entire training regime).'))
 
 tf.flags.DEFINE_integer(
-    'iterations_per_loop', default=1000,
+    'iterations_per_loop', default=100,
     help=('Number of steps to run on TPU before outfeeding metrics to the CPU.'
           ' If the number of iterations in the loop would exceed the number of'
           ' train steps, the loop will exit before reaching'
