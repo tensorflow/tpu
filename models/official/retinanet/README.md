@@ -1,7 +1,7 @@
 # Training RetinaNet on the Cloud TPU.
 
 This folder contains an implementation of the
-[RetinaNet](https://arxiv.org/pdf/1708.02002.pdf) image classification model.
+[RetinaNet](https://arxiv.org/pdf/1708.02002.pdf) object detection model.
 
 The instructions below assume you are already familiar with running a model on
 the TPU.  If you haven't already, please review the [instructions for running
@@ -55,7 +55,7 @@ the command line with gsutil:
 gsutil mb ${GCS_BUCKET}
 ```
 
-## Preparing the MSCOCO dataset
+## Preparing the COCO dataset
 
 Before we can train, we need to prepare our training data.  The RetinaNet 
 model here has been configured to train on the MSCOCO dataset.
@@ -94,7 +94,7 @@ The RetinaNet trainer requires a few extra packages.  We can install them now:
 ```
 sudo apt-get install -y python-tk
 pip install Cython matplotlib
-pip install 'git+https://github.com/pdollar/coco.git#egg=pycocotools&subdirectory=PythonAPI'
+pip install 'git+https://github.com/cocodataset/cocoapi#egg=pycocotools&subdirectory=PythonAPI'
 ```
 
 ## Running the trainer
@@ -133,7 +133,59 @@ let it run.  Instead, we can run our validation in parallel on a different VM.
 Our validation runner will scan our model directory for new checkpoints, and when
 it finds one, will compute new evaluation metrics.
 
-Let's start a VM for running the evalution:
+Let's start a VM for running the evalution.  We recommend using a GPU VM so 
+evaluations run quickly.  This requires a bit more setup:
+
+### GPU Evaluation VM
+
+Start the VM:
+
+```
+gcloud compute instances create eval-vm  \
+ --machine-type=n1-highcpu-16  \
+ --image-project=ubuntu-os-cloud  \
+ --image-family=ubuntu-1604-lts  \
+ --scopes=cloud-platform \
+ --accelerator type=nvidia-tesla-p100 \
+ --maintenance-policy TERMINATE \
+ --restart-on-failure
+```
+
+After a minute, we should be able to connect:
+
+`gcloud compute ssh eval-vm`
+
+We need to setup CUDA so Tensorflow can use our image.  The following commands,
+run on the evaluation VM, will install CUDA and Tensorflow on our GPU VM.
+
+```
+cat > /tmp/setup.sh <<HERE
+wget http://developer.download.nvidia.com/compute/cuda/repos/ubuntu1604/x86_64/cuda-repo-ubuntu1604_9.0.176-1_amd64.deb
+
+dpkg -i ./cuda-repo-ubuntu1604_9.0.176-1_amd64.deb
+apt-key adv --fetch-keys http://developer.download.nvidia.com/compute/cuda/repos/ubuntu1604/x86_64/7fa2af80.pub
+apt-get update
+apt-get install -y cuda-9-0
+bash -c 'echo "deb http://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu1604/x86_64 /" > /etc/apt/sources.list.d/nvidia-ml.list'
+apt-get update
+apt-get install -y --no-install-recommends libcudnn7=7.0.5.15-1+cuda9.0
+apt install -y python-pip python-tk
+HERE
+
+sudo bash /tmp/setup.sh
+pip install tensorflow-gpu==1.6.0rc0
+```
+
+We then need to grab the Retinanet model code so we can evaluate:
+
+```
+git clone https://github.com/tensorflow/tpu
+```
+
+### CPU Evaluation VM (not recommended)
+
+You can also use a CPU VM for evalution which requires a bit less setup, but
+is significantly slower:
 
 ```
 gcloud compute instances create\
@@ -144,24 +196,26 @@ gcloud compute instances create\
   --scopes=cloud-platform
 ```
 
-This image size (nl-highcpu-64) can be larger or smaller depending how
-frequently you are evaluating your data and the computation required by your
-model.  A GPU instance will provide the best performance, but setup for a GPU
-is out of scope for this document.  Consult the [Google Cloud documentation on
-GPU instances](https://cloud.google.com/compute/docs/gpus/add-gpus) for more
-information.
-
 We can now connect to the evaluation VM and start the evaluation loop.
 Note that we specify an empty value for our `--master` flag: this will force
 our evaluation to run on the local machine.
 
-```
-gcloud compute ssh retinanet-eval-vm
+### Installing packages
 
+On either VM type, as before, we'll need to install our packages:
+
+```
 sudo apt-get install -y python-tk
 pip install Cython matplotlib
 pip install 'git+https://github.com/pdollar/coco.git#egg=pycocotools&subdirectory=PythonAPI'
+```
 
+### Running evaluation
+
+We can now run the evaluation script.  Let's first try a quick evaluation to
+test that we can read our model directory and validation files.
+
+```
 # export GCS_BUCKET as above
 
 # Copy over the annotation file we created during preprocessing
@@ -169,26 +223,23 @@ gsutil cp ${GCS_BUCKET}/mscoco/instances_val2017.json .
 
 python /usr/share/tpu/models/official/retinanet/retinanet_main.py  \
  --master= \
- --train_batch_size=64 \
- --training_file_pattern=${GCS_BUCKET}/mscoco/train-* \
  --validation_file_pattern=${GCS_BUCKET}/mscoco/val-* \
  --val_json_file=./instances_val_2017.json \
  --model_dir=${GCS_BUCKET}/retinanet-model/ \
  --hparams=image_size=640 \
- --num_epochs=1 \
  --mode=eval \
+ --num_epochs=1 \
+ --num_examples_per_epoch=100 \
  --eval_steps=10
 ```
 
-Above we specified `num_epochs=1` and `eval_steps=10` to ensure our script
+We specified `num_epochs=1` and `eval_steps=10` above to ensure our script
 finished quickly.  We'll change those now to run over the full evaluation
 dataset:
 
 ```
 python /usr/share/tpu/models/official/retinanet/retinanet_main.py  \
  --master= \
- --train_batch_size=64 \
- --training_file_pattern=${GCS_BUCKET}/mscoco/train-* \
  --validation_file_pattern=${GCS_BUCKET}/mscoco/val-* \
  --val_json_file=./instances_val2017.json
  --model_dir=${GCS_BUCKET}/retinanet-model/ \
@@ -198,9 +249,10 @@ python /usr/share/tpu/models/official/retinanet/retinanet_main.py  \
  --eval_steps=5000
  ```
 
-It takes about 10 minutes to run through the 5000 evaluation steps.  We don't
-have to wait for those to finish though: we can go ahead and kick off our full
-training run now.
+It takes about 10 minutes to run through the 5000 evaluation steps.  After
+finishing, the evaluator will continue waiting for new checkpoints from the
+trainer for up to 1 hour.  We don't have to wait for the evaluation to finish
+though: we can go ahead and kick off our full training run now.
 
 ## Running the trainer (again)
 
