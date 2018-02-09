@@ -25,7 +25,9 @@ import (
 
 func testDeleteWorkflow(t *testing.T, libs *testLibs, expectedGCEAction, expectedTPUAction string) {
 	t.Helper()
-	c := deleteCmd{}
+	c := deleteCmd{
+		skipConfirmation: true,
+	}
 
 	exit := c.Execute(context.Background(), nil, libs.libs)
 	if exit != 0 {

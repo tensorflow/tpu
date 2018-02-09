@@ -16,6 +16,7 @@
 package commands
 
 import (
+	"fmt"
 	"log"
 	"sync"
 
@@ -25,6 +26,7 @@ import (
 )
 
 type deleteCmd struct {
+	skipConfirmation bool
 	tpuCmd
 }
 
@@ -35,6 +37,11 @@ func DeleteCommand() subcommands.Command {
 
 func (deleteCmd) Name() string {
 	return "delete"
+}
+
+func (d *deleteCmd) SetFlags(f *flag.FlagSet) {
+	f.BoolVar(&d.skipConfirmation, "noconf", false, "Skip confirmation about deleting resources.")
+	d.tpuCmd.SetFlags(f)
 }
 
 func (deleteCmd) Synopsis() string {
@@ -51,6 +58,17 @@ func (c *deleteCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...in
 	if err != nil {
 		log.Print(err)
 		return subcommands.ExitFailure
+	}
+
+	if !c.skipConfirmation {
+		ok, err := askForConfirmation("About to permanently delete your resources. Ok?")
+		if err != nil {
+			log.Fatalf("Delete confirmation error: %v", err)
+		}
+		if !ok {
+			fmt.Printf("Exiting without making any changes.\n")
+			return subcommands.ExitUsageError
+		}
 	}
 
 	var exitTPU, exitVM subcommands.ExitStatus

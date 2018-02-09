@@ -17,8 +17,10 @@
 package commands
 
 import (
+	"bufio"
 	"fmt"
 	"log"
+	"os"
 	"regexp"
 	"sort"
 	"strconv"
@@ -279,4 +281,27 @@ func parseVersion(version string) (parsedVersion, error) {
 	}
 
 	return parsedVersion{}, fmt.Errorf("unreachable code reached in parseVersion while parsing version %q", version)
+}
+
+func askForConfirmation(prompt string) (bool, error) {
+	reader := bufio.NewReader(os.Stdin)
+
+	fmt.Printf("%s [Yn]: ", prompt)
+
+	response, err := reader.ReadString('\n')
+	if err != nil {
+		return false, err
+	}
+
+	canon := strings.ToLower(strings.TrimSpace(response))
+
+	if len(canon) == 0 || canon[0] == 'y' {
+		return true, nil
+	}
+
+	if canon[0] == 'n' {
+		return false, nil
+	}
+
+	return false, fmt.Errorf("unexpected response: %q", strings.TrimSpace(response))
 }

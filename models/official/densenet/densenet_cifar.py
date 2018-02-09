@@ -53,7 +53,8 @@ tf.flags.DEFINE_string(
     "must specify either this flag or --tpu_name.")
 
 tf.flags.DEFINE_string("train_file", "", "Path to cifar10 training data.")
-tf.flags.DEFINE_integer("train_epochs", 200, "Number of epochs to train for.")
+tf.flags.DEFINE_integer("train_steps",
+                        8000, "Number of steps to train for.")
 tf.flags.DEFINE_bool("use_tpu", True, "Use TPUs rather than plain CPUs")
 
 tf.flags.DEFINE_string(
@@ -210,9 +211,7 @@ CIFAR_SMALL_PARAMS = {
 
 def main(argv):
   del argv
-  training_examples = (FLAGS.train_epochs * 40000)
-  eval_examples = 10000
-  iterations_per_loop = ((training_examples // 10) // FLAGS.train_batch_size)
+  eval_steps = 10000 // FLAGS.eval_batch_size
 
   if FLAGS.master is None and FLAGS.tpu_name is None:
     raise RuntimeError("You must specify either --master or --tpu_name.")
@@ -234,11 +233,11 @@ def main(argv):
       master=tpu_grpc_url,
       model_dir=FLAGS.model_dir,
       save_checkpoints_steps=FLAGS.steps_per_checkpoint,
-      log_step_count_steps=iterations_per_loop,
+      log_step_count_steps=100,
       session_config=tf.ConfigProto(
           allow_soft_placement=True, log_device_placement=True),
       tpu_config=tpu_config.TPUConfig(
-          iterations_per_loop=iterations_per_loop,
+          iterations_per_loop=100,
           num_shards=FLAGS.num_shards,
       ),
   )
@@ -252,19 +251,15 @@ def main(argv):
       params=dict(CIFAR_SMALL_PARAMS, use_tpu=FLAGS.use_tpu),
   )
 
-  # Evaluate the test set after 5% of training examples are finished.
-  for cycle in range(10):
-    tf.logging.info("Starting %d train steps" %
-                    (training_examples // 10 // FLAGS.train_batch_size))
-    estimator.train(
-        input_fn=InputReader(FLAGS.train_file, is_training=True),
-        steps=training_examples // 10 // FLAGS.train_batch_size)
+  estimator.train(
+      input_fn=InputReader(FLAGS.train_file, is_training=True),
+      steps=FLAGS.train_steps)
 
-    tf.logging.info("Starting evaluation cycle %d ." % cycle)
-    print(estimator.evaluate(
-        input_fn=InputReader(FLAGS.train_file, is_training=False),
-        steps=eval_examples // FLAGS.eval_batch_size,
-    ))
+  tf.logging.info("Starting evaluation.")
+  tf.logging.info("Results: %s", estimator.evaluate(
+      input_fn=InputReader(FLAGS.train_file, is_training=False),
+      steps=eval_steps,
+  ))
 
 
 if __name__ == "__main__":
