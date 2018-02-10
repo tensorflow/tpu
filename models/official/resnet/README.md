@@ -9,9 +9,10 @@ to get a GCE VM with access to Cloud TPU.
 
 To run this model, you will need:
 
-* A GCP project and its associated project ID
-* The zone you are planning on using
 * A GCE VM instance with an associated Cloud TPU resource
+* A GCS bucket to store your training checkpoints
+* (Optional): The ImageNet training and validation data preprocessed into
+  TFRecord format, and stored in GCS.
 
 ### Formatting the data
 
@@ -25,36 +26,29 @@ fake dataset to test the model. It is located at
 
 ## Training the model
 
-First, modify `train_resnet.sh` by assigning appropriate values to the following
-lines in the script:
+Train the model by executing the following command (substituting the appropriate
+values):
 
 ```
-PROJECT = 'your-gcp-project'
-ZONE = 'your-compute-zone'
-TPU_NAME = 'your-assigned-tpu-name'
-DATA_DIR = 'gs://path/to/data/dir'
-MODEL_DIR = gs://path/to/your/model
+python resnet_main.py \
+  --tpu_name=$TPU_NAME \
+  --data_dir=$DATA_DIR \
+  --model_dir=$MODEL_DIR
 ```
 
-`PROJECT`, `ZONE`, and `TPU_NAME` should be the same as the values you used to
-initialize your GCE VM in the [Quickstart
-Guide](https://cloud.google.com/tpu/docs/quickstart).
-The data and model directories should be the address to your GCS buckets.
-
-Then run the script via
-
-```
-./train_resnet.sh
-```
+If you are not running this script on a GCE VM in the same project and zone as
+your Cloud TPU, you will need to add the `--project` and `--zone` flags
+specifying the corresponding values for the Cloud TPU you'd like to use.
 
 This will train a ResNet-50 model on ImageNet with 1024 batch size on a single
 Cloud TPU. With the default flags on everything, the model should train to
 above 76% accuracy in around 17 hours (including evaluation time every
 `--steps_per_eval` steps).
 
-The script also launches a Tensorboard instance at port 6006. This port is
-automatically forwarded to your local machine and can be viewed at
-http://localhost:6006.
+You can launch TensorBoard (e.g. `tensorboard -logdir=$MODEL_DIR`) to view loss
+curves and other metadata regarding your training run. (Note: if you launch
+on your VM, be sure to configure ssh port forwarding or the GCE firewall rules
+appropriately.)
 
 ## Understanding the code
 
@@ -114,7 +108,7 @@ ResNet-18, 34, 101, 152, 200. The 18 and 34 layer configurations use residual
 blocks without bottlenecks and the remaining configurations use bottleneck
 layers. The configuration can be controlled via `--resnet_size`. Bigger models
 require more training time and more memory, thus may require lowering the
-`--train_batch_size` to prevent running out of memory.
+`--train_batch_size` to avoid running out of memory.
 
 ### Using your own data
 
@@ -132,4 +126,3 @@ steps per second and images per second are logged during training. Total
 training time excluding evaluation but including the time it takes to compile
 and initialize the graph is also logged and can be explicitly calculated by
 subtracting the start timestamp from the end timestamp on the logs.
-

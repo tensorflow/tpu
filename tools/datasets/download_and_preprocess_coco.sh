@@ -14,7 +14,7 @@
 # limitations under the License.
 # ==============================================================================
 
-# Script to download and preprocess the MSCOCO data set for detection.
+# Script to download and preprocess the COCO data set for detection.
 #
 # The outputs of this script are TFRecord files containing serialized
 # tf.Example protocol buffers. See create_coco_tf_record.py for details of how
@@ -22,13 +22,13 @@
 # http://cocodataset.org/#overview for an overview of the dataset.
 #
 # usage:
-#  bash download_and_preprocess_mscoco.sh /data-dir/mscoco
+#  bash download_and_preprocess_coco.sh /data-dir/coco
 set -e
 set -x
 
 
 if [ -z "$1" ]; then
-  echo "usage download_and_preprocess_mscoco.sh [data dir]"
+  echo "usage download_and_preprocess_coco.sh [data dir]"
   exit
 fi
 
