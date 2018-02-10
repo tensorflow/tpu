@@ -61,6 +61,7 @@ func (g GCloudCLI) makeExecCommand(forwardPorts, forwardAgent bool, tpuInstance 
 	if forwardPorts {
 		if g.Config.Environment() == "devshell" {
 			command = append(command, "-L", "8080:localhost:6006", "-L", "8081:localhost:8888")
+			command = append(command, "-y") // Suppresses channel errors from ssh.
 		} else {
 			command = append(command, "-L", "6006:localhost:6006", "-L", "8888:localhost:8888")
 			if tpuInstance != nil {

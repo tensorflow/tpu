@@ -20,6 +20,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/tensorflow/tpu/tools/ctpu/config"
+	"google.golang.org/api/compute/v1"
 )
 
 func TestMakeCreateInstance(t *testing.T) {
@@ -99,6 +100,37 @@ func TestConflictRegex(t *testing.T) {
 		got := conflictRegex.FindStringSubmatch(tt.input)
 		if !cmp.Equal(got, tt.want) {
 			t.Errorf("conflictRegex.FindStringSubmatch(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestCanDelete(t *testing.T) {
+	testcases := []struct {
+		status string
+		want   bool
+	}{{
+		status: "RUNNING",
+		want:   true,
+	}, {
+		status: "STOPPING",
+		want:   false,
+	}, {
+		status: "STOPPED",
+		want:   true,
+	}, {
+		status: "TERMINATED",
+		want:   true,
+	}, {
+		status: "SUSPENDED",
+		want:   true,
+	}, {
+		status: "PROVISIONING",
+		want:   false,
+	}}
+	for _, testcase := range testcases {
+		i := GCEInstance{Instance: &compute.Instance{Status: testcase.status}}
+		if i.CanDelete() != testcase.want {
+			t.Errorf("GCEInstance{Status: %q}.CanDelete() = %v, want: %v", testcase.status, i.CanDelete(), testcase.want)
 		}
 	}
 }

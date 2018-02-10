@@ -145,14 +145,22 @@ model on a Cloud TPU!
 
 ## Recognizing handwritten digits using a Cloud TPU ##
 
+### Prepare the data ###
 
-> TODO(saeta): Insert the `convert_to_records.py` preprocessing instructions.
+Run the following command to download and decompress the [dataset](http://yann.lecun.com/exdb/mnist/index.html):
+
+```bash
+python /usr/share/tensorflow/tensorflow/examples/how_tos/reading_data/convert_to_records.py --directory=./data
+gunzip ./data/*.gz
+```
 
 Upload the preprocessed records to your GCS bucket:
 
 ```bash
-gsutil cp -r mnist_data gs://$GCS_BUCKET_NAME/mnist
+gsutil cp -r ./data gs://$GCS_BUCKET_NAME/mnist
 ```
+
+### Train your model ###
 
 Now that you have your data prepared, you're ready to train. Execute:
 
@@ -204,9 +212,12 @@ tensorboard -logdir gs://$GCS_BUCKET_NAME/resnet &
 
 `ctpu` automatically set up special port forwarding for the Cloud Shell
 environment to make TensorBoard available.
-All you need to do is click on
-`walkthrough spotlight-pointer devshell-web-preview-button "Web Preview"`, and
-select port `8080`.
+
+All you need to do is click on the Web Preview button (`walkthrough web-preview-icon` -
+`walkthrough spotlight-pointer devshell-web-preview-button "click me to highlight it"`),
+and open port `8080`.
+
+> Note: because we haven't started training yet, tensorboard should be empty.
 
 ### Start Training ###
 
@@ -220,11 +231,13 @@ python /usr/share/tpu/models/official/resnet/resnet_main.py \
   --tpu_name=$USER
 ```
 
-`resnet_main.py` alternates between training on the labeled data for a few
-epochs, and performing a full pass over the evaluation dataset. While the loss
-and accuracy won't improve when training on the fake dataset, ResNet-50 on the
-ImageNet dataset should achieve > 76% top-1 accuracy on the validation dataset
-in 90 epochs.
+`resnet_main.py` will connect to your Cloud TPU, initialize the device, and
+train a ResNet-50 model on the provided data. Checkpoints will be regularly
+saved to `gs://$GCS_BUCKET_NAME/resnet`.
+
+While the loss and accuracy won't improve when training on the fake dataset,
+ResNet-50 on the ImageNet dataset should achieve > 76% top-1 accuracy on the
+validation dataset in 90 epochs.
 
 Be sure to flip back to TensorBoard to watch metrics about your training run.
 
