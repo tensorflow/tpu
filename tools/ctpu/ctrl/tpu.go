@@ -162,11 +162,13 @@ func (g *TPUCP) ListLocations() ([]*tpu.Location, error) {
 	return locations.Locations, nil
 }
 
+const tpuMaxLoops = 180 // 15 minutes in 5 second increments
+
 func (g *TPUCP) loopUntilOperationComplete(operation *tpu.Operation) error {
 	if operation.Error != nil {
 		return errors.New(operation.Error.Message)
 	}
-	for {
+	for i := 0; i < tpuMaxLoops; i++ {
 		time.Sleep(5 * time.Second) // Poll every 5 seconds
 		op, err := g.operations.Get(operation.Name).Do()
 		if err != nil {
@@ -178,7 +180,12 @@ func (g *TPUCP) loopUntilOperationComplete(operation *tpu.Operation) error {
 		if op.Done {
 			return nil
 		}
+		// Every 20 seconds
+		if i%4 == 0 {
+			log.Println("TPU operation still running...")
+		}
 	}
+	return fmt.Errorf("TPU operation still pending after 15 minutes: %q", operation.Name)
 }
 
 func (g *TPUCP) parentPath() string {

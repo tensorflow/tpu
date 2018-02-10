@@ -21,6 +21,7 @@ import (
 	"log"
 	"net/http"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/tensorflow/tpu/tools/ctpu/config"
@@ -61,6 +62,11 @@ type GCEInstance struct {
 // IsRunning returns true if the GCE instance is running, false otherwise.
 func (i *GCEInstance) IsRunning() bool {
 	return i.Status == "RUNNING"
+}
+
+// CanDelete returns true if the GCE intance can be deleted, false otherwise.
+func (i *GCEInstance) CanDelete() bool {
+	return i.IsRunning() || !strings.HasSuffix(i.Status, "ING")
 }
 
 // IsFlockVM returns true if this GCE VM appears to have been created by the ctpu tool.
@@ -117,11 +123,13 @@ func (g *GCECP) ListInstances() ([]*GCEInstance, error) {
 	return instances, nil
 }
 
+const gceMaxLoops = 120 // 10 minutes in 5 second increments
+
 func (g *GCECP) loopUntilOperationComplete(operation *compute.Operation) error {
 	if operation.Error != nil {
 		return errors.New(operation.Error.Errors[0].Message)
 	}
-	for {
+	for i := 0; i < gceMaxLoops; i++ {
 		time.Sleep(5 * time.Second) // Poll every 5 seconds
 		op, err := g.computeService.ZoneOperations.Get(g.config.Project(), g.config.Zone(), operation.Name).Do()
 		if err != nil {
@@ -133,7 +141,12 @@ func (g *GCECP) loopUntilOperationComplete(operation *compute.Operation) error {
 		if op.Status == "DONE" {
 			return nil
 		}
+		// Every 30 seconds
+		if i%6 == 0 {
+			log.Println("GCE operation still running...")
+		}
 	}
+	return fmt.Errorf("GCE operation still pending after 10 minutes: %q", operation.Name)
 }
 
 // GCECreateRequest captures all the configurable parameters involved in creating the GCE VM.

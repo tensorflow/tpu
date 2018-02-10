@@ -1,4 +1,4 @@
-# Copyright 2018 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,16 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""ImageNet preprocessing for ResNet."""
+"""High Quality preprocessing for ResNet.
+"""
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
 import tensorflow as tf
 
-IMAGE_SIZE = 224
-MEAN_RGB = [0.485, 0.456, 0.406]
-STDDEV_RGB = [0.229, 0.224, 0.225]
+_IMAGE_SIZE = 224
 
 
 def _crop(image, offset_height, offset_width, crop_height, crop_width):
@@ -31,9 +30,9 @@ def _crop(image, offset_height, offset_width, crop_height, crop_width):
   assume we know the input image rank.
 
   Args:
-    image: `Tensor` image of shape [height, width, channels].
-    offset_height: `Tensor` indicating the height offset.
-    offset_width: `Tensor` indicating the width offset.
+    image: an image of shape [height, width, channels].
+    offset_height: a scalar tensor indicating the height offset.
+    offset_width: a scalar tensor indicating the width offset.
     crop_height: the height of the cropped image.
     crop_width: the width of the cropped image.
 
@@ -78,24 +77,24 @@ def distorted_bounding_box_crop(image,
   See `tf.image.sample_distorted_bounding_box` for more documentation.
 
   Args:
-    image: `Tensor` of image (it will be converted to floats in [0, 1]).
-    bbox: `Tensor` of bounding boxes arranged `[1, num_boxes, coords]`
-        where each coordinate is [0, 1) and the coordinates are arranged
-        as `[ymin, xmin, ymax, xmax]`. If num_boxes is 0 then use the whole
-        image.
+    image: 3-D Tensor of image (it will be converted to floats in [0, 1]).
+    bbox: 3-D float Tensor of bounding boxes arranged [1, num_boxes, coords]
+      where each coordinate is [0, 1) and the coordinates are arranged
+      as [ymin, xmin, ymax, xmax]. If num_boxes is 0 then it would use the whole
+      image.
     min_object_covered: An optional `float`. Defaults to `0.1`. The cropped
-        area of the image must contain at least this fraction of any bounding
-        box supplied.
-    aspect_ratio_range: An optional list of `float`s. The cropped area of the
-        image must have an aspect ratio = width / height within this range.
-    area_range: An optional list of `float`s. The cropped area of the image
-        must contain a fraction of the supplied image within in this range.
+      area of the image must contain at least this fraction of any bounding box
+      supplied.
+    aspect_ratio_range: An optional list of `floats`. The cropped area of the
+      image must have an aspect ratio = width / height within this range.
+    area_range: An optional list of `floats`. The cropped area of the image
+      must contain a fraction of the supplied image within in this range.
     max_attempts: An optional `int`. Number of attempts at generating a cropped
-        region of the image of the specified constraints. After `max_attempts`
-        failures, return the entire image.
-    scope: Optional `str` for name scope.
+      region of the image of the specified constraints. After `max_attempts`
+      failures, return the entire image.
+    scope: Optional scope for name_scope.
   Returns:
-    (cropped image `Tensor`, distorted bbox `Tensor`).
+    A tuple, a 3-D Tensor cropped_image and the distorted bbox
   """
   with tf.name_scope(scope, 'distorted_bounding_box_crop', [image, bbox]):
     # Each bounding box has shape [1, num_boxes, box coords] and
@@ -124,7 +123,7 @@ def distorted_bounding_box_crop(image,
 
 
 def _random_crop(image, size):
-  """Make a random crop of (`size` x `size`)."""
+  """Make a randomn crop of size: (size x size)."""
   bbox = tf.constant([0.0, 0.0, 1.0, 1.0], dtype=tf.float32, shape=[1, 1, 4])
   random_image, bbox = distorted_bounding_box_crop(
       image,
@@ -143,20 +142,25 @@ def _random_crop(image, size):
 
 
 def _flip(image):
-  """Random horizontal image flip."""
   image = tf.image.random_flip_left_right(image)
   return image
 
 
 def _at_least_x_are_true(a, b, x):
-  """At least `x` of `a` and `b` `Tensors` are true."""
   match = tf.equal(a, b)
   match = tf.cast(match, tf.int32)
   return tf.greater_equal(tf.reduce_sum(match), x)
 
 
 def _do_scale(image, size):
-  """Rescale the image by scaling the smaller spatial dimension to `size`."""
+  """Rescale the image.
+
+  Args:
+    image: The input image.
+    size: the size to which we rescale (shortest edge).
+  Returns:
+    A rescaled image.
+  """
   shape = tf.cast(tf.shape(image), tf.float32)
   w_greater = tf.greater(shape[0], shape[1])
   shape = tf.cond(w_greater,
@@ -167,7 +171,6 @@ def _do_scale(image, size):
 
 
 def _center_crop(image, size):
-  """Crops to center of image with specified `size`."""
   image_height = tf.shape(image)[0]
   image_width = tf.shape(image)[1]
 
@@ -179,27 +182,15 @@ def _center_crop(image, size):
 
 def _normalize(image):
   """Normalize the image to zero mean and unit variance."""
-  offset = tf.constant(MEAN_RGB, shape=[1, 1, 3])
+  offset = tf.constant([0.485, 0.456, 0.406])
+  offset = tf.expand_dims(offset, axis=0)
+  offset = tf.expand_dims(offset, axis=0)
   image -= offset
 
-  scale = tf.constant(STDDEV_RGB, shape=[1, 1, 3])
+  scale = tf.constant([0.229, 0.224, 0.225])
+  scale = tf.expand_dims(scale, axis=0)
+  scale = tf.expand_dims(scale, axis=0)
   image /= scale
-  return image
-
-
-def preprocess_for_train(image):
-  """Preprocesses the given image for evaluation.
-
-  Args:
-    image: `Tensor` representing an image of arbitrary size.
-
-  Returns:
-    A preprocessed image `Tensor`.
-  """
-  image = _random_crop(image, IMAGE_SIZE)
-  image = _normalize(image)
-  image = _flip(image)
-  image = tf.reshape(image, [IMAGE_SIZE, IMAGE_SIZE, 3])
   return image
 
 
@@ -207,15 +198,30 @@ def preprocess_for_eval(image):
   """Preprocesses the given image for evaluation.
 
   Args:
-    image: `Tensor` representing an image of arbitrary size.
+    image: A `Tensor` representing an image of arbitrary size.
+  Returns:
+    A preprocessed image.
+  """
+  image = _do_scale(image, _IMAGE_SIZE + 32)
+  image = _normalize(image)
+  image = _center_crop(image, _IMAGE_SIZE)
+  image = tf.reshape(image, [_IMAGE_SIZE, _IMAGE_SIZE, 3])
+  return image
+
+
+def preprocess_for_train(image):
+  """Preprocesses the given image for evaluation.
+
+  Args:
+    image: A `Tensor` representing an image of arbitrary size.
 
   Returns:
-    A preprocessed image `Tensor`.
+    A preprocessed image.
   """
-  image = _do_scale(image, IMAGE_SIZE + 32)
+  image = _random_crop(image, _IMAGE_SIZE)
   image = _normalize(image)
-  image = _center_crop(image, IMAGE_SIZE)
-  image = tf.reshape(image, [IMAGE_SIZE, IMAGE_SIZE, 3])
+  image = _flip(image)
+  image = tf.reshape(image, [_IMAGE_SIZE, _IMAGE_SIZE, 3])
   return image
 
 
@@ -223,11 +229,11 @@ def preprocess_image(image, is_training=False):
   """Preprocesses the given image.
 
   Args:
-    image: `Tensor` representing an image of arbitrary size.
-    is_training: `bool` for whether the preprocessing is for training.
-
+    image: A `Tensor` representing an image of arbitrary size.
+    is_training: `True` if we're preprocessing the image for training and
+      `False` otherwise.
   Returns:
-    A preprocessed image `Tensor`.
+    A preprocessed image.
   """
   if is_training:
     return preprocess_for_train(image)

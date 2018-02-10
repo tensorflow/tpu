@@ -49,9 +49,9 @@ func TestDeleteNotExistent(t *testing.T) {
 
 func TestDeleteNotRunning(t *testing.T) {
 	libs := newTestLibs()
-	libs.testGCECP().instance = &compute.Instance{Status: "STOPPING"}
+	libs.testGCECP().instance = &compute.Instance{Status: "STOPPED"}
 	libs.testTPUCP().instance = &tpu.Node{State: "CREATING"}
-	testDeleteWorkflow(t, libs, "", "DELETE")
+	testDeleteWorkflow(t, libs, "DELETE", "DELETE")
 }
 
 func TestDelete(t *testing.T) {

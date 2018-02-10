@@ -109,6 +109,8 @@ func (c *upCmd) upVM(libs *libs) error {
 				TensorFlowVersion: c.tfVersion,
 				ImageFamily:       imageFamily,
 				ImageName:         c.gceImage,
+				MachineType:       c.machineType,
+				DiskSizeGb:        c.diskSizeGb,
 			}
 			err = libs.gce.CreateInstance(req)
 			if err != nil {
@@ -251,7 +253,9 @@ func (c *upCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...interf
 	}
 
 	if c.forwardPorts {
-		fmt.Println("Automatically forwarding common ports (see documentation for additional details)...")
+		fmt.Println("About to ssh (with port forwarding enabled -- see docs details)...")
+	} else {
+		fmt.Println("About to ssh...")
 	}
 	if err := libs.cli.SSHToInstance(c.forwardPorts, c.forwardAgent, tpu); err != nil {
 		log.Printf("Could not ssh to instance: %v\n", err)

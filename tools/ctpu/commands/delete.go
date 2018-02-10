@@ -81,7 +81,7 @@ func (c *deleteCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...in
 	}()
 	go func() {
 		if !c.tpuOnly {
-			exitVM = cleanUpVM(libs.cfg, libs.gce, c.dryRun, "Deleting", libs.gce.DeleteInstance, c.waitForAsync)
+			exitVM = cleanUpVM(libs.cfg, libs.gce, c.dryRun, "Deleting", libs.gce.DeleteInstance, c.waitForAsync, false)
 		}
 		wg.Done()
 	}()

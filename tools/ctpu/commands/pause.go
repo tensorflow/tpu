@@ -64,7 +64,7 @@ func (c *pauseCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...int
 
 	go func() {
 		if !c.tpuOnly {
-			exitVM = cleanUpVM(libs.cfg, libs.gce, c.dryRun, "Stopping", libs.gce.StopInstance, c.waitForAsync)
+			exitVM = cleanUpVM(libs.cfg, libs.gce, c.dryRun, "Stopping", libs.gce.StopInstance, c.waitForAsync, true)
 		}
 		wg.Done()
 	}()
