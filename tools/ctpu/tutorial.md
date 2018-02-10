@@ -3,8 +3,8 @@
 ## Introduction ##
 
 This Google Cloud Shell tutorial walks through how to use the open source
-[`ctpu`](https://github.com/tensorflow/tpu/tree/master/tools/ctpu) tool. We
-will:
+[`ctpu`](https://github.com/tensorflow/tpu/tree/master/tools/ctpu) tool to train
+an image classification model on a Cloud TPU. In this tutorial, you will:
 
 1. Download the latest `ctpu` release.
 1. Confirm the configuration of `ctpu` through a few basic commands.
@@ -20,11 +20,15 @@ will:
 1. View performance and other metrics using [TensorBoard](https://www.tensorflow.org/programmers_guide/summaries_and_tensorboard).
 1. Clean everything up!
 
-Before you get started, be sure you have created a GCP Project with billing
-enabled. Once you have the project ID (the "short name" found on the cloud
-console's main landing page) in hand, click "Continue" to get started!
+Before you get started, be sure you have created a GCP Project with
+[billing enabled](https://cloud.google.com/billing/docs/how-to/modify-project#enable_billing_for_a_project).
+Once you have the [project ID](https://support.google.com/cloud/answer/6158840?hl=en)
+in hand (the "short name" found on the cloud console's main landing page), click
+"Continue" to get started!
 
-## Download `ctpu` ##
+## Setup ##
+
+### Download `ctpu` ###
 
 `ctpu` is available from <https://dl.google.com/cloud_tpu/ctpu/latest>. Execute
 the following commands to get your copy:
@@ -35,31 +39,18 @@ cd && \
   chmod a+x ctpu
 ```
 
-After these commands complete, you should be able to execute the following
-command successfully:
-
-```bash
-ctpu version
-```
-
-You can see all available subcommands by running:
-
-```bash
-ctpu
-```
-
-You should see a list of commands and a brief description of each one. Click
-"Continue" to learn about how `ctpu` is configured.
-
-## Configuration `ctpu` ##
+### Configure Cloud Shell ###
 
 `ctpu` is integrated with the Google Cloud Shell environment and should
 automatically determine your username.
 
-When you launch cloud shell within the context of a project, `ctpu`
-automatically determines the project. However, Cloud Shell tutorials are not
-created within the context of a project. Therefore, for this tutorial we need
-to set the project environment variable. Execute:
+When you [launch cloud shell within the context of a project](https://cloud.google.com/shell/docs/starting-cloud-shell)
+(e.g. from the Cloud console dashboard), `ctpu` automatically determines the
+project.
+
+However, Cloud Shell tutorials are not created within the context of a project.
+Therefore, for this tutorial we need to set the project environment variable
+with your [GCP Project ID](https://support.google.com/cloud/answer/6158840?hl=en).
 
 ```bash
 export DEVSHELL_PROJECT_ID=<fill_in_your_project_id>
@@ -68,11 +59,23 @@ export DEVSHELL_PROJECT_ID=<fill_in_your_project_id>
 You can view the configuration inferred by `ctpu` by executing:
 
 ```bash
-ctpu config
+ctpu print-config
 ```
 
-Before we go any further, let's verify that we will be able to launch a Cloud
-TPU in the next step. Execute:
+### Test your installation ###
+
+You can see all available subcommands by running:
+
+```bash
+ctpu
+```
+
+You should see a list of commands and a brief description of each one.
+
+### Check your TPU Quota ###
+
+Before we go any further, let's verify that we have been allocated enough quota
+to launch a Cloud TPU. Execute:
 
 ```bash
 ctpu quota
@@ -83,7 +86,11 @@ least one Cloud TPU (measured in increments of 8 cores).
 
 If you do not have available quota, please request quota at <https://goo.gl/TODO>.
 
-## Launch your Cloud TPU Flock ##
+Once you've confirmed you have at least 8 TPU cores of quota available in your
+preferred zone (`us-central1-c` by default), click "Continue" to launch your
+resources.
+
+## Create resources ##
 
 It's now time to create your GCP resources.
 
@@ -97,8 +104,7 @@ ctpu up
 
 This subcommand may take a few minutes to run. On your behalf, `ctpu` will:
 
-1. Enable the GCE service (if required).
-1. Enable the TPU service (if required).
+1. Enable the GCE and TPU service (if required).
 1. Create a GCE VM with the latest stable TensorFlow version pre-installed.
 1. Create a Cloud TPU with the corresponding version of TensorFlow.
 1. Ensure your Cloud TPU has access to resource it needs from your project.
@@ -111,7 +117,8 @@ This subcommand may take a few minutes to run. On your behalf, `ctpu` will:
 
 ### Create your GCS Bucket ###
 
-While the `ctpu up` command is running, let's prepare one additional resource: GCS.
+While the `ctpu up` command is running, let's prepare one additional resource:
+[GCS](https://cloud.google.com/storage/).
 
 Navigate to <https://console.cloud.google.com/storage/browser> and create a new
 bucket. Pick a unique name, select the *Regional* default storage class, and
@@ -141,23 +148,27 @@ export GCS_BUCKET_NAME=<fill_me_in>
 ```
 
 After you have configured your GCS bucket, click "Continue" to train your first
-model on a Cloud TPU!
+model on a Cloud TPU.
 
 ## Recognizing handwritten digits using a Cloud TPU ##
 
 ### Prepare the data ###
 
-Run the following command to download and decompress the [dataset](http://yann.lecun.com/exdb/mnist/index.html):
+Run the following [script](https://github.com/tensorflow/tensorflow/blob/master/tensorflow/examples/how_tos/reading_data/convert_to_records.py)
+to download and preprocess the
+[images](http://yann.lecun.com/exdb/mnist/index.html):
 
 ```bash
-python /usr/share/tensorflow/tensorflow/examples/how_tos/reading_data/convert_to_records.py --directory=./data
-gunzip ./data/*.gz
+python /usr/share/tensorflow/tensorflow/examples/how_tos/reading_data/convert_to_records.py --directory=./data && \
+  gunzip ./data/*.gz
 ```
 
-Upload the preprocessed records to your GCS bucket:
+Upload the preprocessed records to your GCS bucket (the environment variable you
+set in the last step will be automatically substituted so you can copy-paste the
+following commands un-modified):
 
 ```bash
-gsutil cp -r ./data gs://$GCS_BUCKET_NAME/mnist
+gsutil cp -r ./data gs://$GCS_BUCKET_NAME/mnist/data
 ```
 
 ### Train your model ###
@@ -165,8 +176,8 @@ gsutil cp -r ./data gs://$GCS_BUCKET_NAME/mnist
 Now that you have your data prepared, you're ready to train. Execute:
 
 ```bash
-python /usr/share/tpu/models/official/mnist/mnist_tpu.py \
-  --train_file=gs://$GCS_BUCKET_NAME/mnist/data/train.tfrecords \
+python /usr/share/models/official/mnist/mnist_tpu.py \
+  --data_dir=gs://$GCS_BUCKET_NAME/mnist/data/ \
   --model_dir=gs://$GCS_BUCKET_NAME/mnist/model \
   --tpu_name=$USER
 ```
@@ -202,7 +213,7 @@ on Cloud TPUs.
 
 ### Start TensorBoard ###
 
-Before training the model (which takes hours to complete), first start
+Before training the model (which takes hours to complete), start
 TensorBoard in the background so you can visualize your training program's
 progress.
 
@@ -267,3 +278,11 @@ To learn more, head over to the [Cloud TPU docs](https://cloud.google.com/tpu/do
 Check out the [Cloud TPU Tools](https://cloud.google.com/tpu/docs/cloud-tpu-tools)
 to visualize and debug performance, or check to see if your model is
 TPU-compatible.
+
+You can refer back to this tutorial to see all the commands by opening it on
+[GitHub](https://github.com/tensorflow/tpu/blob/master/tools/ctpu/tutorial.md).
+
+Finally, all the code used in this tutorial is open source. Check out the [TPU
+repository on GitHub](https://github.com/tensorflow/tpu) and the
+[TensorFlow models repository](https://github.com/tensorflow/models/) for
+pre-processing scripts, and additional sample models.
