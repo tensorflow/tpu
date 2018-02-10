@@ -44,7 +44,7 @@ func (statusCmd) Name() string {
 }
 
 func (s *statusCmd) SetFlags(f *flag.FlagSet) {
-	f.BoolVar(&s.details, "print-details", false,
+	f.BoolVar(&s.details, "details", false,
 		"Prints out more details about the state of the GCE VM and Cloud TPU.")
 	f.BoolVar(&s.noColor, "no-color", false, "Disable color in the output.")
 }

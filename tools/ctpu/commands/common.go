@@ -112,7 +112,7 @@ func parseArgs(args []interface{}) (*libs, error) {
 
 type cpCommand func(bool) error
 
-func cleanUpVM(cfg config.Config, gce gceCP, dryRun bool, actionName string, vmCommand cpCommand, waitForAsync bool) subcommands.ExitStatus {
+func cleanUpVM(cfg config.Config, gce gceCP, dryRun bool, actionName string, vmCommand cpCommand, waitForAsync, requiresRunning bool) subcommands.ExitStatus {
 	vm, err := gce.Instance()
 	if err != nil {
 		log.Print(err)
@@ -120,7 +120,7 @@ func cleanUpVM(cfg config.Config, gce gceCP, dryRun bool, actionName string, vmC
 	}
 	if vm == nil {
 		log.Printf("No GCE VM %s found.\n", cfg.FlockName())
-	} else if !vm.IsRunning() {
+	} else if !vm.IsRunning() && requiresRunning {
 		log.Printf("GCE VM %s not running.\n", cfg.FlockName())
 	} else {
 		log.Printf("%s GCE VM %s...\n", actionName, cfg.FlockName())
