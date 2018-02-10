@@ -20,7 +20,7 @@ If they are not available, you can find the latest version on GitHub:
 
 ```
 git clone http://github.com/tensorflow/tpu/
-cd tpu/models/official/retinanet
+ls tpu/models/official/retinanet
 ```
 
 ## Before we start
@@ -58,10 +58,10 @@ gsutil mb ${GCS_BUCKET}
 ## Preparing the COCO dataset
 
 Before we can train, we need to prepare our training data.  The RetinaNet 
-model here has been configured to train on the MSCOCO dataset.
+model here has been configured to train on the COCO dataset.
 
-The `datasets/download_and_preprocess_mscoco.sh` script will convert the MSCOCO
-dataset into a set of TFRecords that our trainer expects.
+The `tpu/tools/datasets/download_and_preprocess_coco.sh` script will convert 
+the COCO dataset into a set of TFRecords that our trainer expects.
 
 This requires at least 100GB of disk space for the target directory, and will
 take approximately 1 hour to complete.  If you don't have this amount of space
@@ -71,7 +71,10 @@ instructions for details on how to do this.
 
 Once you have a data directory available, you can run the preprocessing script:
 
-`datasets/download_and_preprocess_mscoco.sh /data/dir/mscoco`
+```
+cd tpu/tools/dataset
+bash download_and_preprocess_coco.sh /data/dir/coco
+```
 
 This will install the required libraries and then run the preprocessing script.
 It outputs a number of `*.tfrecord` files in your data directory.  The script 
@@ -83,8 +86,8 @@ training.  We can use `gsutil` to copy the files over.  We also want to save the
 annotation files: we use these to validate our model performance:
 
 ```
-gsutil cp -m /data/dir/mscoco/*-tfrecord ${GCS_BUCKET}/mscoco
-gsutil cp /data/dir/mscoco/raw-data/annotations/*.json ${GCS_BUCKET}/mscoco
+gsutil -m cp /data/dir/coco/*.tfrecord ${GCS_BUCKET}/coco
+gsutil cp /data/dir/coco/raw-data/annotations/*.json ${GCS_BUCKET}/coco
 ```
 
 ## Installing extra packages
@@ -106,15 +109,15 @@ make sure everything is working and we can write out checkpoints successfully:
 RESNET_CHECKPOINT=gs://cloud-tpu-artifacts/resnet/resnet-nhwc-2018-02-07/model.ckpt-112603
 MODEL_DIR=${GCS_BUCKET}/retinanet-model
 
-python /usr/share/tpu/models/official/retinanet/retinanet_main.py \
+python tpu/models/official/retinanet_main.py \
  --master=${GRPC_SERVER} \
  --train_batch_size=64 \
- --training_file_pattern=${GCS_BUCKET}/mscoco/train-* \
+ --training_file_pattern=${GCS_BUCKET}/coco/train-* \
  --resnet_checkpoint=${RESNET_CHECKPOINT} \
  --model_dir=${MODEL_DIR} \
  --hparams=image_size=640 \
- --num_examples_per_epoch=100 \
- --num_epochs=1 
+ --num_examples_per_epoch=6400 \
+ --num_epochs=1
 ```
 
 Note the `--resnet_checkpoint` flag: RetinaNet requires a pre-trained image
@@ -129,11 +132,11 @@ We often want to measure the progress of our model on a validation set as it
 trains.  As our evaluation code for RetinaNet does not currently run on the
 TPU VM, we need to run it on a CPU or GPU machine.  Running through all of the
 validation images is time-consuming, so we don't want to stop our training to
-let it run.  Instead, we can run our validation in parallel on a different VM.  
+let it run.  Instead, we can run our validation in parallel on a different VM.
 Our validation runner will scan our model directory for new checkpoints, and when
 it finds one, will compute new evaluation metrics.
 
-Let's start a VM for running the evalution.  We recommend using a GPU VM so 
+Let's start a VM for running the evalution.  We recommend using a GPU VM so
 evaluations run quickly.  This requires a bit more setup:
 
 ### GPU Evaluation VM
@@ -156,7 +159,8 @@ After a minute, we should be able to connect:
 `gcloud compute ssh eval-vm`
 
 We need to setup CUDA so Tensorflow can use our image.  The following commands,
-run on the evaluation VM, will install CUDA and Tensorflow on our GPU VM.
+run on the evaluation VM, will install CUDA and Tensorflow on our GPU VM. After 
+the installation finishes, we recommend you restart the VM.
 
 ```
 cat > /tmp/setup.sh <<HERE
@@ -170,16 +174,10 @@ bash -c 'echo "deb http://developer.download.nvidia.com/compute/machine-learning
 apt-get update
 apt-get install -y --no-install-recommends libcudnn7=7.0.5.15-1+cuda9.0
 apt install -y python-pip python-tk
+pip install tensorflow-gpu==1.6.0rc0
 HERE
 
 sudo bash /tmp/setup.sh
-pip install tensorflow-gpu==1.6.0rc0
-```
-
-We then need to grab the Retinanet model code so we can evaluate:
-
-```
-git clone https://github.com/tensorflow/tpu
 ```
 
 ### CPU Evaluation VM (not recommended)
@@ -200,7 +198,7 @@ We can now connect to the evaluation VM and start the evaluation loop.
 Note that we specify an empty value for our `--master` flag: this will force
 our evaluation to run on the local machine.
 
-### Installing packages
+### Installing packages and checking the RetinaNet Model
 
 On either VM type, as before, we'll need to install our packages:
 
@@ -208,6 +206,12 @@ On either VM type, as before, we'll need to install our packages:
 sudo apt-get install -y python-tk
 pip install Cython matplotlib
 pip install 'git+https://github.com/pdollar/coco.git#egg=pycocotools&subdirectory=PythonAPI'
+```
+
+We then need to grab the Retinanet model code so we can evaluate:
+
+```
+git clone https://github.com/tensorflow/tpu
 ```
 
 ### Running evaluation
@@ -219,11 +223,11 @@ test that we can read our model directory and validation files.
 # export GCS_BUCKET as above
 
 # Copy over the annotation file we created during preprocessing
-gsutil cp ${GCS_BUCKET}/mscoco/instances_val2017.json .
+gsutil cp ${GCS_BUCKET}/coco/instances_val2017.json .
 
-python /usr/share/tpu/models/official/retinanet/retinanet_main.py  \
+python tpu/models/official/retinanet/retinanet_main.py  \
  --master= \
- --validation_file_pattern=${GCS_BUCKET}/mscoco/val-* \
+ --validation_file_pattern=${GCS_BUCKET}/coco/val-* \
  --val_json_file=./instances_val_2017.json \
  --model_dir=${GCS_BUCKET}/retinanet-model/ \
  --hparams=image_size=640 \
@@ -238,16 +242,16 @@ finished quickly.  We'll change those now to run over the full evaluation
 dataset:
 
 ```
-python /usr/share/tpu/models/official/retinanet/retinanet_main.py  \
+python tpu/models/official/retinanet/retinanet_main.py  \
  --master= \
- --validation_file_pattern=${GCS_BUCKET}/mscoco/val-* \
+ --validation_file_pattern=${GCS_BUCKET}/coco/val-* \
  --val_json_file=./instances_val2017.json
  --model_dir=${GCS_BUCKET}/retinanet-model/ \
  --hparams=image_size=640 \
  --num_epochs=15 \
  --mode=eval \
  --eval_steps=5000
- ```
+```
 
 It takes about 10 minutes to run through the 5000 evaluation steps.  After
 finishing, the evaluator will continue waiting for new checkpoints from the
@@ -257,17 +261,17 @@ though: we can go ahead and kick off our full training run now.
 ## Running the trainer (again)
 
 Back on our original VM, we're now ready to run our model on our preprocessed
-MSCOCO data.  Complete training takes approximately 6 hours.
+COCO data.  Complete training takes approximately 6 hours.
 
 ```
-python /usr/share/tpu/models/official/retinanet/retinanet_main.py \
+python tpu/models/official/retinanet/retinanet_main.py \
  --master=${GRPC_SERVER} \
  --train_batch_size=64 \
- --training_file_pattern=${GCS_BUCKET}/mscoco/train-* \
+ --training_file_pattern=${GCS_BUCKET}/coco/train-* \
  --resnet_checkpoint=${RESNET_CHECKPOINT} \
  --model_dir=${GCS_BUCKET}/retinanet-model/ \
  --hparams=image_size=640 \
- --num_epochs=15 
+ --num_epochs=15
 ```
 
 ### Checking the status of our training
@@ -283,8 +287,8 @@ the current status of the training and evaluation in Tensorboard:
 tensorboard --logdir=${MODEL_DIR}
 ```
 
-You will need to run this from your local desktop, setup port forwarding to your
-VM to access the server.
+You will need to run this from your local desktop, [setup port forwarding](https://cloud.google.com/tpu/docs/tutorials/mnist)
+to your VM to access the server.
 
 ## Where to go from here
 
