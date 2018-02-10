@@ -208,6 +208,7 @@ func TestMakeExecCommandInDevshell(t *testing.T) {
 		"8080:localhost:6006",
 		"-L",
 		"8081:localhost:8888",
+		"-y",
 	}
 	if !cmp.Equal(cmd, expected) {
 		t.Errorf("incorrect command, got: %v, want: %v", cmd, expected)

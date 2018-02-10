@@ -25,7 +25,10 @@ import (
 
 func testUpWorkflow(t *testing.T, libs *testLibs, expectedGCEAction, expectedTPUAction string, aclServiceAccount bool) {
 	t.Helper()
-	c := upCmd{}
+	c := upCmd{
+		machineType: "n1-standard-2",
+		diskSizeGb:  250,
+	}
 
 	exit := c.Execute(context.Background(), nil, libs.libs)
 	if exit != 0 {
@@ -59,6 +62,12 @@ func TestUpCreating(t *testing.T) {
 	}
 	if libs.testGCECP().createRequest.ImageFamily != "tf-1-7" {
 		t.Errorf("createRequest.ImageFamily = %q, want: %q", libs.testGCECP().createRequest.ImageFamily, "tf-1-7")
+	}
+	if libs.testGCECP().createRequest.MachineType != "n1-standard-2" {
+		t.Errorf("createRequest.MachineType = %q, want: %q", libs.testGCECP().createRequest.MachineType, "n1-standard-2")
+	}
+	if libs.testGCECP().createRequest.DiskSizeGb != 250 {
+		t.Errorf("createRequest.ImageFamily = %d, want: %d", libs.testGCECP().createRequest.DiskSizeGb, 250)
 	}
 }
 
