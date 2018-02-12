@@ -30,8 +30,9 @@ There are 4 main subcommands to know when using `ctpu`:
 
 You can get started using `ctpu` in one of two ways:
 
-1. Using Google Cloud Shell. This is the fastest and easiest way to get started,
-   and comes with a tutorial to walk you through all the steps.
+1. Using Google Cloud Shell (**recommended**). This is the fastest and easiest
+   way to get started, and comes with a tutorial to walk you through all the
+   steps.
 2. Using your local machine. You can download and run `ctpu` on your local
    machine
 
@@ -46,8 +47,8 @@ getting everything set up.
 
 ### Local Machine ###
 
-You can also use `ctpu` from your local machine. Follow the instructions below
-to install and configure `ctpu` locally.
+Alternatively, you can also use `ctpu` from your local machine. Follow the
+instructions below to install and configure `ctpu` locally.
 
 #### Download ####
 
@@ -128,115 +129,6 @@ If you're having problems getting your credentials right, use the `ctpu print-co
 command to print out the configuration `ctpu` would use when creating your Cloud
 TPU and GCE VM.
 
-## Code Lab ##
-
-This code lab walks through how to use the `ctpu` tool to use a Cloud TPU from
-your local machine. (If you're using Cloud Shell, please follow the
-[tutorial](https://console.cloud.google.com/cloudshell/open?git_repo=https%3A%2F%2Fgithub.com%2Ftensorflow%2Ftpu&page=shell&tutorial=tools%2Fctpu%2Ftutorial.md))
-
-### Prerequisites ###
-
- - `ctpu` installed and configured. (See above.)
- - A GCP project with allocated TPU Quota.
-
-### Check Configuration ###
-
-Run `ctpu print-config` to view the name of the GCE VM and Cloud TPU `ctpu` will
-create. For example:
-
-```
-saeta@saeta:~$ ctpu print-config
-ctpu configuration:
-        name: saeta
-        project: ctpu-test-project
-        zone: us-central1-c
-```
-
-### Bring up your flock ###
-
-The most common way to use a Cloud TPU is from a GCE VM. You run your TensorFlow
-python script on a GCE VM, and connect to a Cloud TPU over the network. `ctpu`
-refers to the VM + TPU pair as a "flock". To allocate your flock, simply run:
-`ctpu up`. `ctpu` will perform a number of actions on your behalf to get your
-GCP environment properly setup and configured.
-
-> Note: The first time you allocate a Cloud TPU, some additional operations may
-> be required. Please do be patient. :-)
-
-Once `ctpu up` has successfully allocated a Cloud TPU and a GCE VM with
-TensorFlow installed, `ctpu` will automatically log you in to your GCE VM.
-
-> Pro tip: If you need to reconnect to your GCE VM, just re-run `ctpu up`! If
-> you'd like an additional ssh connection to your GCE VM and would like to get
-> rid of the warnings (`bind: Address already in use` and
-> `channel_setup_fwd_listener_tcpip: ...`), run `ctpu up --forward-ports=false`.
-
-### Run a computation on a TPU ###
-
-The GCE VM's that `ctpu` creates for you automatically have the latest stable
-[TensorFlow](https://www.tensorflow.org/) version pre-installed. They also have
-a few sample programs available at `/usr/share/tpu-demos/`
-
-> TODO(saeta): Include running `mnist.py` on the Cloud TPU on the CLI
-
-#### Using TensorBoard ####
-
-When `ctpu` opens the ssh connection to your GCE VM, it also configures port
-forwarding for the default TensorBoard port (6006). To use Tensorboard, run the
-`tensorboard` command on the GCE VM, and then navigate to
-[`localhost:6006`](http://localhost:6006/) to view TensorBoard.
-
-> Pro tip: Use a terminal multiplexer such as `tmux` or `screen` to run your
-> TensorFlow script and the `tensorboard` command at the same time.
-
-<!-- TODO(saeta): Add an example invocation with model dir & logdir -->
-
-#### Using Jupyter Notebooks ####
-
-`ctpu` makes it easy to use [juypter notebooks](http://jupyter.org/) with Cloud
-TPUs, because `ctpu` also opens up port forwarding for the default jupyter
-notebook port (8888). Run `jupyter notebook` on the command line, and navigate
-to [`localhost:8888`](http://localhost:8888/) on your local computer.
-
-#### Connecting directly to the Cloud TPU ####
-
-Power users may want to run code on their local machine that runs computations
-on a Cloud TPU. `ctpu` also port-forwards `8470` and `8466` from the Cloud TPU
-to your local machine. Therefore, you can run a TensorFlow script on your local
-machine, and connect to `grpc://localhost:8470` and talk to your Cloud TPU.
-
-> Note: running in this configuration incurs some additional performance
-> overhead. Do not use this configuration when running benchmarks or other
-> high performance workloads.
-
-### Take a break ###
-
-If you're done for the day, have to run to a meeting, or just would like to get
-some coffee while you design your new machine learning algorithm, you can
-"pause" your flock to save money. Just run `ctpu pause`.
-
-When you pause your flock, you will de-allocate your Cloud TPU, and shut down
-your GCE VM. All files saved on GCS or the local disk of your GCE VM will be
-preserved.
-
-To resume work, just run `ctpu up`!
-
-### Cleaning up ###
-
-To clean up your GCE VM and Cloud TPU, just run `ctpu delete`. This will ensure
-you are not charged for your GCE VM or your Cloud TPU any further. _Important
-note: you will still be charged for files stored in GCS._
-
-### Multiple Flocks ###
-
-By default, `ctpu` creates the flock name based on your username. We find this
-to be the most common way for people to work. That said, if you're working on
-multiple independent projects, you can configure the flock name on the command
-line. In doing so, you can use multiple Cloud TPU flocks at the same time.
-
-> Pro tip: If you're doing multiple independent experiments, you can often use
-> a single GCE VM to drive training jobs on multiple Cloud TPUs concurrently.
-
 ## Security Documentation ##
 
 The `ctpu` tool focuses on user egonomics, and thus automatically selects
@@ -279,7 +171,9 @@ how to customize the security posture.
 
  - **Multiple Accounts**: `ctpu` cannot correctly handle if you use multiple
    Google accounts across different projects. (e.g. `alice@example.com` for work
-   and `alice@gmail.com` for personal development.)
+   and `alice@gmail.com` for personal development.) Instead, please use `ctpu`
+   in Google Cloud Shell where you will have a different shell environment for
+   each account.
  - **Name restrictions**: In order to prevent clashes, we require that all
    flock names are longer than 2 characters. If your username is 2 characters or
    less, you will have to manually set a flock name on the command line with the

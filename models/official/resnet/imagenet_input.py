@@ -140,7 +140,7 @@ class ImageNetInput(object):
       dataset = dataset.repeat()
 
     def fetch_dataset(filename):
-      buffer_size = 8 * 1024 * 1024     # 8 GB per file
+      buffer_size = 8 * 1024 * 1024     # 8 MiB per file
       dataset = tf.data.TFRecordDataset(filename, buffer_size=buffer_size)
       return dataset
 

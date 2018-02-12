@@ -84,7 +84,8 @@ ctpu quota
 and navigate to the resulting URL. You should ensure that you can allocate at
 least one Cloud TPU (measured in increments of 8 cores).
 
-If you do not have available quota, please request quota at <https://goo.gl/TODO>.
+If you do not have available quota, please request quota via the [Cloud TPU
+quota request form](https://services.google.com/fb/forms/cloud-tpu-beta-request/).
 
 Once you've confirmed you have at least 8 TPU cores of quota available in your
 preferred zone (`us-central1-c` by default), click "Continue" to launch your
@@ -280,9 +281,29 @@ to visualize and debug performance, or check to see if your model is
 TPU-compatible.
 
 You can refer back to this tutorial to see all the commands by opening it on
-[GitHub](https://github.com/tensorflow/tpu/blob/master/tools/ctpu/tutorial.md).
+[GitHub](https://github.com/tensorflow/tpu/blob/master/tools/ctpu/tutorial.md)
+or by executing in your Google Cloud shell:
 
-Finally, all the code used in this tutorial is open source. Check out the [TPU
-repository on GitHub](https://github.com/tensorflow/tpu) and the
-[TensorFlow models repository](https://github.com/tensorflow/models/) for
+```bash
+teachme ~/tpu/tools/ctpu/tutorial.md
+```
+
+All the code used in this tutorial is open source. Check out the
+[TPU](https://github.com/tensorflow/tpu),
+[TensorFlow](https://github.com/tensorflow/tensorflow), and
+[models](https://github.com/tensorflow/models) repositories for
 pre-processing scripts, and additional sample models.
+
+Finally, below is a "cheat sheet" for using Cloud TPUs:
+
+ - `ctpu status`: Prints the current status of your GCE VM and Cloud TPU.
+ - `ctpu up`: Get everything ready and logs in to your VM. You can run this
+   multiple times.
+ - `ctpu pause`: Turn off your GCE VM and Cloud TPU. Software installed, data
+   saved on your GCE VM disk, and data in GCS will persist.
+ - `ctpu delete`: Clean up all GCE resources (VM & Cloud TPU). Any software
+   installation or configuration and all data on your GCE VM will be deleted.
+   Data stored in GCS will persist.
+ - `ctpu`: Displays a summary of all available commands.
+ - `/usr/share/tpu`, `/usr/share/tensorflow`, `/usr/share/models`: copies of
+   scripts and tools for use with Cloud TPUs.
