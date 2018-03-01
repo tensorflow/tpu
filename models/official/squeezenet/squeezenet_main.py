@@ -65,7 +65,7 @@ tf.flags.DEFINE_integer("num_epochs", 150,
                         "Number of epochs of the training set to process.")
 tf.flags.DEFINE_integer("num_evals", 10,
                         "How many times to run an evaluation during training.")
-tf.flags.DEFINE_float("learning_rate", 0.04, "Learning rate.")
+tf.flags.DEFINE_float("learning_rate", 0.03, "Learning rate.")
 
 FLAGS = tf.flags.FLAGS
 
@@ -84,7 +84,7 @@ def main(argv):
   else:
     tpu_cluster_resolver = (
         tf.contrib.cluster_resolver.TPUClusterResolver(
-            tpu_names=[FLAGS.tpu_name],
+            FLAGS.tpu_name,
             zone=FLAGS.tpu_zone,
             project=FLAGS.gcp_project))
     tpu_grpc_url = tpu_cluster_resolver.get_master()

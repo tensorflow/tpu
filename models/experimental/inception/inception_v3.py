@@ -26,6 +26,7 @@ import tensorflow as tf
 import inception_preprocessing
 import vgg_preprocessing
 
+from tensorflow.contrib import summary
 from tensorflow.contrib.framework.python.ops import arg_scope
 from tensorflow.contrib.slim.nets import inception
 from tensorflow.contrib.tpu.python.tpu import tpu_config
@@ -119,10 +120,6 @@ tf.flags.DEFINE_float(
     'learning_rate', 0.165,
     'Learning rate.')
 
-tf.flags.DEFINE_float(
-    'depth_multiplier', 1.0,
-    'Depth Multiplier on Inception')
-
 tf.flags.DEFINE_string(
     'optimizer', 'RMS',
     'Optimizer (one of sgd, RMS, momentum)')
@@ -142,10 +139,6 @@ tf.flags.DEFINE_integer(
 tf.flags.DEFINE_bool(
     'transpose_enabled', False,
     'Boolean to enable/disable explicit I/O transpose')
-
-tf.flags.DEFINE_bool(
-    'use_fused_batchnorm', True,
-    'Enable fused batchrnom')
 
 tf.flags.DEFINE_bool(
     'log_device_placement', False,
@@ -182,16 +175,24 @@ tf.flags.DEFINE_integer(
     'Exponential decay epochs used in learning rate adjustment')
 
 tf.flags.DEFINE_bool(
-    'use_logits', True,
-    'Use logits if true, else use predictions')
-
-tf.flags.DEFINE_bool(
     'display_tensors', False,
     'Whether to dump prediction tensors for comparison')
 
 tf.flags.DEFINE_bool(
     'clear_update_collections', True,
     'Set batchnorm update_collections to None if true, else use default value')
+
+tf.flags.DEFINE_integer(
+    'cold_epochs', 2,
+    'Number of epochs using cold learning rate')
+
+tf.flags.DEFINE_integer(
+    'warmup_epochs', 7,
+    'Number of epochs using linearly increasing learning rate')
+
+tf.flags.DEFINE_bool(
+    'use_learning_rate_warmup', False,
+    'Apply learning rate warmup if true')
 
 # Dataset specific paramenters
 tf.flags.DEFINE_bool(
@@ -411,7 +412,7 @@ def tensor_transform_fn(data, perm):
 
   Args:
     data: Tensor to be transposed
-    perm: Permutation of the dimensions of a
+    perm: New ordering of dimensions
 
   Returns:
     Transposed tensor
@@ -424,9 +425,8 @@ def tensor_transform_fn(data, perm):
 def inception_model_fn(features, labels, mode, params):
   """Inception v3 model using Estimator API."""
   num_classes = FLAGS.num_classes
-  training_active = (mode == tf.estimator.ModeKeys.TRAIN)
-  eval_active = (mode == tf.estimator.ModeKeys.EVAL)
-
+  is_training = (mode == tf.estimator.ModeKeys.TRAIN)
+  is_eval = (mode == tf.estimator.ModeKeys.EVAL)
   features = tensor_transform_fn(features, params['input_perm'])
 
   if FLAGS.clear_update_collections:
@@ -434,23 +434,19 @@ def inception_model_fn(features, labels, mode, params):
     with arg_scope(inception.inception_v3_arg_scope(
         batch_norm_decay=BATCH_NORM_DECAY,
         batch_norm_epsilon=BATCH_NORM_EPSILON,
-        updates_collections=None,
-        use_fused_batchnorm=FLAGS.use_fused_batchnorm)):
+        updates_collections=None)):
       logits, end_points = inception.inception_v3(
           features,
           num_classes,
-          is_training=training_active,
-          depth_multiplier=FLAGS.depth_multiplier)
+          is_training=is_training)
   else:
     with arg_scope(inception.inception_v3_arg_scope(
         batch_norm_decay=BATCH_NORM_DECAY,
-        batch_norm_epsilon=BATCH_NORM_EPSILON,
-        use_fused_batchnorm=FLAGS.use_fused_batchnorm)):
+        batch_norm_epsilon=BATCH_NORM_EPSILON)):
       logits, end_points = inception.inception_v3(
           features,
           num_classes,
-          is_training=training_active,
-          depth_multiplier=FLAGS.depth_multiplier)
+          is_training=is_training)
 
   predictions = end_points
   predictions.update({
@@ -490,19 +486,48 @@ def inception_model_fn(features, labels, mode, params):
   loss = tf.losses.get_total_loss(add_regularization_losses=True)
 
   initial_learning_rate = FLAGS.learning_rate * FLAGS.train_batch_size / 256
+  if FLAGS.use_learning_rate_warmup:
+    # Adjust initial learning rate to match final warmup rate
+    warmup_decay = FLAGS.learning_rate_decay**(
+        (FLAGS.warmup_epochs + FLAGS.cold_epochs) /
+        FLAGS.learning_rate_decay_epochs)
+    adj_initial_learning_rate = initial_learning_rate * warmup_decay
+
   final_learning_rate = 0.0001 * initial_learning_rate
 
+  host_call = None
   train_op = None
-  if training_active:
-    batches_per_epoch = _NUM_TRAIN_IMAGES // FLAGS.train_batch_size
+  if is_training:
+    batches_per_epoch = _NUM_TRAIN_IMAGES / FLAGS.train_batch_size
     global_step = tf.train.get_or_create_global_step()
+    current_epoch = tf.cast(
+        (tf.cast(global_step, tf.float32) / batches_per_epoch), tf.int32)
 
     learning_rate = tf.train.exponential_decay(
         learning_rate=initial_learning_rate,
         global_step=global_step,
-        decay_steps=FLAGS.learning_rate_decay_epochs * batches_per_epoch,
+        decay_steps=int(FLAGS.learning_rate_decay_epochs * batches_per_epoch),
         decay_rate=FLAGS.learning_rate_decay,
         staircase=True)
+
+    if FLAGS.use_learning_rate_warmup:
+      wlr = 0.1 * adj_initial_learning_rate
+      wlr_height = tf.cast(
+          0.9 * adj_initial_learning_rate /
+          (FLAGS.warmup_epochs + FLAGS.learning_rate_decay_epochs - 1),
+          tf.float32)
+      epoch_offset = tf.cast(FLAGS.cold_epochs - 1, tf.int32)
+      exp_decay_start = (FLAGS.warmup_epochs + FLAGS.cold_epochs +
+                         FLAGS.learning_rate_decay_epochs)
+      lin_inc_lr = tf.add(
+          wlr, tf.multiply(
+              tf.cast(tf.subtract(current_epoch, epoch_offset), tf.float32),
+              wlr_height))
+      learning_rate = tf.where(
+          tf.greater_equal(current_epoch, FLAGS.cold_epochs),
+          (tf.where(tf.greater_equal(current_epoch, exp_decay_start),
+                    learning_rate, lin_inc_lr)),
+          wlr)
 
     # Set a minimum boundary for the learning rate.
     learning_rate = tf.maximum(
@@ -535,31 +560,96 @@ def inception_model_fn(features, labels, mode, params):
     if FLAGS.moving_average:
       ema = tf.train.ExponentialMovingAverage(
           decay=MOVING_AVERAGE_DECAY, num_updates=global_step)
-      variables_to_average = (tf.trainable_variables() +
-                              tf.moving_average_variables())
+      variables_to_average = (
+          tf.trainable_variables() + tf.moving_average_variables())
       with tf.control_dependencies([train_op]), tf.name_scope('moving_average'):
         train_op = ema.apply(variables_to_average)
 
+    # To log the loss, current learning rate, and epoch for Tensorboard, the
+    # summary op needs to be run on the host CPU via host_call. host_call
+    # expects [batch_size, ...] Tensors, thus reshape to introduce a batch
+    # dimension. These Tensors are implicitly concatenated to
+    # [params['batch_size']].
+    gs_t = tf.reshape(global_step, [1])
+    loss_t = tf.reshape(loss, [1])
+    lr_t = tf.reshape(learning_rate, [1])
+    ce_t = tf.reshape(current_epoch, [1])
+
+    def host_call_fn(gs, loss, lr, ce):
+      """Training host call. Creates scalar summaries for training metrics.
+
+      This function is executed on the CPU and should not directly reference
+      any Tensors in the rest of the `model_fn`. To pass Tensors from the model
+      to the `metric_fn`, provide as part of the `host_call`. See
+      https://www.tensorflow.org/api_docs/python/tf/contrib/tpu/TPUEstimatorSpec
+      for more information.
+
+      Arguments should match the list of `Tensor` objects passed as the second
+      element in the tuple passed to `host_call`.
+
+      Args:
+        gs: `Tensor with shape `[batch]` for the global_step
+        loss: `Tensor` with shape `[batch]` for the training loss.
+        lr: `Tensor` with shape `[batch]` for the learning_rate.
+        ce: `Tensor` with shape `[batch]` for the current_epoch.
+
+      Returns:
+        List of summary ops to run on the CPU host.
+      """
+      gs = gs[0]
+      with summary.create_file_writer(FLAGS.model_dir).as_default():
+        with summary.always_record_summaries():
+          summary.scalar('loss', tf.reduce_mean(loss), step=gs)
+          summary.scalar('learning_rate', tf.reduce_mean(lr), step=gs)
+          summary.scalar('current_epoch', tf.reduce_mean(ce), step=gs)
+
+          return summary.all_summary_ops()
+
+    host_call = (host_call_fn, [gs_t, loss_t, lr_t, ce_t])
+
   eval_metrics = None
-  if eval_active:
-    def metric_fn(labels, predictions):
-      accuracy = tf.metrics.accuracy(labels, tf.argmax(
-          input=predictions, axis=1))
-      return {'accuracy': accuracy}
+  if is_eval:
+    def metric_fn(labels, logits):
+      """Evaluation metric function. Evaluates accuracy.
 
-    if FLAGS.use_logits:
-      eval_predictions = logits
-    else:
-      eval_predictions = end_points['Predictions']
+      This function is executed on the CPU and should not directly reference
+      any Tensors in the rest of the `model_fn`. To pass Tensors from the model
+      to the `metric_fn`, provide as part of the `eval_metrics`. See
+      https://www.tensorflow.org/api_docs/python/tf/contrib/tpu/TPUEstimatorSpec
+      for more information.
 
-    eval_metrics = (metric_fn, [labels, eval_predictions])
+      Arguments should match the list of `Tensor` objects passed as the second
+      element in the tuple passed to `eval_metrics`.
+
+      Args:
+        labels: `Tensor` with shape `[batch, ]`.
+        logits: `Tensor` with shape `[batch, num_classes]`.
+
+      Returns:
+        A dict of the metrics to return from evaluation.
+      """
+      predictions = tf.argmax(logits, axis=1)
+      top_1_accuracy = tf.metrics.accuracy(labels, predictions)
+      in_top_5 = tf.cast(tf.nn.in_top_k(logits, labels, 5), tf.float32)
+      top_5_accuracy = tf.metrics.mean(in_top_5)
+
+      return {
+          'accuracy': top_1_accuracy,
+          'accuracy@5': top_5_accuracy,
+      }
+
+    eval_metrics = (metric_fn, [labels, logits])
 
   return tpu_estimator.TPUEstimatorSpec(
-      mode=mode, loss=loss, train_op=train_op, eval_metrics=eval_metrics)
+      mode=mode,
+      loss=loss,
+      train_op=train_op,
+      host_call=host_call,
+      eval_metrics=eval_metrics)
 
 
 class LoadEMAHook(tf.train.SessionRunHook):
-  """Hook to load EMA into their corresponding variables."""
+  """Hook to load exponential moving averages into corresponding variables."""
 
   def __init__(self, model_dir):
     super(LoadEMAHook, self).__init__()
@@ -590,7 +680,7 @@ def main(unused_argv):
   else:
     tpu_cluster_resolver = (
         tf.contrib.cluster_resolver.TPUClusterResolver(
-            tpu_names=[FLAGS.tpu_name],
+            FLAGS.tpu_name,
             zone=FLAGS.tpu_zone,
             project=FLAGS.gcp_project))
     tpu_grpc_url = tpu_cluster_resolver.get_master()
@@ -618,8 +708,8 @@ def main(unused_argv):
   eval_batch_size = (None if FLAGS.mode == 'train' else
                      FLAGS.eval_batch_size)
 
-  per_host_input_for_training = (FLAGS.num_shards <= 8 if
-                                 FLAGS.mode == 'train' else True)
+  per_host_input_for_training = (
+      FLAGS.num_shards <= 8 if FLAGS.mode == 'train' else True)
 
   run_config = tpu_config.RunConfig(
       master=tpu_grpc_url,

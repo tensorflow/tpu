@@ -38,11 +38,16 @@ from tensorflow.contrib.tpu.python.tpu import tpu_optimizer
 
 # A collection of Learning Rate schecules:
 # third_party/tensorflow_models/object_detection/utils/learning_schedules.py
-def _learning_rate_schedule(base_learning_rate, lr_warmup_step, lr_drop_step,
-                            global_step):
+def _learning_rate_schedule(base_learning_rate, lr_warmup_init, lr_warmup_step,
+                            lr_drop_step, global_step):
   """Handles linear scaling rule, gradual warmup, and LR decay."""
-  linear_warmup = [(1.0/3.0 + float(step)/lr_warmup_step * 2.0/3.0, step)
-                   for step in range(lr_warmup_step)]
+  # lr_warmup_init is the starting learning rate; the learning rate is linearly
+  # scaled up to the full learning rate after `lr_warmup_steps` before decaying.
+  lr_warmup_remainder = 1.0 - lr_warmup_init
+  linear_warmup = [
+      (lr_warmup_init + lr_warmup_remainder * (float(step) / lr_warmup_step),
+       step) for step in range(0, lr_warmup_step, max(1, lr_warmup_step // 100))
+  ]
   lr_schedule = linear_warmup + [[1.0, lr_warmup_step], [0.1, lr_drop_step]]
   learning_rate = base_learning_rate
   for mult, start_global_step in lr_schedule:
@@ -216,9 +221,9 @@ def _model_fn(features, labels, mode, params, model):
 
   # Set up training loss and learning rate.
   global_step = tf.train.get_global_step()
-  learning_rate = _learning_rate_schedule(params['learning_rate'],
-                                          params['lr_warmup_step'],
-                                          params['lr_drop_step'], global_step)
+  learning_rate = _learning_rate_schedule(
+      params['learning_rate'], params['lr_warmup_init'],
+      params['lr_warmup_step'], params['lr_drop_step'], global_step)
   # cls_loss and box_loss are for logging. only total_loss is optimized.
   total_loss, cls_loss, box_loss = _detection_loss(cls_outputs, box_outputs,
                                                    labels, params)
@@ -322,6 +327,7 @@ def default_hparams():
       # optimization
       momentum=0.9,
       learning_rate=0.04,
+      lr_warmup_init=0.2,
       lr_warmup_step=2000,
       lr_drop_step=15000,
       # classification loss
