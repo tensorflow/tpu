@@ -164,6 +164,47 @@ def learning_rate_schedule(current_epoch):
   return decay_rate
 
 
+def get_custom_getter():
+  """Returns a custom getter that this class's methods must be called under.
+
+  All methods of this class must be called under a variable scope that was
+  passed this custom getter. Example:
+
+  ```python
+  network = ConvNetBuilder(...)
+  with tf.variable_scope('cg', custom_getter=network.get_custom_getter()):
+    network.conv(...)
+    # Call more methods of network here
+  ```
+
+  Currently, this custom getter only does anything if self.use_tf_layers is
+  True. In that case, it causes variables to be stored as dtype
+  self.variable_type, then casted to the requested dtype, instead of directly
+  storing the variable as the requested dtype.
+  """
+
+  def inner_custom_getter(getter, *args, **kwargs):
+    """Custom getter that forces variables to have type self.variable_type."""
+    cast_to_bfloat16 = False
+    requested_dtype = kwargs['dtype']
+    if requested_dtype == tf.bfloat16:
+      # Only change the variable dtype if doing so does not decrease variable
+      # precision.
+      kwargs['dtype'] = tf.float32
+      cast_to_bfloat16 = True
+    var = getter(*args, **kwargs)
+    # This if statement is needed to guard the cast, because batch norm
+    # assigns directly to the return value of this custom getter. The cast
+    # makes the return value not a variable so it cannot be assigned. Batch
+    # norm variables are always in fp32 so this if statement is never
+    # triggered for them.
+    if cast_to_bfloat16:
+      var = tf.cast(var, tf.bfloat16)
+    return var
+
+  return inner_custom_getter
+
+
 def resnet_model_fn(features, labels, mode, params):
   """The model_fn for ResNet to be used with TPUEstimator.
 
@@ -188,13 +229,16 @@ def resnet_model_fn(features, labels, mode, params):
   if FLAGS.data_format == 'channels_first':
     features = tf.transpose(features, [0, 3, 1, 2])
 
-  network = resnet_model.resnet_v1(
-      resnet_depth=FLAGS.resnet_depth,
-      num_classes=LABEL_CLASSES,
-      data_format=FLAGS.data_format)
+  with tf.variable_scope('cg', custom_getter=get_custom_getter()):
+    network = resnet_model.resnet_v1(
+        resnet_depth=FLAGS.resnet_depth,
+        num_classes=LABEL_CLASSES,
+        data_format=FLAGS.data_format)
 
-  logits = network(
-      inputs=features, is_training=(mode == tf.estimator.ModeKeys.TRAIN))
+    logits = network(
+        inputs=features, is_training=(mode == tf.estimator.ModeKeys.TRAIN))
+
+    logits = tf.cast(logits, tf.float32)
 
   if mode == tf.estimator.ModeKeys.PREDICT:
     predictions = {
@@ -248,9 +292,9 @@ def resnet_model_fn(features, labels, mode, params):
     # To log the loss, current learning rate, and epoch for Tensorboard, the
     # summary op needs to be run on the host CPU via host_call. host_call
     # expects [batch_size, ...] Tensors, thus reshape to introduce a batch
-    # dimension. These Tensors are implicitly concatenated to
-    # [params['batch_size']].
-    gs_t = tf.reshape(global_step, [1])
+    # dimension. These Tensors are implicitly broadcasted to
+    # [params['batch_size'], ].
+    gs_t = tf.reshape(tf.cast(global_step, tf.int32), [1])
     loss_t = tf.reshape(loss, [1])
     lr_t = tf.reshape(learning_rate, [1])
     ce_t = tf.reshape(current_epoch, [1])
@@ -268,15 +312,16 @@ def resnet_model_fn(features, labels, mode, params):
       element in the tuple passed to `host_call`.
 
       Args:
-        gs: `Tensor with shape `[batch]` for the global_step
-        loss: `Tensor` with shape `[batch]` for the training loss.
-        lr: `Tensor` with shape `[batch]` for the learning_rate.
-        ce: `Tensor` with shape `[batch]` for the current_epoch.
+        gs: `Tensor with shape `[batch, ]` for the global_step
+        loss: `Tensor` with shape `[batch, ]` for the training loss.
+        lr: `Tensor` with shape `[batch, ]` for the learning_rate.
+        ce: `Tensor` with shape `[batch, ]` for the current_epoch.
 
       Returns:
         List of summary ops to run on the CPU host.
       """
-      gs = gs[0]
+      # Outfeed supports int32 but global_step is expected to be int64.
+      gs = tf.cast(tf.reduce_mean(gs), tf.int64)
       with summary.create_file_writer(FLAGS.model_dir).as_default():
         with summary.always_record_summaries():
           summary.scalar('loss', tf.reduce_mean(loss), step=gs)

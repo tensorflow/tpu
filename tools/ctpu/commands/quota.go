@@ -53,7 +53,8 @@ func (quotaCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...interf
 		return subcommands.ExitFailure
 	}
 
-	fmt.Printf("Quotas cannot currently be displayed within ctpu. To view your quota, open:\n\thttps://console.cloud.google.com/iam-admin/quotas?project=%s&service=tpu.googleapis.com\n", libs.cfg.Project())
+	fmt.Printf("Quotas cannot currently be displayed within ctpu. To view your quota, open:\n\thttps://console.cloud.google.com/iam-admin/quotas?project=%s&service=tpu.googleapis.com\n\n", libs.cfg.Project())
+	fmt.Printf("Request additional quota from:\n\thttps://services.google.com/fb/forms/cloud-tpu-beta-request/\n")
 
 	return subcommands.ExitSuccess
 }
