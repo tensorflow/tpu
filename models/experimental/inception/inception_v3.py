@@ -335,6 +335,52 @@ class InputPipeline(object):
 
     return image, label
 
+  def dataset_iterator(self, batch_size, shuffle):
+    """Constructs a real-data iterator over batches for train or eval.
+
+    Args:
+      batch_size: The effective batch size.
+      shuffle: Whether or not to shuffle the data.
+
+    Returns:
+      A tf.data iterator.
+    """
+    file_pattern = os.path.join(self.data_dir, 'train-*'
+                                if self.is_training else 'validation-*')
+    dataset = tf.data.Dataset.list_files(file_pattern)
+
+    # the set of operations that follow are based on guidelines
+    # discussed in new pipeline best usage presentation.
+    if shuffle and FLAGS.initial_shuffle_buffer_size > 0:
+      dataset = dataset.shuffle(buffer_size=FLAGS.initial_shuffle_buffer_size)
+
+    if self.is_training:
+      dataset = dataset.repeat()
+
+    def prefetch_dataset(filename):
+      dataset = tf.data.TFRecordDataset(
+          filename, buffer_size=FLAGS.prefetch_dataset_buffer_size)
+      return dataset
+
+    dataset = dataset.apply(
+        tf.contrib.data.parallel_interleave(
+            prefetch_dataset, cycle_length=FLAGS.num_files_infeed, sloppy=True))
+
+    if shuffle and FLAGS.followup_shuffle_buffer_size > 0:
+      dataset = dataset.shuffle(buffer_size=FLAGS.followup_shuffle_buffer_size)
+
+    dataset = dataset.map(
+        self.dataset_parser, num_parallel_calls=FLAGS.num_parallel_calls)
+
+    dataset = dataset.prefetch(batch_size)
+
+    dataset = dataset.apply(
+        tf.contrib.data.batch_and_drop_remainder(batch_size))
+
+    dataset = dataset.prefetch(2)  # Prefetch overlaps in-feed with training
+
+    return dataset.make_one_shot_iterator()
+
   def input_fn(self, params):
     """Input function which provides a single batch for train or eval.
 
@@ -349,46 +395,8 @@ class InputPipeline(object):
     batch_size = params['batch_size']
 
     if FLAGS.use_data == 'real':
-      file_pattern = os.path.join(
-          self.data_dir, 'train-*' if self.is_training else 'validation-*')
-      dataset = tf.data.Dataset.list_files(file_pattern)
-
-      # the set of operations that follow are based on guidelines
-      # discussed in new pipeline best usage presentation.
-      if self.is_training and FLAGS.initial_shuffle_buffer_size > 0:
-        dataset = dataset.shuffle(
-            buffer_size=FLAGS.initial_shuffle_buffer_size)
-
-      if self.is_training:
-        dataset = dataset.repeat()
-
-      def prefetch_dataset(filename):
-        dataset = tf.data.TFRecordDataset(
-            filename, buffer_size=FLAGS.prefetch_dataset_buffer_size)
-        return dataset
-
-      dataset = dataset.apply(
-          tf.contrib.data.parallel_interleave(
-              prefetch_dataset,
-              cycle_length=FLAGS.num_files_infeed,
-              sloppy=True))
-
-      if FLAGS.followup_shuffle_buffer_size > 0:
-        dataset = dataset.shuffle(
-            buffer_size=FLAGS.followup_shuffle_buffer_size)
-
-      dataset = dataset.map(
-          self.dataset_parser,
-          num_parallel_calls=FLAGS.num_parallel_calls)
-
-      dataset = dataset.prefetch(batch_size)
-
-      dataset = dataset.apply(
-          tf.contrib.data.batch_and_drop_remainder(batch_size))
-
-      dataset = dataset.prefetch(2)  # Prefetch overlaps in-feed with training
-
-      images, labels = dataset.make_one_shot_iterator().get_next()
+      images, labels = self.dataset_iterator(batch_size,
+                                             self.is_training).get_next()
     else:
       images = tf.random_uniform(
           [batch_size, FLAGS.height, FLAGS.width, 3], minval=-1, maxval=1)

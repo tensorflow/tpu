@@ -51,8 +51,9 @@ def parser(serialized_example):
 class InputFunction(object):
   """Wrapper class that is passed as callable to Estimator."""
 
-  def __init__(self, is_training):
+  def __init__(self, is_training, noise_dim):
     self.is_training = is_training
+    self.noise_dim = noise_dim
     self.data_file = (FLAGS.cifar_train_data_file if is_training
                       else FLAGS.cifar_test_data_file)
 
@@ -64,11 +65,18 @@ class InputFunction(object):
     dataset = dataset.apply(
         tf.contrib.data.batch_and_drop_remainder(batch_size))
     dataset = dataset.prefetch(2)
-    images, _ = dataset.make_one_shot_iterator().get_next()
+    images, labels = dataset.make_one_shot_iterator().get_next()
 
     # Reshape to give inputs statically known shapes.
-    # Label is unused by unconditional GAN models
-    return tf.reshape(images, [batch_size, 32, 32, 3]), None
+    images = tf.reshape(images, [batch_size, 32, 32, 3])
+
+    random_noise = tf.random_normal([batch_size, self.noise_dim])
+
+    features = {
+        'real_images': images,
+        'random_noise': random_noise}
+
+    return features, labels
 
 
 def convert_array_to_image(array):
