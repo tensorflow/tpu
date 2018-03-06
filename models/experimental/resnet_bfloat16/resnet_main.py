@@ -18,6 +18,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import csv
 import time
 
 import absl.logging as _logging  # pylint: disable=unused-import
@@ -100,12 +101,16 @@ tf.flags.DEFINE_integer(
           ' after finishing the entire training regime).'))
 
 tf.flags.DEFINE_integer(
-    'iterations_per_loop', default=100,
+    'iterations_per_loop', default=1500,
     help=('Number of steps to run on TPU before outfeeding metrics to the CPU.'
           ' If the number of iterations in the loop would exceed the number of'
           ' train steps, the loop will exit before reaching'
           ' --iterations_per_loop. The larger this value is, the higher the'
           ' utilization on the TPU.'))
+
+tf.flags.DEFINE_integer(
+    'num_parallel_calls', default=64,
+    help=('Number of parallel threads in CPU for the input pipeline'))
 
 tf.flags.DEFINE_integer(
     'num_cores', default=8,
@@ -123,6 +128,7 @@ tf.flags.DEFINE_string(
     'export_dir',
     default=None,
     help=('The directory where the exported SavedModel will be stored.'))
+
 
 # Dataset constants
 LABEL_CLASSES = 1000
@@ -402,6 +408,7 @@ def main(unused_argv):
       master=tpu_grpc_url,
       evaluation_master=tpu_grpc_url,
       model_dir=FLAGS.model_dir,
+      keep_checkpoint_max=None,
       tpu_config=tpu_config.TPUConfig(
           iterations_per_loop=FLAGS.iterations_per_loop,
           num_shards=FLAGS.num_cores))
@@ -417,30 +424,26 @@ def main(unused_argv):
   # preprocessing) between training and evaluation.
   imagenet_train = imagenet_input.ImageNetInput(
       is_training=True,
-      data_dir=FLAGS.data_dir)
+      data_dir=FLAGS.data_dir,
+      num_parallel_calls=FLAGS.num_parallel_calls)
   imagenet_eval = imagenet_input.ImageNetInput(
       is_training=False,
-      data_dir=FLAGS.data_dir)
+      data_dir=FLAGS.data_dir,
+      num_parallel_calls=FLAGS.num_parallel_calls)
 
   current_step = estimator._load_global_step_from_checkpoint_dir(FLAGS.model_dir)  # pylint: disable=protected-access,line-too-long
-  batches_per_epoch = NUM_TRAIN_IMAGES / FLAGS.train_batch_size
-  tf.logging.info('Training for %d steps (%.2f epochs in total). Current'
-                  ' step %d.' % (FLAGS.train_steps,
-                                 FLAGS.train_steps / batches_per_epoch,
-                                 current_step))
+  batches_per_epoch = NUM_TRAIN_IMAGES // FLAGS.train_batch_size
   start_timestamp = time.time()
-  while current_step < FLAGS.train_steps:
-    # Train for up to steps_per_eval number of steps. At the end of training, a
-    # checkpoint will be written to --model_dir.
-    next_checkpoint = min(current_step + FLAGS.steps_per_eval,
-                          FLAGS.train_steps)
+  current_epoch = current_step // FLAGS.train_batch_size
+  results = []
+  while current_epoch < 95:
+    next_checkpoint = (current_epoch + 1) * batches_per_epoch
     resnet_classifier.train(
         input_fn=imagenet_train.input_fn, max_steps=next_checkpoint)
-    current_step = next_checkpoint
+    current_epoch += 1
 
-    elapsed_time = int(time.time() - start_timestamp)
     tf.logging.info('Finished training up to step %d. Elapsed seconds %d.' %
-                    (current_step, elapsed_time))
+                    (next_checkpoint, int(time.time() - start_timestamp)))
 
     # Evaluate the model on the most recent model in --model_dir.
     # Since evaluation happens in batches of --eval_batch_size, some images may
@@ -451,6 +454,21 @@ def main(unused_argv):
         input_fn=imagenet_eval.input_fn,
         steps=NUM_EVAL_IMAGES // FLAGS.eval_batch_size)
     tf.logging.info('Eval results: %s' % eval_results)
+
+    elapsed_time = int(time.time() - start_timestamp)
+    tf.logging.info('Finished epoch %s at %s time' % (
+        current_epoch, elapsed_time))
+    results.append([
+        current_epoch,
+        elapsed_time / 3600.0,
+        '{0:.2f}'.format(eval_results['Top-1 accuracy']*100),
+        '{0:.2f}'.format(eval_results['Top-5 accuracy']*100),
+    ])
+
+  with tf.gfile.GFile(FLAGS.model_dir + '/epoch_results.tsv', 'wb') as tsv_file:
+    writer = csv.writer(tsv_file, delimiter='\t')
+    writer.writerow(['epoch', 'hours', 'top1Accuracy', 'top5Accuracy'])
+    writer.writerows(results)
 
   if FLAGS.export_dir is not None:
     # The guide to serve a exported TensorFlow model is at:

@@ -68,11 +68,12 @@ class ImageNetInput(object):
     num_cores: `int` for the number of TPU cores
   """
 
-  def __init__(self, is_training, data_dir, num_cores=8):
+  def __init__(self, is_training, data_dir, num_cores=8, num_parallel_calls=64):
     self.image_preprocessing_fn = resnet_preprocessing.preprocess_image
     self.is_training = is_training
     self.data_dir = data_dir
     self.num_cores = num_cores
+    self.num_parallel_calls = num_parallel_calls
 
   def dataset_parser(self, value):
     """Parse an ImageNet record from a serialized string Tensor."""
@@ -152,7 +153,7 @@ class ImageNetInput(object):
 
     dataset = dataset.map(
         self.dataset_parser,
-        num_parallel_calls=64)
+        num_parallel_calls=self.num_parallel_calls)
     dataset = dataset.prefetch(batch_size)
 
     # For training, batch as usual. When evaluating, prevent accidentally
