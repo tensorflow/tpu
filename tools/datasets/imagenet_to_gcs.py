@@ -47,6 +47,7 @@ the format:
 
 import math
 import os
+import random
 import tarfile
 import urllib
 
@@ -357,6 +358,14 @@ def _process_dataset(filenames, synsets, labels, output_directory, prefix,
 def convert_to_tf_records(raw_data_dir):
   """Convert the Imagenet dataset into TF-Record dumps."""
 
+  # Shuffle training/validation records to ensure we are distributing classes
+  # across the batches.
+  random.seed(0)
+  def make_shuffle_idx(n):
+    order = range(n)
+    random.shuffle(order)
+    return order
+
   # Glob all the training files
   training_files = tf.gfile.Glob(
       os.path.join(raw_data_dir, TRAINING_DIRECTORY, '*', '*.JPEG'))
@@ -365,6 +374,10 @@ def convert_to_tf_records(raw_data_dir):
   training_synsets = [
       os.path.basename(os.path.dirname(f)) for f in training_files]
 
+  training_shuffle_idx = make_shuffle_idx(len(training_files))
+  training_files = [training_files[i] for i in training_shuffle_idx]
+  training_synsets = [training_synsets[i] for i in training_shuffle_idx]
+
   # Glob all the validation files
   validation_files = tf.gfile.Glob(
       os.path.join(raw_data_dir, VALIDATION_DIRECTORY, '*.JPEG'))
@@ -372,6 +385,10 @@ def convert_to_tf_records(raw_data_dir):
   # Get validation file synset labels from labels.txt
   validation_synsets = tf.gfile.FastGFile(
       os.path.join(raw_data_dir, LABELS_FILE), 'r').read().splitlines()
+
+  validation_shuffle_idx = make_shuffle_idx(len(validation_files))
+  validation_files = [validation_files[i] for i in validation_shuffle_idx]
+  validation_synsets = [validation_synsets[i] for i in validation_shuffle_idx]
 
   # Create unique ids for all synsets
   labels = {v: k + 1 for k, v in enumerate(
