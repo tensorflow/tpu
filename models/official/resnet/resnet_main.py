@@ -345,7 +345,7 @@ def main(unused_argv):
     else:
       tpu_cluster_resolver = (
           tf.contrib.cluster_resolver.TPUClusterResolver(
-              FLAGS.tpu_name,
+              [FLAGS.tpu_name],
               zone=FLAGS.tpu_zone,
               project=FLAGS.gcp_project))
       tpu_grpc_url = tpu_cluster_resolver.get_master()
