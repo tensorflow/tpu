@@ -129,3 +129,37 @@ func TestFlagConfigProject(t *testing.T) {
 		t.Errorf("f.Project() = '%s', want: 'my-other-tpu-project'", f.Project())
 	}
 }
+
+func TestCheckFlockName(t *testing.T) {
+	testcases := []struct {
+		name    string
+		wantErr bool
+	}{{
+		name:    "goodname",
+		wantErr: false,
+	}, {
+		name:    "good-name",
+		wantErr: false,
+	}, {
+		name:    "bad_name",
+		wantErr: true,
+	}, {
+		name:    "also-bad_",
+		wantErr: true,
+	}, {
+		name:    "_veryBad",
+		wantErr: true,
+	}}
+
+	for _, test := range testcases {
+		err := checkFlockName(test.name)
+		gotErr := (err != nil)
+		if gotErr != test.wantErr {
+			want := "<nil>"
+			if test.wantErr {
+				want = "<an error>"
+			}
+			t.Errorf("checkFlockName(%q) = %#v, want: %s", test.name, err, want)
+		}
+	}
+}
