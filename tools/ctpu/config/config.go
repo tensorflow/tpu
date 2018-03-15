@@ -18,6 +18,7 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"os/user"
 	"regexp"
@@ -71,7 +72,8 @@ func RegisterFlags() {
 }
 
 // Validation regular expression.
-var usernameRegex = regexp.MustCompile("^[A-z0-9._-]+")
+var usernameRegex = regexp.MustCompile("^([A-z0-9-_]+)")
+var flocknameRegex = regexp.MustCompile("^[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?$")
 
 // NewConfig constructs a Config object from the environment.
 func NewConfig() (Config, error) {
@@ -111,6 +113,9 @@ func (f *flagOverrideConfig) validate() error {
 	if len(f.FlockName()) == 0 {
 		return errors.New("no flock name specified, please set one on the command line --name=NAME")
 	}
+	if err := checkFlockName(f.FlockName()); err != nil {
+		return err
+	}
 	if len(f.Project()) == 0 {
 		return errors.New("no project specified, please set one on the command line --project $PROJECT_NAME")
 	}
@@ -132,13 +137,26 @@ func computeFlockName(e *envConfig) (flockName string, err error) {
 			}
 			flockName = curUser.Username
 		} else {
-			flockName = usernameRegex.FindString(e.account)
+			log.Printf("WAHOO HERE! %q\n", e.account)
+			submatches := usernameRegex.FindStringSubmatch(e.account)
+			if len(submatches) != 2 {
+				return "", fmt.Errorf("could not determine a flock name based on the current user account (%q)", e.account)
+			}
+			log.Printf("SUBMATCHES: %#v", submatches)
+			flockName = submatches[1]
 		}
 	}
 	if len(flockName) < 2 {
 		return "", errors.New("could not compute a name for your cluster; please specify one using the --name parameter on the command line")
 	}
 	return
+}
+
+func checkFlockName(name string) error {
+	if !flocknameRegex.MatchString(name) {
+		return fmt.Errorf("flock name %q is not a valid flock name (must match regex: %q)", name, flocknameRegex.String())
+	}
+	return nil
 }
 
 func (f *flagOverrideConfig) ActiveConfiguration() string {
