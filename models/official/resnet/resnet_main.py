@@ -250,7 +250,7 @@ def resnet_model_fn(features, labels, mode, params):
     # expects [batch_size, ...] Tensors, thus reshape to introduce a batch
     # dimension. These Tensors are implicitly concatenated to
     # [params['batch_size']].
-    gs_t = tf.reshape(global_step, [1])
+    gs_t = tf.reshape(tf.cast(global_step, tf.int32), [1])
     loss_t = tf.reshape(loss, [1])
     lr_t = tf.reshape(learning_rate, [1])
     ce_t = tf.reshape(current_epoch, [1])
@@ -276,6 +276,7 @@ def resnet_model_fn(features, labels, mode, params):
       Returns:
         List of summary ops to run on the CPU host.
       """
+      gs = tf.cast(gs, tf.int64)
       gs = gs[0]
       with summary.create_file_writer(FLAGS.model_dir).as_default():
         with summary.always_record_summaries():
@@ -345,7 +346,7 @@ def main(unused_argv):
     else:
       tpu_cluster_resolver = (
           tf.contrib.cluster_resolver.TPUClusterResolver(
-              FLAGS.tpu_name,
+              [FLAGS.tpu_name],
               zone=FLAGS.tpu_zone,
               project=FLAGS.gcp_project))
       tpu_grpc_url = tpu_cluster_resolver.get_master()
