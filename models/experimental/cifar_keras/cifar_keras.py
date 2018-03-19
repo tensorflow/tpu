@@ -18,6 +18,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from absl import flags
 import absl.logging as _logging  # pylint: disable=unused-import
 import tensorflow as tf
 
@@ -26,42 +27,42 @@ from tensorflow.contrib.tpu.python.tpu import tpu_estimator
 from tensorflow.contrib.tpu.python.tpu import tpu_optimizer
 
 # Cloud TPU Cluster Resolvers
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     "gcp_project", default=None,
     help="Project name for the Cloud TPU-enabled project. If not specified, we "
     "will attempt to automatically detect the GCE project from metadata.")
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     "tpu_zone", default=None,
     help="GCE zone where the Cloud TPU is located in. If not specified, we "
     "will attempt to automatically detect the GCE project from metadata.")
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     "tpu_name", default=None,
     help="Name of the Cloud TPU for Cluster Resolvers. You must specify either "
     "this flag or --master.")
 
 # Model specific paramenters
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     "master", default=None,
     help="GRPC URL of the master (e.g. grpc://ip.address.of.tpu:8470). You "
     "must specify either this flag or --tpu_name.")
 
-tf.flags.DEFINE_integer("batch_size", 128,
-                        "Mini-batch size for the computation. Note that this "
-                        "is the global batch size and not the per-shard batch.")
-tf.flags.DEFINE_float("learning_rate", 0.05, "Learning rate.")
-tf.flags.DEFINE_string("train_file", "", "Path to cifar10 training data.")
-tf.flags.DEFINE_integer("train_steps", 100000,
-                        "Total number of steps. Note that the actual number of "
-                        "steps is the next multiple of --iterations greater "
-                        "than this value.")
-tf.flags.DEFINE_bool("use_tpu", True, "Use TPUs rather than plain CPUs")
-tf.flags.DEFINE_string("model_dir", None, "Estimator model_dir")
-tf.flags.DEFINE_integer("iterations_per_loop", 100,
-                        "Number of iterations per TPU training loop.")
-tf.flags.DEFINE_integer("num_shards", 8, "Number of shards (TPU chips).")
+flags.DEFINE_integer("batch_size", 128,
+                     "Mini-batch size for the computation. Note that this "
+                     "is the global batch size and not the per-shard batch.")
+flags.DEFINE_float("learning_rate", 0.05, "Learning rate.")
+flags.DEFINE_string("train_file", "", "Path to cifar10 training data.")
+flags.DEFINE_integer("train_steps", 100000,
+                     "Total number of steps. Note that the actual number of "
+                     "steps is the next multiple of --iterations greater "
+                     "than this value.")
+flags.DEFINE_bool("use_tpu", True, "Use TPUs rather than plain CPUs")
+flags.DEFINE_string("model_dir", None, "Estimator model_dir")
+flags.DEFINE_integer("iterations_per_loop", 100,
+                     "Number of iterations per TPU training loop.")
+flags.DEFINE_integer("num_shards", 8, "Number of shards (TPU chips).")
 
 
-FLAGS = tf.flags.FLAGS
+FLAGS = flags.FLAGS
 
 
 def model_fn(features, labels, mode, params):

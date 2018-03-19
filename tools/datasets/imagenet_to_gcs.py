@@ -51,25 +51,26 @@ import random
 import tarfile
 import urllib
 
+from absl import flags
 import tensorflow as tf
 
 from google.cloud import storage
 
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     'project', None, 'Google cloud project id for uploading the dataset.')
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     'gcs_output_path', None, 'GCS path for uploading the dataset.')
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     'local_scratch_dir', None, 'Scratch directory path for temporary files.')
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     'raw_data_dir', None, 'Directory path for raw Imagenet dataset. '
     'Should have train and validation subdirectories inside it.')
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     'imagenet_username', None, 'Username for Imagenet.org account')
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     'imagenet_access_key', None, 'Access Key for Imagenet.org account')
 
-FLAGS = tf.flags.FLAGS
+FLAGS = flags.FLAGS
 
 BASE_URL = 'http://www.image-net.org/challenges/LSVRC/2012/nnoupb/'
 LABELS_URL = 'https://raw.githubusercontent.com/tensorflow/models/master/research/inception/inception/data/imagenet_2012_validation_synset_labels.txt'  # pylint: disable=line-too-long
@@ -82,7 +83,7 @@ TRAINING_SHARDS = 1024
 VALIDATION_SHARDS = 128
 
 TRAINING_DIRECTORY = 'train'
-VALIDATION_DIRECTORY = 'validation'
+VALIDATION_DIRECTORY = 'val'
 
 
 def _check_or_create_dir(directory):
@@ -358,7 +359,7 @@ def _process_dataset(filenames, synsets, labels, output_directory, prefix,
 def convert_to_tf_records(raw_data_dir):
   """Convert the Imagenet dataset into TF-Record dumps."""
 
-  # Shuffle training/validation records to ensure we are distributing classes
+  # Shuffle training records to ensure we are distributing classes
   # across the batches.
   random.seed(0)
   def make_shuffle_idx(n):
@@ -379,16 +380,12 @@ def convert_to_tf_records(raw_data_dir):
   training_synsets = [training_synsets[i] for i in training_shuffle_idx]
 
   # Glob all the validation files
-  validation_files = tf.gfile.Glob(
-      os.path.join(raw_data_dir, VALIDATION_DIRECTORY, '*.JPEG'))
+  validation_files = sorted(tf.gfile.Glob(
+      os.path.join(raw_data_dir, VALIDATION_DIRECTORY, '*.JPEG')))
 
   # Get validation file synset labels from labels.txt
   validation_synsets = tf.gfile.FastGFile(
       os.path.join(raw_data_dir, LABELS_FILE), 'r').read().splitlines()
-
-  validation_shuffle_idx = make_shuffle_idx(len(validation_files))
-  validation_files = [validation_files[i] for i in validation_shuffle_idx]
-  validation_synsets = [validation_synsets[i] for i in validation_shuffle_idx]
 
   # Create unique ids for all synsets
   labels = {v: k + 1 for k, v in enumerate(
