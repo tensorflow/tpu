@@ -19,16 +19,16 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from absl import flags
 import numpy as np
 from PIL import Image
 import tensorflow as tf
 
-FLAGS = tf.flags.FLAGS
+FLAGS = flags.FLAGS
 
-tf.flags.DEFINE_string('cifar_train_data_file', '',
-                       'Path to CIFAR10 training data.')
-tf.flags.DEFINE_string('cifar_test_data_file', '',
-                       'Path to CIFAR10 test data.')
+flags.DEFINE_string('cifar_train_data_file', '',
+                    'Path to CIFAR10 training data.')
+flags.DEFINE_string('cifar_test_data_file', '', 'Path to CIFAR10 test data.')
 
 
 def parser(serialized_example):
@@ -83,4 +83,3 @@ def convert_array_to_image(array):
   """Converts a numpy array to a PIL Image and undoes any rescaling."""
   img = Image.fromarray(np.uint8((array + 1.0) / 2.0 * 255), mode='RGB')
   return img
-

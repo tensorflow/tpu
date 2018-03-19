@@ -18,16 +18,15 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from absl import flags
 import numpy as np
 from PIL import Image
 import tensorflow as tf
 
-FLAGS = tf.flags.FLAGS
+FLAGS = flags.FLAGS
 
-tf.flags.DEFINE_string('mnist_train_data_file',
-                       '', 'Training .tfrecord data file')
-tf.flags.DEFINE_string('mnist_test_data_file',
-                       '', 'Test .tfrecord data file')
+flags.DEFINE_string('mnist_train_data_file', '', 'Training .tfrecord data file')
+flags.DEFINE_string('mnist_test_data_file', '', 'Test .tfrecord data file')
 
 NUM_TRAIN_IMAGES = 60000
 NUM_EVAL_IMAGES = 10000
@@ -90,4 +89,3 @@ def convert_array_to_image(array):
   array = array[:, :, 0]
   img = Image.fromarray(np.uint8((array + 1.0) / 2.0 * 255), mode='L')
   return img
-

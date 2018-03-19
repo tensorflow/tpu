@@ -21,6 +21,7 @@ from __future__ import print_function
 
 import os
 
+from absl import flags
 import tensorflow as tf
 
 import dataloader
@@ -31,67 +32,67 @@ from tensorflow.contrib.training.python.training import evaluation
 
 
 # Cloud TPU Cluster Resolvers
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     'gcp_project', default=None,
     help='Project name for the Cloud TPU-enabled project. If not specified, we '
     'will attempt to automatically detect the GCE project from metadata.')
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     'tpu_zone', default=None,
     help='GCE zone where the Cloud TPU is located in. If not specified, we '
     'will attempt to automatically detect the GCE project from metadata.')
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     'tpu_name', default=None,
     help='Name of the Cloud TPU for Cluster Resolvers. You must specify either '
     'this flag or --master.')
 
 # Model specific paramenters
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     'master', default=None,
     help='GRPC URL of the master (e.g. grpc://ip.address.of.tpu:8470). You '
     'must specify either this flag or --tpu_name.')
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     'eval_master', default='',
     help='GRPC URL of the eval master. Set to an appropiate value when running '
     'on CPU/GPU')
-tf.flags.DEFINE_bool('use_tpu', True, 'Use TPUs rather than CPUs')
-tf.flags.DEFINE_string('model_dir', None, 'Location of model_dir')
-tf.flags.DEFINE_string('resnet_checkpoint', '',
-                       'Location of the ResNet50 checkpoint to use for model '
-                       'initialization.')
-tf.flags.DEFINE_string('hparams', '',
-                       'Comma separated k=v pairs of hyperparameters.')
-tf.flags.DEFINE_integer(
+flags.DEFINE_bool('use_tpu', True, 'Use TPUs rather than CPUs')
+flags.DEFINE_string('model_dir', None, 'Location of model_dir')
+flags.DEFINE_string('resnet_checkpoint', '',
+                    'Location of the ResNet50 checkpoint to use for model '
+                    'initialization.')
+flags.DEFINE_string('hparams', '',
+                    'Comma separated k=v pairs of hyperparameters.')
+flags.DEFINE_integer(
     'num_shards', default=8, help='Number of shards (TPU cores)')
-tf.flags.DEFINE_integer('train_batch_size', 64, 'training batch size')
-tf.flags.DEFINE_integer('eval_steps', 5000, 'evaluation steps')
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer('train_batch_size', 64, 'training batch size')
+flags.DEFINE_integer('eval_steps', 5000, 'evaluation steps')
+flags.DEFINE_integer(
     'iterations_per_loop', 100, 'Number of iterations per TPU training loop')
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     'training_file_pattern', None,
     'Glob for training data files (e.g., COCO train - minival set)')
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     'validation_file_pattern', None,
     'Glob for evaluation tfrecords (e.g., COCO val2017 set)')
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     'val_json_file',
     '',
     'COCO validation JSON containing golden bounding boxes.')
-tf.flags.DEFINE_integer('num_examples_per_epoch', 120000,
-                        'Number of examples in one epoch')
-tf.flags.DEFINE_integer('num_epochs', 15, 'Number of epochs for training')
-tf.flags.DEFINE_string('mode', 'train',
-                       'Mode to run: train or eval (default: train)')
-tf.flags.DEFINE_bool('eval_after_training', False, 'Run one eval after the '
-                     'training finishes.')
+flags.DEFINE_integer('num_examples_per_epoch', 120000,
+                     'Number of examples in one epoch')
+flags.DEFINE_integer('num_epochs', 15, 'Number of epochs for training')
+flags.DEFINE_string('mode', 'train',
+                    'Mode to run: train or eval (default: train)')
+flags.DEFINE_bool('eval_after_training', False, 'Run one eval after the '
+                  'training finishes.')
 # For Eval mode
-tf.flags.DEFINE_integer('min_eval_interval', 180,
-                        'Minimum seconds between evaluations.')
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer('min_eval_interval', 180,
+                     'Minimum seconds between evaluations.')
+flags.DEFINE_integer(
     'eval_timeout', None,
     'Maximum seconds between checkpoints before evaluation terminates.')
 
 
-FLAGS = tf.flags.FLAGS
+FLAGS = flags.FLAGS
 
 
 def main(argv):

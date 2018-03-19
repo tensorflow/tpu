@@ -21,6 +21,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from absl import flags
 import absl.logging as _logging  # pylint: disable=unused-import
 import tensorflow as tf
 
@@ -31,43 +32,42 @@ from tensorflow.contrib.tpu.python.tpu import tpu_estimator
 
 
 # Cloud TPU Cluster Resolvers
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     "gcp_project", default=None,
     help="Project name for the Cloud TPU-enabled project. If not specified, we "
     "will attempt to automatically detect the GCE project from metadata.")
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     "tpu_zone", default=None,
     help="GCE zone where the Cloud TPU is located in. If not specified, we "
     "will attempt to automatically detect the GCE project from metadata.")
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     "tpu_name", default=None,
     help="Name of the Cloud TPU for Cluster Resolvers. You must specify either "
     "this flag or --master.")
 
 # Model specific paramenters
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     "master", default=None,
     help="GRPC URL of the master (e.g. grpc://ip.address.of.tpu:8470). You "
     "must specify either this flag or --tpu_name.")
 
-tf.flags.DEFINE_string("data_dir", "", "Location of training files.")
-tf.flags.DEFINE_string("model_dir", "", "Where to store model checkpoints.")
-tf.flags.DEFINE_integer("save_checkpoints_secs", 3600,
-                        "Interval between saving model checkpoints.")
-tf.flags.DEFINE_integer("num_shards", 8, "Number of TPU shards.")
-tf.flags.DEFINE_integer("batch_size", 1024, "Batch size for training and eval.")
-tf.flags.DEFINE_boolean("use_tpu", True, "If true, use TPU device.")
+flags.DEFINE_string("data_dir", "", "Location of training files.")
+flags.DEFINE_string("model_dir", "", "Where to store model checkpoints.")
+flags.DEFINE_integer("save_checkpoints_secs", 3600,
+                     "Interval between saving model checkpoints.")
+flags.DEFINE_integer("num_shards", 8, "Number of TPU shards.")
+flags.DEFINE_integer("batch_size", 1024, "Batch size for training and eval.")
+flags.DEFINE_boolean("use_tpu", True, "If true, use TPU device.")
 
-tf.flags.DEFINE_string("optimizer", "momentum",
-                       "Optimizer: momentum|adam|rmsprop")
-tf.flags.DEFINE_float("momentum", 0.9, "Momentum parameter for SGD optimizer.")
-tf.flags.DEFINE_integer("num_epochs", 150,
-                        "Number of epochs of the training set to process.")
-tf.flags.DEFINE_integer("num_evals", 10,
-                        "How many times to run an evaluation during training.")
-tf.flags.DEFINE_float("learning_rate", 0.03, "Learning rate.")
+flags.DEFINE_string("optimizer", "momentum", "Optimizer: momentum|adam|rmsprop")
+flags.DEFINE_float("momentum", 0.9, "Momentum parameter for SGD optimizer.")
+flags.DEFINE_integer("num_epochs", 150,
+                     "Number of epochs of the training set to process.")
+flags.DEFINE_integer("num_evals", 10,
+                     "How many times to run an evaluation during training.")
+flags.DEFINE_float("learning_rate", 0.03, "Learning rate.")
 
-FLAGS = tf.flags.FLAGS
+FLAGS = flags.FLAGS
 
 
 def main(argv):

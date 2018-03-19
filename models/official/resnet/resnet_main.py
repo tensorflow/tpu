@@ -20,6 +20,7 @@ from __future__ import print_function
 
 import time
 
+from absl import flags
 import absl.logging as _logging  # pylint: disable=unused-import
 import tensorflow as tf
 
@@ -31,47 +32,47 @@ from tensorflow.contrib.tpu.python.tpu import tpu_estimator
 from tensorflow.contrib.tpu.python.tpu import tpu_optimizer
 from tensorflow.python.estimator import estimator
 
-FLAGS = tf.flags.FLAGS
+FLAGS = flags.FLAGS
 
-tf.flags.DEFINE_bool(
+flags.DEFINE_bool(
     'use_tpu', True,
     help=('Use TPU to execute the model for training and evaluation. If'
           ' --use_tpu=false, will use whatever devices are available to'
           ' TensorFlow by default (e.g. CPU and GPU)'))
 
 # Cloud TPU Cluster Resolvers
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     'gcp_project', default=None,
     help='Project name for the Cloud TPU-enabled project. If not specified, we '
     'will attempt to automatically detect the GCE project from metadata.')
 
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     'tpu_zone', default=None,
     help='GCE zone where the Cloud TPU is located in. If not specified, we '
     'will attempt to automatically detect the GCE project from metadata.')
 
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     'tpu_name', default=None,
     help='Name of the Cloud TPU for Cluster Resolvers. You must specify either '
     'this flag or --master.')
 
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     'master', default=None,
     help='gRPC URL of the master (i.e. grpc://ip.address.of.tpu:8470). You '
     'must specify either this flag or --tpu_name.')
 
 # Model specific flags
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     'data_dir', default=None,
     help=('The directory where the ImageNet input data is stored. Please see'
           ' the README.md for the expected data format.'))
 
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     'model_dir', default=None,
     help=('The directory where the model and training/evaluation summaries are'
           ' stored.'))
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     'resnet_depth', default=50,
     help=('Depth of ResNet model to use. Must be one of {18, 34, 50, 101, 152,'
           ' 200}. ResNet-18 and 34 use the pre-activation residual blocks'
@@ -80,26 +81,26 @@ tf.flags.DEFINE_integer(
           ' more memory and may require reducing --train_batch_size to prevent'
           ' running out of memory.'))
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     'train_steps', default=112603,
     help=('The number of steps to use for training. Default is 112603 steps'
           ' which is approximately 90 epochs at batch size 1024. This flag'
           ' should be adjusted according to the --train_batch_size flag.'))
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     'train_batch_size', default=1024, help='Batch size for training.')
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     'eval_batch_size', default=1024, help='Batch size for evaluation.')
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     'steps_per_eval', default=5000,
     help=('Controls how often evaluation is performed. Since evaluation is'
           ' fairly expensive, it is advised to evaluate as infrequently as'
           ' possible (i.e. up to --train_steps, which evaluates the model only'
           ' after finishing the entire training regime).'))
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     'iterations_per_loop', default=100,
     help=('Number of steps to run on TPU before outfeeding metrics to the CPU.'
           ' If the number of iterations in the loop would exceed the number of'
@@ -107,19 +108,19 @@ tf.flags.DEFINE_integer(
           ' --iterations_per_loop. The larger this value is, the higher the'
           ' utilization on the TPU.'))
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     'num_cores', default=8,
     help=('Number of TPU cores. For a single TPU device, this is 8 because each'
           ' TPU has 4 chips each with 2 cores.'))
 
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     'data_format',
     default='channels_last',
     help=('A flag to override the data format used in the model. The value '
           'is either channels_first or channels_last. To run the network on '
           'CPU or TPU, channels_last should be used.'))
 
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     'export_dir',
     default=None,
     help=('The directory where the exported SavedModel will be stored.'))
@@ -317,8 +318,8 @@ def resnet_model_fn(features, labels, mode, params):
       top_5_accuracy = tf.metrics.mean(in_top_5)
 
       return {
-          'Top-1 accuracy': top_1_accuracy,
-          'Top-5 accuracy': top_5_accuracy,
+          'top_1_accuracy': top_1_accuracy,
+          'top_5_accuracy': top_5_accuracy,
       }
 
     eval_metrics = (metric_fn, [labels, logits])
