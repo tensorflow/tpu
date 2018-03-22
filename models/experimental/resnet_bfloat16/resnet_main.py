@@ -120,7 +120,7 @@ flags.DEFINE_integer(
     help=('Number of TPU cores. For a single TPU device, this is 8 because each'
           ' TPU has 4 chips each with 2 cores.'))
 
-flags.DEFINE_string('mode', 'train',
+flags.DEFINE_string('mode', 'train_and_eval',
                     'Mode to run: train or eval (default: train)')
 
 flags.DEFINE_string(
@@ -499,9 +499,47 @@ def main(unused_argv):
         # file could have been deleted already.
         tf.logging.info('Checkpoint %s no longer exists, skipping checkpoint' %
                         ckpt)
-    with tf.gfile.GFile(FLAGS.model_dir + '/epoch_results.tsv', 'wb') as tsv_file:  # pylint: disable=line-too-long
+    with tf.gfile.GFile(FLAGS.model_dir + '/epoch_results_eval.tsv', 'wb') as tsv_file:  # pylint: disable=line-too-long
       writer = csv.writer(tsv_file, delimiter='\t')
       writer.writerow(['epoch', 'top1Accuracy', 'top5Accuracy'])
+      writer.writerows(results)
+  elif FLAGS.mode == 'train_and_eval':
+    batches_per_epoch = NUM_TRAIN_IMAGES // FLAGS.train_batch_size
+    start_timestamp = time.time()
+    current_epoch = current_step // FLAGS.train_batch_size
+    results = []
+    while current_epoch < 95:
+      next_checkpoint = (current_epoch + 1) * batches_per_epoch
+      resnet_classifier.train(
+          input_fn=imagenet_train.input_fn, max_steps=next_checkpoint)
+      current_epoch += 1
+
+      tf.logging.info('Finished training up to step %d. Elapsed seconds %d.' %
+                      (next_checkpoint, int(time.time() - start_timestamp)))
+
+      # Evaluate the model on the most recent model in --model_dir.
+      # Since evaluation happens in batches of --eval_batch_size, some images
+      # may be excluded modulo the batch size. As long as the batch size is
+      # consistent, the evaluated images are also consistent.
+      tf.logging.info('Starting to evaluate.')
+      eval_results = resnet_classifier.evaluate(
+          input_fn=imagenet_eval.input_fn,
+          steps=NUM_EVAL_IMAGES // FLAGS.eval_batch_size)
+      tf.logging.info('Eval results: %s' % eval_results)
+
+      elapsed_time = int(time.time() - start_timestamp)
+      tf.logging.info('Finished epoch %s at %s time' % (
+          current_epoch, elapsed_time))
+      results.append([
+          current_epoch,
+          elapsed_time / 3600.0,
+          '{0:.2f}'.format(eval_results['top_1_accuracy']*100),
+          '{0:.2f}'.format(eval_results['top_5_accuracy']*100),
+      ])
+
+    with tf.gfile.GFile(FLAGS.model_dir + '/epoch_results_train_eval.tsv', 'wb') as tsv_file:   # pylint: disable=line-too-long
+      writer = csv.writer(tsv_file, delimiter='\t')
+      writer.writerow(['epoch', 'hours', 'top1Accuracy', 'top5Accuracy'])
       writer.writerows(results)
   else:
     tf.logging.info('Mode not found.')

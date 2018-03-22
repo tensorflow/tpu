@@ -148,7 +148,13 @@ def _detection_loss(cls_outputs, box_outputs, labels, params):
   cls_losses = []
   box_losses = []
   for level in levels:
-    cls_targets_at_level = labels['cls_targets_%d' % level]
+    # Onehot encoding for classification labels.
+    cls_targets_at_level = tf.one_hot(
+        labels['cls_targets_%d' % level],
+        params['num_classes'])
+    bs, width, height, _, _ = cls_targets_at_level.get_shape().as_list()
+    cls_targets_at_level = tf.reshape(cls_targets_at_level,
+                                      [bs, width, height, -1])
     box_targets_at_level = labels['box_targets_%d' % level]
     cls_losses.append(
         _classification_loss(
@@ -316,6 +322,7 @@ def default_hparams():
       input_rand_hflip=True,
       # dataset specific parameters
       num_classes=90,
+      skip_crowd=True,
       # model architecture
       min_level=3,
       max_level=7,
