@@ -68,6 +68,12 @@ class InputReader(object):
         boxes = data['groundtruth_boxes']
         classes = data['groundtruth_classes']
         classes = tf.reshape(tf.cast(classes, dtype=tf.float32), [-1, 1])
+        # Handle crowd annotations. As crowd annotations are not large
+        # instances, the model ignores them in training.
+        if params['skip_crowd']:
+          indices = tf.where(tf.logical_not(data['groundtruth_is_crowd']))
+          classes = tf.gather_nd(classes, indices)
+          boxes = tf.gather_nd(boxes, indices)
 
         # the image normalization is identical to Cloud TPU ResNet-50
         image = tf.image.convert_image_dtype(image, dtype=tf.float32)

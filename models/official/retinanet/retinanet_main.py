@@ -166,6 +166,7 @@ def main(argv):
           params,
           use_tpu=False,
           input_rand_hflip=False,
+          skip_crowd=False,
           resnet_checkpoint=None,
           is_training_bn=False,
       )
@@ -190,6 +191,7 @@ def main(argv):
         params,
         use_tpu=False,
         input_rand_hflip=False,
+        skip_crowd=False,
         resnet_checkpoint=None,
         is_training_bn=False,
     )

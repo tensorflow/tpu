@@ -347,9 +347,8 @@ class AnchorLabeler(object):
     Returns:
       cls_targets_dict: ordered dictionary with keys
         [min_level, min_level+1, ..., max_level]. The values are tensor with
-        shape [height_l, width_l, num_anchors * num_classes]. The
-        height_l and width_l represent the dimension of class logits at l-th
-        level.
+        shape [height_l, width_l, num_anchors]. The height_l and width_l
+        represent the dimension of class logits at l-th level.
       box_targets_dict: ordered dictionary with keys
         [min_level, min_level+1, ..., max_level]. The values are tensor with
         shape [height_l, width_l, num_anchors * 4]. The height_l and
@@ -366,14 +365,10 @@ class AnchorLabeler(object):
 
     # class labels start from 1 and the background class = -1
     cls_targets -= 1
+    cls_targets = tf.cast(cls_targets, tf.int32)
 
-    # create one-hot labels
-    cls_targets_one_hot = tf.one_hot(
-        tf.cast(cls_targets, dtype=tf.int32), self._num_classes)
-    cls_targets_one_hot = tf.reshape(cls_targets_one_hot,
-                                     [-1, self._num_classes])
-
-    cls_targets_dict = self._unpack_labels(cls_targets_one_hot)
+    # Unpack labels.
+    cls_targets_dict = self._unpack_labels(cls_targets)
     box_targets_dict = self._unpack_labels(box_targets)
     num_positives = tf.reduce_sum(
         tf.cast(tf.not_equal(matches.match_results, -1), tf.float32))
