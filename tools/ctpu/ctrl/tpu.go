@@ -139,7 +139,7 @@ func (g *TPUCP) ListInstances() ([]*TPUInstance, error) {
 
 // ListVersions retrieves all available TensorFlow versions that can be used to create a Cloud TPU.
 func (g *TPUCP) ListVersions() ([]*tpu.TensorFlowVersion, error) {
-	versions, err := g.versions.List(g.parentPath()).Do()
+	versions, err := g.versions.List(g.parentPath()).PageSize(100).Do()
 	if err != nil {
 		return nil, err
 	}

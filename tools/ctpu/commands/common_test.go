@@ -227,9 +227,8 @@ func verifySingleOperation(t *testing.T, operationsPerformed []string, expectedA
 
 func TestParseVersion(t *testing.T) {
 	testcases := []struct {
-		version     string
-		expectError bool
-		want        parsedVersion
+		version string
+		want    parsedVersion
 	}{{
 		version: "1.6",
 		want: parsedVersion{
@@ -254,8 +253,10 @@ func TestParseVersion(t *testing.T) {
 			Modifier:  "-20180205",
 		},
 	}, {
-		version:     "unknown",
-		expectError: true,
+		version: "unknown",
+		want: parsedVersion{
+			Modifier: "unknown",
+		},
 	}, {
 		version: "1.7-RC3",
 		want: parsedVersion{
@@ -270,20 +271,19 @@ func TestParseVersion(t *testing.T) {
 			Minor:    7,
 			Modifier: ".2-RC0",
 		},
+	}, {
+		version: "test_version",
+		want: parsedVersion{
+			Modifier: "test_version",
+		},
 	}}
 	for _, testcase := range testcases {
 		got, err := parseVersion(testcase.version)
-		if testcase.expectError {
-			if err == nil {
-				t.Errorf("parseVersion(%q).err = nil, want non-nil error", testcase.version)
-			}
-		} else {
-			if err != nil {
-				t.Errorf("parseVersion(%q) = %#v", testcase.version, err)
-			}
-			if !cmp.Equal(got, testcase.want) {
-				t.Errorf("parseVersion(%q) = %#v, want: %#v", testcase.version, got, testcase.want)
-			}
+		if err != nil {
+			t.Errorf("parseVersion(%q) = %#v", testcase.version, err)
+		}
+		if !cmp.Equal(got, testcase.want) {
+			t.Errorf("parseVersion(%q) = %#v, want: %#v", testcase.version, got, testcase.want)
 		}
 	}
 }
@@ -322,6 +322,15 @@ func TestSortingParsedVersions(t *testing.T) {
 	}, {
 		versions: []string{"nightly", "2.1", "1.8"},
 		want:     []string{"2.1", "1.8", "nightly"},
+	}, {
+		versions: []string{"nightly", "test_version", "2.1", "1.8"},
+		want:     []string{"2.1", "1.8", "nightly", "test_version"},
+	}, {
+		versions: []string{"other_version", "nightly-20180901", "nightly", "nightly-20170101", "test_version"},
+		want:     []string{"nightly", "nightly-20180901", "nightly-20170101", "other_version", "test_version"},
+	}, {
+		versions: []string{"test_version", "0.1", "other_version", "nightly", "nightly-20180901"},
+		want:     []string{"0.1", "nightly", "nightly-20180901", "other_version", "test_version"},
 	}}
 	for _, testcase := range testcases {
 		input := make([]parsedVersion, 0, len(testcase.versions))
