@@ -143,6 +143,10 @@ flags.DEFINE_integer(
     'eval_timeout', None,
     'Maximum seconds between checkpoints before evaluation terminates.')
 
+flags.DEFINE_bool(
+    'use_transpose', True,
+    help=('Use the TPU double transpose optimization'))
+
 # Dataset constants
 LABEL_CLASSES = 1000
 NUM_TRAIN_IMAGES = 1281167
@@ -247,6 +251,9 @@ def resnet_model_fn(features, labels, mode, params):
   # are only supported on NHWC.
   if FLAGS.data_format == 'channels_first':
     features = tf.transpose(features, [0, 3, 1, 2])
+
+  if FLAGS.use_transpose:
+    features = tf.transpose(features, [3, 0, 1, 2])  # HWCN to NHCW
 
   with tf.variable_scope('cg', custom_getter=get_custom_getter()):
     network = resnet_model.resnet_v1(
@@ -427,23 +434,29 @@ def main(unused_argv):
           iterations_per_loop=FLAGS.iterations_per_loop,
           num_shards=FLAGS.num_cores))
 
+  batch_axis = 0
+  if FLAGS.use_transpose:
+    batch_axis = 3
   resnet_classifier = tpu_estimator.TPUEstimator(
       use_tpu=FLAGS.use_tpu,
       model_fn=resnet_model_fn,
       config=config,
       train_batch_size=FLAGS.train_batch_size,
-      eval_batch_size=FLAGS.eval_batch_size)
+      eval_batch_size=FLAGS.eval_batch_size,
+      batch_axis=(batch_axis, 0))
 
   # Input pipelines are slightly different (with regards to shuffling and
   # preprocessing) between training and evaluation.
   imagenet_train = imagenet_input.ImageNetInput(
       is_training=True,
       data_dir=FLAGS.data_dir,
-      num_parallel_calls=FLAGS.num_parallel_calls)
+      num_parallel_calls=FLAGS.num_parallel_calls,
+      use_transpose=FLAGS.use_transpose)
   imagenet_eval = imagenet_input.ImageNetInput(
       is_training=False,
       data_dir=FLAGS.data_dir,
-      num_parallel_calls=FLAGS.num_parallel_calls)
+      num_parallel_calls=FLAGS.num_parallel_calls,
+      use_transpose=FLAGS.use_transpose)
 
   current_step = estimator._load_global_step_from_checkpoint_dir(FLAGS.model_dir)  # pylint: disable=protected-access,line-too-long
   start_timestamp = time.time()

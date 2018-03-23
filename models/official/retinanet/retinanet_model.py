@@ -177,7 +177,7 @@ def _detection_loss(cls_outputs, box_outputs, labels, params):
   return total_loss, cls_loss, box_loss
 
 
-def _model_fn(features, labels, mode, params, model):
+def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
   """Model defination for the RetinaNet model based on ResNet-50.
 
   Args:
@@ -190,6 +190,8 @@ def _model_fn(features, labels, mode, params, model):
     params: the dictionary defines hyperparameters of model. The default
       settings are in default_hparams function in this file.
     model: the RetinaNet model outputs class logits and box regression outputs.
+    variable_filter_fn: the filter function that takes trainable_variables and
+      returns the variable list after applying the filter rule.
 
   Returns:
     tpu_spec: the TPUEstimatorSpec to run training, evaluation, or prediction.
@@ -242,8 +244,10 @@ def _model_fn(features, labels, mode, params, model):
 
     # Batch norm requires update_ops to be added as a train_op dependency.
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+    var_list = variable_filter_fn(
+        tf.trainable_variables()) if variable_filter_fn else None
     with tf.control_dependencies(update_ops):
-      train_op = optimizer.minimize(total_loss, global_step)
+      train_op = optimizer.minimize(total_loss, global_step, var_list=var_list)
   else:
     train_op = None
 
@@ -312,8 +316,13 @@ def _model_fn(features, labels, mode, params, model):
 
 def retinanet_50_model_fn(features, labels, mode, params):
   """RetinaNet-50 model."""
-  return _model_fn(features, labels, mode, params,
-                   model=retinanet_architecture.retinanet_50)
+  return _model_fn(
+      features,
+      labels,
+      mode,
+      params,
+      model=retinanet_architecture.retinanet_50,
+      variable_filter_fn=retinanet_architecture.remove_variables)
 
 
 def default_hparams():

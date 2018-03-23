@@ -552,3 +552,23 @@ def retinanet_50(features,
         box_outputs[level] = box_net(feats[level], num_anchors)
 
   return class_outputs, box_outputs
+
+
+def remove_variables(variables):
+  """Removes low-level variables from the input.
+
+  Removing low-level parameters (e.g., initial convolution layer) from training
+  usually leads to higher training speed and slightly better testing accuracy.
+  The intuition is that the low-level architecture (e.g., ResNet-50) is able to
+  capture low-level features such as edges; therefore, it does not need to be
+  fine-tuned for the detection task.
+
+  Args:
+    variables: all the variables in training
+
+  Returns:
+    var_list: a list containing variables for training
+
+  """
+  var_list = [v for v in variables if v.name.find('resnet50/conv2d/') == -1]
+  return var_list

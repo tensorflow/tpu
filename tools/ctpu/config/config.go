@@ -137,12 +137,10 @@ func computeFlockName(e *envConfig) (flockName string, err error) {
 			}
 			flockName = curUser.Username
 		} else {
-			log.Printf("WAHOO HERE! %q\n", e.account)
 			submatches := usernameRegex.FindStringSubmatch(e.account)
 			if len(submatches) != 2 {
 				return "", fmt.Errorf("could not determine a flock name based on the current user account (%q)", e.account)
 			}
-			log.Printf("SUBMATCHES: %#v", submatches)
 			flockName = submatches[1]
 		}
 	}

@@ -173,9 +173,16 @@ type parsedVersion struct {
 	Modifier  string
 }
 
+func (p parsedVersion) isUnknown() bool {
+	return p.Major == 0 && p.Minor == 0 && !p.IsNightly
+}
+
 func (p parsedVersion) versionString() string {
 	if p.IsNightly {
 		return fmt.Sprintf("nightly%s", p.Modifier)
+	}
+	if p.Major == 0 && p.Minor == 0 {
+		return p.Modifier
 	}
 	return fmt.Sprintf("%d.%d%s", p.Major, p.Minor, p.Modifier)
 }
@@ -188,8 +195,8 @@ type sortedParsedVersions []parsedVersion
 func (s sortedParsedVersions) Len() int      { return len(s) }
 func (s sortedParsedVersions) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 func (s sortedParsedVersions) Less(i, j int) bool {
-	// Both non-nightlies
-	if !s[i].IsNightly && !s[j].IsNightly {
+	// Both non-nightlies, non-unknowns
+	if !s[i].IsNightly && !s[j].IsNightly && !s[i].isUnknown() && !s[j].isUnknown() {
 		if s[i].Major != s[j].Major {
 			return s[i].Major > s[j].Major
 		}
@@ -213,6 +220,17 @@ func (s sortedParsedVersions) Less(i, j int) bool {
 			return false
 		}
 		return strings.Compare(s[i].Modifier, s[j].Modifier) >= 0
+	}
+	// Both unknown versions
+	if s[i].isUnknown() && s[j].isUnknown() {
+		return strings.Compare(s[i].Modifier, s[j].Modifier) < 0 // Alpha sort!
+	}
+	// If one is an unknown version, sort after
+	if s[i].isUnknown() {
+		return false
+	}
+	if s[j].isUnknown() {
+		return true
 	}
 	// One is nightly, one is not.
 	if s[i].IsNightly {
@@ -240,7 +258,7 @@ func parseVersion(version string) (parsedVersion, error) {
 	nightlyMatch := nightlyVersionRegex.FindStringSubmatch(version)
 
 	if len(versionMatch) == 0 && len(nightlyMatch) == 0 {
-		return parsedVersion{}, fmt.Errorf("could not parse version '%s'", version)
+		return parsedVersion{Modifier: version}, nil
 	}
 
 	if len(versionMatch) != 0 && len(nightlyMatch) != 0 {
