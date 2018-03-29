@@ -178,7 +178,7 @@ def _detection_loss(cls_outputs, box_outputs, labels, params):
 
 
 def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
-  """Model defination for the RetinaNet model based on ResNet-50.
+  """Model defination for the RetinaNet model based on ResNet.
 
   Args:
     features: the input image tensor with shape [batch_size, height, width, 3].
@@ -202,6 +202,7 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
       max_level=params['max_level'],
       num_classes=params['num_classes'],
       num_anchors=len(params['aspect_ratios'] * params['num_scales']),
+      resnet_depth=params['resnet_depth'],
       is_training_bn=params['is_training_bn'])
   levels = cls_outputs.keys()
 
@@ -221,7 +222,7 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
     def scaffold_fn():
       """Loads pretrained model through scaffold function."""
       tf.train.init_from_checkpoint(params['resnet_checkpoint'], {
-          '/': 'resnet50/',
+          '/': 'resnet%s/' % params['resnet_depth'],
       })
       return tf.train.Scaffold()
   else:
@@ -245,7 +246,8 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
     # Batch norm requires update_ops to be added as a train_op dependency.
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
     var_list = variable_filter_fn(
-        tf.trainable_variables()) if variable_filter_fn else None
+        tf.trainable_variables(),
+        params['resnet_depth']) if variable_filter_fn else None
     with tf.control_dependencies(update_ops):
       train_op = optimizer.minimize(total_loss, global_step, var_list=var_list)
   else:
@@ -314,14 +316,14 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
       scaffold_fn=scaffold_fn)
 
 
-def retinanet_50_model_fn(features, labels, mode, params):
-  """RetinaNet-50 model."""
+def retinanet_model_fn(features, labels, mode, params):
+  """RetinaNet model."""
   return _model_fn(
       features,
       labels,
       mode,
       params,
-      model=retinanet_architecture.retinanet_50,
+      model=retinanet_architecture.retinanet,
       variable_filter_fn=retinanet_architecture.remove_variables)
 
 
@@ -335,20 +337,21 @@ def default_hparams():
       # model architecture
       min_level=3,
       max_level=7,
-      num_scales=2,
+      num_scales=3,
       aspect_ratios=[(1.0, 1.0), (1.4, 0.7), (0.7, 1.4)],
       anchor_scale=4.0,
+      resnet_depth=50,
       # is batchnorm training mode
-      is_training_bn=False,
+      is_training_bn=True,
       # optimization
       momentum=0.9,
-      learning_rate=0.04,
-      lr_warmup_init=0.2,
+      learning_rate=0.08,
+      lr_warmup_init=0.1,
       lr_warmup_step=2000,
       lr_drop_step=15000,
       # classification loss
       alpha=0.25,
-      gamma=2.0,
+      gamma=1.5,
       # localization loss
       delta=0.1,
       box_loss_weight=50.0,

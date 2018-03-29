@@ -432,18 +432,16 @@ def main(unused_argv):
       keep_checkpoint_max=None,
       tpu_config=tpu_config.TPUConfig(
           iterations_per_loop=FLAGS.iterations_per_loop,
-          num_shards=FLAGS.num_cores))
+          num_shards=FLAGS.num_cores,
+          per_host_input_for_training=tpu_config.InputPipelineConfig.PER_HOST_V2
+      ))
 
-  batch_axis = 0
-  if FLAGS.use_transpose:
-    batch_axis = 3
   resnet_classifier = tpu_estimator.TPUEstimator(
       use_tpu=FLAGS.use_tpu,
       model_fn=resnet_model_fn,
       config=config,
       train_batch_size=FLAGS.train_batch_size,
-      eval_batch_size=FLAGS.eval_batch_size,
-      batch_axis=(batch_axis, 0))
+      eval_batch_size=FLAGS.eval_batch_size)
 
   # Input pipelines are slightly different (with regards to shuffling and
   # preprocessing) between training and evaluation.
