@@ -149,7 +149,7 @@ def main(argv):
   # TPU Estimator
   if FLAGS.mode == 'train':
     train_estimator = tpu_estimator.TPUEstimator(
-        model_fn=retinanet_model.retinanet_50_model_fn,
+        model_fn=retinanet_model.retinanet_model_fn,
         use_tpu=FLAGS.use_tpu,
         train_batch_size=FLAGS.train_batch_size,
         config=run_config,
@@ -171,7 +171,7 @@ def main(argv):
           is_training_bn=False,
       )
       eval_estimator = tpu_estimator.TPUEstimator(
-          model_fn=retinanet_model.retinanet_50_model_fn,
+          model_fn=retinanet_model.retinanet_model_fn,
           use_tpu=False,
           eval_batch_size=1,
           config=run_config,
@@ -197,7 +197,7 @@ def main(argv):
     )
 
     eval_estimator = tpu_estimator.TPUEstimator(
-        model_fn=retinanet_model.retinanet_50_model_fn,
+        model_fn=retinanet_model.retinanet_model_fn,
         use_tpu=False,
         eval_batch_size=1,
         config=run_config,

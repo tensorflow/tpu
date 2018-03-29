@@ -187,6 +187,5 @@ class ImageNetInput(object):
     if self.is_training:
       dataset = dataset.map(set_shapes)
 
-    dataset = dataset.prefetch(4)  # Prefetch overlaps in-feed with training
-    images, labels = dataset.make_one_shot_iterator().get_next()
-    return images, labels
+    dataset = dataset.prefetch(32)  # Prefetch overlaps in-feed with training
+    return dataset  # Must return the dataset and not tensors for high perf!
