@@ -12,13 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""RetinaNet (via ResNet50) model definition.
+"""RetinaNet (via ResNet) model definition.
 
 Defines the RetinaNet model and loss functions from this paper:
 
 https://arxiv.org/pdf/1708.02002
 
-Uses the ResNetv50 model as a basis.
+Uses the ResNet model as a basis.
 """
 
 from __future__ import absolute_import
@@ -31,13 +31,15 @@ import tensorflow as tf
 _WEIGHT_DECAY = 1e-4
 _BATCH_NORM_DECAY = 0.997
 _BATCH_NORM_EPSILON = 1e-4
+_RESNET_MAX_LEVEL = 5
 
 
 def batch_norm_relu(inputs,
                     is_training_bn,
                     relu=True,
                     init_zero=False,
-                    data_format='channels_first'):
+                    data_format='channels_last',
+                    name=None):
   """Performs a batch normalization followed by a ReLU.
 
   Args:
@@ -48,6 +50,7 @@ def batch_norm_relu(inputs,
         normalization with 0 instead of 1 (default).
     data_format: `str` either "channels_first" for `[batch, channels, height,
         width]` or "channels_last for `[batch, height, width, channels]`.
+    name: the name of the batch normalization layer
 
   Returns:
     A normalized `Tensor` with the same `data_format`.
@@ -71,14 +74,15 @@ def batch_norm_relu(inputs,
       scale=True,
       training=is_training_bn,
       fused=True,
-      gamma_initializer=gamma_initializer)
+      gamma_initializer=gamma_initializer,
+      name=name)
 
   if relu:
     inputs = tf.nn.relu(inputs)
   return inputs
 
 
-def fixed_padding(inputs, kernel_size, data_format='channels_first'):
+def fixed_padding(inputs, kernel_size, data_format='channels_last'):
   """Pads the input along the spatial dimensions independently of input size.
 
   Args:
@@ -110,7 +114,7 @@ def conv2d_fixed_padding(inputs,
                          filters,
                          kernel_size,
                          strides,
-                         data_format='channels_first'):
+                         data_format='channels_last'):
   """Strided 2-D convolution with explicit padding.
 
   The padding is consistent and is based only on `kernel_size`, not on the
@@ -146,7 +150,7 @@ def residual_block(inputs,
                    is_training_bn,
                    strides,
                    use_projection=False,
-                   data_format='channels_first'):
+                   data_format='channels_last'):
   """Standard building block for residual networks with BN after convolutions.
 
   Args:
@@ -207,7 +211,7 @@ def bottleneck_block(inputs,
                      is_training_bn,
                      strides,
                      use_projection=False,
-                     data_format='channels_first'):
+                     data_format='channels_last'):
   """Bottleneck block variant for residual networks with BN after convolutions.
 
   Args:
@@ -280,7 +284,7 @@ def block_group(inputs,
                 strides,
                 is_training_bn,
                 name,
-                data_format='channels_first'):
+                data_format='channels_last'):
   """Creates one group of blocks for the ResNet model.
 
   Args:
@@ -314,124 +318,126 @@ def block_group(inputs,
   return tf.identity(inputs, name)
 
 
-# Our actual resnet network.  We return the output of c3,c4,c5
-# N.B. batch norm is always run with trained parameters, as we use very small
-# batches when training the object layers.
-def resnet_50(inputs, block_fn=bottleneck_block, is_training_bn=False):
-  """ResNetv50 model with classification layers removed."""
-  layers = [3, 4, 6, 3]
-  data_format = 'channels_last'
+def resnet_v1_generator(block_fn, layers, data_format='channels_last'):
+  """Generator of ResNet v1 model with classification layers removed.
 
-  inputs = conv2d_fixed_padding(
-      inputs=inputs,
-      filters=64,
-      kernel_size=7,
-      strides=2,
-      data_format=data_format)
-  inputs = tf.identity(inputs, 'initial_conv')
-  inputs = batch_norm_relu(inputs, is_training_bn, data_format=data_format)
-
-  inputs = tf.layers.max_pooling2d(
-      inputs=inputs,
-      pool_size=3,
-      strides=2,
-      padding='SAME',
-      data_format=data_format)
-  inputs = tf.identity(inputs, 'initial_max_pool')
-
-  inputs = block_group(
-      inputs=inputs,
-      filters=64,
-      blocks=layers[0],
-      strides=1,
-      block_fn=block_fn,
-      is_training_bn=is_training_bn,
-      name='block_group1',
-      data_format=data_format)
-  c3 = block_group(
-      inputs=inputs,
-      filters=128,
-      blocks=layers[1],
-      strides=2,
-      block_fn=block_fn,
-      is_training_bn=is_training_bn,
-      name='block_group2',
-      data_format=data_format)
-  c4 = block_group(
-      inputs=c3,
-      filters=256,
-      blocks=layers[2],
-      strides=2,
-      block_fn=block_fn,
-      is_training_bn=is_training_bn,
-      name='block_group3',
-      data_format=data_format)
-  c5 = block_group(
-      inputs=c4,
-      filters=512,
-      blocks=layers[3],
-      strides=2,
-      block_fn=block_fn,
-      is_training_bn=is_training_bn,
-      name='block_group4',
-      data_format=data_format)
-
-  return c3, c4, c5
-
-
-def _nearest_upsampling(data, scale):
-  """Nearest neighbor upsampling implementation.
+    Our actual ResNet network.  We return the output of c3, c4, c5
+    N.B. batch norm is always run with trained parameters, as we use very small
+    batches when training the object layers.
 
   Args:
-    data: A float32 tensor of size [batch, height_in, width_in, channels].
-    scale: An integer multiple to scale resolution of input data.
+    block_fn: `function` for the block to use within the model. Either
+        `residual_block` or `bottleneck_block`.
+    layers: list of 4 `int`s denoting the number of blocks to include in each
+      of the 4 block groups. Each group consists of blocks that take inputs of
+      the same resolution.
+    data_format: `str` either "channels_first" for `[batch, channels, height,
+        width]` or "channels_last for `[batch, height, width, channels]`.
+
   Returns:
-    data_up: A float32 tensor of size
-      [batch, height_in*scale, width_in*scale, channels].
+    Model `function` that takes in `inputs` and `is_training` and returns the
+    output `Tensor` of the ResNet model.
   """
-  shape = data.shape
-  shape_before_tile = [shape[0], shape[1], 1, shape[2], 1, shape[3]]
-  shape_after_tile = [shape[0], shape[1] * scale, shape[2] * scale, shape[3]]
-  data_reshaped = tf.reshape(data, shape_before_tile)
-  data_up = tf.tile(data_reshaped, [1, 1, scale, 1, scale, 1])
-  data_up = tf.reshape(data_up, shape_after_tile)
-  return data_up
+  def model(inputs, is_training_bn=False):
+    """Creation of the model graph."""
+    inputs = conv2d_fixed_padding(
+        inputs=inputs,
+        filters=64,
+        kernel_size=7,
+        strides=2,
+        data_format=data_format)
+    inputs = tf.identity(inputs, 'initial_conv')
+    inputs = batch_norm_relu(inputs, is_training_bn, data_format=data_format)
+
+    inputs = tf.layers.max_pooling2d(
+        inputs=inputs,
+        pool_size=3,
+        strides=2,
+        padding='SAME',
+        data_format=data_format)
+    inputs = tf.identity(inputs, 'initial_max_pool')
+
+    c2 = block_group(
+        inputs=inputs,
+        filters=64,
+        blocks=layers[0],
+        strides=1,
+        block_fn=block_fn,
+        is_training_bn=is_training_bn,
+        name='block_group1',
+        data_format=data_format)
+    c3 = block_group(
+        inputs=c2,
+        filters=128,
+        blocks=layers[1],
+        strides=2,
+        block_fn=block_fn,
+        is_training_bn=is_training_bn,
+        name='block_group2',
+        data_format=data_format)
+    c4 = block_group(
+        inputs=c3,
+        filters=256,
+        blocks=layers[2],
+        strides=2,
+        block_fn=block_fn,
+        is_training_bn=is_training_bn,
+        name='block_group3',
+        data_format=data_format)
+    c5 = block_group(
+        inputs=c4,
+        filters=512,
+        blocks=layers[3],
+        strides=2,
+        block_fn=block_fn,
+        is_training_bn=is_training_bn,
+        name='block_group4',
+        data_format=data_format)
+    return c2, c3, c4, c5
+
+  return model
 
 
-def nearest_upsampling(data, scale, num_splits=2):
+def resnet_v1(resnet_depth, data_format='channels_last'):
+  """Returns the ResNet model for a given size and number of output classes."""
+  model_params = {
+      18: {'block': residual_block, 'layers': [2, 2, 2, 2]},
+      34: {'block': residual_block, 'layers': [3, 4, 6, 3]},
+      50: {'block': bottleneck_block, 'layers': [3, 4, 6, 3]},
+      101: {'block': bottleneck_block, 'layers': [3, 4, 23, 3]},
+      152: {'block': bottleneck_block, 'layers': [3, 8, 36, 3]},
+      200: {'block': bottleneck_block, 'layers': [3, 24, 36, 3]}
+  }
+
+  if resnet_depth not in model_params:
+    raise ValueError('Not a valid resnet_depth:', resnet_depth)
+
+  params = model_params[resnet_depth]
+  return resnet_v1_generator(
+      params['block'], params['layers'], data_format)
+
+
+def nearest_upsampling(data, scale):
   """Nearest neighbor upsampling implementation.
 
   Args:
     data: A float32 tensor of size [batch, height_in, width_in, channels].
     scale: An integer multiple to scale resolution of input data.
-    num_splits: An integer number representing number of splits. The data is
-      split into parts and concat back into output. It saves memory on some
-      hardware.
   Returns:
     data_up: A float32 tensor of size
       [batch, height_in*scale, width_in*scale, channels].
-  Raises:
-    ValueError: input channels are not divisible by num_splits
   """
   with tf.name_scope('nearest_upsampling'):
-    bs, w, h, c = data.get_shape().as_list()
-    if c % num_splits != 0:
-      raise ValueError(
-          'input channels should be divisible by number of splits.')
-    output = []
-    steps = c // num_splits
-    index = 0
-    for _ in range(num_splits):
-      output.append(
-          _nearest_upsampling(
-              tf.slice(data, [0, 0, 0, index], [bs, w, h, steps]), scale))
-      index += steps
-    outputs = tf.concat(output, 3)
-    return outputs
+    bs, h, w, c = data.get_shape().as_list()
+    # Use reshape to quickly upsample the input.  The nearest pixel is selected
+    # implicitly via broadcasting.
+    data = tf.reshape(data, [bs, h, 1, w, 1, c]) * tf.ones(
+        [1, 1, scale, 1, scale, 1], dtype=data.dtype)
+    return tf.reshape(data, [bs, h * scale, w * scale, c])
 
 
 ## RetinaNet specific layers
-def class_net(images, num_classes, num_anchors=6):
+def class_net(images, level, num_classes, num_anchors=6, is_training_bn=False):
   """Class prediction network for RetinaNet."""
   for i in range(4):
     images = tf.layers.conv2d(
@@ -441,16 +447,21 @@ def class_net(images, num_classes, num_anchors=6):
         bias_initializer=tf.zeros_initializer(),
         kernel_initializer=tf.random_normal_initializer(stddev=0.01),
         kernel_regularizer=tf.contrib.layers.l2_regularizer(_WEIGHT_DECAY),
-        activation=tf.nn.relu,
+        activation=None,
         padding='same',
         name='class-%d' % i)
+    # The convolution layers in the class net are shared among all levels, but
+    # each level has its batch normlization to capture the statistical
+    # difference among different levels.
+    images = batch_norm_relu(images, is_training_bn, relu=True, init_zero=False,
+                             name='class-%d-bn-%d' % (i, level))
 
   classes = tf.layers.conv2d(
       images,
       num_classes * num_anchors,
       kernel_size=(3, 3),
       bias_initializer=tf.constant_initializer(-np.log((1 - 0.01) / 0.01)),
-      kernel_initializer=tf.zeros_initializer(),
+      kernel_initializer=tf.random_normal_initializer(stddev=0.01),
       kernel_regularizer=tf.contrib.layers.l2_regularizer(_WEIGHT_DECAY),
       padding='same',
       name='class-predict')
@@ -458,19 +469,24 @@ def class_net(images, num_classes, num_anchors=6):
   return classes
 
 
-def box_net(images, num_anchors=6):
+def box_net(images, level, num_anchors=6, is_training_bn=False):
   """Box regression network for RetinaNet."""
   for i in range(4):
     images = tf.layers.conv2d(
         images,
         256,
         kernel_size=(3, 3),
-        activation=tf.nn.relu,
+        activation=None,
         bias_initializer=tf.zeros_initializer(),
         kernel_initializer=tf.random_normal_initializer(stddev=0.01),
         kernel_regularizer=tf.contrib.layers.l2_regularizer(_WEIGHT_DECAY),
         padding='same',
         name='box-%d' % i)
+    # The convolution layers in the box net are shared among all levels, but
+    # each level has its batch normlization to capture the statistical
+    # difference among different levels.
+    images = batch_norm_relu(images, is_training_bn, relu=True, init_zero=False,
+                             name='box-%d-bn-%d' % (i, level))
 
   boxes = tf.layers.conv2d(
       images,
@@ -485,76 +501,108 @@ def box_net(images, num_anchors=6):
   return boxes
 
 
-def retinanet_50(features,
-                 min_level=3,
-                 max_level=7,
-                 num_classes=90,
-                 num_anchors=6,
-                 is_training_bn=False):
-  """RetinaNet classification and regression model."""
-  # build FPN features by upsampling from the upper layer and summing.
-
+def resnet_fpn(features,
+               min_level=3,
+               max_level=7,
+               resnet_depth=50,
+               is_training_bn=False):
+  """ResNet feature pyramid networks."""
   # upward layers
-  with tf.variable_scope('resnet50'):
-    u3, u4, u5 = resnet_50(features, bottleneck_block, is_training_bn)
+  with tf.variable_scope('resnet%s' % resnet_depth):
+    resnet_fn = resnet_v1(resnet_depth)
+    u2, u3, u4, u5 = resnet_fn(features, is_training_bn)
 
-  # lateral connections
-  with tf.variable_scope('retinanet'):
-    l3 = tf.layers.conv2d(
-        u3, filters=256, kernel_size=(1, 1), padding='same', name='l1')
-    l4 = tf.layers.conv2d(
-        u4, filters=256, kernel_size=(1, 1), padding='same', name='l2')
-    l5 = tf.layers.conv2d(
-        u5, filters=256, kernel_size=(1, 1), padding='same', name='l3')
+  feats_bottom_up = {
+      2: u2,
+      3: u3,
+      4: u4,
+      5: u5,
+  }
 
-    # input layers for box and class networks
-    d5 = l5
-    d4 = l4 + nearest_upsampling(d5, 2)
-    d3 = l3 + nearest_upsampling(d4, 2)
-    d6 = tf.layers.conv2d(
-        u5,
-        filters=256,
-        strides=(2, 2),
-        kernel_size=(3, 3),
-        padding='same',
-        name='d6')
-    d7 = tf.layers.conv2d(
-        tf.nn.relu(d6),
-        filters=256,
-        strides=(2, 2),
-        kernel_size=(3, 3),
-        padding='same',
-        name='d7')
+  with tf.variable_scope('resnet_fpn'):
+    # lateral connections
+    feats_lateral = {}
+    for level in range(min_level, _RESNET_MAX_LEVEL + 1):
+      feats_lateral[level] = tf.layers.conv2d(
+          feats_bottom_up[level],
+          filters=256,
+          kernel_size=(1, 1),
+          padding='same',
+          name='l%d' % level)
 
-    feats = {
-        3: d3,
-        4: d4,
-        5: d5,
-        6: d6,
-        7: d7
-    }
-    # post-hoc 3x3 convolution kernel
+    # add top-down path
+    feats = {_RESNET_MAX_LEVEL: feats_lateral[_RESNET_MAX_LEVEL]}
+    for level in range(_RESNET_MAX_LEVEL - 1, min_level - 1, -1):
+      feats[level] = (
+          nearest_upsampling(feats[level + 1], 2) + feats_lateral[level]
+      )
+
+    # add post-hoc 3x3 convolution kernel
+    for level, features in feats.items():
+      feats[level] = tf.layers.conv2d(
+          features,
+          filters=256,
+          strides=(1, 1),
+          kernel_size=(3, 3),
+          padding='same',
+          name='post_hoc_d%d' % level)
+
+    # coarser FPN levels introduced for RetinaNet
+    for level in range(_RESNET_MAX_LEVEL + 1, max_level + 1):
+      feats_in = feats[level - 1]
+      if level > _RESNET_MAX_LEVEL + 1:
+        feats_in = tf.nn.relu(feats_in)
+      feats[level] = tf.layers.conv2d(
+          feats_in,
+          filters=256,
+          strides=(2, 2),
+          kernel_size=(3, 3),
+          padding='same',
+          name='p%d' % level)
+    # add batchnorm
     for level in range(min_level, max_level + 1):
-      feats[level] = tf.layers.conv2d(feats[level],
-                                      filters=256,
-                                      strides=(1, 1),
-                                      kernel_size=(3, 3),
-                                      padding='same',
-                                      name='post_hoc_d%d'%level)
+      feats[level] = tf.layers.batch_normalization(
+          inputs=feats[level],
+          momentum=_BATCH_NORM_DECAY,
+          epsilon=_BATCH_NORM_EPSILON,
+          center=True,
+          scale=True,
+          training=is_training_bn,
+          fused=True,
+          name='p%d-bn' % level)
+
+  return feats
+
+
+def retinanet(features,
+              min_level=3,
+              max_level=7,
+              num_classes=90,
+              num_anchors=6,
+              resnet_depth=50,
+              is_training_bn=False):
+  """RetinaNet classification and regression model."""
+  # create feature pyramid networks
+  feats = resnet_fpn(features, min_level, max_level, resnet_depth,
+                     is_training_bn)
+  # add class net and box net in RetinaNet. The class net and the box net are
+  # shared among all the levels.
+  with tf.variable_scope('retinanet'):
     class_outputs = {}
     box_outputs = {}
     with tf.variable_scope('class_net', reuse=tf.AUTO_REUSE):
       for level in range(min_level, max_level + 1):
-        class_outputs[level] = class_net(feats[level], num_classes,
-                                         num_anchors)
+        class_outputs[level] = class_net(feats[level], level, num_classes,
+                                         num_anchors, is_training_bn)
     with tf.variable_scope('box_net', reuse=tf.AUTO_REUSE):
       for level in range(min_level, max_level + 1):
-        box_outputs[level] = box_net(feats[level], num_anchors)
+        box_outputs[level] = box_net(feats[level], level,
+                                     num_anchors, is_training_bn)
 
   return class_outputs, box_outputs
 
 
-def remove_variables(variables):
+def remove_variables(variables, resnet_depth=50):
   """Removes low-level variables from the input.
 
   Removing low-level parameters (e.g., initial convolution layer) from training
@@ -565,10 +613,12 @@ def remove_variables(variables):
 
   Args:
     variables: all the variables in training
+    resnet_depth: the depth of ResNet model
 
   Returns:
     var_list: a list containing variables for training
 
   """
-  var_list = [v for v in variables if v.name.find('resnet50/conv2d/') == -1]
+  var_list = [v for v in variables
+              if v.name.find('resnet%s/conv2d/' % resnet_depth) == -1]
   return var_list

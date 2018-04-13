@@ -136,8 +136,7 @@ def input_fn(params):
       tf.contrib.data.batch_and_drop_remainder(FLAGS.batch_size)
   )
   dataset = dataset.prefetch(1)
-  images, labels = dataset.make_one_shot_iterator().get_next()
-  return images, labels
+  return dataset
 
 
 def main(argv):

@@ -96,10 +96,16 @@ class ImageNetInput(object):
     }
 
     parsed = tf.parse_single_example(value, keys_to_features)
+    image_buffer = tf.reshape(parsed['image/encoded'], shape=[])
 
-    image = tf.image.decode_image(
-        tf.reshape(parsed['image/encoded'], shape=[]), 3)
-    image = tf.image.convert_image_dtype(image, dtype=tf.float32)
+    if self.is_training:
+      # In this case image is decoded in the preprocessing
+      # function. We pass the raw buffer directly to take advantage of
+      # the decode and crop optimization.
+      image = image_buffer
+    else:
+      image = tf.image.decode_image(image_buffer, 3)
+      image = tf.image.convert_image_dtype(image, dtype=tf.float32)
 
     image = self.image_preprocessing_fn(
         image=image,
@@ -145,7 +151,7 @@ class ImageNetInput(object):
 
     dataset = dataset.apply(
         tf.contrib.data.parallel_interleave(
-            fetch_dataset, cycle_length=self.num_cores, sloppy=True))
+            fetch_dataset, cycle_length=self.num_parallel_calls, sloppy=True))
     dataset = dataset.shuffle(1024)
 
     # Use the fused map-and-batch operation.
@@ -187,6 +193,5 @@ class ImageNetInput(object):
     if self.is_training:
       dataset = dataset.map(set_shapes)
 
-    dataset = dataset.prefetch(4)  # Prefetch overlaps in-feed with training
-    images, labels = dataset.make_one_shot_iterator().get_next()
-    return images, labels
+    dataset = dataset.prefetch(32)  # Prefetch overlaps in-feed with training
+    return dataset  # Must return the dataset and not tensors for high perf!

@@ -108,8 +108,9 @@ def distorted_bounding_box_crop(image,
     # allowed range of aspect ratios, sizes and overlap with the human-annotated
     # bounding box. If no box is supplied, then we assume the bounding box is
     # the entire image.
+    shape = tf.image.extract_jpeg_shape(image)
     sample_distorted_bounding_box = tf.image.sample_distorted_bounding_box(
-        tf.shape(image),
+        shape,
         bounding_boxes=bbox,
         min_object_covered=min_object_covered,
         aspect_ratio_range=aspect_ratio_range,
@@ -117,9 +118,16 @@ def distorted_bounding_box_crop(image,
         max_attempts=max_attempts,
         use_image_if_no_bounding_boxes=True)
     bbox_begin, bbox_size, distort_bbox = sample_distorted_bounding_box
-
     # Crop the image to the specified bounding box.
-    cropped_image = tf.slice(image, bbox_begin, bbox_size)
+    # cropped_image = tf.slice(image, bbox_begin, bbox_size)
+
+    offset_y, offset_x, _ = tf.unstack(bbox_begin)
+    target_height, target_width, _ = tf.unstack(bbox_size)
+    crop_window = tf.stack([offset_y, offset_x, target_height, target_width])
+    cropped_image = tf.image.decode_and_crop_jpeg(image, crop_window)
+    cropped_image = tf.image.convert_image_dtype(
+        cropped_image, dtype=tf.float32)
+
     return cropped_image, distort_bbox
 
 
@@ -134,10 +142,11 @@ def _random_crop(image, size):
       area_range=(0.08, 1.0),
       max_attempts=1,
       scope=None)
-  bad = _at_least_x_are_true(tf.shape(image), tf.shape(random_image), 3)
+  shape = tf.image.extract_jpeg_shape(image)
+  bad = _at_least_x_are_true(shape, tf.shape(random_image), 3)
 
   image = tf.cond(
-      bad, lambda: _center_crop(_do_scale(image, size), size),
+      bad, lambda: _center_crop(_do_scale(image, size, True), size),
       lambda: tf.image.resize_bicubic([random_image], [size, size])[0])
   return image
 
@@ -155,8 +164,12 @@ def _at_least_x_are_true(a, b, x):
   return tf.greater_equal(tf.reduce_sum(match), x)
 
 
-def _do_scale(image, size):
+def _do_scale(image, size, compressed=False):
   """Rescale the image by scaling the smaller spatial dimension to `size`."""
+  if compressed:
+    image = tf.image.decode_image(image, 3)
+    image = tf.image.convert_image_dtype(image, dtype=tf.float32)
+
   shape = tf.cast(tf.shape(image), tf.float32)
   w_greater = tf.greater(shape[0], shape[1])
   shape = tf.cond(w_greater,

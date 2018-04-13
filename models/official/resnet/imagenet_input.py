@@ -30,11 +30,8 @@ def image_serving_input_fn():
 
   def _preprocess_image(image_bytes):
     """Preprocess a single raw image."""
-    image = tf.image.decode_image(tf.reshape(image_bytes, shape=[]), 3)
-    image = tf.image.convert_image_dtype(image, dtype=tf.float32)
-
     image = resnet_preprocessing.preprocess_image(
-        image=image, is_training=False)
+        image_bytes=image_bytes, is_training=False)
     return image
 
   image_bytes_list = tf.placeholder(
@@ -59,20 +56,20 @@ class ImageNetInput(object):
 
   The validation data is in the same format but sharded in 128 files.
 
-  The fortmat of the data required is created by the script at:
+  The format of the data required is created by the script at:
       https://github.com/tensorflow/tpu-demos/blob/master/cloud_tpu/datasets/imagenet_to_gcs.py
 
   Args:
     is_training: `bool` for whether the input is for training
     data_dir: `str` for the directory of the training and validation data
-    num_cores: `int` for the number of TPU cores
+    transpose_input: 'bool' for whether to use the double transpose trick
   """
 
-  def __init__(self, is_training, data_dir, num_cores=8):
+  def __init__(self, is_training, data_dir, transpose_input=True):
     self.image_preprocessing_fn = resnet_preprocessing.preprocess_image
     self.is_training = is_training
     self.data_dir = data_dir
-    self.num_cores = num_cores
+    self.transpose_input = transpose_input
 
   def dataset_parser(self, value):
     """Parse an ImageNet record from a serialized string Tensor."""
@@ -98,19 +95,18 @@ class ImageNetInput(object):
     }
 
     parsed = tf.parse_single_example(value, keys_to_features)
-
-    image = tf.image.decode_image(
-        tf.reshape(parsed['image/encoded'], shape=[]), 3)
-    image = tf.image.convert_image_dtype(image, dtype=tf.float32)
+    image_bytes = tf.reshape(parsed['image/encoded'], shape=[])
 
     image = self.image_preprocessing_fn(
-        image=image,
+        image_bytes=image_bytes,
         is_training=self.is_training,
     )
 
     # Subtract one so that labels are in [0, 1000).
     label = tf.cast(
         tf.reshape(parsed['image/class/label'], shape=[]), dtype=tf.int32) - 1
+
+    image = tf.cast(image, tf.bfloat16)
 
     return image, label
 
@@ -144,24 +140,44 @@ class ImageNetInput(object):
       dataset = tf.data.TFRecordDataset(filename, buffer_size=buffer_size)
       return dataset
 
+    # Read the data from disk in parallel
     dataset = dataset.apply(
         tf.contrib.data.parallel_interleave(
-            fetch_dataset, cycle_length=self.num_cores, sloppy=True))
+            fetch_dataset, cycle_length=64, sloppy=True))
     dataset = dataset.shuffle(1024)
 
-    dataset = dataset.map(
-        self.dataset_parser,
-        num_parallel_calls=64)
-    dataset = dataset.prefetch(batch_size)
-
-    # For training, batch as usual. When evaluating, prevent accidentally
-    # evaluating the same image twice by dropping the final batch if it is less
-    # than a full batch size. As long as this validation is done with
-    # consistent batch size, exactly the same images will be used.
+    # Parse, preprocess, and batch the data in parallel
     dataset = dataset.apply(
-        tf.contrib.data.batch_and_drop_remainder(batch_size))
+        tf.contrib.data.map_and_batch(
+            self.dataset_parser, batch_size=batch_size,
+            num_parallel_batches=8,    # 8 == num_cores per host
+            drop_remainder=True))
 
-    dataset = dataset.prefetch(2)     # Prefetch overlaps in-feed with training
-    images, labels = dataset.make_one_shot_iterator().get_next()
-    return images, labels
+    # Transpose for performance on TPU
+    if self.transpose_input:
+      dataset = dataset.map(
+          lambda images, labels: (tf.transpose(images, [1, 2, 3, 0]), labels),
+          num_parallel_calls=8)
+
+    def set_shapes(images, labels):
+      """Statically set the batch_size dimension."""
+      if self.transpose_input:
+        images.set_shape(images.get_shape().merge_with(
+            tf.TensorShape([None, None, None, batch_size])))
+        labels.set_shape(labels.get_shape().merge_with(
+            tf.TensorShape([batch_size])))
+      else:
+        images.set_shape(images.get_shape().merge_with(
+            tf.TensorShape([batch_size, None, None, None])))
+        labels.set_shape(labels.get_shape().merge_with(
+            tf.TensorShape([batch_size])))
+
+      return images, labels
+
+    # Assign static batch size dimension
+    dataset = dataset.map(set_shapes)
+
+    # Prefetch overlaps in-feed with training
+    dataset = dataset.prefetch(tf.contrib.data.AUTOTUNE)
+    return dataset
 
