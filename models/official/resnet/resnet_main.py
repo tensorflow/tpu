@@ -28,6 +28,7 @@ import tensorflow as tf
 import imagenet_input
 import resnet_model
 from tensorflow.contrib import summary
+from tensorflow.contrib.tpu.python.tpu import bfloat16
 from tensorflow.contrib.tpu.python.tpu import tpu_config
 from tensorflow.contrib.tpu.python.tpu import tpu_estimator
 from tensorflow.contrib.tpu.python.tpu import tpu_optimizer
@@ -128,11 +129,17 @@ flags.DEFINE_integer(
           ' TPU has 4 chips each with 2 cores.'))
 
 flags.DEFINE_string(
-    'data_format',
-    default='channels_last',
-    help=('A flag to override the data format used in the model. The value '
-          'is either channels_first or channels_last. To run the network on '
-          'CPU or TPU, channels_last should be used.'))
+    'data_format', default='channels_last',
+    help=('A flag to override the data format used in the model. The value'
+          ' is either channels_first or channels_last. To run the network on'
+          ' CPU or TPU, channels_last should be used. For GPU, channels_first'
+          ' will improve performance.'))
+
+# TODO(chrisying): remove this flag once --transpose_tpu_infeed flag is enabled
+# by default for TPU
+flags.DEFINE_bool(
+    'transpose_input', default=True,
+    help='Use TPU double transpose optimization')
 
 flags.DEFINE_string(
     'export_dir',
@@ -196,20 +203,22 @@ def resnet_model_fn(features, labels, mode, params):
   if isinstance(features, dict):
     features = features['feature']
 
-  # In most cases, the default data format NCHW instead of NHWC should be
-  # used for a significant performance boost on GPU/TPU. NHWC should be used
-  # only if the network needs to be run on CPU since the pooling operations
-  # are only supported on NHWC.
   if FLAGS.data_format == 'channels_first':
+    assert not FLAGS.transpose_input    # channels_first only for GPU
     features = tf.transpose(features, [0, 3, 1, 2])
 
-  network = resnet_model.resnet_v1(
-      resnet_depth=FLAGS.resnet_depth,
-      num_classes=LABEL_CLASSES,
-      data_format=FLAGS.data_format)
+  if FLAGS.transpose_input:
+    features = tf.transpose(features, [3, 0, 1, 2])  # HWCN to NHWC
 
-  logits = network(
-      inputs=features, is_training=(mode == tf.estimator.ModeKeys.TRAIN))
+  with bfloat16.bfloat16_scope():
+    network = resnet_model.resnet_v1(
+        resnet_depth=FLAGS.resnet_depth,
+        num_classes=LABEL_CLASSES,
+        data_format=FLAGS.data_format)
+
+    logits = network(
+        inputs=features, is_training=(mode == tf.estimator.ModeKeys.TRAIN))
+    logits = tf.cast(logits, tf.float32)
 
   if mode == tf.estimator.ModeKeys.PREDICT:
     predictions = {
@@ -374,10 +383,12 @@ def main(unused_argv):
       master=tpu_grpc_url,
       evaluation_master=tpu_grpc_url,
       model_dir=FLAGS.model_dir,
+      save_checkpoints_steps=FLAGS.iterations_per_loop,
       cluster=tpu_cluster_resolver,
       tpu_config=tpu_config.TPUConfig(
           iterations_per_loop=FLAGS.iterations_per_loop,
-          num_shards=FLAGS.num_cores))
+          num_shards=FLAGS.num_cores,
+          per_host_input_for_training=tpu_config.InputPipelineConfig.PER_HOST_V2))  # pylint: disable=line-too-long
 
   resnet_classifier = tpu_estimator.TPUEstimator(
       use_tpu=FLAGS.use_tpu,
@@ -390,10 +401,12 @@ def main(unused_argv):
   # preprocessing) between training and evaluation.
   imagenet_train = imagenet_input.ImageNetInput(
       is_training=True,
-      data_dir=FLAGS.data_dir)
+      data_dir=FLAGS.data_dir,
+      transpose_input=FLAGS.transpose_input)
   imagenet_eval = imagenet_input.ImageNetInput(
       is_training=False,
-      data_dir=FLAGS.data_dir)
+      data_dir=FLAGS.data_dir,
+      transpose_input=FLAGS.transpose_input)
 
   if FLAGS.mode == 'eval':
     eval_steps = NUM_EVAL_IMAGES // FLAGS.eval_batch_size

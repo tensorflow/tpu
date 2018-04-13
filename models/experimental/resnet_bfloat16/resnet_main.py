@@ -29,6 +29,7 @@ import tensorflow as tf
 import imagenet_input
 import resnet_model
 from tensorflow.contrib import summary
+from tensorflow.contrib.tpu.python.tpu import bfloat16
 from tensorflow.contrib.tpu.python.tpu import tpu_config
 from tensorflow.contrib.tpu.python.tpu import tpu_estimator
 from tensorflow.contrib.tpu.python.tpu import tpu_optimizer
@@ -112,7 +113,7 @@ flags.DEFINE_integer(
           ' utilization on the TPU.'))
 
 flags.DEFINE_integer(
-    'num_parallel_calls', default=192,
+    'num_parallel_calls', default=64,
     help=('Number of parallel threads in CPU for the input pipeline'))
 
 flags.DEFINE_integer(
@@ -145,6 +146,10 @@ flags.DEFINE_integer(
 
 flags.DEFINE_bool(
     'use_transpose', True,
+    help=('Use the TPU double transpose optimization'))
+
+flags.DEFINE_bool(
+    'enable_hostcall', True,
     help=('Use the TPU double transpose optimization'))
 
 # Dataset constants
@@ -187,47 +192,6 @@ def learning_rate_schedule(current_epoch):
   return decay_rate
 
 
-def get_custom_getter():
-  """Returns a custom getter that this class's methods must be called under.
-
-  All methods of this class must be called under a variable scope that was
-  passed this custom getter. Example:
-
-  ```python
-  network = ConvNetBuilder(...)
-  with tf.variable_scope('cg', custom_getter=network.get_custom_getter()):
-    network.conv(...)
-    # Call more methods of network here
-  ```
-
-  Currently, this custom getter only does anything if self.use_tf_layers is
-  True. In that case, it causes variables to be stored as dtype
-  self.variable_type, then casted to the requested dtype, instead of directly
-  storing the variable as the requested dtype.
-  """
-
-  def inner_custom_getter(getter, *args, **kwargs):
-    """Custom getter that forces variables to have type self.variable_type."""
-    cast_to_bfloat16 = False
-    requested_dtype = kwargs['dtype']
-    if requested_dtype == tf.bfloat16:
-      # Only change the variable dtype if doing so does not decrease variable
-      # precision.
-      kwargs['dtype'] = tf.float32
-      cast_to_bfloat16 = True
-    var = getter(*args, **kwargs)
-    # This if statement is needed to guard the cast, because batch norm
-    # assigns directly to the return value of this custom getter. The cast
-    # makes the return value not a variable so it cannot be assigned. Batch
-    # norm variables are always in fp32 so this if statement is never
-    # triggered for them.
-    if cast_to_bfloat16:
-      var = tf.cast(var, tf.bfloat16)
-    return var
-
-  return inner_custom_getter
-
-
 def resnet_model_fn(features, labels, mode, params):
   """The model_fn for ResNet to be used with TPUEstimator.
 
@@ -255,7 +219,7 @@ def resnet_model_fn(features, labels, mode, params):
   if FLAGS.use_transpose:
     features = tf.transpose(features, [3, 0, 1, 2])  # HWCN to NHCW
 
-  with tf.variable_scope('cg', custom_getter=get_custom_getter()):
+  with bfloat16.bfloat16_scope():
     network = resnet_model.resnet_v1(
         resnet_depth=FLAGS.resnet_depth,
         num_classes=LABEL_CLASSES,
@@ -356,7 +320,8 @@ def resnet_model_fn(features, labels, mode, params):
 
           return summary.all_summary_ops()
 
-    host_call = (host_call_fn, [gs_t, loss_t, lr_t, ce_t])
+    if FLAGS.enable_hostcall:
+      host_call = (host_call_fn, [gs_t, loss_t, lr_t, ce_t])
 
   else:
     train_op = None
@@ -432,18 +397,16 @@ def main(unused_argv):
       keep_checkpoint_max=None,
       tpu_config=tpu_config.TPUConfig(
           iterations_per_loop=FLAGS.iterations_per_loop,
-          num_shards=FLAGS.num_cores))
+          num_shards=FLAGS.num_cores,
+          per_host_input_for_training=tpu_config.InputPipelineConfig.PER_HOST_V2
+      ))
 
-  batch_axis = 0
-  if FLAGS.use_transpose:
-    batch_axis = 3
   resnet_classifier = tpu_estimator.TPUEstimator(
       use_tpu=FLAGS.use_tpu,
       model_fn=resnet_model_fn,
       config=config,
       train_batch_size=FLAGS.train_batch_size,
-      eval_batch_size=FLAGS.eval_batch_size,
-      batch_axis=(batch_axis, 0))
+      eval_batch_size=FLAGS.eval_batch_size)
 
   # Input pipelines are slightly different (with regards to shuffling and
   # preprocessing) between training and evaluation.

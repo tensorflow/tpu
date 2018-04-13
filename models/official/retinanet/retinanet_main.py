@@ -55,6 +55,10 @@ flags.DEFINE_string(
     help='GRPC URL of the eval master. Set to an appropiate value when running '
     'on CPU/GPU')
 flags.DEFINE_bool('use_tpu', True, 'Use TPUs rather than CPUs')
+flags.DEFINE_bool(
+    'use_xla', False,
+    'Use XLA even if use_tpu is false.  If use_tpu is true, we always use XLA, '
+    'and this flag has no effect.')
 flags.DEFINE_string('model_dir', None, 'Location of model_dir')
 flags.DEFINE_string('resnet_checkpoint', '',
                     'Location of the ResNet50 checkpoint to use for model '
@@ -136,20 +140,25 @@ def main(argv):
       val_json_file=FLAGS.val_json_file,
       mode=FLAGS.mode,
   )
+  config_proto = tf.ConfigProto(
+      allow_soft_placement=True, log_device_placement=False)
+  if FLAGS.use_xla and not FLAGS.use_tpu:
+    config_proto.graph_options.optimizer_options.global_jit_level = (
+        tf.OptimizerOptions.ON_1)
+
   run_config = tpu_config.RunConfig(
       master=FLAGS.master,
       evaluation_master=FLAGS.eval_master,
       model_dir=FLAGS.model_dir,
       log_step_count_steps=FLAGS.iterations_per_loop,
-      session_config=tf.ConfigProto(
-          allow_soft_placement=True, log_device_placement=False),
+      session_config=config_proto,
       tpu_config=tpu_config.TPUConfig(FLAGS.iterations_per_loop,
                                       FLAGS.num_shards))
 
   # TPU Estimator
   if FLAGS.mode == 'train':
     train_estimator = tpu_estimator.TPUEstimator(
-        model_fn=retinanet_model.retinanet_50_model_fn,
+        model_fn=retinanet_model.retinanet_model_fn,
         use_tpu=FLAGS.use_tpu,
         train_batch_size=FLAGS.train_batch_size,
         config=run_config,
@@ -171,7 +180,7 @@ def main(argv):
           is_training_bn=False,
       )
       eval_estimator = tpu_estimator.TPUEstimator(
-          model_fn=retinanet_model.retinanet_50_model_fn,
+          model_fn=retinanet_model.retinanet_model_fn,
           use_tpu=False,
           eval_batch_size=1,
           config=run_config,
@@ -197,7 +206,7 @@ def main(argv):
     )
 
     eval_estimator = tpu_estimator.TPUEstimator(
-        model_fn=retinanet_model.retinanet_50_model_fn,
+        model_fn=retinanet_model.retinanet_model_fn,
         use_tpu=False,
         eval_batch_size=1,
         config=run_config,

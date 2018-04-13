@@ -232,8 +232,7 @@ class ImageNetInput(object):
     dataset = dataset.apply(
         tf.contrib.data.batch_and_drop_remainder(batch_size))
     dataset = dataset.prefetch(2)  # Prefetch overlaps in-feed with training
-    images, labels = dataset.make_one_shot_iterator().get_next()
-    return images, labels
+    return dataset
 
 
 def model_fn(features, labels, mode, params):
