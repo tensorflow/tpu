@@ -50,14 +50,11 @@ python amoeba_net.py \
   --model_dir=$MODEL_DIR
 ```
 
-TODO: this Python command is not complete. Though ideally, most flags should be
-good by default.
-
 If you are not running this script on a GCE VM in the same project and zone as
 your Cloud TPU, you will need to add the `--project` and `--zone` flags
 specifying the corresponding values for the Cloud TPU you'd like to use.
 
-This will train an AmoebaNet-D model on ImageNet with 1024 batch size on a
+This will train an AmoebaNet-D model on ImageNet with 256 batch size on a
 single Cloud TPU. With the default flags on everything, the model should train
 to above 80% accuracy in under 48 hours (including evaluation time every
 few epochs).
@@ -66,6 +63,24 @@ You can launch TensorBoard (e.g. `tensorboard -logdir=$MODEL_DIR`) to view loss
 curves and other metadata regarding your training run. (Note: if you launch
 on your VM, be sure to configure ssh port forwarding or the GCE firewall rules
 appropriately.)
+
+You can also train the AmoebaNet-D model to 93% top-5 accuracy in under 7.5
+hours using the following command:
+
+```
+python amoeba_net.py \
+  --tpu_name=$TPU_NAME \
+  --data_dir=$DATA_DIR \
+  --model_dir=$MODEL_DIR \
+  --num_cells=6 \
+  --image_size=224 \
+  --num_epochs=35 \
+  --train_batch_size=1024 \
+  --eval_batch_size=1024 \
+  --lr=2.56 \
+  --lr_decay_value=0.88 \
+  --iterations_per_loop=1152
+```
 
 ## Understanding the code
 

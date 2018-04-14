@@ -89,7 +89,7 @@ flags.DEFINE_integer(
     'Global (not per-shard) batch size for evaluation')
 
 flags.DEFINE_integer(
-    'num_epochs', 4,
+    'num_epochs', 48,
     'Number of steps use for training.')
 
 flags.DEFINE_integer(
@@ -130,9 +130,9 @@ flags.DEFINE_string(
 flags.DEFINE_string(
     'cell_name', 'evol_net_h', 'Which network to run.')
 flags.DEFINE_integer(
-    'num_cells', None, 'Total number of cells.')
+    'num_cells', 12, 'Total number of cells.')
 flags.DEFINE_integer(
-    'reduction_size', 32, 'Default cell reduction size.')
+    'reduction_size', 256, 'Default cell reduction size.')
 flags.DEFINE_integer(
     'stem_reduction_size', 32, 'Stem filter size.')
 flags.DEFINE_float(
@@ -148,10 +148,10 @@ flags.DEFINE_float(
     'moving_average_decay', 0.9999,
     'moving average decay rate')
 flags.DEFINE_float(
-    'lr_decay_value', 0.94,
+    'lr_decay_value', 0.9,
     'Exponential decay rate used in learning rate adjustment')
 flags.DEFINE_integer(
-    'lr_num_epochs_per_decay', 3,
+    'lr_num_epochs_per_decay', 1,
     'Exponential decay epochs used in learning rate adjustment')
 flags.DEFINE_string(
     'lr_decay_method', 'exponential',
@@ -165,7 +165,7 @@ flags.DEFINE_string(
     'One of "fake","real"')
 
 flags.DEFINE_integer(
-    'image_size', 224, 'Size of image, assuming image height and width.')
+    'image_size', 299, 'Size of image, assuming image height and width.')
 
 flags.DEFINE_bool(
     'transpose_enabled', True,

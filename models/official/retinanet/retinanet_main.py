@@ -147,7 +147,7 @@ def main(argv):
         tf.OptimizerOptions.ON_1)
 
   run_config = tpu_config.RunConfig(
-      master=FLAGS.master,
+      master=tpu_grpc_url,
       evaluation_master=FLAGS.eval_master,
       model_dir=FLAGS.model_dir,
       log_step_count_steps=FLAGS.iterations_per_loop,
@@ -166,8 +166,8 @@ def main(argv):
     train_estimator.train(
         input_fn=dataloader.InputReader(FLAGS.training_file_pattern,
                                         is_training=True),
-        steps=int((FLAGS.num_epochs * FLAGS.num_examples_per_epoch) /
-                  FLAGS.train_batch_size))
+        max_steps=int((FLAGS.num_epochs * FLAGS.num_examples_per_epoch) /
+                      FLAGS.train_batch_size))
 
     if FLAGS.eval_after_training:
       # Run evaluation after training finishes.
@@ -182,6 +182,7 @@ def main(argv):
       eval_estimator = tpu_estimator.TPUEstimator(
           model_fn=retinanet_model.retinanet_model_fn,
           use_tpu=False,
+          train_batch_size=FLAGS.train_batch_size,
           eval_batch_size=1,
           config=run_config,
           params=eval_params)
@@ -209,6 +210,7 @@ def main(argv):
         model_fn=retinanet_model.retinanet_model_fn,
         use_tpu=False,
         eval_batch_size=1,
+        train_batch_size=FLAGS.train_batch_size,
         config=run_config,
         params=eval_params)
 
