@@ -18,51 +18,26 @@ package ctrl
 import (
 	"testing"
 
+	"github.com/tensorflow/tpu/tools/ctpu/config"
 	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/tpu/v1alpha1"
 )
 
-type testConfig struct {
-	project string
-	zone    string
-	flock   string
-}
-
-func (t *testConfig) ActiveConfiguration() string {
-	return ""
-}
-
-func (t *testConfig) FlockName() string {
-	return t.flock
-}
-
-func (t *testConfig) IPRange() string {
-	return ""
-}
-
-func (t *testConfig) Project() string {
-	return t.project
-}
-
-func (t *testConfig) Zone() string {
-	return t.zone
-}
-
-func (t *testConfig) Environment() string {
-	return ""
-}
-
 func TestCreateParentPath(t *testing.T) {
-	cfg := testConfig{"testProject", "us-central1-f", "alice"}
-	cp := TPUCP{config: &cfg}
+	cfg := &config.Config{
+		Project:   "testProject",
+		Zone:      "us-central1-f",
+		FlockName: "alice",
+	}
+	cp := TPUCP{config: cfg}
 
 	expected := "projects/testProject/locations/us-central1-f"
 	if cp.parentPath() != expected {
 		t.Errorf("wrong parent path: got %s, want %s", cp.parentPath(), expected)
 	}
 
-	cfg.project = "otherProject"
-	cfg.zone = "us-central1-c"
+	cfg.Project = "otherProject"
+	cfg.Zone = "us-central1-c"
 	expected = "projects/otherProject/locations/us-central1-c"
 	if cp.parentPath() != expected {
 		t.Errorf("wrong parent path: got %s, want %s", cp.parentPath(), expected)
@@ -70,17 +45,21 @@ func TestCreateParentPath(t *testing.T) {
 }
 
 func TestNodeName(t *testing.T) {
-	cfg := testConfig{"testProject", "us-central1-f", "alice"}
-	cp := TPUCP{config: &cfg}
+	cfg := &config.Config{
+		Project:   "testProject",
+		Zone:      "us-central1-f",
+		FlockName: "alice",
+	}
+	cp := TPUCP{config: cfg}
 
 	expected := "projects/testProject/locations/us-central1-f/nodes/alice"
 	if cp.nodeName() != expected {
 		t.Errorf("wrong node name: got %s, want %s", cp.nodeName(), expected)
 	}
 
-	cfg.project = "otherProject"
-	cfg.zone = "us-central1-c"
-	cfg.flock = "bob"
+	cfg.Project = "otherProject"
+	cfg.Zone = "us-central1-c"
+	cfg.FlockName = "bob"
 	expected = "projects/otherProject/locations/us-central1-c/nodes/bob"
 	if cp.nodeName() != expected {
 		t.Errorf("wrong node name: got %s, want %s", cp.nodeName(), expected)

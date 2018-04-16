@@ -24,17 +24,38 @@ import (
 	"flag"
 	"github.com/fatih/color"
 	"github.com/google/subcommands"
+	"github.com/tensorflow/tpu/tools/ctpu/config"
 	"github.com/tensorflow/tpu/tools/ctpu/ctrl"
 )
 
+// ListTPUInstancesCP lists the available TPU instances.
+type ListTPUInstancesCP interface {
+	// ListInstances lists the available TPU instances.
+	ListInstances() ([]*ctrl.TPUInstance, error)
+}
+
+// ListGCEInstancesCP lists the available GCE instances.
+type ListGCEInstancesCP interface {
+	// ListInstances lists the available GCE instances.
+	ListInstances() ([]*ctrl.GCEInstance, error)
+}
+
 type listCmd struct {
+	cfg *config.Config
+	tpu ListTPUInstancesCP
+	gce ListGCEInstancesCP
+
 	noHeader bool
 	noColor  bool
 }
 
 // ListCommand creates the list command.
-func ListCommand() subcommands.Command {
-	return &listCmd{}
+func ListCommand(cfg *config.Config, tpu ListTPUInstancesCP, gce ListGCEInstancesCP) subcommands.Command {
+	return &listCmd{
+		cfg: cfg,
+		tpu: tpu,
+		gce: gce,
+	}
 }
 
 func (listCmd) Name() string {
@@ -74,18 +95,19 @@ func (c *listCmd) flockStatus(flock *flock) string {
 }
 
 func (c *listCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	libs, err := parseArgs(args)
+	err := c.cfg.Validate()
 	if err != nil {
-		log.Printf("%v\n", err)
+		log.Print(err)
 		return subcommands.ExitFailure
 	}
+
 	if c.noColor {
 		color.NoColor = true
 	}
 
 	flocks := make(map[string]*flock)
 
-	vms, err := libs.gce.ListInstances()
+	vms, err := c.gce.ListInstances()
 
 	if err != nil {
 		log.Printf("Error listing GCE VM's: %v", err)
@@ -98,7 +120,7 @@ func (c *listCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...inte
 		}
 	}
 
-	tpus, err := libs.tpu.ListInstances()
+	tpus, err := c.tpu.ListInstances()
 	if err != nil {
 		log.Printf("Error listing Cloud TPUs: %v", err)
 		return subcommands.ExitFailure
@@ -128,7 +150,7 @@ func (c *listCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...inte
 		}
 
 		annotation := ""
-		if flockName == libs.cfg.FlockName() {
+		if flockName == c.cfg.FlockName {
 			annotation = " (*)"
 		}
 

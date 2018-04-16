@@ -32,17 +32,17 @@ func TestGcloudClean(t *testing.T) {
 		t.Fatal(err.Error())
 	}
 
-	if cfg.activeConfiguration != "ctpu9" {
-		t.Error("Active configuration: " + cfg.activeConfiguration)
+	if cfg.ActiveConfiguration != "ctpu9" {
+		t.Error("Active configuration: " + cfg.ActiveConfiguration)
 	}
 	if cfg.account != "saeta@google.com" {
 		t.Error("Account: " + cfg.account)
 	}
-	if cfg.project != "ctpu9-test-project" {
-		t.Error("Project: " + cfg.project)
+	if cfg.Project != "ctpu9-test-project" {
+		t.Error("Project: " + cfg.Project)
 	}
-	if cfg.zone != "us-central1-c" {
-		t.Error("Zone: " + cfg.zone)
+	if cfg.Zone != "us-central1-c" {
+		t.Error("Zone: " + cfg.Zone)
 	}
 }
 
@@ -68,14 +68,14 @@ func TestGcloudCorruptedNoConfigurationsDirectory(t *testing.T) {
 	if cfg.account != "" {
 		t.Error("Account was non-empty! " + cfg.account)
 	}
-	if cfg.activeConfiguration != "" {
-		t.Error("Active config was non-empty! " + cfg.activeConfiguration)
+	if cfg.ActiveConfiguration != "" {
+		t.Error("Active config was non-empty! " + cfg.ActiveConfiguration)
 	}
-	if cfg.project != "" {
-		t.Error("project was non-empty! " + cfg.project)
+	if cfg.Project != "" {
+		t.Error("project was non-empty! " + cfg.Project)
 	}
-	if cfg.zone != "" {
-		t.Error("zone was non-empty! " + cfg.zone)
+	if cfg.Zone != "" {
+		t.Error("zone was non-empty! " + cfg.Zone)
 	}
 }
 
@@ -91,16 +91,16 @@ func TestGcloudIncomplete(t *testing.T) {
 		t.Error("Account error: " + cfg.account)
 	}
 
-	if cfg.activeConfiguration != "ctpu9" {
-		t.Error("Active configuration error: " + cfg.activeConfiguration)
+	if cfg.ActiveConfiguration != "ctpu9" {
+		t.Error("Active configuration error: " + cfg.ActiveConfiguration)
 	}
 
-	if cfg.project != "" {
-		t.Error("Project was non-empty! " + cfg.project)
+	if cfg.Project != "" {
+		t.Error("Project was non-empty! " + cfg.Project)
 	}
 
-	if cfg.zone != "us-central1-c" {
-		t.Error("Zone error: " + cfg.zone)
+	if cfg.Zone != "us-central1-c" {
+		t.Error("Zone error: " + cfg.Zone)
 	}
 }
 

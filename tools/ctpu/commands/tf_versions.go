@@ -23,13 +23,24 @@ import (
 	"context"
 	"flag"
 	"github.com/google/subcommands"
+	"github.com/tensorflow/tpu/tools/ctpu/config"
+	"google.golang.org/api/tpu/v1alpha1"
 )
 
-type tfVersionsCmd struct{}
+// TFVersionsCP lists the available TensorFlow versions
+type TFVersionsCP interface {
+	// ListVersions returns the available TPU TensorFlow versions.
+	ListVersions() ([]*tpu.TensorFlowVersion, error)
+}
+
+type tfVersionsCmd struct {
+	cfg      *config.Config
+	versions TFVersionsCP
+}
 
 // TFVersionsCommand creates the 'tf-versions' command.
-func TFVersionsCommand() subcommands.Command {
-	return &tfVersionsCmd{}
+func TFVersionsCommand(cfg *config.Config, versions TFVersionsCP) subcommands.Command {
+	return &tfVersionsCmd{cfg, versions}
 }
 
 func (tfVersionsCmd) Name() string {
@@ -46,14 +57,14 @@ func (tfVersionsCmd) Usage() string {
 	return "ctpu tf-versions\n"
 }
 
-func (tfVersionsCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	libs, err := parseArgs(args)
+func (c *tfVersionsCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	err := c.cfg.Validate()
 	if err != nil {
 		log.Print(err)
 		return subcommands.ExitFailure
 	}
 
-	versions, err := libs.tpu.ListVersions()
+	versions, err := c.versions.ListVersions()
 	if err != nil {
 		log.Print(err)
 		return subcommands.ExitFailure

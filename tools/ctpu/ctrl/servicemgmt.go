@@ -28,10 +28,10 @@ import (
 type serviceManagementCP struct {
 	services   *servicemanagement.ServicesService
 	operations *servicemanagement.OperationsService
-	config     config.Config
+	config     *config.Config
 }
 
-func newServiceManagementCP(config config.Config, client *http.Client, ctpuVersion string) (*serviceManagementCP, error) {
+func newServiceManagementCP(config *config.Config, client *http.Client, ctpuVersion string) (*serviceManagementCP, error) {
 	apiService, err := servicemanagement.New(client)
 	if err != nil {
 		return nil, err
@@ -78,7 +78,7 @@ func (s *serviceManagementCP) pollUntilOperationComplete(serviceName string, ope
 }
 
 func (s *serviceManagementCP) consumerID() string {
-	return fmt.Sprintf("project:%s", s.config.Project())
+	return fmt.Sprintf("project:%s", s.config.Project)
 }
 
 func (s *serviceManagementCP) enableService(serviceName string) error {

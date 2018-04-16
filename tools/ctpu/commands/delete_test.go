@@ -27,19 +27,18 @@ func testDeleteWorkflow(t *testing.T, libs *testLibs, expectedGCEAction, expecte
 	t.Helper()
 	c := deleteCmd{
 		skipConfirmation: true,
+		cfg:              libs.cfg,
+		gce:              libs.gce,
+		tpu:              libs.tpu,
 	}
 
-	exit := c.Execute(context.Background(), nil, libs.libs)
+	exit := c.Execute(context.Background(), nil)
 	if exit != 0 {
 		t.Fatalf("Exit code incorrect: %d", exit)
 	}
 
-	verifySingleOperation(t, libs.testGCECP().OperationsPerformed, expectedGCEAction)
-	verifySingleOperation(t, libs.testTPUCP().OperationsPerformed, expectedTPUAction)
-
-	if libs.testRmg().callCount != 0 {
-		t.Errorf("AddTPUUserAgent was called: %d", libs.testRmg().callCount)
-	}
+	verifySingleOperation(t, libs.gce.OperationsPerformed, expectedGCEAction)
+	verifySingleOperation(t, libs.tpu.OperationsPerformed, expectedTPUAction)
 }
 
 func TestDeleteNotExistent(t *testing.T) {
@@ -49,14 +48,14 @@ func TestDeleteNotExistent(t *testing.T) {
 
 func TestDeleteNotRunning(t *testing.T) {
 	libs := newTestLibs()
-	libs.testGCECP().instance = &compute.Instance{Status: "STOPPED"}
-	libs.testTPUCP().instance = &tpu.Node{State: "CREATING"}
+	libs.gce.instance = &compute.Instance{Status: "STOPPED"}
+	libs.tpu.instance = &tpu.Node{State: "CREATING"}
 	testDeleteWorkflow(t, libs, "DELETE", "DELETE")
 }
 
 func TestDelete(t *testing.T) {
 	libs := newTestLibs()
-	libs.testGCECP().instance = &compute.Instance{Status: "RUNNING"}
-	libs.testTPUCP().instance = &tpu.Node{State: "READY"}
+	libs.gce.instance = &compute.Instance{Status: "RUNNING"}
+	libs.tpu.instance = &tpu.Node{State: "READY"}
 	testDeleteWorkflow(t, libs, "DELETE", "DELETE")
 }

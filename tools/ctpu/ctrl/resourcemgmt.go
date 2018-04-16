@@ -31,11 +31,11 @@ const storageRole = "roles/storage.admin" // Note storage.objectAdmin does not w
 //
 // It is intentionally small so that other packages in the ctpu tool can be effectively tested.
 type ResourceManagementCP struct {
-	config  config.Config
+	config  *config.Config
 	service *cloudresourcemanager.Service
 }
 
-func newResourceManagementCP(config config.Config, client *http.Client, ctpuVersion string) (*ResourceManagementCP, error) {
+func newResourceManagementCP(config *config.Config, client *http.Client, ctpuVersion string) (*ResourceManagementCP, error) {
 	service, err := cloudresourcemanager.New(client)
 	if err != nil {
 		return nil, err
@@ -88,7 +88,7 @@ func (r *ResourceManagementCP) addAgentToPolicy(tpuUserAgent string, policy *clo
 // It is a no-op if the tpuUserAgent has already been granted some access.
 func (r *ResourceManagementCP) AddTPUUserAgent(tpuUserAgent string) error {
 	req := cloudresourcemanager.GetIamPolicyRequest{}
-	policy, err := r.service.Projects.GetIamPolicy(r.config.Project(), &req).Do()
+	policy, err := r.service.Projects.GetIamPolicy(r.config.Project, &req).Do()
 	if err != nil {
 		return err
 	}
@@ -96,7 +96,7 @@ func (r *ResourceManagementCP) AddTPUUserAgent(tpuUserAgent string) error {
 	if policy != nil {
 		log.Printf("Updating the project's IAM policy to add the TPU service account ('%s') to roles: %s and %s.", tpuUserAgent, loggingRole, storageRole)
 		req := cloudresourcemanager.SetIamPolicyRequest{Policy: policy}
-		if _, err := r.service.Projects.SetIamPolicy(r.config.Project(), &req).Do(); err != nil {
+		if _, err := r.service.Projects.SetIamPolicy(r.config.Project, &req).Do(); err != nil {
 			return err
 		}
 	}

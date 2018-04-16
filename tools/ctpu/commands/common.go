@@ -30,7 +30,6 @@ import (
 	"github.com/google/subcommands"
 	"github.com/tensorflow/tpu/tools/ctpu/config"
 	"github.com/tensorflow/tpu/tools/ctpu/ctrl"
-	"google.golang.org/api/tpu/v1alpha1"
 )
 
 type tpuCmd struct {
@@ -48,82 +47,22 @@ func (c *tpuCmd) SetFlags(f *flag.FlagSet) {
 		"Wait for asynchronous operations to complete (e.g. TPU termination, GCE VM halting)")
 }
 
-type gceCP interface {
-	Instance() (*ctrl.GCEInstance, error)
-	CreateInstance(*ctrl.GCECreateRequest) error
-	StartInstance() error
-	StopInstance(bool) error
-	DeleteInstance(bool) error
-	ListInstances() ([]*ctrl.GCEInstance, error)
-}
-
-type tpuCP interface {
-	Instance() (*ctrl.TPUInstance, error)
-	CreateInstance(version string) error
-	DeleteInstance(bool) error
-	ListInstances() ([]*ctrl.TPUInstance, error)
-	ListVersions() ([]*tpu.TensorFlowVersion, error)
-	ListLocations() ([]*tpu.Location, error)
-}
-
-type resourceManagementCP interface {
-	AddTPUUserAgent(tpuUserAgent string) error
-}
-
-type gcloudCLI interface {
-	IsGcloudInstalled() bool
-	SSHToInstance(forwardPorts, forwardAgent bool, tpuInstance *ctrl.TPUInstance) error
-	PrintInstallInstructions()
-}
-
-type libs struct {
-	cfg config.Config
-	gce gceCP
-	tpu tpuCP
-	rmg resourceManagementCP
-	cli gcloudCLI
-}
-
-func parseArgs(args []interface{}) (*libs, error) {
-	// Check for testing structs
-	libsS, ok := args[0].(*libs)
-	if ok {
-		return libsS, nil
-	}
-
-	// Parse out cfg.
-	cfg, ok := args[0].(config.Config)
-	if !ok {
-		return nil, fmt.Errorf("internal error in parseArgs(0), got %T, expected config.Config", args[0])
-	}
-
-	ctrls, ok := args[1].(*ctrl.Ctrl)
-	if ok {
-		return &libs{
-			cfg: cfg,
-			gce: ctrls.GCE,
-			tpu: ctrls.TPU,
-			rmg: ctrls.ResourceManagement,
-			cli: ctrls.CLI,
-		}, nil
-	}
-	return nil, fmt.Errorf("internal error in parseArgs, could not parse libs from args, got: %#v", args)
-}
-
+type tpuInstanceFn func() (*ctrl.TPUInstance, error)
+type gceInstanceFn func() (*ctrl.GCEInstance, error)
 type cpCommand func(bool) error
 
-func cleanUpVM(cfg config.Config, gce gceCP, dryRun bool, actionName string, vmCommand cpCommand, waitForAsync, requiresRunning bool) subcommands.ExitStatus {
-	vm, err := gce.Instance()
+func cleanUpVM(cfg *config.Config, gceCP gceInstanceFn, vmCommand cpCommand, dryRun bool, actionName string, waitForAsync, requiresRunning bool) subcommands.ExitStatus {
+	vm, err := gceCP()
 	if err != nil {
 		log.Print(err)
 		return 1
 	}
 	if vm == nil {
-		log.Printf("No GCE VM %s found.\n", cfg.FlockName())
+		log.Printf("No GCE VM %s found.\n", cfg.FlockName)
 	} else if !vm.IsRunning() && requiresRunning {
-		log.Printf("GCE VM %s not running.\n", cfg.FlockName())
+		log.Printf("GCE VM %s not running.\n", cfg.FlockName)
 	} else {
-		log.Printf("%s GCE VM %s...\n", actionName, cfg.FlockName())
+		log.Printf("%s GCE VM %s...\n", actionName, cfg.FlockName)
 		if !dryRun {
 			err = vmCommand(waitForAsync)
 			if err != nil {
@@ -131,29 +70,29 @@ func cleanUpVM(cfg config.Config, gce gceCP, dryRun bool, actionName string, vmC
 				return subcommands.ExitFailure
 			}
 		}
-		log.Printf("%s GCE VM %s complete!\n", actionName, cfg.FlockName())
+		log.Printf("%s GCE VM %s complete!\n", actionName, cfg.FlockName)
 	}
 	return subcommands.ExitSuccess
 }
 
-func cleanUpTPU(cfg config.Config, tpuCP tpuCP, dryRun, waitForAsync bool) subcommands.ExitStatus {
-	tpu, err := tpuCP.Instance()
+func cleanUpTPU(cfg *config.Config, tpuCP tpuInstanceFn, tpuCommand cpCommand, dryRun, waitForAsync bool) subcommands.ExitStatus {
+	tpu, err := tpuCP()
 	if err != nil {
 		log.Print(err)
 		return subcommands.ExitFailure
 	}
 	if tpu == nil {
-		log.Printf("No TPU %s found.\n", cfg.FlockName())
+		log.Printf("No TPU %s found.\n", cfg.FlockName)
 	} else {
-		log.Printf("Deleting TPU %s...\n", cfg.FlockName())
+		log.Printf("Deleting TPU %s...\n", cfg.FlockName)
 		if !dryRun {
-			err = tpuCP.DeleteInstance(waitForAsync)
+			err = tpuCommand(waitForAsync)
 			if err != nil {
 				log.Print(err)
 				return subcommands.ExitFailure
 			}
 		}
-		log.Printf("Deleting TPU %s complete!\n", cfg.FlockName())
+		log.Printf("Deleting TPU %s complete!\n", cfg.FlockName)
 	}
 	return subcommands.ExitSuccess
 }

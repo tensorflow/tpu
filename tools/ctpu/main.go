@@ -29,7 +29,7 @@ import (
 	"github.com/tensorflow/tpu/tools/ctpu/ctrl"
 )
 
-const version = "0.6"
+const version = "0.7-dev"
 
 var logRequests bool
 
@@ -48,34 +48,34 @@ func init() {
 }
 
 func main() {
-	config.RegisterFlags()
+	cfg, err := config.FromEnv()
+	check("creating configuration", err)
+	cfg.SetFlags(flag.CommandLine)
 	flag.Parse()
+
+	ctx := context.Background()
+	ctrls, err := ctrl.New(ctx, cfg, version, logRequests)
+	check("creating API clients", err)
 
 	subcommands.ImportantFlag("name")
 	subcommands.ImportantFlag("project")
 	subcommands.ImportantFlag("zone")
 
-	subcommands.Register(commands.UpCommand(), "")
-	subcommands.Register(commands.PauseCommand(), "")
-	subcommands.Register(commands.DeleteCommand(), "")
-	subcommands.Register(commands.StatusCommand(), "")
+	subcommands.Register(commands.UpCommand(cfg, ctrls.TPU, ctrls.GCE, ctrls.ResourceManagement, ctrls.CLI), "")
+	subcommands.Register(commands.PauseCommand(cfg, ctrls.TPU, ctrls.GCE), "")
+	subcommands.Register(commands.DeleteCommand(cfg, ctrls.TPU, ctrls.GCE), "")
+	subcommands.Register(commands.StatusCommand(cfg, ctrls.TPU, ctrls.GCE), "")
 
-	subcommands.Register(commands.ConfigCommand(), "configuration")
+	subcommands.Register(commands.ConfigCommand(cfg, ctrls.CLI), "configuration")
 	subcommands.Register(commands.VersionCommand(version), "configuration")
-	subcommands.Register(commands.ListCommand(), "configuration")
-	subcommands.Register(commands.TFVersionsCommand(), "configuration")
-	subcommands.Register(commands.TPULocationsCommand(), "configuration")
-	subcommands.Register(commands.QuotaCommand(), "configuration")
+	subcommands.Register(commands.ListCommand(cfg, ctrls.TPU, ctrls.GCE), "configuration")
+	subcommands.Register(commands.TFVersionsCommand(cfg, ctrls.TPU), "configuration")
+	subcommands.Register(commands.TPULocationsCommand(cfg, ctrls.TPU), "configuration")
+	subcommands.Register(commands.QuotaCommand(cfg), "configuration")
 
 	subcommands.Register(subcommands.HelpCommand(), "usage")
 	subcommands.Register(subcommands.FlagsCommand(), "usage")
 	subcommands.Register(subcommands.CommandsCommand(), "usage")
 
-	ctx := context.Background()
-	cfg, err := config.NewConfig()
-	check("creating configuration", err)
-	ctrls, err := ctrl.New(ctx, cfg, version, logRequests)
-	check("creating API clients", err)
-
-	os.Exit(int(subcommands.Execute(ctx, cfg, ctrls)))
+	os.Exit(int(subcommands.Execute(ctx)))
 }

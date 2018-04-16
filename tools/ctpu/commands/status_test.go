@@ -84,16 +84,18 @@ func TestStatusExecute(t *testing.T) {
 	}
 
 	for _, tt := range testCases {
-		libs := &libs{
-			cfg: &config.TestConfig{},
-			gce: &testGCECP{instance: tt.vm},
-			tpu: &testTPUCP{instance: tt.tpu},
-		}
-
 		for _, details := range []bool{false, true} {
-			s := statusCmd{details: details}
+			s := statusCmd{
+				cfg: &config.Config{
+					FlockName: "test-flock",
+					Project:   "testProject",
+				},
+				tpu:     &testTPUCP{instance: tt.tpu},
+				gce:     &testGCECP{instance: tt.vm},
+				details: details,
+			}
 
-			got := s.Execute(context.Background(), nil, libs)
+			got := s.Execute(context.Background(), nil)
 			if got != 0 {
 				t.Errorf("statusCmd{details: %t}.Execute(nil, nil, %v) = %d, want: 0", details, tt, got)
 			}

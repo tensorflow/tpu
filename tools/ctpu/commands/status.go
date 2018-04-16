@@ -24,19 +24,38 @@ import (
 	"flag"
 	"github.com/fatih/color"
 	"github.com/google/subcommands"
+	"github.com/tensorflow/tpu/tools/ctpu/config"
 	"github.com/tensorflow/tpu/tools/ctpu/ctrl"
 )
 
-type sprintfFunc func(format string, a ...interface{}) string
+// StatusTPUCP encapsulates the control plane interfaces required to execute the Status command.
+type StatusTPUCP interface {
+	// Instance retrieves the TPU instance (if available).
+	Instance() (*ctrl.TPUInstance, error)
+}
+
+// StatusGCECP encapsulates the control plane interfaces required to execute the Status command.
+type StatusGCECP interface {
+	// Instance retrieves the GCE instance (if available).
+	Instance() (*ctrl.GCEInstance, error)
+}
 
 type statusCmd struct {
+	cfg *config.Config
+	tpu StatusTPUCP
+	gce StatusGCECP
+
 	details bool
 	noColor bool
 }
 
 // StatusCommand creates the status command.
-func StatusCommand() subcommands.Command {
-	return &statusCmd{}
+func StatusCommand(cfg *config.Config, tpu StatusTPUCP, gce StatusGCECP) subcommands.Command {
+	return &statusCmd{
+		cfg: cfg,
+		tpu: tpu,
+		gce: gce,
+	}
 }
 
 func (statusCmd) Name() string {
@@ -102,22 +121,23 @@ func (s *statusCmd) tpuStatus(tpu *ctrl.TPUInstance) string {
 }
 
 func (s *statusCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	libs, err := parseArgs(args)
+	err := s.cfg.Validate()
 	if err != nil {
 		log.Print(err)
 		return subcommands.ExitFailure
 	}
+
 	if s.noColor {
 		color.NoColor = true
 	}
 
-	vm, err := libs.gce.Instance()
+	vm, err := s.gce.Instance()
 	if err != nil {
 		log.Print(err)
 		return subcommands.ExitFailure
 	}
 
-	tpu, err := libs.tpu.Instance()
+	tpu, err := s.tpu.Instance()
 	if err != nil {
 		log.Print(err)
 		return subcommands.ExitFailure
