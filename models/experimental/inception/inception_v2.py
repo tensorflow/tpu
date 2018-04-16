@@ -20,6 +20,7 @@ from __future__ import division
 from __future__ import print_function
 
 import os
+import time
 from absl import flags
 import absl.logging as _logging  # pylint: disable=unused-import
 import tensorflow as tf
@@ -85,7 +86,7 @@ flags.DEFINE_integer(
     'Global (not per-shard) batch size for evaluation')
 
 flags.DEFINE_integer(
-    'train_steps', 8000000,
+    'train_steps', 200000,
     'Number of steps use for training.')
 
 flags.DEFINE_integer(
@@ -744,30 +745,33 @@ def main(unused_argv):
     eval_hooks = []
 
   if FLAGS.mode == 'eval':
-    def terminate_eval():
-      tf.logging.info('%d seconds without new checkpoints have elapsed '
-                      '... terminating eval' % FLAGS.eval_timeout)
-      return True
-
-    def get_next_checkpoint():
-      return evaluation.checkpoints_iterator(
-          FLAGS.model_dir,
-          min_interval_secs=FLAGS.min_eval_interval,
-          timeout=FLAGS.eval_timeout,
-          timeout_fn=terminate_eval)
-
-    for checkpoint in get_next_checkpoint():
+    # Run evaluation when there is a new checkpoint
+    for checkpoint in evaluation.checkpoints_iterator(FLAGS.model_dir):
       tf.logging.info('Starting to evaluate.')
       try:
+        start_timestamp = time.time()  # Includes compilation time
         eval_results = inception_classifier.evaluate(
             input_fn=imagenet_eval.input_fn,
             steps=eval_steps,
             hooks=eval_hooks,
             checkpoint_path=checkpoint)
-        tf.logging.info('Evaluation results: %s' % eval_results)
+        elapsed_time = int(time.time() - start_timestamp)
+        tf.logging.info(
+            'Eval results: %s. Elapsed seconds: %d', eval_results, elapsed_time)
+
+        # Terminate eval job when final checkpoint is reached
+        current_step = int(os.path.basename(checkpoint).split('-')[1])
+        if current_step >= FLAGS.train_steps:
+          tf.logging.info(
+              'Evaluation finished after training step %d', current_step)
+          break
       except tf.errors.NotFoundError:
-        # skip checkpoint if it gets deleted prior to evaluation
-        tf.logging.info('Checkpoint %s no longer exists ... skipping')
+        # Since the coordinator is on a different job than the TPU worker,
+        # sometimes the TPU worker does not finish initializing until long after
+        # the CPU job tells it to start evaluating. In this case, the checkpoint
+        # file could have been deleted already.
+        tf.logging.info(
+            'Checkpoint %s no longer exists, skipping checkpoint', checkpoint)
 
   elif FLAGS.mode == 'train_and_eval':
     for cycle in range(FLAGS.train_steps // FLAGS.train_steps_per_eval):

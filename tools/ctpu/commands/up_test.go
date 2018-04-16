@@ -26,64 +26,75 @@ import (
 func testUpWorkflow(t *testing.T, libs *testLibs, expectedGCEAction, expectedTPUAction string, aclServiceAccount bool) {
 	t.Helper()
 	c := upCmd{
+		cfg:         libs.cfg,
+		tpu:         libs.tpu,
+		gce:         libs.gce,
+		rmg:         libs.rmg,
+		cli:         libs.cli,
 		machineType: "n1-standard-2",
 		diskSizeGb:  250,
 	}
 
-	exit := c.Execute(context.Background(), nil, libs.libs)
+	exit := c.Execute(context.Background(), nil)
 	if exit != 0 {
 		t.Fatalf("Exit code incorrect: %d", exit)
 	}
 
-	verifySingleOperation(t, libs.testGCECP().OperationsPerformed, expectedGCEAction)
-	verifySingleOperation(t, libs.testTPUCP().OperationsPerformed, expectedTPUAction)
+	verifySingleOperation(t, libs.gce.OperationsPerformed, expectedGCEAction)
+	verifySingleOperation(t, libs.tpu.OperationsPerformed, expectedTPUAction)
 	if aclServiceAccount {
-		if libs.testRmg().callCount != 1 {
-			t.Errorf("resourceMgmt not called correct number of times: got %d, want 1", libs.testRmg().callCount)
+		if libs.rmg.callCount != 1 {
+			t.Errorf("resourceMgmt not called correct number of times: got %d, want 1", libs.rmg.callCount)
 		}
 	}
 }
 
 func TestUpAlreadyRunning(t *testing.T) {
 	libs := newTestLibs()
-	libs.testGCECP().instance = &compute.Instance{Status: "RUNNING"}
-	libs.testTPUCP().instance = &tpu.Node{State: "READY"}
-	libs.testTPUCP().SetTfVersions("1.6", "1.7")
+	libs.gce.instance = &compute.Instance{Status: "RUNNING"}
+	libs.tpu.instance = &tpu.Node{State: "READY"}
+	libs.tpu.SetTfVersions("1.6", "1.7")
 	testUpWorkflow(t, libs, "", "", false)
 }
 
 func TestUpCreating(t *testing.T) {
 	libs := newTestLibs()
-	libs.testTPUCP().postCreateInstance = &tpu.Node{State: "READY", ServiceAccount: "compute-123@gserviceaccounts.com"}
-	libs.testTPUCP().SetTfVersions("1.6", "1.7")
+	libs.tpu.postCreateInstance = &tpu.Node{State: "READY", ServiceAccount: "compute-123@gserviceaccounts.com"}
+	libs.tpu.SetTfVersions("1.6", "1.7")
 	testUpWorkflow(t, libs, "CREATE", "CREATE-1.7", true)
-	if libs.testGCECP().createRequest == nil {
+	if libs.gce.createRequest == nil {
 		t.Fatalf("createRequest was nil")
 	}
-	if libs.testGCECP().createRequest.ImageFamily != "tf-1-7" {
-		t.Errorf("createRequest.ImageFamily = %q, want: %q", libs.testGCECP().createRequest.ImageFamily, "tf-1-7")
+	if libs.gce.createRequest.ImageFamily != "tf-1-7" {
+		t.Errorf("createRequest.ImageFamily = %q, want: %q", libs.gce.createRequest.ImageFamily, "tf-1-7")
 	}
-	if libs.testGCECP().createRequest.MachineType != "n1-standard-2" {
-		t.Errorf("createRequest.MachineType = %q, want: %q", libs.testGCECP().createRequest.MachineType, "n1-standard-2")
+	if libs.gce.createRequest.MachineType != "n1-standard-2" {
+		t.Errorf("createRequest.MachineType = %q, want: %q", libs.gce.createRequest.MachineType, "n1-standard-2")
 	}
-	if libs.testGCECP().createRequest.DiskSizeGb != 250 {
-		t.Errorf("createRequest.ImageFamily = %d, want: %d", libs.testGCECP().createRequest.DiskSizeGb, 250)
+	if libs.gce.createRequest.DiskSizeGb != 250 {
+		t.Errorf("createRequest.ImageFamily = %d, want: %d", libs.gce.createRequest.DiskSizeGb, 250)
 	}
 }
 
 func TestUpStarting(t *testing.T) {
 	libs := newTestLibs()
-	libs.testGCECP().instance = &compute.Instance{Status: "STOPPING"}
-	libs.testTPUCP().postCreateInstance = &tpu.Node{State: "READY", ServiceAccount: "compute-123@gserviceaccounts.com"}
-	libs.testTPUCP().SetTfVersions("1.6")
+	libs.gce.instance = &compute.Instance{Status: "STOPPING"}
+	libs.tpu.postCreateInstance = &tpu.Node{State: "READY", ServiceAccount: "compute-123@gserviceaccounts.com"}
+	libs.tpu.SetTfVersions("1.6")
 	testUpWorkflow(t, libs, "START", "CREATE-1.6", true)
 }
 
 func TestUpMissingGcloud(t *testing.T) {
 	libs := newTestLibs()
-	libs.testGcloudCLI().isInstalled = false
-	c := upCmd{}
-	exit := c.Execute(context.Background(), nil, libs.libs)
+	libs.cli.isInstalled = false
+	c := upCmd{
+		cfg: libs.cfg,
+		tpu: libs.tpu,
+		gce: libs.gce,
+		rmg: libs.rmg,
+		cli: libs.cli,
+	}
+	exit := c.Execute(context.Background(), nil)
 	if exit != 1 {
 		t.Fatalf("Exit code incorrect, got: %d, want: 1", exit)
 	}
@@ -91,10 +102,16 @@ func TestUpMissingGcloud(t *testing.T) {
 
 func TestUpNoAvailableTfVersions(t *testing.T) {
 	libs := newTestLibs()
-	libs.testTPUCP().postCreateInstance = &tpu.Node{State: "READY", ServiceAccount: "compute-123@gserviceaccounts.com"}
-	libs.testTPUCP().SetTfVersions("nightly")
-	c := upCmd{}
-	exit := c.Execute(context.Background(), nil, libs.libs)
+	libs.tpu.postCreateInstance = &tpu.Node{State: "READY", ServiceAccount: "compute-123@gserviceaccounts.com"}
+	libs.tpu.SetTfVersions("nightly")
+	c := upCmd{
+		cfg: libs.cfg,
+		tpu: libs.tpu,
+		gce: libs.gce,
+		rmg: libs.rmg,
+		cli: libs.cli,
+	}
+	exit := c.Execute(context.Background(), nil)
 	if exit != 1 {
 		t.Errorf("Exit code incorrect, got: %d, want: 1", exit)
 	}
@@ -102,12 +119,17 @@ func TestUpNoAvailableTfVersions(t *testing.T) {
 
 func TestUpNoAvailableTfVersionsSetViaFlag(t *testing.T) {
 	libs := newTestLibs()
-	libs.testTPUCP().postCreateInstance = &tpu.Node{State: "READY", ServiceAccount: "compute-123@gserviceaccounts.com"}
-	libs.testTPUCP().SetTfVersions("nightly")
+	libs.tpu.postCreateInstance = &tpu.Node{State: "READY", ServiceAccount: "compute-123@gserviceaccounts.com"}
+	libs.tpu.SetTfVersions("nightly")
 	c := upCmd{
+		cfg:       libs.cfg,
+		tpu:       libs.tpu,
+		gce:       libs.gce,
+		rmg:       libs.rmg,
+		cli:       libs.cli,
 		tfVersion: "nightly",
 	}
-	exit := c.Execute(context.Background(), nil, libs.libs)
+	exit := c.Execute(context.Background(), nil)
 	if exit != 0 {
 		t.Errorf("Exit code incorrect, got: %d, want: 0", exit)
 	}

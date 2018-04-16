@@ -88,11 +88,11 @@ func (l *loggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 }
 
 // New creates a new Ctrl instance with fully populated control plane values.
-func New(ctx context.Context, config config.Config, ctpuVersion string, logRequests bool) (*Ctrl, error) {
+func New(ctx context.Context, config *config.Config, ctpuVersion string, logRequests bool) (*Ctrl, error) {
 
 	var client *http.Client
 	var err error
-	if config.Environment() == "devshell" {
+	if config.Environment == "devshell" {
 		ts := &devshellTokenSource{}
 		firstToken, err := ts.Token()
 		if err != nil {

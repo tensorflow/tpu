@@ -27,45 +27,26 @@ import (
 	"google.golang.org/api/tpu/v1alpha1"
 )
 
-var _ tpuCP = &ctrl.TPUCP{}
-var _ tpuCP = &testTPUCP{}
-var _ gceCP = &ctrl.GCECP{}
-var _ gceCP = &testGCECP{}
-var _ gcloudCLI = &ctrl.GCloudCLI{}
-var _ gcloudCLI = &testGcloudCLI{}
-var _ resourceManagementCP = &ctrl.ResourceManagementCP{}
-var _ resourceManagementCP = &testResourceManagementCP{}
-
 type testLibs struct {
-	*libs
-}
-
-func (t *testLibs) testGCECP() *testGCECP {
-	return t.gce.(*testGCECP)
-}
-
-func (t *testLibs) testTPUCP() *testTPUCP {
-	return t.tpu.(*testTPUCP)
-}
-
-func (t *testLibs) testGcloudCLI() *testGcloudCLI {
-	return t.cli.(*testGcloudCLI)
-}
-
-func (t *testLibs) testRmg() *testResourceManagementCP {
-	return t.rmg.(*testResourceManagementCP)
+	cfg *config.Config
+	gce *testGCECP
+	tpu *testTPUCP
+	cli *testGcloudCLI
+	rmg *testResourceManagementCP
 }
 
 func newTestLibs() *testLibs {
-	return &testLibs{&libs{
-		cfg: &config.TestConfig{
-			FlockNameVal: "test",
+	return &testLibs{
+		cfg: &config.Config{
+			FlockName:   "test",
+			Environment: "gcloud",
+			Project:     "test-project",
 		},
 		gce: &testGCECP{},
 		tpu: &testTPUCP{},
 		rmg: &testResourceManagementCP{},
 		cli: &testGcloudCLI{true},
-	}}
+	}
 }
 
 type testGCECP struct {

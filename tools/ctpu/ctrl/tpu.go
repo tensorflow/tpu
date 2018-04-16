@@ -42,11 +42,11 @@ type TPUCP struct {
 	versions    *tpu.ProjectsLocationsTensorflowVersionsService
 	locations   *tpu.ProjectsLocationsService
 	compute     *compute.Service
-	config      config.Config
+	config      *config.Config
 	serviceMgmt *serviceManagementCP
 }
 
-func newTPUCP(config config.Config, client *http.Client, serviceManagementCP *serviceManagementCP, ctpuVersion string) (*TPUCP, error) {
+func newTPUCP(config *config.Config, client *http.Client, serviceManagementCP *serviceManagementCP, ctpuVersion string) (*TPUCP, error) {
 	tpuService, err := tpu.New(client)
 	if err != nil {
 		return nil, err
@@ -151,7 +151,7 @@ func (g *TPUCP) ListVersions() ([]*tpu.TensorFlowVersion, error) {
 
 // ListLocations retrieves all locations where TPUs might be available.
 func (g *TPUCP) ListLocations() ([]*tpu.Location, error) {
-	locations, err := g.locations.List(fmt.Sprintf("projects/%s", g.config.Project())).Do()
+	locations, err := g.locations.List(fmt.Sprintf("projects/%s", g.config.Project)).Do()
 	if err != nil {
 		return nil, err
 	}
@@ -189,7 +189,7 @@ func (g *TPUCP) loopUntilOperationComplete(operation *tpu.Operation) error {
 }
 
 func (g *TPUCP) parentPath() string {
-	return fmt.Sprintf("projects/%s/locations/%s", g.config.Project(), g.config.Zone())
+	return fmt.Sprintf("projects/%s/locations/%s", g.config.Project, g.config.Zone)
 }
 
 func (g *TPUCP) selectCidrBlock(routes []*compute.Route) (string, error) {
@@ -228,7 +228,7 @@ func (g *TPUCP) selectCidrBlock(routes []*compute.Route) (string, error) {
 
 // CreateInstance creates the Cloud TPU with an API call to the TPU control plane.
 func (g *TPUCP) CreateInstance(version string) error {
-	routes, err := g.compute.Routes.List(g.config.Project()).Do()
+	routes, err := g.compute.Routes.List(g.config.Project).Do()
 	if err != nil {
 		return err
 	}
@@ -246,11 +246,11 @@ func (g *TPUCP) CreateInstance(version string) error {
 		TensorflowVersion: version,
 	}
 	req := g.nodes.Create(g.parentPath(), &node)
-	op, err := req.NodeId(g.config.FlockName()).Do()
+	op, err := req.NodeId(g.config.FlockName).Do()
 	if err != nil {
 		googErr, ok := err.(*googleapi.Error)
 		if ok && googErr.Code == 429 {
-			return fmt.Errorf("TPU quota exceeded on project %q", g.config.Project())
+			return fmt.Errorf("TPU quota exceeded on project %q", g.config.Project)
 		}
 		return err
 	}
@@ -269,7 +269,7 @@ func (g *TPUCP) StopInstance(waitForAsync bool) error {
 }
 
 func (g *TPUCP) nodeName() string {
-	return fmt.Sprintf("projects/%s/locations/%s/nodes/%s", g.config.Project(), g.config.Zone(), g.config.FlockName())
+	return fmt.Sprintf("projects/%s/locations/%s/nodes/%s", g.config.Project, g.config.Zone, g.config.FlockName)
 }
 
 // DeleteInstance deletes a previously created Cloud TPU with an API call to the TPU control plane.

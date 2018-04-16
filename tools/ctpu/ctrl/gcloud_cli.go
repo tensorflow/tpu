@@ -26,7 +26,7 @@ import (
 
 // GCloudCLI abstracts away interacting with a locally installed GCloud to facilitate testing
 type GCloudCLI struct {
-	Config config.Config
+	Config *config.Config
 }
 
 // IsGcloudInstalled returnes true if the gcloud cli is installed, false otherwise.
@@ -47,19 +47,19 @@ func (g GCloudCLI) makeExecCommand(forwardPorts, forwardAgent bool, tpuInstance 
 		"compute",
 		"ssh",
 		"--zone",
-		g.Config.Zone(),
+		g.Config.Zone,
 		"--project",
-		g.Config.Project(),
-		g.Config.FlockName(),
+		g.Config.Project,
+		g.Config.FlockName,
 	}
 	if forwardPorts || forwardAgent {
 		command = append(command, "--")
 	}
-	if forwardAgent && g.Config.Environment() != "devshell" {
+	if forwardAgent && g.Config.Environment != "devshell" {
 		command = append(command, "-A")
 	}
 	if forwardPorts {
-		if g.Config.Environment() == "devshell" {
+		if g.Config.Environment == "devshell" {
 			command = append(command, "-L", "8080:localhost:6006", "-L", "8081:localhost:8888")
 			command = append(command, "-y") // Suppresses channel errors from ssh.
 		} else {

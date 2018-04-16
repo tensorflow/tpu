@@ -24,10 +24,10 @@ import (
 )
 
 func TestMakeExecCommandNoForwarding(t *testing.T) {
-	cfg := &config.TestConfig{
-		FlockNameVal: "testuser123",
-		ProjectVal:   "testProject",
-		ZoneVal:      "us-central1-q",
+	cfg := &config.Config{
+		FlockName: "testuser123",
+		Project:   "testProject",
+		Zone:      "us-central1-q",
 	}
 	cli := GCloudCLI{cfg}
 	cmd := cli.makeExecCommand(false, false, nil)
@@ -47,10 +47,10 @@ func TestMakeExecCommandNoForwarding(t *testing.T) {
 }
 
 func TestMakeExecCommandForwardAgent(t *testing.T) {
-	cfg := &config.TestConfig{
-		FlockNameVal: "testuser321",
-		ProjectVal:   "otherTestProject",
-		ZoneVal:      "us-central1-x",
+	cfg := &config.Config{
+		FlockName: "testuser321",
+		Project:   "otherTestProject",
+		Zone:      "us-central1-x",
 	}
 	cli := GCloudCLI{cfg}
 	cmd := cli.makeExecCommand(false, true, nil)
@@ -72,10 +72,10 @@ func TestMakeExecCommandForwardAgent(t *testing.T) {
 }
 
 func TestMakeExecCommandNoTPU(t *testing.T) {
-	cfg := &config.TestConfig{
-		FlockNameVal: "testuser321",
-		ProjectVal:   "otherTestProject",
-		ZoneVal:      "us-central1-x",
+	cfg := &config.Config{
+		FlockName: "testuser321",
+		Project:   "otherTestProject",
+		Zone:      "us-central1-x",
 	}
 	cli := GCloudCLI{cfg}
 	cmd := cli.makeExecCommand(true, false, nil)
@@ -100,10 +100,10 @@ func TestMakeExecCommandNoTPU(t *testing.T) {
 }
 
 func TestMakeExecCommandWithTPU(t *testing.T) {
-	cfg := &config.TestConfig{
-		FlockNameVal: "testuser321",
-		ProjectVal:   "otherTestProject",
-		ZoneVal:      "us-central1-x",
+	cfg := &config.Config{
+		FlockName: "testuser321",
+		Project:   "otherTestProject",
+		Zone:      "us-central1-x",
 	}
 	tpu := &TPUInstance{&tpu.Node{
 		NetworkEndpoints: []*tpu.NetworkEndpoint{
@@ -139,10 +139,10 @@ func TestMakeExecCommandWithTPU(t *testing.T) {
 }
 
 func TestMakeExecCommandWithTPUAndAgentForwarding(t *testing.T) {
-	cfg := &config.TestConfig{
-		FlockNameVal: "testuser321",
-		ProjectVal:   "otherTestProject",
-		ZoneVal:      "us-central1-x",
+	cfg := &config.Config{
+		FlockName: "testuser321",
+		Project:   "otherTestProject",
+		Zone:      "us-central1-x",
 	}
 	tpu := &TPUInstance{&tpu.Node{
 		NetworkEndpoints: []*tpu.NetworkEndpoint{
@@ -179,11 +179,11 @@ func TestMakeExecCommandWithTPUAndAgentForwarding(t *testing.T) {
 }
 
 func TestMakeExecCommandInDevshell(t *testing.T) {
-	cfg := &config.TestConfig{
-		FlockNameVal:   "testuser321",
-		ProjectVal:     "otherTestProject",
-		ZoneVal:        "us-central1-x",
-		EnvironmentVal: "devshell",
+	cfg := &config.Config{
+		FlockName:   "testuser321",
+		Project:     "otherTestProject",
+		Zone:        "us-central1-x",
+		Environment: "devshell",
 	}
 	tpu := &TPUInstance{&tpu.Node{
 		NetworkEndpoints: []*tpu.NetworkEndpoint{

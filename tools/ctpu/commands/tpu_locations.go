@@ -23,14 +23,24 @@ import (
 	"context"
 	"flag"
 	"github.com/google/subcommands"
+	"github.com/tensorflow/tpu/tools/ctpu/config"
 	"google.golang.org/api/tpu/v1alpha1"
 )
 
-type tpuLocationsCmd struct{}
+// TPULocationsCP lists available TPU locations.
+type TPULocationsCP interface {
+	// ListLocations lists available locations.
+	ListLocations() ([]*tpu.Location, error)
+}
+
+type tpuLocationsCmd struct {
+	cfg  *config.Config
+	tpus TPULocationsCP
+}
 
 // TPULocationsCommand creates the tpu-locations command.
-func TPULocationsCommand() subcommands.Command {
-	return &tpuLocationsCmd{}
+func TPULocationsCommand(cfg *config.Config, tpus TPULocationsCP) subcommands.Command {
+	return &tpuLocationsCmd{cfg, tpus}
 }
 
 func (tpuLocationsCmd) Name() string {
@@ -52,14 +62,14 @@ func sortLocations(locations []*tpu.Location) {
 	sort.Slice(locations, func(i, j int) bool { return locations[i].LocationId < locations[j].LocationId })
 }
 
-func (tpuLocationsCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	libs, err := parseArgs(args)
+func (t *tpuLocationsCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	err := t.cfg.Validate()
 	if err != nil {
 		log.Print(err)
 		return subcommands.ExitFailure
 	}
 
-	locations, err := libs.tpu.ListLocations()
+	locations, err := t.tpus.ListLocations()
 	if err != nil {
 		log.Print(err)
 		return subcommands.ExitFailure

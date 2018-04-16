@@ -37,11 +37,11 @@ const gceServiceAPIName = "compute.googleapis.com"
 // tested.
 type GCECP struct {
 	computeService *compute.Service
-	config         config.Config
+	config         *config.Config
 	serviceMgmt    *serviceManagementCP
 }
 
-func newGCECP(config config.Config, client *http.Client, serviceManagementCP *serviceManagementCP, ctpuVersion string) (*GCECP, error) {
+func newGCECP(config *config.Config, client *http.Client, serviceManagementCP *serviceManagementCP, ctpuVersion string) (*GCECP, error) {
 	computeService, err := compute.New(client)
 	if err != nil {
 		return nil, err
@@ -77,7 +77,7 @@ func (i *GCEInstance) IsFlockVM() bool {
 
 // Instance retrieves the Instance from the GCE control plane.
 func (g *GCECP) Instance() (*GCEInstance, error) {
-	instance, err := g.computeService.Instances.Get(g.config.Project(), g.config.Zone(), g.config.FlockName()).Do()
+	instance, err := g.computeService.Instances.Get(g.config.Project, g.config.Zone, g.config.FlockName).Do()
 	googError, ok := err.(*googleapi.Error)
 	if ok && googError != nil && googError.Code == 404 {
 		return nil, nil
@@ -107,7 +107,7 @@ func (g *GCECP) Instance() (*GCEInstance, error) {
 
 // ListInstances lists all GCE instances in a given zone.
 func (g *GCECP) ListInstances() ([]*GCEInstance, error) {
-	list, err := g.computeService.Instances.List(g.config.Project(), g.config.Zone()).Do()
+	list, err := g.computeService.Instances.List(g.config.Project, g.config.Zone).Do()
 	if err != nil {
 		return []*GCEInstance{}, err
 	}
@@ -131,7 +131,7 @@ func (g *GCECP) loopUntilOperationComplete(operation *compute.Operation) error {
 	}
 	for i := 0; i < gceMaxLoops; i++ {
 		time.Sleep(5 * time.Second) // Poll every 5 seconds
-		op, err := g.computeService.ZoneOperations.Get(g.config.Project(), g.config.Zone(), operation.Name).Do()
+		op, err := g.computeService.ZoneOperations.Get(g.config.Project, g.config.Zone, operation.Name).Do()
 		if err != nil {
 			return err
 		}
@@ -185,14 +185,14 @@ func (g *GCECP) CreateInstance(request *GCECreateRequest) (err error) {
 		return fmt.Errorf("could not create GCE Instance without a base image")
 	}
 	instance := g.makeCreateInstance(request)
-	op, err := g.computeService.Instances.Insert(g.config.Project(), g.config.Zone(), instance).Do()
+	op, err := g.computeService.Instances.Insert(g.config.Project, g.config.Zone, instance).Do()
 	if err != nil {
 		googErr, ok := err.(*googleapi.Error)
 		if ok && googErr.Code == 409 {
 			// Conflict, another GCE VM already exists.
 			submatches := conflictRegex.FindStringSubmatch(googErr.Message)
-			if len(submatches) == 3 && submatches[2] == g.config.FlockName() && submatches[1] != g.config.Zone() {
-				return fmt.Errorf("while trying to create a GCE VM in zone %q, ctpu discovered another GCE VM of the same name (%q) has already been created in another zone (%q). Either use a new name (using the --name global flag), or use the other zone", g.config.Zone(), g.config.FlockName(), submatches[1])
+			if len(submatches) == 3 && submatches[2] == g.config.FlockName && submatches[1] != g.config.Zone {
+				return fmt.Errorf("while trying to create a GCE VM in zone %q, ctpu discovered another GCE VM of the same name (%q) has already been created in another zone (%q). Either use a new name (using the --name global flag), or use the other zone", g.config.Zone, g.config.FlockName, submatches[1])
 			}
 		}
 		return err
@@ -202,7 +202,7 @@ func (g *GCECP) CreateInstance(request *GCECreateRequest) (err error) {
 
 // StartInstance starts a previously stopped GCE instance with an API call to the GCE control plane.
 func (g *GCECP) StartInstance() error {
-	op, err := g.computeService.Instances.Start(g.config.Project(), g.config.Zone(), g.config.FlockName()).Do()
+	op, err := g.computeService.Instances.Start(g.config.Project, g.config.Zone, g.config.FlockName).Do()
 	if err != nil {
 		return err
 	}
@@ -211,7 +211,7 @@ func (g *GCECP) StartInstance() error {
 
 // StopInstance stops a previously started GCE instance with an API call to the GCE control plane.
 func (g *GCECP) StopInstance(waitForAsync bool) error {
-	op, err := g.computeService.Instances.Stop(g.config.Project(), g.config.Zone(), g.config.FlockName()).Do()
+	op, err := g.computeService.Instances.Stop(g.config.Project, g.config.Zone, g.config.FlockName).Do()
 	if err != nil {
 		return err
 	}
@@ -223,7 +223,7 @@ func (g *GCECP) StopInstance(waitForAsync bool) error {
 
 // DeleteInstance deletes a previously created GCE instance with an API call to the GCE control plane.
 func (g *GCECP) DeleteInstance(waitForAsync bool) error {
-	op, err := g.computeService.Instances.Delete(g.config.Project(), g.config.Zone(), g.config.FlockName()).Do()
+	op, err := g.computeService.Instances.Delete(g.config.Project, g.config.Zone, g.config.FlockName).Do()
 	if err != nil {
 		return err
 	}
@@ -242,7 +242,7 @@ func (g *GCECP) resolveImageFamily(family string) (string, error) {
 }
 
 func (g *GCECP) makeCreateInstance(request *GCECreateRequest) *compute.Instance {
-	flockName := g.config.FlockName()
+	flockName := g.config.FlockName
 	return &compute.Instance{
 		Description: "TODO",
 		Disks: []*compute.AttachedDisk{
@@ -277,10 +277,10 @@ func (g *GCECP) makeCreateInstance(request *GCECreateRequest) *compute.Instance 
 				},
 			},
 		},
-		MachineType: fmt.Sprintf("zones/%s/machineTypes/%s", g.config.Zone(), request.MachineType),
-		Name:        g.config.FlockName(),
+		MachineType: fmt.Sprintf("zones/%s/machineTypes/%s", g.config.Zone, request.MachineType),
+		Name:        g.config.FlockName,
 		Labels: map[string]string{
-			"ctpu": g.config.FlockName(),
+			"ctpu": g.config.FlockName,
 		},
 		Metadata: &compute.Metadata{
 			Items: []*compute.MetadataItems{

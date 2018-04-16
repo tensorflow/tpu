@@ -128,7 +128,7 @@ flags.DEFINE_float(
 flags.DEFINE_string(
     'drop_connect_version', None, 'Drop connect version.')
 flags.DEFINE_string(
-    'cell_name', 'evol_net_h', 'Which network to run.')
+    'cell_name', 'amoeba_net_d', 'Which network to run.')
 flags.DEFINE_integer(
     'num_cells', 12, 'Total number of cells.')
 flags.DEFINE_integer(

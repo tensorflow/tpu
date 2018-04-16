@@ -27,22 +27,11 @@ import (
 	"github.com/zieckey/goini"
 )
 
-// TODO(saeta): Add a cloud-shell & GCE compatible environment.
+// TODO(saeta): Add a GCE compatible environment.
 
 const appDefaultFile = "application_default_credentials.json"
 
-type envConfig struct {
-	environment         string
-	activeConfiguration string
-	account             string
-	project             string
-	zone                string
-}
-
-func buildEnvConfig() (*envConfig, error) {
-	if isDevshell() {
-		return devshellConfig()
-	}
+func gcloudConfig() (*Config, error) {
 	user, err := user.Current()
 	if err != nil {
 		return nil, err
@@ -53,7 +42,7 @@ func buildEnvConfig() (*envConfig, error) {
 	return buildGcloudEnvConfig(path.Join(user.HomeDir, ".config", "gcloud"))
 }
 
-func buildGcloudEnvConfig(configDir string) (*envConfig, error) {
+func buildGcloudEnvConfig(configDir string) (*Config, error) {
 	if stat, err := os.Stat(configDir); os.IsNotExist(err) || !stat.IsDir() {
 		return nil, fmt.Errorf("expected gcloud config directory at '%s'", configDir)
 	}
@@ -63,7 +52,7 @@ func buildGcloudEnvConfig(configDir string) (*envConfig, error) {
 	}
 
 	if !hasGcloudConfig(configDir) {
-		return &envConfig{}, nil
+		return &Config{}, nil
 	}
 
 	activeConfigBytes, err := ioutil.ReadFile(path.Join(configDir, "active_config"))
@@ -87,12 +76,12 @@ func buildGcloudEnvConfig(configDir string) (*envConfig, error) {
 	project, _ := ini.SectionGet("core", "project")
 	zone, _ := ini.SectionGet("compute", "zone")
 
-	return &envConfig{
-		environment:         "gcloud",
-		activeConfiguration: activeConfig,
+	return &Config{
+		Environment:         "gcloud",
 		account:             account,
-		project:             project,
-		zone:                zone,
+		ActiveConfiguration: activeConfig,
+		Project:             project,
+		Zone:                zone,
 	}, nil
 }
 
