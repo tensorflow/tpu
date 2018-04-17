@@ -136,14 +136,6 @@ flags.DEFINE_string(
     default=None,
     help=('The directory where the exported SavedModel will be stored.'))
 
-# For Eval mode
-flags.DEFINE_integer('min_eval_interval', 30 * 60,
-                     'Minimum seconds between evaluations.')
-
-flags.DEFINE_integer(
-    'eval_timeout', None,
-    'Maximum seconds between checkpoints before evaluation terminates.')
-
 flags.DEFINE_bool(
     'use_transpose', True,
     help=('Use the TPU double transpose optimization'))
@@ -260,9 +252,9 @@ def resnet_model_fn(features, labels, mode, params):
   if mode == tf.estimator.ModeKeys.TRAIN:
     # Compute the current epoch and associated learning rate from global_step.
     global_step = tf.train.get_global_step()
-    batches_per_epoch = NUM_TRAIN_IMAGES / FLAGS.train_batch_size
+    steps_per_epoch = NUM_TRAIN_IMAGES / FLAGS.train_batch_size
     current_epoch = (tf.cast(global_step, tf.float32) /
-                     batches_per_epoch)
+                     steps_per_epoch)
     learning_rate = learning_rate_schedule(current_epoch)
 
     optimizer = tf.train.MomentumOptimizer(
@@ -422,8 +414,9 @@ def main(unused_argv):
       use_transpose=FLAGS.use_transpose)
 
   current_step = estimator._load_global_step_from_checkpoint_dir(FLAGS.model_dir)  # pylint: disable=protected-access,line-too-long
+  steps_per_epoch = NUM_TRAIN_IMAGES // FLAGS.train_batch_size
   start_timestamp = time.time()
-  current_epoch = current_step // FLAGS.train_batch_size
+  current_epoch = current_step // steps_per_epoch
 
   if FLAGS.mode == 'train':
     resnet_classifier.train(
@@ -433,39 +426,35 @@ def main(unused_argv):
 
     with tf.gfile.GFile(FLAGS.model_dir + '/total_time_%s.txt' % training_time, 'w') as f:  # pylint: disable=line-too-long
       f.write('Total training time was %s seconds' % training_time)
+
   elif FLAGS.mode == 'eval':
     results = []
-    def terminate_eval():
-      tf.logging.info('Terminating eval after %d seconds of no checkpoints' %
-                      FLAGS.eval_timeout)
-      return True
 
     # Run evaluation when there's a new checkpoint
-    for ckpt in evaluation.checkpoints_iterator(
-        FLAGS.model_dir,
-        min_interval_secs=FLAGS.min_eval_interval,
-        timeout=FLAGS.eval_timeout,
-        timeout_fn=terminate_eval):
-
+    for ckpt in evaluation.checkpoints_iterator(FLAGS.model_dir):
       tf.logging.info('Starting to evaluate.')
       try:
+        start_timestamp = time.time()  # This time will include compilation time
         eval_results = resnet_classifier.evaluate(
             input_fn=imagenet_eval.input_fn,
-            steps=NUM_EVAL_IMAGES // FLAGS.eval_batch_size)
-        tf.logging.info('Eval results: %s' % eval_results)
+            steps=NUM_EVAL_IMAGES // FLAGS.eval_batch_size,
+            checkpoint_path=ckpt)
+        elapsed_time = int(time.time() - start_timestamp)
+        tf.logging.info('Eval results: %s. Elapsed seconds: %d' %
+                        (eval_results, elapsed_time))
 
-        # Terminate eval job when final checkpoint is reached
         current_step = int(os.path.basename(ckpt).split('-')[1])
-        current_epoch = current_step // FLAGS.iterations_per_loop
+        current_epoch = current_step // steps_per_epoch
         results.append([
             current_epoch,
             '{0:.2f}'.format(eval_results['top_1_accuracy']*100),
             '{0:.2f}'.format(eval_results['top_5_accuracy']*100),
         ])
 
+        # Terminate eval job when final checkpoint is reached
         if current_step >= FLAGS.train_steps:
-          tf.logging.info('Evaluation finished after training step %d' %
-                          current_step)
+          tf.logging.info(
+              'Evaluation finished after training step %d' % current_step)
           break
 
       except tf.errors.NotFoundError:
@@ -473,19 +462,18 @@ def main(unused_argv):
         # sometimes the TPU worker does not finish initializing until long after
         # the CPU job tells it to start evaluating. In this case, the checkpoint
         # file could have been deleted already.
-        tf.logging.info('Checkpoint %s no longer exists, skipping checkpoint' %
-                        ckpt)
+        tf.logging.info(
+            'Checkpoint %s no longer exists, skipping checkpoint' % ckpt)
+
     with tf.gfile.GFile(FLAGS.model_dir + '/epoch_results_eval.tsv', 'wb') as tsv_file:  # pylint: disable=line-too-long
       writer = csv.writer(tsv_file, delimiter='\t')
       writer.writerow(['epoch', 'top1Accuracy', 'top5Accuracy'])
       writer.writerows(results)
+
   elif FLAGS.mode == 'train_and_eval':
-    batches_per_epoch = NUM_TRAIN_IMAGES // FLAGS.train_batch_size
-    start_timestamp = time.time()
-    current_epoch = current_step // FLAGS.train_batch_size
     results = []
     while current_epoch < 95:
-      next_checkpoint = (current_epoch + 1) * batches_per_epoch
+      next_checkpoint = (current_epoch + 1) * steps_per_epoch
       resnet_classifier.train(
           input_fn=imagenet_train.input_fn, max_steps=next_checkpoint)
       current_epoch += 1

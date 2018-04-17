@@ -63,6 +63,7 @@ func (deleteCmd) Name() string {
 
 func (d *deleteCmd) SetFlags(f *flag.FlagSet) {
 	f.BoolVar(&d.skipConfirmation, "noconf", false, "Skip confirmation about deleting resources.")
+	d.cfg.SetFlags(f) // Allow users to specify cfg flags either before or after the subcommand name.
 	d.tpuCmd.SetFlags(f)
 }
 

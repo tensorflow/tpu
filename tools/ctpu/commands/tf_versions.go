@@ -47,7 +47,9 @@ func (tfVersionsCmd) Name() string {
 	return "tf-versions"
 }
 
-func (tfVersionsCmd) SetFlags(f *flag.FlagSet) {}
+func (c *tfVersionsCmd) SetFlags(f *flag.FlagSet) {
+	c.cfg.SetFlags(f) // Allow users to specify cfg flags either before or after the subcommand name.
+}
 
 func (tfVersionsCmd) Synopsis() string {
 	return "queries the control plane for the available TF versions."

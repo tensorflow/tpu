@@ -74,6 +74,7 @@ func (listCmd) Usage() string {
 func (c *listCmd) SetFlags(f *flag.FlagSet) {
 	f.BoolVar(&c.noHeader, "no-header", false, "Do not print the header line.")
 	f.BoolVar(&c.noColor, "no-color", false, "Disable color in the output.")
+	c.cfg.SetFlags(f) // Allow users to specify cfg flags either before or after the subcommand name.
 }
 
 type flock struct {

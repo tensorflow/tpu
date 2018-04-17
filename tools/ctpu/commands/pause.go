@@ -68,6 +68,11 @@ func (pauseCmd) Usage() string {
 `
 }
 
+func (c *pauseCmd) SetFlags(f *flag.FlagSet) {
+	c.cfg.SetFlags(f) // Allow users to specify cfg flags either before or after the subcommand name.
+	c.tpuCmd.SetFlags(f)
+}
+
 func (c *pauseCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	err := c.cfg.Validate()
 	if err != nil {

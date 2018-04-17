@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync"
 
 	"context"
 	"flag"
@@ -63,6 +64,7 @@ func (statusCmd) Name() string {
 }
 
 func (s *statusCmd) SetFlags(f *flag.FlagSet) {
+	s.cfg.SetFlags(f) // Allow users to specify cfg flags either before or after the subcommand name.
 	f.BoolVar(&s.details, "details", false,
 		"Prints out more details about the state of the GCE VM and Cloud TPU.")
 	f.BoolVar(&s.noColor, "no-color", false, "Disable color in the output.")
@@ -131,16 +133,38 @@ func (s *statusCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...in
 		color.NoColor = true
 	}
 
-	vm, err := s.gce.Instance()
-	if err != nil {
-		log.Print(err)
-		return subcommands.ExitFailure
-	}
+	var vm *ctrl.GCEInstance
+	var tpu *ctrl.TPUInstance
+	var exitTPU, exitVM subcommands.ExitStatus
+	var wg sync.WaitGroup
+	wg.Add(2)
 
-	tpu, err := s.tpu.Instance()
-	if err != nil {
-		log.Print(err)
-		return subcommands.ExitFailure
+	go func() {
+		var err error
+		vm, err = s.gce.Instance()
+		if err != nil {
+			log.Print(err)
+			exitVM = subcommands.ExitFailure
+		}
+		wg.Done()
+	}()
+
+	go func() {
+		var err error
+		tpu, err = s.tpu.Instance()
+		if err != nil {
+			log.Print(err)
+			exitTPU = subcommands.ExitFailure
+		}
+		wg.Done()
+	}()
+
+	wg.Wait()
+	if exitTPU != subcommands.ExitSuccess {
+		return exitTPU
+	}
+	if exitVM != subcommands.ExitSuccess {
+		return exitVM
 	}
 
 	fmt.Printf(`%s
