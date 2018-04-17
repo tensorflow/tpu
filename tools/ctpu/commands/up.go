@@ -98,6 +98,7 @@ func (upCmd) Name() string {
 }
 
 func (c *upCmd) SetFlags(f *flag.FlagSet) {
+	c.cfg.SetFlags(f) // Allow users to specify cfg flags either before or after the subcommand name.
 	f.BoolVar(&c.dryRun, "dry-run", false,
 		"Do not make changes; print only what would have happened.")
 	f.BoolVar(&c.vmOnly, "vm-only", false,

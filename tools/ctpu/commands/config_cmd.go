@@ -48,6 +48,7 @@ func (configCmd) Name() string {
 }
 
 func (c *configCmd) SetFlags(f *flag.FlagSet) {
+	c.cfg.SetFlags(f) // Allow users to specify cfg flags either before or after the subcommand name.
 }
 
 func (configCmd) Synopsis() string {

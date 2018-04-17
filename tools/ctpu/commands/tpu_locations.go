@@ -47,7 +47,9 @@ func (tpuLocationsCmd) Name() string {
 	return "tpu-locations"
 }
 
-func (tpuLocationsCmd) SetFlags(f *flag.FlagSet) {}
+func (c *tpuLocationsCmd) SetFlags(f *flag.FlagSet) {
+	c.cfg.SetFlags(f) // Allow users to specify cfg flags either before or after the subcommand name.
+}
 
 func (tpuLocationsCmd) Synopsis() string {
 	return "queries for all locations with TPUs available."

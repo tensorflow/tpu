@@ -38,7 +38,9 @@ func (quotaCmd) Name() string {
 	return "quota"
 }
 
-func (quotaCmd) SetFlags(f *flag.FlagSet) {}
+func (c *quotaCmd) SetFlags(f *flag.FlagSet) {
+	c.cfg.SetFlags(f) // Allow users to specify cfg flags either before or after the subcommand name.
+}
 
 func (quotaCmd) Synopsis() string {
 	return "prints URL where quota can be seen"
