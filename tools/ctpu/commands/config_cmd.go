@@ -59,6 +59,18 @@ func (configCmd) Usage() string {
 `
 }
 
+type configCmdAlias struct {
+	configCmd
+}
+
+// ConfigCommandAlias creates an alias to the config command with a shorter name.
+func ConfigCommandAlias(cfg *config.Config, cli ConfigGcloudCLI) subcommands.Command {
+	return &configCmdAlias{configCmd{cfg: cfg, cli: cli}}
+}
+func (configCmdAlias) Name() string     { return "cfg" }
+func (configCmdAlias) Synopsis() string { return "alias to ctpu print-config" }
+func (configCmdAlias) Usage() string    { return "ctpu cfg\n" }
+
 func (c *configCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	err := c.cfg.Validate()
 	if err != nil {

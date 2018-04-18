@@ -22,6 +22,7 @@ import (
 	"log"
 	"os/user"
 	"regexp"
+	"strings"
 
 	"flag"
 )
@@ -31,6 +32,8 @@ const defaultZone = "us-central1-c"
 // Validation regular expression.
 var usernameRegex = regexp.MustCompile("^([A-z0-9-_]+)")
 var flocknameRegex = regexp.MustCompile("^[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?$")
+var invalidChars = regexp.MustCompile("([^-a-z0-9])")
+var dupedDash = regexp.MustCompile("(--+)")
 
 // Config encapsulates all common configuration required to execute a command.
 type Config struct {
@@ -66,7 +69,6 @@ func (c *Config) SetFlags(f *flag.FlagSet) {
 
 // Validate verifies that the configuration has been fully populated.
 func (c *Config) Validate() error {
-	// TODO(saeta): Fill in additional checks here!
 	err := checkFlockName(c.FlockName)
 	if err != nil {
 		return err
@@ -95,21 +97,27 @@ func FromEnv() (cfg *Config, err error) {
 	return cfg, nil
 }
 
-// TODO(saeta): Fix logic to only generate valid flock names
+func cleanFlockName(flockName string) string {
+	flockName = invalidChars.ReplaceAllString(flockName, "-")
+	flockName = dupedDash.ReplaceAllString(flockName, "-")
+	flockName = strings.Trim(flockName, "-")
+	return flockName
+}
+
 func (c *Config) computeFlockName() {
 	if len(c.account) < 2 {
 		curUser, err := user.Current()
 		if err != nil {
 			return
 		}
-		c.FlockName = curUser.Username
+		c.FlockName = cleanFlockName(curUser.Username)
 	} else {
 		submatches := usernameRegex.FindStringSubmatch(c.account)
 		if len(submatches) != 2 {
 			return
 		}
 		if len(submatches[1]) >= 2 {
-			c.FlockName = submatches[1]
+			c.FlockName = cleanFlockName(submatches[1])
 		}
 	}
 }

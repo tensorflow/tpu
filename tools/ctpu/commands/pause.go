@@ -68,6 +68,19 @@ func (pauseCmd) Usage() string {
 `
 }
 
+type pauseCmdAlias struct {
+	pauseCmd
+}
+
+// PauseCommandAlias creates an alias to the pause command with a shorter name.
+func PauseCommandAlias(cfg *config.Config, tpu PauseTPUCP, gce PauseGCECP) subcommands.Command {
+	return &pauseCmdAlias{pauseCmd{cfg: cfg, tpu: tpu, gce: gce}}
+}
+
+func (pauseCmdAlias) Name() string     { return "zz" }
+func (pauseCmdAlias) Synopsis() string { return "alias to ctpu pause (pause a Cloud TPU flock)" }
+func (pauseCmdAlias) Usage() string    { return "ctpu zz\n" }
+
 func (c *pauseCmd) SetFlags(f *flag.FlagSet) {
 	c.cfg.SetFlags(f) // Allow users to specify cfg flags either before or after the subcommand name.
 	c.tpuCmd.SetFlags(f)

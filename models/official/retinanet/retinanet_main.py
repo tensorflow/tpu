@@ -178,6 +178,7 @@ def main(argv):
           skip_crowd=False,
           resnet_checkpoint=None,
           is_training_bn=False,
+          use_bfloat16=False,
       )
       eval_estimator = tpu_estimator.TPUEstimator(
           model_fn=retinanet_model.retinanet_model_fn,

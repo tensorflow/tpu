@@ -71,6 +71,18 @@ func (listCmd) Usage() string {
 `
 }
 
+type listCmdAlias struct {
+	listCmd
+}
+
+// ListCommandAlias creates an alias to the list command with a shorter name.
+func ListCommandAlias(cfg *config.Config, tpu ListTPUInstancesCP, gce ListGCEInstancesCP) subcommands.Command {
+	return &listCmdAlias{listCmd{cfg: cfg, tpu: tpu, gce: gce}}
+}
+func (listCmdAlias) Name() string     { return "ls" }
+func (listCmdAlias) Synopsis() string { return "alias to ctpu list (lists all flocks)" }
+func (listCmdAlias) Usage() string    { return "ctpu ls\n" }
+
 func (c *listCmd) SetFlags(f *flag.FlagSet) {
 	f.BoolVar(&c.noHeader, "no-header", false, "Do not print the header line.")
 	f.BoolVar(&c.noColor, "no-color", false, "Disable color in the output.")

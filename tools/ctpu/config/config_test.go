@@ -91,3 +91,35 @@ func TestCheckFlockName(t *testing.T) {
 		}
 	}
 }
+
+func TestCleanFlockName(t *testing.T) {
+	testcases := []struct {
+		name string
+		want string
+	}{{
+		name: "goodname",
+		want: "goodname",
+	}, {
+		name: "with_underscores",
+		want: "with-underscores",
+	}, {
+		name: "multi__underscores",
+		want: "multi-underscores",
+	}, {
+		name: "foo.bar",
+		want: "foo-bar",
+	}, {
+		name: "-dash",
+		want: "dash",
+	}, {
+		name: "awful . name!",
+		want: "awful-name",
+	}}
+
+	for _, test := range testcases {
+		got := cleanFlockName(test.name)
+		if got != test.want {
+			t.Errorf("cleanFlockName(%q) = %q, want: %q", test.name, got, test.want)
+		}
+	}
+}

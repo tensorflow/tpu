@@ -31,12 +31,12 @@ type serviceManagementCP struct {
 	config     *config.Config
 }
 
-func newServiceManagementCP(config *config.Config, client *http.Client, ctpuVersion string) (*serviceManagementCP, error) {
+func newServiceManagementCP(config *config.Config, client *http.Client, userAgent string) (*serviceManagementCP, error) {
 	apiService, err := servicemanagement.New(client)
 	if err != nil {
 		return nil, err
 	}
-	apiService.UserAgent = "ctpu/" + ctpuVersion
+	apiService.UserAgent = userAgent
 	return &serviceManagementCP{
 		services:   apiService.Services,
 		operations: apiService.Operations,

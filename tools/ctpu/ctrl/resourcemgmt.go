@@ -35,12 +35,12 @@ type ResourceManagementCP struct {
 	service *cloudresourcemanager.Service
 }
 
-func newResourceManagementCP(config *config.Config, client *http.Client, ctpuVersion string) (*ResourceManagementCP, error) {
+func newResourceManagementCP(config *config.Config, client *http.Client, userAgent string) (*ResourceManagementCP, error) {
 	service, err := cloudresourcemanager.New(client)
 	if err != nil {
 		return nil, err
 	}
-	service.UserAgent = "ctpu/" + ctpuVersion
+	service.UserAgent = userAgent
 	return &ResourceManagementCP{
 		config:  config,
 		service: service,

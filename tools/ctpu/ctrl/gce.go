@@ -41,12 +41,12 @@ type GCECP struct {
 	serviceMgmt    *serviceManagementCP
 }
 
-func newGCECP(config *config.Config, client *http.Client, serviceManagementCP *serviceManagementCP, ctpuVersion string) (*GCECP, error) {
+func newGCECP(config *config.Config, client *http.Client, serviceManagementCP *serviceManagementCP, userAgent string) (*GCECP, error) {
 	computeService, err := compute.New(client)
 	if err != nil {
 		return nil, err
 	}
-	computeService.UserAgent = "ctpu/" + ctpuVersion
+	computeService.UserAgent = userAgent
 	return &GCECP{
 		computeService: computeService,
 		config:         config,
