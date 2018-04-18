@@ -79,6 +79,21 @@ func (statusCmd) Usage() string {
 `
 }
 
+type statusCmdAlias struct {
+	statusCmd
+}
+
+// StatusCommandAlias creates an alias for the status command with a shorter name.
+func StatusCommandAlias(cfg *config.Config, tpu StatusTPUCP, gce StatusGCECP) subcommands.Command {
+	return &statusCmdAlias{statusCmd{cfg: cfg, tpu: tpu, gce: gce}}
+}
+
+func (statusCmdAlias) Name() string { return "st" }
+func (statusCmdAlias) Synopsis() string {
+	return "alias to ctpu status (retrieves info on current instances)"
+}
+func (statusCmdAlias) Usage() string { return "ctpu st\n" }
+
 func (s *statusCmd) runnableStatus(exists, isRunning bool, status string) string {
 	if !exists {
 		return color.YellowString("--")

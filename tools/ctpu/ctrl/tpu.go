@@ -46,18 +46,18 @@ type TPUCP struct {
 	serviceMgmt *serviceManagementCP
 }
 
-func newTPUCP(config *config.Config, client *http.Client, serviceManagementCP *serviceManagementCP, ctpuVersion string) (*TPUCP, error) {
+func newTPUCP(config *config.Config, client *http.Client, serviceManagementCP *serviceManagementCP, userAgent string) (*TPUCP, error) {
 	tpuService, err := tpu.New(client)
 	if err != nil {
 		return nil, err
 	}
-	tpuService.UserAgent = "ctpu/" + ctpuVersion
+	tpuService.UserAgent = userAgent
 
 	computeService, err := compute.New(client)
 	if err != nil {
 		return nil, err
 	}
-	computeService.UserAgent = "ctpu/" + ctpuVersion
+	computeService.UserAgent = userAgent
 
 	return &TPUCP{
 		nodes:       tpu.NewProjectsLocationsNodesService(tpuService),
@@ -192,6 +192,8 @@ func (g *TPUCP) parentPath() string {
 	return fmt.Sprintf("projects/%s/locations/%s", g.config.Project, g.config.Zone)
 }
 
+var legacyNetwork = net.IPv4(10, 240, 0, 0)
+
 func (g *TPUCP) selectCidrBlock(routes []*compute.Route) (string, error) {
 	cidrBlocks := make([]*net.IPNet, 0, len(routes))
 	for _, i := range routes {
@@ -202,6 +204,12 @@ func (g *TPUCP) selectCidrBlock(routes []*compute.Route) (string, error) {
 		maskSize, _ := ipNet.Mask.Size()
 		if maskSize < 8 {
 			continue
+		}
+		if legacyNetwork.Equal(ipNet.IP) && maskSize <= 16 {
+			return "", fmt.Errorf("Cloud TPUs cannot be used with legacy networks, please create a new GCP project")
+		}
+		if maskSize <= 16 && ipNet.Contains(net.IPv4(10, 240, 1, 1)) && ipNet.Contains(net.IPv4(10, 240, 250, 250)) {
+			return "", fmt.Errorf("existing routing entries appear to entirely cover the IP-range ctpu uses")
 		}
 		cidrBlocks = append(cidrBlocks, ipNet)
 	}

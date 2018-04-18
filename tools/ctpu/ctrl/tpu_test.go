@@ -134,3 +134,33 @@ func TestCidrBlockErrorHandling(t *testing.T) {
 		t.Fatalf("g.selectCidrBlock(--malformed--) = %v, %v, want: non-nil error value", got, err)
 	}
 }
+
+func TestCidrBlockLegacyNetwork(t *testing.T) {
+	includesLegacy := []*compute.Route{
+		{DestRange: "0.0.0.0/0"},
+		{DestRange: "10.240.0.0/16"},
+	}
+
+	g := TPUCP{}
+	got, err := g.selectCidrBlock(includesLegacy)
+	if err == nil {
+		t.Fatalf("g.selectCidrBlock(%#v) = %v, %v, want: non-nil error value", includesLegacy, got, err)
+	}
+}
+
+func TestCidrBlockLargeNetblocks(t *testing.T) {
+	largeNetBlocks := []string{"10.240.0.0/12", "10.224.0.0/11", "10.128.0.0/9"}
+
+	for _, netblock := range largeNetBlocks {
+		networks := []*compute.Route{
+			{DestRange: "0.0.0.0/0"},
+			{DestRange: netblock},
+		}
+
+		g := TPUCP{}
+		got, err := g.selectCidrBlock(networks)
+		if err == nil {
+			t.Fatalf("g.selectCidrBlock(%q) = %v, %v, want: non-nil error value", netblock, got, err)
+		}
+	}
+}

@@ -76,6 +76,19 @@ func (deleteCmd) Usage() string {
 `
 }
 
+type deleteCmdAlias struct {
+	deleteCmd
+}
+
+// DeleteCommandAlias creates an alias for the delete command with a shorter name.
+func DeleteCommandAlias(cfg *config.Config, tpu DeleteTPUCP, gce DeleteGCECP) subcommands.Command {
+	return &deleteCmdAlias{deleteCmd{cfg: cfg, gce: gce, tpu: tpu}}
+}
+
+func (deleteCmdAlias) Name() string     { return "rm" }
+func (deleteCmdAlias) Synopsis() string { return "alias to ctpu delete (delete a Cloud TPU flock)" }
+func (deleteCmdAlias) Usage() string    { return "ctpu rm\n" }
+
 func (c *deleteCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	err := c.cfg.Validate()
 	if err != nil {
