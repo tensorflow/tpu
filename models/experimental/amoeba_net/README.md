@@ -79,8 +79,9 @@ python amoeba_net.py \
   --eval_batch_size=1024 \
   --lr=2.56 \
   --lr_decay_value=0.88 \
+  --lr_warmup_epochs=0.35 \
   --mode=train \
-  --iterations_per_loop=1152
+  --iterations_per_loop=1251
 ```
 
 ## Understanding the code

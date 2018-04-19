@@ -116,7 +116,7 @@ def build_learning_rate(initial_lr,
                         stepwise_epoch=None,
                         total_steps=None,
                         add_summary=True,
-                        warmup_steps_fraction=0.0):
+                        warmup_steps=0):
   """Build learning rate."""
   if lr_decay_type == 'exponential':
     assert decay_steps is not None
@@ -141,7 +141,6 @@ def build_learning_rate(initial_lr,
     assert False, 'Unknown lr_decay_type : %s' % lr_decay_type
 
   # By default, warmup_steps_fraction = 0.0 which means no warmup steps.
-  warmup_steps = int(total_steps * warmup_steps_fraction)
   tf.logging.info('Learning rate warmup_steps: %d' % warmup_steps)
   warmup_lr = (
       initial_lr * tf.cast(global_step, tf.float32) / tf.cast(

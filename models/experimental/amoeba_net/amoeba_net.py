@@ -156,20 +156,15 @@ flags.DEFINE_integer(
 flags.DEFINE_string(
     'lr_decay_method', 'exponential',
     'Method of decay: exponential, cosine, constant, stepwise')
+flags.DEFINE_float(
+    'lr_warmup_epochs', 3.0,
+    'Learning rate increased from zero linearly to lr for the first '
+    'lr_warmup_epochs.')
 flags.DEFINE_float('gradient_clipping_by_global_norm', 0,
                    'gradient_clipping_by_global_norm')
 
-# Dataset specific paramenters
-flags.DEFINE_string(
-    'use_data', 'real',
-    'One of "fake","real"')
-
 flags.DEFINE_integer(
     'image_size', 299, 'Size of image, assuming image height and width.')
-
-flags.DEFINE_bool(
-    'transpose_enabled', True,
-    'Boolean to enable/disable explicit I/O transpose')
 
 flags.DEFINE_bool(
     'use_bp16', True, 'If True, use bfloat16 for activations')
@@ -207,8 +202,9 @@ def build_run_config():
       keep_checkpoint_max=None,
       tpu_config=tpu_config.TPUConfig(
           iterations_per_loop=iterations_per_loop,
-          per_host_input_for_training=FLAGS.num_shards <= 8,
-          num_shards=FLAGS.num_shards))
+          num_shards=FLAGS.num_shards,
+          per_host_input_for_training=tpu_config.InputPipelineConfig.PER_HOST_V2
+      ))
   return run_config
 
 
@@ -235,12 +231,11 @@ def override_with_flags(hparams):
       'num_epochs',
       'num_epochs_per_eval',
       'optimizer',
-      'transpose_enabled',
       'enable_hostcall',
       'use_aux_head',
       'use_bp16',
-      'use_data',
       'use_tpu',
+      'lr_warmup_epochs',
       'weight_decay',
   ]
   for flag_name in override_flag_names:
@@ -314,12 +309,6 @@ def main(_):
   hparams = build_hparams()
 
   estimator_parmas = {}
-  batch_axis = 0
-
-  if FLAGS.transpose_enabled:
-    estimator_parmas['input_perm'] = [3, 0, 1, 2]
-    estimator_parmas['output_perm'] = [1, 2, 3, 0]
-    batch_axis = 3
 
   train_steps_per_epoch = int(
       math.ceil(model_lib.NUM_TRAIN_IMAGES / float(hparams.train_batch_size)))
@@ -338,8 +327,7 @@ def main(_):
         config=run_config,
         params=estimator_parmas,
         train_batch_size=hparams.train_batch_size,
-        eval_batch_size=eval_batch_size,
-        batch_axis=(batch_axis, 0))
+        eval_batch_size=eval_batch_size)
   else:
     image_classifier = tf.estimator.Estimator(
         model_fn=model.model_fn,
