@@ -105,7 +105,7 @@ class InputReader(object):
 
     batch_size = params['batch_size']
 
-    dataset = tf.data.Dataset.list_files(self._file_pattern)
+    dataset = tf.data.Dataset.list_files(self._file_pattern, shuffle=False)
 
     dataset = dataset.shuffle(buffer_size=1024)
     if self._is_training:

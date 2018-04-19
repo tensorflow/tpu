@@ -210,7 +210,7 @@ class ImageNetInput(object):
     # Shuffle the filenames to ensure better randomization
     file_pattern = os.path.join(self.data_dir, "train-*"
                                 if self.is_training else "validation-*")
-    dataset = tf.data.Dataset.list_files(file_pattern)
+    dataset = tf.data.Dataset.list_files(file_pattern, shuffle=False)
     if self.is_training:
       dataset = dataset.shuffle(buffer_size=1024)  # 1024 files in dataset
 
