@@ -26,12 +26,14 @@ import tensorflow as tf
 import inception_preprocessing
 import model_builder
 from tensorflow.contrib import summary
+from tensorflow.contrib.data.python.ops import batching
 from tensorflow.contrib.tpu.python.tpu import tpu_estimator
 from tensorflow.contrib.tpu.python.tpu import tpu_optimizer
 
 # Dataset constants
 NUM_TRAIN_IMAGES = 1281167
 NUM_EVAL_IMAGES = 50000
+LABEL_CLASSES = 1001
 
 # Random cropping constants
 _RESIZE_SIDE_MIN = 300
@@ -116,6 +118,7 @@ def imagenet_hparams():
       lr_decay_method='exponential',
       lr_decay_value=0.97,
       lr_num_epochs_per_decay=2.4,
+      lr_warmup_epochs=3.0,
 
       # Optimizer.
       optimizer='rmsprop',  # 'sgd', 'mom', 'adam' or 'rmsprop'
@@ -193,9 +196,9 @@ class AmoebaNetEstimatorModel(object):
   def _build_learning_rate_schedule(self, global_step):
     """Build learning rate."""
     steps_per_epoch = NUM_TRAIN_IMAGES // self.hparams.train_batch_size
-    warmup_steps_fraction = 0
+    lr_warmup_epochs = 0
     if self.hparams.lr_decay_method == 'exponential':
-      warmup_steps_fraction = 0.01
+      lr_warmup_epochs = self.hparams.lr_warmup_epochs
     learning_rate = model_builder.build_learning_rate(
         self.hparams.lr,
         self.hparams.lr_decay_method,
@@ -204,7 +207,7 @@ class AmoebaNetEstimatorModel(object):
         decay_steps=steps_per_epoch * self.hparams.lr_num_epochs_per_decay,
         decay_factor=self.hparams.lr_decay_value,
         add_summary=False,
-        warmup_steps_fraction=warmup_steps_fraction)
+        warmup_steps=int(lr_warmup_epochs * steps_per_epoch))
 
     learning_rate = tf.maximum(
         learning_rate, 0.0001 * self.hparams.lr, name='learning_rate')
@@ -231,7 +234,7 @@ class AmoebaNetEstimatorModel(object):
             formatted_hparams(hparams)))
 
     logits, end_points = model_builder.build_network(
-        features, 1001, is_training, hparams)
+        features, LABEL_CLASSES, is_training, hparams)
 
     if not is_predict:
       loss = model_builder.build_softmax_loss(
@@ -303,12 +306,12 @@ class AmoebaNetEstimatorModel(object):
     Returns:
       A tf.estimator.EstimatorSpec.
     """
+    del params
     is_training = (mode == tf.estimator.ModeKeys.TRAIN)
     eval_active = (mode == tf.estimator.ModeKeys.EVAL)
     is_predict = (mode == tf.estimator.ModeKeys.PREDICT)
-    if self.hparams.transpose_enabled:
-      features = tensor_transform_fn(features, params['input_perm'])
-
+    features = tf.transpose(features, [3, 0, 1, 2])  # HWCN to NHWC
+    labels = tf.one_hot(labels, LABEL_CLASSES)
     loss, logits = self._build_network(features, labels, mode)
 
     if is_predict:
@@ -458,7 +461,7 @@ class InputPipeline(object):
       params: `dict` of parameters passed from the `TPUEstimator`.
 
     Returns:
-      A (images, labels) tuple of `Tensor`s for a batch of samples.
+      A callable dataset object.
     """
     # Retrieves the batch size for the current shard. The # of shards is
     # computed according to the input pipeline deployment. See
@@ -468,73 +471,58 @@ class InputPipeline(object):
     else:
       batch_size = (self.hparams.train_batch_size if self.is_training
                     else self.hparams.eval_batch_size)
+    file_pattern = os.path.join(
+        self.data_dir, 'train-*' if self.is_training else 'validation-*')
+    dataset = tf.data.Dataset.list_files(file_pattern, shuffle=self.is_training)
+    if self.is_training:
+      dataset = dataset.repeat()
 
-    if self.hparams.use_data == 'real':
-      file_pattern = os.path.join(
-          self.data_dir, 'train-*' if self.is_training else 'validation-*')
-      dataset = tf.data.Dataset.list_files(file_pattern,
-                                           shuffle=self.is_training)
+    def fetch_dataset(filename):
+      buffer_size = 8 * 1024 * 1024  # 8 MiB per file
+      dataset = tf.data.TFRecordDataset(filename, buffer_size=buffer_size)
+      return dataset
 
-      if self.is_training:
-        dataset = dataset.repeat()
+    dataset = dataset.apply(
+        tf.contrib.data.parallel_interleave(
+            fetch_dataset, cycle_length=64, sloppy=True))
+    dataset = dataset.shuffle(1024)
 
-      def prefetch_dataset(filename):
-        dataset = tf.data.TFRecordDataset(
-            filename, buffer_size=8*1024*1024)  # 8 MB
-        return dataset
+    # Use the fused map-and-batch operation.
+    dataset = dataset.apply(
+        tf.contrib.data.map_and_batch(
+            self._dataset_parser, batch_size=batch_size,
+            num_parallel_batches=8))
 
-      dataset = dataset.apply(
-          tf.contrib.data.parallel_interleave(
-              prefetch_dataset,
-              cycle_length=8,
-              sloppy=True))
+    # For training, batch as usual. When evaluating, prevent accidentally
+    # evaluating the same image twice by dropping the final batch if it is less
+    # than a full batch size. As long as this validation is done with
+    # consistent batch size, exactly the same images will be used.
+    if not self.is_training:
+      dataset = dataset.apply(batching.filter_irregular_batches(batch_size))
 
-      if self.is_training:
-        dataset = dataset.shuffle(
-            buffer_size=1024)
+    dataset = dataset.map(
+        lambda images, labels: (tf.transpose(images, [1, 2, 3, 0]), labels),
+        num_parallel_calls=8)
 
-      dataset = dataset.map(
-          self._dataset_parser,
-          num_parallel_calls=64)
+    # For XLA, we must used fixed shapes. Because we repeat the source training
+    # dataset indefinitely, this is not a dangerous operation.
+    #
+    # When evaluating, prevent accidentally evaluating the same image twice by
+    # dropping the final batch if it is less than a full batch size. As long as
+    # this validation is done with consistent batch size, exactly the same
+    # images will be used.
+    def set_shapes(images, labels):
+      images.set_shape(images.get_shape().merge_with(
+          tf.TensorShape([None, None, None, batch_size])))
+      labels.set_shape(labels.get_shape().merge_with(
+          tf.TensorShape([batch_size])))
+      return images, labels
 
-      dataset = dataset.prefetch(batch_size)
+    if self.is_training:
+      dataset = dataset.map(set_shapes)
 
-      dataset = dataset.apply(
-          tf.contrib.data.batch_and_drop_remainder(batch_size))
-
-      dataset = dataset.prefetch(2)  # Prefetch overlaps in-feed with training
-      images, labels = dataset.make_one_shot_iterator().get_next()
-    else:
-      images = tf.random_uniform(
-          [batch_size, self.hparams.image_size,
-           self.hparams.image_size, 3], minval=-1, maxval=1)
-      labels = tf.random_uniform(
-          [batch_size], minval=0, maxval=999, dtype=tf.int32)
-    if self.hparams.transpose_enabled:
-      images = tensor_transform_fn(images, params['output_perm'])
-    one_hot_labels = tf.one_hot(labels, self.num_classes)
-    return images, one_hot_labels
-
-
-def tensor_transform_fn(data, perm):
-  """Transpose function.
-
-  This function is used to transpose an image tensor on the host and then
-  perform an inverse transpose on the TPU. The transpose on the TPU gets
-  effectively elided thus voiding any associated computational cost.
-
-  NOTE: Eventually the compiler will be able to detect when this kind of
-  operation may prove beneficial and perform these types of transformations
-  implicitly, voiding the need for user intervention
-
-  Args:
-    data: Tensor to be transposed
-    perm: Permutation of the dimensions of a
-
-  Returns:
-    Transposed tensor
-  """
-  return tf.transpose(data, perm)
+    dataset = dataset.prefetch(32)  # Prefetch overlaps in-feed with training
+    return dataset  # Must return the dataset and not tensors for high perf!
 
 
 class LoadEMAHook(tf.train.SessionRunHook):
