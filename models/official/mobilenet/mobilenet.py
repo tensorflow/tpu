@@ -356,13 +356,8 @@ class InputPipeline(object):
     if FLAGS.use_data == 'real':
       file_pattern = os.path.join(
           self.data_dir, 'train-*' if self.is_training else 'validation-*')
-      dataset = tf.data.Dataset.list_files(file_pattern)
-
-      # the set of operations that follow are based on guidelines
-      # discussed in new pipeline best usage presentation.
-      if self.is_training and FLAGS.initial_shuffle_buffer_size > 0:
-        dataset = dataset.shuffle(
-            buffer_size=FLAGS.initial_shuffle_buffer_size)
+      dataset = tf.data.Dataset.list_files(file_pattern,
+                                           shuffle=self.is_training)
 
       if self.is_training:
         dataset = dataset.repeat()

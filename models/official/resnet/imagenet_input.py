@@ -119,7 +119,7 @@ class ImageNetInput(object):
           effective batch size.
 
     Returns:
-      A (images, labels) tuple of `Tensor`s for a batch of samples.
+      A `tf.data.Dataset` object.
     """
     # Retrieves the batch size for the current shard. The # of shards is
     # computed according to the input pipeline deployment. See
@@ -129,10 +129,9 @@ class ImageNetInput(object):
     # Shuffle the filenames to ensure better randomization.
     file_pattern = os.path.join(
         self.data_dir, 'train-*' if self.is_training else 'validation-*')
-    dataset = tf.data.Dataset.list_files(file_pattern)
+    dataset = tf.data.Dataset.list_files(file_pattern, shuffle=self.is_training)
 
     if self.is_training:
-      dataset = dataset.shuffle(buffer_size=1024)   # 1024 files in dataset
       dataset = dataset.repeat()
 
     def fetch_dataset(filename):
