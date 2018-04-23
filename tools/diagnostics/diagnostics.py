@@ -193,16 +193,20 @@ class Diagnostics(object):
 
   def _run_tpu_computation(self):
     """Attempt to run computation graph directly on TPU."""
+    def _computation_fn(alpha, x, y):
+      return alpha * x + y
+
     alpha = tf.Variable(3.0, name='alpha')
     x = tf.Variable(tf.ones([3, 3], tf.float32), name='x')
     y = tf.Variable(tf.ones([3, 3], tf.float32), name='y')
 
-    with tf.device('/device:TPU:0'):
-      result = (alpha * x) + y
+    result = tf.contrib.tpu.rewrite(_computation_fn, [alpha, x, y])
 
     with tf.Session('grpc://{0}:8470'.format(self.tpu_ip)) as sess:
-      tf.global_variables_initializer().run()
+      sess.run(tf.contrib.tpu.initialize_system())
+      sess.run(tf.global_variables_initializer())
       logging.info(sess.run(result))
+      sess.run(tpu.shutdown_system())
       logging.info('Output should be a 3x3 matrix with all 4s.')
     self.tpu_computation = 'Passed'
     logging.info('Successfully ran a computation on the TPU')

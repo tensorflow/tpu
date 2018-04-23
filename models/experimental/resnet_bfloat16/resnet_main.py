@@ -117,7 +117,7 @@ flags.DEFINE_integer(
     help=('Number of parallel threads in CPU for the input pipeline'))
 
 flags.DEFINE_integer(
-    'num_cores', default=8,
+    'num_cores', default=None,
     help=('Number of TPU cores. For a single TPU device, this is 8 because each'
           ' TPU has 4 chips each with 2 cores.'))
 
