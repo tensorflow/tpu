@@ -1,6 +1,6 @@
 # CTPU: The Cloud TPU Provisioning Utility #
 
-`ctpu` is an **experimental** tool that helps manage setting up a Cloud TPU. It
+`ctpu` is a tool that helps you set up a Cloud TPU. It
 is focused on supporting data scientists using Cloud TPUs for their research and
 model development.
 
@@ -178,21 +178,11 @@ how to customize the security posture.
    flock names are longer than 2 characters. If your username is 2 characters or
    less, you will have to manually set a flock name on the command line with the
    `-name` global flag.
-
-### Stability ###
-
-`ctpu` is an *experimental* tool and thus is not guaranteed to be stable,
-including, but not limited to, the following ways:
-
- - **TF version**: When `ctpu` creates a Cloud TPU and GCE VM, it will create it
-   with the latest stable TensorFlow version. As new TensorFlow versions are
-   released, you will need to upgrade the installed TensorFlow on your VMs, or
+ - **TF version**: When `ctpu` creates a Cloud TPU and GCE VM, it creates the VM
+   with the latest stable TensorFlow version. When new TensorFlow versions are
+   released, you must upgrade the installed TensorFlow on your VMs, or
    delete your GCE VM (after appropriately saving your work!) and re-create it
    using `ctpu up`.
- - **Commands & Output**: Do not rely on the presence of particular subcommands,
-   flags, or the format of their output. It can change without warning.
- - **The existence of ctpu itself**: It is entirely possible that `ctpu` as it
-   exists today will be gone tomorrow!
 
 ## Contributing ##
 
