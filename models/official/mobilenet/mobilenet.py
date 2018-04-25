@@ -230,7 +230,7 @@ flags.DEFINE_bool(
     'quantize', False, 'Quantize training')
 
 flags.DEFINE_integer(
-    'quant_delay', 100000, 'when to start quantization')
+    'quant_delay', 250000, 'when to start quantization')
 
 FLAGS = flags.FLAGS
 
