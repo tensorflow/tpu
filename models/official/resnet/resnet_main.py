@@ -45,6 +45,11 @@ flags.DEFINE_bool(
 
 # Cloud TPU Cluster Resolvers
 flags.DEFINE_string(
+    'tpu', default=None,
+    help='The Cloud TPU to use for training. This should be either the name '
+    'used when creating the Cloud TPU, or a grpc://ip.address.of.tpu:8470 url.')
+
+flags.DEFINE_string(
     'gcp_project', default=None,
     help='Project name for the Cloud TPU-enabled project. If not specified, we '
     'will attempt to automatically detect the GCE project from metadata.')
@@ -53,16 +58,6 @@ flags.DEFINE_string(
     'tpu_zone', default=None,
     help='GCE zone where the Cloud TPU is located in. If not specified, we '
     'will attempt to automatically detect the GCE project from metadata.')
-
-flags.DEFINE_string(
-    'tpu_name', default=None,
-    help='Name of the Cloud TPU for Cluster Resolvers. You must specify either '
-    'this flag or --master.')
-
-flags.DEFINE_string(
-    'master', default=None,
-    help='gRPC URL of the master (i.e. grpc://ip.address.of.tpu:8470). You '
-    'must specify either this flag or --tpu_name.')
 
 # Model specific flags
 flags.DEFINE_string(
@@ -145,6 +140,10 @@ flags.DEFINE_string(
     'export_dir',
     default=None,
     help=('The directory where the exported SavedModel will be stored.'))
+
+flags.DEFINE_string(
+    'precision', 'bfloat16',
+    help=('Precision to use; one of: {bfloat16, float32}'))
 
 # Dataset constants
 LABEL_CLASSES = 1000
@@ -357,34 +356,15 @@ def resnet_model_fn(features, labels, mode, params):
 
 
 def main(unused_argv):
-  tpu_grpc_url = None
-  tpu_cluster_resolver = None
-  if FLAGS.use_tpu:
-    # Determine the gRPC URL of the TPU device to use
-    if not FLAGS.master and not FLAGS.tpu_name:
-      raise RuntimeError('You must specify either --master or --tpu_name.')
-
-    if FLAGS.master:
-      if FLAGS.tpu_name:
-        tf.logging.warn('Both --master and --tpu_name are set. Ignoring'
-                        ' --tpu_name and using --master.')
-      tpu_grpc_url = FLAGS.master
-    else:
-      tpu_cluster_resolver = (
-          tf.contrib.cluster_resolver.TPUClusterResolver(
-              FLAGS.tpu_name,
-              zone=FLAGS.tpu_zone,
-              project=FLAGS.gcp_project))
-  else:
-    # URL is unused if running locally without TPU
-    tpu_grpc_url = None
+  tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
+      FLAGS.tpu,
+      zone=FLAGS.tpu_zone,
+      project=FLAGS.gcp_project)
 
   config = tpu_config.RunConfig(
-      master=tpu_grpc_url,
-      evaluation_master=tpu_grpc_url,
+      cluster=tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
       save_checkpoints_steps=FLAGS.iterations_per_loop,
-      cluster=tpu_cluster_resolver,
       tpu_config=tpu_config.TPUConfig(
           iterations_per_loop=FLAGS.iterations_per_loop,
           num_shards=FLAGS.num_cores,
@@ -397,16 +377,18 @@ def main(unused_argv):
       train_batch_size=FLAGS.train_batch_size,
       eval_batch_size=FLAGS.eval_batch_size)
 
+  assert FLAGS.precision == 'bfloat16' or FLAGS.precision == 'float32', (
+      'Invalid value for --precision flag; must be bfloat16 or float32.')
+  tf.logging.info('Precision: %s', FLAGS.precision)
+  use_bfloat16 = FLAGS.precision == 'bfloat16'
+
   # Input pipelines are slightly different (with regards to shuffling and
   # preprocessing) between training and evaluation.
-  imagenet_train = imagenet_input.ImageNetInput(
-      is_training=True,
+  imagenet_train, imagenet_eval = [imagenet_input.ImageNetInput(
+      is_training=is_training,
       data_dir=FLAGS.data_dir,
-      transpose_input=FLAGS.transpose_input)
-  imagenet_eval = imagenet_input.ImageNetInput(
-      is_training=False,
-      data_dir=FLAGS.data_dir,
-      transpose_input=FLAGS.transpose_input)
+      transpose_input=FLAGS.transpose_input,
+      use_bfloat16=use_bfloat16) for is_training in [True, False]]
 
   if FLAGS.mode == 'eval':
     eval_steps = NUM_EVAL_IMAGES // FLAGS.eval_batch_size

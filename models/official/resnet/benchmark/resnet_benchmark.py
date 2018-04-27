@@ -156,7 +156,6 @@ def main(unused_argv):
           '%.2f' % (eval_results['top_5_accuracy'] * 100),
       ])
 
-      # Sleep 60 seconds to ensure TPU doesn't get corrupted between evals
       time.sleep(60)
 
     with tf.gfile.GFile(os.path.join(FLAGS.model_dir, 'results.tsv'), 'wb') as tsv_file:   # pylint: disable=line-too-long
