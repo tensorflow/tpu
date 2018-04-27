@@ -57,17 +57,21 @@ class ImageNetInput(object):
   The validation data is in the same format but sharded in 128 files.
 
   The format of the data required is created by the script at:
-      https://github.com/tensorflow/tpu-demos/blob/master/cloud_tpu/datasets/imagenet_to_gcs.py
+      https://github.com/tensorflow/tpu/blob/master/tools/datasets/imagenet_to_gcs.py
 
   Args:
     is_training: `bool` for whether the input is for training
-    data_dir: `str` for the directory of the training and validation data
+    data_dir: `str` for the directory of the training and validation data;
+        if 'null' (the literal string 'null', not None), then construct a null
+        pipeline, consisting of empty images.
+    use_bfloat16: If True, use bfloat16 precision; else use float32.
     transpose_input: 'bool' for whether to use the double transpose trick
   """
 
-  def __init__(self, is_training, data_dir, transpose_input=True):
+  def __init__(self, is_training, data_dir, use_bfloat16, transpose_input=True):
     self.image_preprocessing_fn = resnet_preprocessing.preprocess_image
     self.is_training = is_training
+    self.use_bfloat16 = use_bfloat16
     self.data_dir = data_dir
     self.transpose_input = transpose_input
 
@@ -106,7 +110,8 @@ class ImageNetInput(object):
     label = tf.cast(
         tf.reshape(parsed['image/class/label'], shape=[]), dtype=tf.int32) - 1
 
-    image = tf.cast(image, tf.bfloat16)
+    if self.use_bfloat16:
+      image = tf.cast(image, tf.bfloat16)
 
     return image, label
 
@@ -121,6 +126,9 @@ class ImageNetInput(object):
     Returns:
       A `tf.data.Dataset` object.
     """
+    if self.data_dir == 'null':
+      return self.input_fn_null(params)
+
     # Retrieves the batch size for the current shard. The # of shards is
     # computed according to the input pipeline deployment. See
     # tf.contrib.tpu.RunConfig for details.
@@ -180,3 +188,24 @@ class ImageNetInput(object):
     dataset = dataset.prefetch(tf.contrib.data.AUTOTUNE)
     return dataset
 
+  def input_fn_null(self, params):
+    """Input function which provides null (black) images."""
+    batch_size = params['batch_size']
+    dataset = tf.data.Dataset.range(1).repeat().map(self._get_null_input)
+    dataset = dataset.prefetch(batch_size)
+
+    dataset = dataset.apply(
+        tf.contrib.data.batch_and_drop_remainder(batch_size))
+
+    dataset = dataset.map(
+        lambda images, labels: (tf.transpose(images, [1, 2, 3, 0]), labels),
+        num_parallel_calls=8)
+
+    dataset = dataset.prefetch(32)     # Prefetch overlaps in-feed with training
+    tf.logging.info('Input dataset: %s', str(dataset))
+    return dataset
+
+  def _get_null_input(self, _):
+    null_image = tf.zeros([224, 224, 3], tf.bfloat16
+                          if self.use_bfloat16 else tf.float32)
+    return (null_image, tf.constant(0, tf.int32))
