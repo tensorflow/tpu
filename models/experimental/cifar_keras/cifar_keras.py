@@ -28,6 +28,10 @@ from tensorflow.contrib.tpu.python.tpu import tpu_optimizer
 
 # Cloud TPU Cluster Resolvers
 flags.DEFINE_string(
+    'tpu', default=None,
+    help='The Cloud TPU to use for training. This should be either the name '
+    'used when creating the Cloud TPU, or a grpc://ip.address.of.tpu:8470 url.')
+flags.DEFINE_string(
     "gcp_project", default=None,
     help="Project name for the Cloud TPU-enabled project. If not specified, we "
     "will attempt to automatically detect the GCE project from metadata.")
@@ -35,17 +39,8 @@ flags.DEFINE_string(
     "tpu_zone", default=None,
     help="GCE zone where the Cloud TPU is located in. If not specified, we "
     "will attempt to automatically detect the GCE project from metadata.")
-flags.DEFINE_string(
-    "tpu_name", default=None,
-    help="Name of the Cloud TPU for Cluster Resolvers. You must specify either "
-    "this flag or --master.")
 
 # Model specific paramenters
-flags.DEFINE_string(
-    "master", default=None,
-    help="GRPC URL of the master (e.g. grpc://ip.address.of.tpu:8470). You "
-    "must specify either this flag or --tpu_name.")
-
 flags.DEFINE_integer("batch_size", 128,
                      "Mini-batch size for the computation. Note that this "
                      "is the global batch size and not the per-shard batch.")
@@ -142,24 +137,13 @@ def input_fn(params):
 def main(argv):
   del argv  # Unused.
 
-  if FLAGS.master is None and FLAGS.tpu_name is None:
-    raise RuntimeError("You must specify either --master or --tpu_name.")
-
-  if FLAGS.master is not None:
-    if FLAGS.tpu_name is not None:
-      tf.logging.warn("Both --master and --tpu_name are set. Ignoring "
-                      "--tpu_name and using --master.")
-    tpu_grpc_url = FLAGS.master
-  else:
-    tpu_cluster_resolver = (
-        tf.contrib.cluster_resolver.TPUClusterResolver(
-            FLAGS.tpu_name,
-            zone=FLAGS.tpu_zone,
-            project=FLAGS.gcp_project))
-    tpu_grpc_url = tpu_cluster_resolver.get_master()
+  tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
+      FLAGS.tpu,
+      zone=FLAGS.tpu_zone,
+      project=FLAGS.gcp_project)
 
   run_config = tpu_config.RunConfig(
-      master=tpu_grpc_url,
+      cluster=tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
       save_checkpoints_secs=3600,
       session_config=tf.ConfigProto(

@@ -42,31 +42,13 @@ CKPT_PATTERN = r'model\.ckpt-(?P<gs>[0-9]+)\.data'
 
 
 def main(unused_argv):
-  tpu_grpc_url = None
-  tpu_cluster_resolver = None
-  if FLAGS.use_tpu:
-    # Determine the gRPC URL of the TPU device to use
-    if not FLAGS.master and not FLAGS.tpu_name:
-      raise RuntimeError('You must specify either --master or --tpu_name.')
-
-    if FLAGS.master:
-      if FLAGS.tpu_name:
-        tf.logging.warn('Both --master and --tpu_name are set. Ignoring'
-                        ' --tpu_name and using --master.')
-      tpu_grpc_url = FLAGS.master
-    else:
-      tpu_cluster_resolver = (
-          tf.contrib.cluster_resolver.TPUClusterResolver(
-              FLAGS.tpu_name,
-              zone=FLAGS.tpu_zone,
-              project=FLAGS.gcp_project))
-  else:
-    # URL is unused if running locally without TPU
-    tpu_grpc_url = None
+    tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
+        FLAGS.tpu,
+        zone=FLAGS.tpu_zone,
+        project=FLAGS.gcp_project)
 
   config = tpu_config.RunConfig(
-      master=tpu_grpc_url,
-      evaluation_master=tpu_grpc_url,
+      cluster=tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
       save_checkpoints_steps=FLAGS.iterations_per_loop,
       keep_checkpoint_max=None,

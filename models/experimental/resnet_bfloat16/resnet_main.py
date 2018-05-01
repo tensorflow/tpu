@@ -46,6 +46,11 @@ flags.DEFINE_bool(
 
 # Cloud TPU Cluster Resolvers
 flags.DEFINE_string(
+    'tpu', default=None,
+    help='Name of the Cloud TPU for Cluster Resolvers. You must specify either '
+    'this flag or --master.')
+
+flags.DEFINE_string(
     'gcp_project', default=None,
     help='Project name for the Cloud TPU-enabled project. If not specified, we '
     'will attempt to automatically detect the GCE project from metadata.')
@@ -54,16 +59,6 @@ flags.DEFINE_string(
     'tpu_zone', default=None,
     help='GCE zone where the Cloud TPU is located in. If not specified, we '
     'will attempt to automatically detect the GCE project from metadata.')
-
-flags.DEFINE_string(
-    'tpu_name', default=None,
-    help='Name of the Cloud TPU for Cluster Resolvers. You must specify either '
-    'this flag or --master.')
-
-flags.DEFINE_string(
-    'master', default=None,
-    help='gRPC URL of the master (i.e. grpc://ip.address.of.tpu:8470). You '
-    'must specify either this flag or --tpu_name.')
 
 # Model specific flags
 flags.DEFINE_string(
@@ -360,30 +355,13 @@ def resnet_model_fn(features, labels, mode, params):
 
 
 def main(unused_argv):
-  if FLAGS.use_tpu:
-    # Determine the gRPC URL of the TPU device to use
-    if FLAGS.master is None and FLAGS.tpu_name is None:
-      raise RuntimeError('You must specify either --master or --tpu_name.')
-
-    if FLAGS.master is not None:
-      if FLAGS.tpu_name is not None:
-        tf.logging.warn('Both --master and --tpu_name are set. Ignoring'
-                        ' --tpu_name and using --master.')
-      tpu_grpc_url = FLAGS.master
-    else:
-      tpu_cluster_resolver = (
-          tf.contrib.cluster_resolver.TPUClusterResolver(
-              FLAGS.tpu_name,
-              zone=FLAGS.tpu_zone,
-              project=FLAGS.gcp_project))
-      tpu_grpc_url = tpu_cluster_resolver.get_master()
-  else:
-    # URL is unused if running locally without TPU
-    tpu_grpc_url = None
+  tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
+      FLAGS.tpu,
+      zone=FLAGS.tpu_zone,
+      project=FLAGS.gcp_project)
 
   config = tpu_config.RunConfig(
-      master=tpu_grpc_url,
-      evaluation_master=tpu_grpc_url,
+      cluster=tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
       save_checkpoints_steps=FLAGS.iterations_per_loop,
       keep_checkpoint_max=None,
