@@ -29,7 +29,7 @@ import (
 	"github.com/tensorflow/tpu/tools/ctpu/ctrl"
 )
 
-const version = "0.7"
+const version = "1.0.0"
 
 var logRequests bool
 
@@ -65,6 +65,7 @@ func main() {
 	subcommands.Register(commands.PauseCommand(cfg, ctrls.TPU, ctrls.GCE), "")
 	subcommands.Register(commands.DeleteCommand(cfg, ctrls.TPU, ctrls.GCE), "")
 	subcommands.Register(commands.StatusCommand(cfg, ctrls.TPU, ctrls.GCE), "")
+	subcommands.Register(commands.RestartCommand(cfg, ctrls.TPU), "")
 
 	subcommands.Register(commands.ConfigCommand(cfg, ctrls.CLI), "configuration")
 	subcommands.Register(commands.VersionCommand(version), "configuration")

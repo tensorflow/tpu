@@ -16,6 +16,7 @@
 package ctrl
 
 import (
+	"os"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -40,6 +41,9 @@ func TestMakeExecCommandNoForwarding(t *testing.T) {
 		"--project",
 		"testProject",
 		"testuser123",
+		"--",
+		"-o",
+		"SendEnv=TPU_NAME",
 	}
 	if !cmp.Equal(cmd, expected) {
 		t.Errorf("incorrect command, got: %v, want: %v", cmd, expected)
@@ -64,6 +68,8 @@ func TestMakeExecCommandForwardAgent(t *testing.T) {
 		"otherTestProject",
 		"testuser321",
 		"--",
+		"-o",
+		"SendEnv=TPU_NAME",
 		"-A",
 	}
 	if !cmp.Equal(cmd, expected) {
@@ -89,6 +95,8 @@ func TestMakeExecCommandNoTPU(t *testing.T) {
 		"otherTestProject",
 		"testuser321",
 		"--",
+		"-o",
+		"SendEnv=TPU_NAME",
 		"-L",
 		"6006:localhost:6006",
 		"-L",
@@ -124,6 +132,8 @@ func TestMakeExecCommandWithTPU(t *testing.T) {
 		"otherTestProject",
 		"testuser321",
 		"--",
+		"-o",
+		"SendEnv=TPU_NAME",
 		"-L",
 		"6006:localhost:6006",
 		"-L",
@@ -163,6 +173,8 @@ func TestMakeExecCommandWithTPUAndAgentForwarding(t *testing.T) {
 		"otherTestProject",
 		"testuser321",
 		"--",
+		"-o",
+		"SendEnv=TPU_NAME",
 		"-A",
 		"-L",
 		"6006:localhost:6006",
@@ -204,6 +216,8 @@ func TestMakeExecCommandInDevshell(t *testing.T) {
 		"otherTestProject",
 		"testuser321",
 		"--",
+		"-o",
+		"SendEnv=TPU_NAME",
 		"-L",
 		"8080:localhost:6006",
 		"-L",
@@ -212,5 +226,16 @@ func TestMakeExecCommandInDevshell(t *testing.T) {
 	}
 	if !cmp.Equal(cmd, expected) {
 		t.Errorf("incorrect command, got: %v, want: %v", cmd, expected)
+	}
+}
+
+func TestMakeEnviron(t *testing.T) {
+	env := os.Environ()
+	want := append(env, "TPU_NAME=my_flock_name")
+	cfg := &config.Config{FlockName: "my_flock_name"}
+	cli := GCloudCLI{cfg}
+	got := cli.MakeEnviron()
+	if !cmp.Equal(want, got) {
+		t.Errorf("cli.MakeEnviron() = %v, want: %v", got, want)
 	}
 }

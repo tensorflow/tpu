@@ -59,7 +59,7 @@ func (q *quotaCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...int
 	}
 
 	fmt.Printf("Quotas cannot currently be displayed within ctpu. To view your quota, open:\n\thttps://console.cloud.google.com/iam-admin/quotas?project=%s&service=tpu.googleapis.com\n\n", q.cfg.Project)
-	fmt.Printf("Request additional quota from:\n\thttps://services.google.com/fb/forms/cloud-tpu-beta-request/\n")
+	fmt.Printf("Request additional quota from:\n\thttps://console.cloud.google.com/iam-admin/quotas?project=%s&service=tpu.googleapis.com\n", q.cfg.Project)
 
 	return subcommands.ExitSuccess
 }

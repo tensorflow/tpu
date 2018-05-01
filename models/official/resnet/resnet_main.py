@@ -209,15 +209,22 @@ def resnet_model_fn(features, labels, mode, params):
   if FLAGS.transpose_input:
     features = tf.transpose(features, [3, 0, 1, 2])  # HWCN to NHWC
 
-  with bfloat16.bfloat16_scope():
+  # This nested function allows us to avoid duplicating the logic which
+  # builds the network, for different values of --precision.
+  def build_network():
     network = resnet_model.resnet_v1(
         resnet_depth=FLAGS.resnet_depth,
         num_classes=LABEL_CLASSES,
         data_format=FLAGS.data_format)
-
-    logits = network(
+    return network(
         inputs=features, is_training=(mode == tf.estimator.ModeKeys.TRAIN))
+
+  if FLAGS.precision == 'bfloat16':
+    with bfloat16.bfloat16_scope():
+      logits = build_network()
     logits = tf.cast(logits, tf.float32)
+  elif FLAGS.precision == 'float32':
+    logits = build_network()
 
   if mode == tf.estimator.ModeKeys.PREDICT:
     predictions = {

@@ -19,7 +19,6 @@ package config
 import (
 	"errors"
 	"fmt"
-	"log"
 	"os/user"
 	"regexp"
 	"strings"
@@ -27,7 +26,7 @@ import (
 	"flag"
 )
 
-const defaultZone = "us-central1-c"
+const defaultZone = "us-central1-b"
 
 // Validation regular expression.
 var usernameRegex = regexp.MustCompile("^([A-z0-9-_]+)")
@@ -74,11 +73,11 @@ func (c *Config) Validate() error {
 		return err
 	}
 	if c.Project == "" {
-		return errors.New("no project specified, please set one on the command line --project $PROJECT_NAME")
+		return errors.New("no project found; please configure one using `gcloud config set project $PROJECT_NAME` or specify an override on the command line using `--project $PROJECT_NAME` for every ctpu invocation")
 	}
 	if c.Zone == "" {
 		c.Zone = defaultZone
-		log.Printf("WARNING: Setting zone to %q", defaultZone)
+		fmt.Printf("WARNING: Setting zone to [default] %q. To configure a zone, run:\n\tgcloud config set compute/zone <YOUR_PREFERRED_ZONE>\nbefore running `ctpu up`, or override the zone for a specific `ctpu` invocation by setting the `--zone` flag (e.g. `ctpu up --zone=us-central1-c`).", defaultZone)
 	}
 	return nil
 }
