@@ -136,7 +136,7 @@ func (c *upCmd) gceImageFamily() (string, error) {
 		return "", err
 	}
 	if parsed.Modifier != "" {
-		return "", fmt.Errorf("invalid tensorflow version %q (non-empty modifier)", c.tfVersion)
+		return "", fmt.Errorf("invalid tensorflow version %q (non-empty modifier); please set the --gce-image flag", c.tfVersion)
 	}
 	return fmt.Sprintf("tf-%d-%d", parsed.Major, parsed.Minor), nil
 }
@@ -151,7 +151,7 @@ func (c *upCmd) upVM() error {
 	if vm == nil {
 		log.Printf("Creating GCE VM %s (this may take a minute)...\n", c.cfg.FlockName)
 		imageFamily, err := c.gceImageFamily()
-		if err != nil {
+		if err != nil && c.gceImage == "" {
 			log.Print(err)
 			return err
 		}

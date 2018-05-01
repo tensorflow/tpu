@@ -77,7 +77,7 @@ func (c *Config) Validate() error {
 	}
 	if c.Zone == "" {
 		c.Zone = defaultZone
-		fmt.Printf("WARNING: Setting zone to [default] %q. To configure a zone, run:\n\tgcloud config set compute/zone <YOUR_PREFERRED_ZONE>\nbefore running `ctpu up`, or override the zone for a specific `ctpu` invocation by setting the `--zone` flag (e.g. `ctpu up --zone=us-central1-c`).", defaultZone)
+		fmt.Printf("WARNING: Setting zone to [default] %q. To configure a zone, run:\n\tgcloud config set compute/zone <YOUR_PREFERRED_ZONE>\nbefore running `ctpu up`, or override the zone for a specific `ctpu` invocation by setting\nthe `--zone` flag (e.g. `ctpu up --zone=us-central1-c`).\n", defaultZone)
 	}
 	return nil
 }

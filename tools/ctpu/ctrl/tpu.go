@@ -246,7 +246,6 @@ func (g *TPUCP) CreateInstance(version string) error {
 		return err
 	}
 
-	// TODO(saeta): Make TF version configurable, and default to a stable version.
 	node := tpu.Node{
 		AcceleratorType:   "v2-8",
 		CidrBlock:         cidrBlock,
