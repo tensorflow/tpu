@@ -47,6 +47,10 @@ getting everything set up.
 
 [![Open in Cloud Shell](http://gstatic.com/cloudssh/images/open-btn.svg)](https://console.cloud.google.com/cloudshell/open?git_repo=https%3A%2F%2Fgithub.com%2Ftensorflow%2Ftpu&page=shell&tutorial=tools%2Fctpu%2Ftutorial.md)
 
+Note: The above request clones the `ctpu` repository into your Cloud Shell. The
+only reason for cloning the repo is so that you can view the tutorial in the
+shell. The `ctpu` tool itself is pre-installed on the Cloud Shell.
+
 ### Local Machine ###
 
 Alternatively, you can also use `ctpu` from your local machine. Follow the
@@ -109,7 +113,7 @@ using the following commands:
 
 ```
 gcloud config set project $MY_PROJECT
-gcloud config set compute/zone us-central1-c
+gcloud config set compute/zone us-central1-b
 gcloud config set compute/region us-central1
 ```
 

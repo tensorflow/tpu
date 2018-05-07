@@ -371,7 +371,7 @@ def main(unused_argv):
   config = tpu_config.RunConfig(
       cluster=tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
-      save_checkpoints_steps=FLAGS.iterations_per_loop,
+      save_checkpoints_steps=max(600, FLAGS.iterations_per_loop),
       tpu_config=tpu_config.TPUConfig(
           iterations_per_loop=FLAGS.iterations_per_loop,
           num_shards=FLAGS.num_cores,

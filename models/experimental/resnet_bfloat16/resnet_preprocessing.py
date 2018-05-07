@@ -200,49 +200,52 @@ def _normalize(image):
   return image
 
 
-def preprocess_for_train(image):
+def preprocess_for_train(image, image_size=IMAGE_SIZE):
   """Preprocesses the given image for evaluation.
 
   Args:
     image: `Tensor` representing an image of arbitrary size.
+    image_size: image size.
 
   Returns:
     A preprocessed image `Tensor`.
   """
-  image = _random_crop(image, IMAGE_SIZE)
+  image = _random_crop(image, image_size)
   image = _normalize(image)
   image = _flip(image)
-  image = tf.reshape(image, [IMAGE_SIZE, IMAGE_SIZE, 3])
+  image = tf.reshape(image, [image_size, image_size, 3])
   return image
 
 
-def preprocess_for_eval(image):
+def preprocess_for_eval(image, image_size=IMAGE_SIZE):
   """Preprocesses the given image for evaluation.
 
   Args:
     image: `Tensor` representing an image of arbitrary size.
+    image_size: image size.
 
   Returns:
     A preprocessed image `Tensor`.
   """
-  image = _do_scale(image, IMAGE_SIZE + 32)
+  image = _do_scale(image, image_size + 32)
   image = _normalize(image)
-  image = _center_crop(image, IMAGE_SIZE)
-  image = tf.reshape(image, [IMAGE_SIZE, IMAGE_SIZE, 3])
+  image = _center_crop(image, image_size)
+  image = tf.reshape(image, [image_size, image_size, 3])
   return image
 
 
-def preprocess_image(image, is_training=False):
+def preprocess_image(image, is_training=False, image_size=IMAGE_SIZE):
   """Preprocesses the given image.
 
   Args:
     image: `Tensor` representing an image of arbitrary size.
     is_training: `bool` for whether the preprocessing is for training.
+    image_size: image size.
 
   Returns:
     A preprocessed image `Tensor`.
   """
   if is_training:
-    return preprocess_for_train(image)
+    return preprocess_for_train(image, image_size)
   else:
-    return preprocess_for_eval(image)
+    return preprocess_for_eval(image, image_size)
