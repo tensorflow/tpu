@@ -84,7 +84,7 @@ This subcommand may take a few minutes to run. On your behalf, `ctpu` will:
 1. Create a Compute Engine VM with the latest stable TensorFlow version
    pre-installed.
 1. Create a Cloud TPU with the corresponding version of TensorFlow.
-1. Ensure your Cloud TPU has access to resource it needs from your project.
+1. Ensure your Cloud TPU has access to resources it needs from your project.
 1. Perform a number of other checks.
 1. Log you in to your new Compute Engine VM.
 
@@ -184,7 +184,7 @@ on Cloud TPUs.
 > random tensors available at
 > `gs://cloud-tpu-test-datasets/fake_imagenet`. If you would like to train on
 > the true ImageNet data, follow the [instructions to download and preprocess
-> the ImageNet data](https://cloud.google.com/tpu/docs/tutorials/resnet#download_and_convert_the_imagenet_data),
+> the ImageNet data](https://cloud.google.com/tpu/docs/tutorials/resnet#full-imagenet),
 > and be sure to substitute in the bucket where you've uploaded the preprocessed
 > files instead of `gs://cloud-tpu-test-datasets/fake_imagenet` in the commands
 > below.
@@ -211,8 +211,12 @@ and open port `8080`.
 ### Start Training ###
 
 The [ResNet](https://github.com/tensorflow/tpu/tree/master/models/official/resnet)
-model is pre-loaded on your Compute Engine VM. To start training ResNet-50,
-execute:
+model is pre-loaded on your Compute Engine VM.
+
+If TensorBoard has taken over your Cloud Shell tab, open another tab and run
+`ctpu up` in the new shell to connect to your Compute Engine VM:
+
+To start training ResNet-50, execute:
 
 ```bash
 python /usr/share/tpu/models/official/resnet/resnet_main.py \
@@ -239,10 +243,11 @@ the same `--model_dir` value.
 
 ## Clean up ##
 
-To clean up, stop training and  sign out of your Compute Engine VM (use `exit`).
+To clean up, stop training and sign out of your Compute Engine VM (use `exit`).
 Then, in your Cloud Shell (your prompt should be `user@projectname`) execute
 `ctpu delete`. This will delete your Compute Engine VM and your Cloud TPU.
-Then, go to Cloud Storage and delete your bucket (if desired).
+Then, go to Cloud Storage and delete your bucket (if you don't need it any
+more).
 
 You can run `ctpu status` to make sure you have no instances allocated, although
 note that deletion may take a minute or two.
@@ -277,14 +282,14 @@ Finally, below is a "cheat sheet" for using Cloud TPUs:
 
  - `ctpu status`: Prints the current status of your Compute Engine VM and Cloud
    TPU.
- - `ctpu up`: Get everything ready and logs in to your VM. You can run this
+ - `ctpu up`: Gets everything ready and logs in to your VM. You can run this
    multiple times.
- - `ctpu pause`: Turn off your Compute Engine VM and Cloud TPU. Software
+ - `ctpu pause`: Turns off your Compute Engine VM and Cloud TPU. Software
    installed, data saved on your Compute Engine VM disk, and data in Cloud
    Storage will persist.
- - `ctpu delete`: Clean up all Compute Engine resources (VM & Cloud TPU). Any
+ - `ctpu delete`: Cleans up all Compute Engine resources (VM & Cloud TPU). Any
    software installation or configuration and all data on your Compute Engine VM
    will be deleted. Data stored in Cloud Storage will persist.
  - `ctpu`: Displays a summary of all available commands.
- - `/usr/share/tpu`, `/usr/share/tensorflow`, `/usr/share/models`: copies of
-   scripts and tools for use with Cloud TPUs.
+ - `/usr/share/tpu`, `/usr/share/tensorflow`, `/usr/share/models`: Contain
+   copies of scripts and tools for use with Cloud TPUs.
