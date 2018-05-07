@@ -98,12 +98,15 @@ FLAGS = flags.FLAGS
 def main(argv):
   del argv  # Unused.
 
-  tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
-      FLAGS.tpu,
-      zone=FLAGS.tpu_zone,
-      project=FLAGS.gcp_project)
-  tpu_grpc_url = tpu_cluster_resolver.get_master()
-  tf.Session.reset(tpu_grpc_url)
+  if FLAGS.use_tpu:
+    tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
+        FLAGS.tpu,
+        zone=FLAGS.tpu_zone,
+        project=FLAGS.gcp_project)
+    tpu_grpc_url = tpu_cluster_resolver.get_master()
+    tf.Session.reset(tpu_grpc_url)
+  else:
+    tpu_cluster_resolver = None
 
   if FLAGS.mode is 'train' and FLAGS.training_file_pattern is None:
     raise RuntimeError('You must specify --training_file_pattern for training.')
@@ -190,6 +193,7 @@ def main(argv):
         skip_crowd=False,
         resnet_checkpoint=None,
         is_training_bn=False,
+        use_bfloat16=False,
     )
 
     eval_estimator = tpu_estimator.TPUEstimator(
