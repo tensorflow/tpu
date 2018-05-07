@@ -202,8 +202,11 @@ tensorboard -logdir gs://$GCS_BUCKET_NAME/resnet &
 `ctpu` automatically set up special port forwarding for the Cloud Shell
 environment to make TensorBoard available.
 
-All you need to do is click on the Web Preview button (`walkthrough web-preview-icon` -
-`walkthrough spotlight-pointer devshell-web-preview-button "click me to highlight it"`),
+All you need to do is click on the Web Preview button (
+<walkthrough-web-preview-icon></walkthrough-web-preview-icon> -
+<walkthrough-spotlight-pointer spotlightId="devshell-web-preview-button">
+  click me to highlight it
+</walkthrough-spotlight-pointer>),
 and open port `8080`.
 
 > Note: because you haven't started training yet, tensorboard should be empty.
@@ -254,7 +257,7 @@ note that deletion may take a minute or two.
 
 ## Congratulations ##
 
-`walkthrough conclusion-trophy`
+<walkthrough-conclusion-trophy></walkthrough-conclusion-trophy>
 
 You've successfully started training a modern image classification model using a
 Cloud TPU.
