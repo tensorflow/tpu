@@ -68,6 +68,12 @@ class InputReader(object):
         boxes = data['groundtruth_boxes']
         classes = data['groundtruth_classes']
         classes = tf.reshape(tf.cast(classes, dtype=tf.float32), [-1, 1])
+        # Handle crowd annotations. As crowd annotations are not large
+        # instances, the model ignores them in training.
+        if params['skip_crowd']:
+          indices = tf.where(tf.logical_not(data['groundtruth_is_crowd']))
+          classes = tf.gather_nd(classes, indices)
+          boxes = tf.gather_nd(boxes, indices)
 
         # the image normalization is identical to Cloud TPU ResNet-50
         image = tf.image.convert_image_dtype(image, dtype=tf.float32)
@@ -91,13 +97,15 @@ class InputReader(object):
          num_positives) = anchor_labeler.label_anchors(boxes, classes)
 
         source_id = tf.string_to_number(source_id, out_type=tf.float32)
+        if params['use_bfloat16']:
+          image = tf.cast(image, dtype=tf.bfloat16)
         row = (image, cls_targets, box_targets, num_positives, source_id,
                image_scale)
         return row
 
     batch_size = params['batch_size']
 
-    dataset = tf.data.Dataset.list_files(self._file_pattern)
+    dataset = tf.data.Dataset.list_files(self._file_pattern, shuffle=False)
 
     dataset = dataset.shuffle(buffer_size=1024)
     if self._is_training:

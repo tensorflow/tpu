@@ -18,60 +18,59 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import os
 import time
 
+from absl import flags
 import absl.logging as _logging  # pylint: disable=unused-import
 import tensorflow as tf
 
 import imagenet_input
 import resnet_model
 from tensorflow.contrib import summary
+from tensorflow.contrib.tpu.python.tpu import bfloat16
 from tensorflow.contrib.tpu.python.tpu import tpu_config
 from tensorflow.contrib.tpu.python.tpu import tpu_estimator
 from tensorflow.contrib.tpu.python.tpu import tpu_optimizer
+from tensorflow.contrib.training.python.training import evaluation
 from tensorflow.python.estimator import estimator
 
-FLAGS = tf.flags.FLAGS
+FLAGS = flags.FLAGS
 
-tf.flags.DEFINE_bool(
+flags.DEFINE_bool(
     'use_tpu', True,
     help=('Use TPU to execute the model for training and evaluation. If'
           ' --use_tpu=false, will use whatever devices are available to'
           ' TensorFlow by default (e.g. CPU and GPU)'))
 
 # Cloud TPU Cluster Resolvers
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
+    'tpu', default=None,
+    help='The Cloud TPU to use for training. This should be either the name '
+    'used when creating the Cloud TPU, or a grpc://ip.address.of.tpu:8470 url.')
+
+flags.DEFINE_string(
     'gcp_project', default=None,
     help='Project name for the Cloud TPU-enabled project. If not specified, we '
     'will attempt to automatically detect the GCE project from metadata.')
 
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     'tpu_zone', default=None,
     help='GCE zone where the Cloud TPU is located in. If not specified, we '
     'will attempt to automatically detect the GCE project from metadata.')
 
-tf.flags.DEFINE_string(
-    'tpu_name', default=None,
-    help='Name of the Cloud TPU for Cluster Resolvers. You must specify either '
-    'this flag or --master.')
-
-tf.flags.DEFINE_string(
-    'master', default=None,
-    help='gRPC URL of the master (i.e. grpc://ip.address.of.tpu:8470). You '
-    'must specify either this flag or --tpu_name.')
-
 # Model specific flags
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     'data_dir', default=None,
     help=('The directory where the ImageNet input data is stored. Please see'
           ' the README.md for the expected data format.'))
 
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     'model_dir', default=None,
     help=('The directory where the model and training/evaluation summaries are'
           ' stored.'))
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     'resnet_depth', default=50,
     help=('Depth of ResNet model to use. Must be one of {18, 34, 50, 101, 152,'
           ' 200}. ResNet-18 and 34 use the pre-activation residual blocks'
@@ -80,26 +79,38 @@ tf.flags.DEFINE_integer(
           ' more memory and may require reducing --train_batch_size to prevent'
           ' running out of memory.'))
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_string(
+    'mode', default='train_and_eval',
+    help='One of {"train_and_eval", "train", "eval"}.')
+
+flags.DEFINE_integer(
     'train_steps', default=112603,
     help=('The number of steps to use for training. Default is 112603 steps'
           ' which is approximately 90 epochs at batch size 1024. This flag'
           ' should be adjusted according to the --train_batch_size flag.'))
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     'train_batch_size', default=1024, help='Batch size for training.')
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     'eval_batch_size', default=1024, help='Batch size for evaluation.')
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     'steps_per_eval', default=5000,
     help=('Controls how often evaluation is performed. Since evaluation is'
           ' fairly expensive, it is advised to evaluate as infrequently as'
           ' possible (i.e. up to --train_steps, which evaluates the model only'
           ' after finishing the entire training regime).'))
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_bool(
+    'skip_host_call', default=False,
+    help=('Skip the host_call which is executed every training step. This is'
+          ' generally used for generating training summaries (train loss,'
+          ' learning rate, etc...). When --skip_host_call=false, there could'
+          ' be a performance drop if host_call function is slow and cannot'
+          ' keep up with the TPU-side computation.'))
+
+flags.DEFINE_integer(
     'iterations_per_loop', default=100,
     help=('Number of steps to run on TPU before outfeeding metrics to the CPU.'
           ' If the number of iterations in the loop would exceed the number of'
@@ -107,22 +118,32 @@ tf.flags.DEFINE_integer(
           ' --iterations_per_loop. The larger this value is, the higher the'
           ' utilization on the TPU.'))
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     'num_cores', default=8,
     help=('Number of TPU cores. For a single TPU device, this is 8 because each'
           ' TPU has 4 chips each with 2 cores.'))
 
-tf.flags.DEFINE_string(
-    'data_format',
-    default='channels_first',
-    help=('A flag to override the data format used in the model. The value '
-          'is either channels_first or channels_last. To run the network on '
-          'CPU, channels_last should be used.'))
+flags.DEFINE_string(
+    'data_format', default='channels_last',
+    help=('A flag to override the data format used in the model. The value'
+          ' is either channels_first or channels_last. To run the network on'
+          ' CPU or TPU, channels_last should be used. For GPU, channels_first'
+          ' will improve performance.'))
 
-tf.flags.DEFINE_string(
+# TODO(chrisying): remove this flag once --transpose_tpu_infeed flag is enabled
+# by default for TPU
+flags.DEFINE_bool(
+    'transpose_input', default=True,
+    help='Use TPU double transpose optimization')
+
+flags.DEFINE_string(
     'export_dir',
     default=None,
     help=('The directory where the exported SavedModel will be stored.'))
+
+flags.DEFINE_string(
+    'precision', 'bfloat16',
+    help=('Precision to use; one of: {bfloat16, float32}'))
 
 # Dataset constants
 LABEL_CLASSES = 1000
@@ -134,7 +155,7 @@ BASE_LEARNING_RATE = 0.1     # base LR when batch size = 256
 MOMENTUM = 0.9
 WEIGHT_DECAY = 1e-4
 LR_SCHEDULE = [    # (multiplier, epoch to start) tuples
-    (1.0, 5), (0.1, 30), (0.01, 60), (0.001, 80), (0.000, 90)
+    (1.0, 5), (0.1, 30), (0.01, 60), (0.001, 80)
 ]
 
 
@@ -181,20 +202,29 @@ def resnet_model_fn(features, labels, mode, params):
   if isinstance(features, dict):
     features = features['feature']
 
-  # In most cases, the default data format NCHW instead of NHWC should be
-  # used for a significant performance boost on GPU/TPU. NHWC should be used
-  # only if the network needs to be run on CPU since the pooling operations
-  # are only supported on NHWC.
   if FLAGS.data_format == 'channels_first':
+    assert not FLAGS.transpose_input    # channels_first only for GPU
     features = tf.transpose(features, [0, 3, 1, 2])
 
-  network = resnet_model.resnet_v1(
-      resnet_depth=FLAGS.resnet_depth,
-      num_classes=LABEL_CLASSES,
-      data_format=FLAGS.data_format)
+  if FLAGS.transpose_input:
+    features = tf.transpose(features, [3, 0, 1, 2])  # HWCN to NHWC
 
-  logits = network(
-      inputs=features, is_training=(mode == tf.estimator.ModeKeys.TRAIN))
+  # This nested function allows us to avoid duplicating the logic which
+  # builds the network, for different values of --precision.
+  def build_network():
+    network = resnet_model.resnet_v1(
+        resnet_depth=FLAGS.resnet_depth,
+        num_classes=LABEL_CLASSES,
+        data_format=FLAGS.data_format)
+    return network(
+        inputs=features, is_training=(mode == tf.estimator.ModeKeys.TRAIN))
+
+  if FLAGS.precision == 'bfloat16':
+    with bfloat16.bfloat16_scope():
+      logits = build_network()
+    logits = tf.cast(logits, tf.float32)
+  elif FLAGS.precision == 'float32':
+    logits = build_network()
 
   if mode == tf.estimator.ModeKeys.PREDICT:
     predictions = {
@@ -245,48 +275,48 @@ def resnet_model_fn(features, labels, mode, params):
     with tf.control_dependencies(update_ops):
       train_op = optimizer.minimize(loss, global_step)
 
-    # To log the loss, current learning rate, and epoch for Tensorboard, the
-    # summary op needs to be run on the host CPU via host_call. host_call
-    # expects [batch_size, ...] Tensors, thus reshape to introduce a batch
-    # dimension. These Tensors are implicitly broadcasted to
-    # [params['batch_size'], ].
-    gs_t = tf.reshape(tf.cast(global_step, tf.int32), [1])
-    loss_t = tf.reshape(loss, [1])
-    lr_t = tf.reshape(learning_rate, [1])
-    ce_t = tf.reshape(current_epoch, [1])
+    if not FLAGS.skip_host_call:
+      def host_call_fn(gs, loss, lr, ce):
+        """Training host call. Creates scalar summaries for training metrics.
 
-    def host_call_fn(gs, loss, lr, ce):
-      """Training host call. Creates scalar summaries for training metrics.
+        This function is executed on the CPU and should not directly reference
+        any Tensors in the rest of the `model_fn`. To pass Tensors from the
+        model to the `metric_fn`, provide as part of the `host_call`. See
+        https://www.tensorflow.org/api_docs/python/tf/contrib/tpu/TPUEstimatorSpec
+        for more information.
 
-      This function is executed on the CPU and should not directly reference
-      any Tensors in the rest of the `model_fn`. To pass Tensors from the model
-      to the `metric_fn`, provide as part of the `host_call`. See
-      https://www.tensorflow.org/api_docs/python/tf/contrib/tpu/TPUEstimatorSpec
-      for more information.
+        Arguments should match the list of `Tensor` objects passed as the second
+        element in the tuple passed to `host_call`.
 
-      Arguments should match the list of `Tensor` objects passed as the second
-      element in the tuple passed to `host_call`.
+        Args:
+          gs: `Tensor with shape `[batch]` for the global_step
+          loss: `Tensor` with shape `[batch]` for the training loss.
+          lr: `Tensor` with shape `[batch]` for the learning_rate.
+          ce: `Tensor` with shape `[batch]` for the current_epoch.
 
-      Args:
-        gs: `Tensor with shape `[batch, ]` for the global_step
-        loss: `Tensor` with shape `[batch, ]` for the training loss.
-        lr: `Tensor` with shape `[batch, ]` for the learning_rate.
-        ce: `Tensor` with shape `[batch, ]` for the current_epoch.
+        Returns:
+          List of summary ops to run on the CPU host.
+        """
+        gs = gs[0]
+        with summary.create_file_writer(FLAGS.model_dir).as_default():
+          with summary.always_record_summaries():
+            summary.scalar('loss', loss[0], step=gs)
+            summary.scalar('learning_rate', lr[0], step=gs)
+            summary.scalar('current_epoch', ce[0], step=gs)
 
-      Returns:
-        List of summary ops to run on the CPU host.
-      """
-      # Outfeed supports int32 but global_step is expected to be int64.
-      gs = tf.cast(tf.reduce_mean(gs), tf.int64)
-      with summary.create_file_writer(FLAGS.model_dir).as_default():
-        with summary.always_record_summaries():
-          summary.scalar('loss', tf.reduce_mean(loss), step=gs)
-          summary.scalar('learning_rate', tf.reduce_mean(lr), step=gs)
-          summary.scalar('current_epoch', tf.reduce_mean(ce), step=gs)
+            return summary.all_summary_ops()
 
-          return summary.all_summary_ops()
+      # To log the loss, current learning rate, and epoch for Tensorboard, the
+      # summary op needs to be run on the host CPU via host_call. host_call
+      # expects [batch_size, ...] Tensors, thus reshape to introduce a batch
+      # dimension. These Tensors are implicitly concatenated to
+      # [params['batch_size']].
+      gs_t = tf.reshape(global_step, [1])
+      loss_t = tf.reshape(loss, [1])
+      lr_t = tf.reshape(learning_rate, [1])
+      ce_t = tf.reshape(current_epoch, [1])
 
-    host_call = (host_call_fn, [gs_t, loss_t, lr_t, ce_t])
+      host_call = (host_call_fn, [gs_t, loss_t, lr_t, ce_t])
 
   else:
     train_op = None
@@ -306,7 +336,7 @@ def resnet_model_fn(features, labels, mode, params):
       element in the tuple passed to `eval_metrics`.
 
       Args:
-        labels: `Tensor` with shape `[batch, ]`.
+        labels: `Tensor` with shape `[batch]`.
         logits: `Tensor` with shape `[batch, num_classes]`.
 
       Returns:
@@ -318,8 +348,8 @@ def resnet_model_fn(features, labels, mode, params):
       top_5_accuracy = tf.metrics.mean(in_top_5)
 
       return {
-          'Top-1 accuracy': top_1_accuracy,
-          'Top-5 accuracy': top_5_accuracy,
+          'top_1_accuracy': top_1_accuracy,
+          'top_5_accuracy': top_5_accuracy,
       }
 
     eval_metrics = (metric_fn, [labels, logits])
@@ -333,34 +363,19 @@ def resnet_model_fn(features, labels, mode, params):
 
 
 def main(unused_argv):
-  if FLAGS.use_tpu:
-    # Determine the gRPC URL of the TPU device to use
-    if FLAGS.master is None and FLAGS.tpu_name is None:
-      raise RuntimeError('You must specify either --master or --tpu_name.')
-
-    if FLAGS.master is not None:
-      if FLAGS.tpu_name is not None:
-        tf.logging.warn('Both --master and --tpu_name are set. Ignoring'
-                        ' --tpu_name and using --master.')
-      tpu_grpc_url = FLAGS.master
-    else:
-      tpu_cluster_resolver = (
-          tf.contrib.cluster_resolver.TPUClusterResolver(
-              tpu_names=[FLAGS.tpu_name],
-              zone=FLAGS.tpu_zone,
-              project=FLAGS.gcp_project))
-      tpu_grpc_url = tpu_cluster_resolver.get_master()
-  else:
-    # URL is unused if running locally without TPU
-    tpu_grpc_url = None
+  tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
+      FLAGS.tpu,
+      zone=FLAGS.tpu_zone,
+      project=FLAGS.gcp_project)
 
   config = tpu_config.RunConfig(
-      master=tpu_grpc_url,
-      evaluation_master=tpu_grpc_url,
+      cluster=tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
+      save_checkpoints_steps=max(600, FLAGS.iterations_per_loop),
       tpu_config=tpu_config.TPUConfig(
           iterations_per_loop=FLAGS.iterations_per_loop,
-          num_shards=FLAGS.num_cores))
+          num_shards=FLAGS.num_cores,
+          per_host_input_for_training=tpu_config.InputPipelineConfig.PER_HOST_V2))  # pylint: disable=line-too-long
 
   resnet_classifier = tpu_estimator.TPUEstimator(
       use_tpu=FLAGS.use_tpu,
@@ -369,53 +384,94 @@ def main(unused_argv):
       train_batch_size=FLAGS.train_batch_size,
       eval_batch_size=FLAGS.eval_batch_size)
 
+  assert FLAGS.precision == 'bfloat16' or FLAGS.precision == 'float32', (
+      'Invalid value for --precision flag; must be bfloat16 or float32.')
+  tf.logging.info('Precision: %s', FLAGS.precision)
+  use_bfloat16 = FLAGS.precision == 'bfloat16'
+
   # Input pipelines are slightly different (with regards to shuffling and
   # preprocessing) between training and evaluation.
-  imagenet_train = imagenet_input.ImageNetInput(
-      is_training=True,
-      data_dir=FLAGS.data_dir)
-  imagenet_eval = imagenet_input.ImageNetInput(
-      is_training=False,
-      data_dir=FLAGS.data_dir)
+  imagenet_train, imagenet_eval = [imagenet_input.ImageNetInput(
+      is_training=is_training,
+      data_dir=FLAGS.data_dir,
+      transpose_input=FLAGS.transpose_input,
+      use_bfloat16=use_bfloat16) for is_training in [True, False]]
 
-  current_step = estimator._load_global_step_from_checkpoint_dir(FLAGS.model_dir)  # pylint: disable=protected-access,line-too-long
-  batches_per_epoch = NUM_TRAIN_IMAGES / FLAGS.train_batch_size
-  tf.logging.info('Training for %d steps (%.2f epochs in total). Current'
-                  ' step %d.' % (FLAGS.train_steps,
-                                 FLAGS.train_steps / batches_per_epoch,
-                                 current_step))
-  start_timestamp = time.time()
-  while current_step < FLAGS.train_steps:
-    # Train for up to steps_per_eval number of steps. At the end of training, a
-    # checkpoint will be written to --model_dir.
-    next_checkpoint = min(current_step + FLAGS.steps_per_eval,
-                          FLAGS.train_steps)
-    resnet_classifier.train(
-        input_fn=imagenet_train.input_fn, max_steps=next_checkpoint)
-    current_step = next_checkpoint
+  if FLAGS.mode == 'eval':
+    eval_steps = NUM_EVAL_IMAGES // FLAGS.eval_batch_size
+
+    # Run evaluation when there's a new checkpoint
+    for ckpt in evaluation.checkpoints_iterator(FLAGS.model_dir):
+      tf.logging.info('Starting to evaluate.')
+      try:
+        start_timestamp = time.time()  # This time will include compilation time
+        eval_results = resnet_classifier.evaluate(
+            input_fn=imagenet_eval.input_fn,
+            steps=eval_steps,
+            checkpoint_path=ckpt)
+        elapsed_time = int(time.time() - start_timestamp)
+        tf.logging.info('Eval results: %s. Elapsed seconds: %d' %
+                        (eval_results, elapsed_time))
+
+        # Terminate eval job when final checkpoint is reached
+        current_step = int(os.path.basename(ckpt).split('-')[1])
+        if current_step >= FLAGS.train_steps:
+          tf.logging.info(
+              'Evaluation finished after training step %d' % current_step)
+          break
+
+      except tf.errors.NotFoundError:
+        # Since the coordinator is on a different job than the TPU worker,
+        # sometimes the TPU worker does not finish initializing until long after
+        # the CPU job tells it to start evaluating. In this case, the checkpoint
+        # file could have been deleted already.
+        tf.logging.info(
+            'Checkpoint %s no longer exists, skipping checkpoint' % ckpt)
+
+  else:   # FLAGS.mode == 'train' or FLAGS.mode == 'train_and_eval'
+    current_step = estimator._load_global_step_from_checkpoint_dir(FLAGS.model_dir)  # pylint: disable=protected-access,line-too-long
+    batches_per_epoch = NUM_TRAIN_IMAGES / FLAGS.train_batch_size
+    tf.logging.info('Training for %d steps (%.2f epochs in total). Current'
+                    ' step %d.' % (FLAGS.train_steps,
+                                   FLAGS.train_steps / batches_per_epoch,
+                                   current_step))
+
+    start_timestamp = time.time()  # This time will include compilation time
+    if FLAGS.mode == 'train':
+      resnet_classifier.train(
+          input_fn=imagenet_train.input_fn, max_steps=FLAGS.train_steps)
+
+    else:
+      assert FLAGS.mode == 'train_and_eval'
+      while current_step < FLAGS.train_steps:
+        # Train for up to steps_per_eval number of steps.
+        # At the end of training, a checkpoint will be written to --model_dir.
+        next_checkpoint = min(current_step + FLAGS.steps_per_eval,
+                              FLAGS.train_steps)
+        resnet_classifier.train(
+            input_fn=imagenet_train.input_fn, max_steps=next_checkpoint)
+        current_step = next_checkpoint
+
+        # Evaluate the model on the most recent model in --model_dir.
+        # Since evaluation happens in batches of --eval_batch_size, some images
+        # may be consistently excluded modulo the batch size.
+        tf.logging.info('Starting to evaluate.')
+        eval_results = resnet_classifier.evaluate(
+            input_fn=imagenet_eval.input_fn,
+            steps=NUM_EVAL_IMAGES // FLAGS.eval_batch_size)
+        tf.logging.info('Eval results: %s' % eval_results)
 
     elapsed_time = int(time.time() - start_timestamp)
     tf.logging.info('Finished training up to step %d. Elapsed seconds %d.' %
-                    (current_step, elapsed_time))
+                    (FLAGS.train_steps, elapsed_time))
 
-    # Evaluate the model on the most recent model in --model_dir.
-    # Since evaluation happens in batches of --eval_batch_size, some images may
-    # be excluded modulo the batch size. As long as the batch size is
-    # consistent, the evaluated images are also consistent.
-    tf.logging.info('Starting to evaluate.')
-    eval_results = resnet_classifier.evaluate(
-        input_fn=imagenet_eval.input_fn,
-        steps=NUM_EVAL_IMAGES // FLAGS.eval_batch_size)
-    tf.logging.info('Eval results: %s' % eval_results)
-
-  if FLAGS.export_dir is not None:
-    # The guide to serve a exported TensorFlow model is at:
-    #    https://www.tensorflow.org/serving/serving_basic
-    tf.logging.info('Starting to export model.')
-    resnet_classifier.export_savedmodel(
-        export_dir_base=FLAGS.export_dir,
-        serving_input_receiver_fn=imagenet_input.image_serving_input_fn)
-
+    if FLAGS.export_dir is not None:
+      # The guide to serve a exported TensorFlow model is at:
+      #    https://www.tensorflow.org/serving/serving_basic
+      tf.logging.info('Starting to export model.')
+      resnet_classifier.export_savedmodel(
+          export_dir_base=FLAGS.export_dir,
+          serving_input_receiver_fn=imagenet_input.image_serving_input_fn)
 
 if __name__ == '__main__':
   tf.logging.set_verbosity(tf.logging.INFO)

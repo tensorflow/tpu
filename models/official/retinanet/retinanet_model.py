@@ -31,18 +31,23 @@ import tensorflow as tf
 import anchors
 import coco_metric
 import retinanet_architecture
-
+from tensorflow.contrib.tpu.python.tpu import bfloat16
 from tensorflow.contrib.tpu.python.tpu import tpu_estimator
 from tensorflow.contrib.tpu.python.tpu import tpu_optimizer
 
 
 # A collection of Learning Rate schecules:
 # third_party/tensorflow_models/object_detection/utils/learning_schedules.py
-def _learning_rate_schedule(base_learning_rate, lr_warmup_step, lr_drop_step,
-                            global_step):
+def _learning_rate_schedule(base_learning_rate, lr_warmup_init, lr_warmup_step,
+                            lr_drop_step, global_step):
   """Handles linear scaling rule, gradual warmup, and LR decay."""
-  linear_warmup = [(1.0/3.0 + float(step)/lr_warmup_step * 2.0/3.0, step)
-                   for step in range(lr_warmup_step)]
+  # lr_warmup_init is the starting learning rate; the learning rate is linearly
+  # scaled up to the full learning rate after `lr_warmup_steps` before decaying.
+  lr_warmup_remainder = 1.0 - lr_warmup_init
+  linear_warmup = [
+      (lr_warmup_init + lr_warmup_remainder * (float(step) / lr_warmup_step),
+       step) for step in range(0, lr_warmup_step, max(1, lr_warmup_step // 100))
+  ]
   lr_schedule = linear_warmup + [[1.0, lr_warmup_step], [0.1, lr_drop_step]]
   learning_rate = base_learning_rate
   for mult, start_global_step in lr_schedule:
@@ -143,7 +148,13 @@ def _detection_loss(cls_outputs, box_outputs, labels, params):
   cls_losses = []
   box_losses = []
   for level in levels:
-    cls_targets_at_level = labels['cls_targets_%d' % level]
+    # Onehot encoding for classification labels.
+    cls_targets_at_level = tf.one_hot(
+        labels['cls_targets_%d' % level],
+        params['num_classes'])
+    bs, width, height, _, _ = cls_targets_at_level.get_shape().as_list()
+    cls_targets_at_level = tf.reshape(cls_targets_at_level,
+                                      [bs, width, height, -1])
     box_targets_at_level = labels['box_targets_%d' % level]
     cls_losses.append(
         _classification_loss(
@@ -166,8 +177,8 @@ def _detection_loss(cls_outputs, box_outputs, labels, params):
   return total_loss, cls_loss, box_loss
 
 
-def _model_fn(features, labels, mode, params, model):
-  """Model defination for the RetinaNet model based on ResNet-50.
+def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
+  """Model defination for the RetinaNet model based on ResNet.
 
   Args:
     features: the input image tensor with shape [batch_size, height, width, 3].
@@ -179,18 +190,32 @@ def _model_fn(features, labels, mode, params, model):
     params: the dictionary defines hyperparameters of model. The default
       settings are in default_hparams function in this file.
     model: the RetinaNet model outputs class logits and box regression outputs.
+    variable_filter_fn: the filter function that takes trainable_variables and
+      returns the variable list after applying the filter rule.
 
   Returns:
     tpu_spec: the TPUEstimatorSpec to run training, evaluation, or prediction.
   """
-  cls_outputs, box_outputs = model(
-      features,
-      min_level=params['min_level'],
-      max_level=params['max_level'],
-      num_classes=params['num_classes'],
-      num_anchors=len(params['aspect_ratios'] * params['num_scales']),
-      is_training_bn=params['is_training_bn'])
-  levels = cls_outputs.keys()
+  def _model_outputs():
+    return model(
+        features,
+        min_level=params['min_level'],
+        max_level=params['max_level'],
+        num_classes=params['num_classes'],
+        num_anchors=len(params['aspect_ratios'] * params['num_scales']),
+        resnet_depth=params['resnet_depth'],
+        is_training_bn=params['is_training_bn'])
+
+  if params['use_bfloat16']:
+    with bfloat16.bfloat16_scope():
+      cls_outputs, box_outputs = _model_outputs()
+      levels = cls_outputs.keys()
+      for level in levels:
+        cls_outputs[level] = tf.cast(cls_outputs[level], tf.float32)
+        box_outputs[level] = tf.cast(box_outputs[level], tf.float32)
+  else:
+    cls_outputs, box_outputs = _model_outputs()
+    levels = cls_outputs.keys()
 
   # First check if it is in PREDICT mode.
   if mode == tf.estimator.ModeKeys.PREDICT:
@@ -208,7 +233,7 @@ def _model_fn(features, labels, mode, params, model):
     def scaffold_fn():
       """Loads pretrained model through scaffold function."""
       tf.train.init_from_checkpoint(params['resnet_checkpoint'], {
-          '/': 'resnet50/',
+          '/': 'resnet%s/' % params['resnet_depth'],
       })
       return tf.train.Scaffold()
   else:
@@ -216,9 +241,9 @@ def _model_fn(features, labels, mode, params, model):
 
   # Set up training loss and learning rate.
   global_step = tf.train.get_global_step()
-  learning_rate = _learning_rate_schedule(params['learning_rate'],
-                                          params['lr_warmup_step'],
-                                          params['lr_drop_step'], global_step)
+  learning_rate = _learning_rate_schedule(
+      params['learning_rate'], params['lr_warmup_init'],
+      params['lr_warmup_step'], params['lr_drop_step'], global_step)
   # cls_loss and box_loss are for logging. only total_loss is optimized.
   total_loss, cls_loss, box_loss = _detection_loss(cls_outputs, box_outputs,
                                                    labels, params)
@@ -231,8 +256,11 @@ def _model_fn(features, labels, mode, params, model):
 
     # Batch norm requires update_ops to be added as a train_op dependency.
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+    var_list = variable_filter_fn(
+        tf.trainable_variables(),
+        params['resnet_depth']) if variable_filter_fn else None
     with tf.control_dependencies(update_ops):
-      train_op = optimizer.minimize(total_loss, global_step)
+      train_op = optimizer.minimize(total_loss, global_step, var_list=var_list)
   else:
     train_op = None
 
@@ -299,10 +327,15 @@ def _model_fn(features, labels, mode, params, model):
       scaffold_fn=scaffold_fn)
 
 
-def retinanet_50_model_fn(features, labels, mode, params):
-  """RetinaNet-50 model."""
-  return _model_fn(features, labels, mode, params,
-                   model=retinanet_architecture.retinanet_50)
+def retinanet_model_fn(features, labels, mode, params):
+  """RetinaNet model."""
+  return _model_fn(
+      features,
+      labels,
+      mode,
+      params,
+      model=retinanet_architecture.retinanet,
+      variable_filter_fn=retinanet_architecture.remove_variables)
 
 
 def default_hparams():
@@ -311,22 +344,25 @@ def default_hparams():
       input_rand_hflip=True,
       # dataset specific parameters
       num_classes=90,
+      skip_crowd=True,
       # model architecture
       min_level=3,
       max_level=7,
-      num_scales=2,
+      num_scales=3,
       aspect_ratios=[(1.0, 1.0), (1.4, 0.7), (0.7, 1.4)],
       anchor_scale=4.0,
+      resnet_depth=50,
       # is batchnorm training mode
-      is_training_bn=False,
+      is_training_bn=True,
       # optimization
       momentum=0.9,
-      learning_rate=0.04,
+      learning_rate=0.08,
+      lr_warmup_init=0.1,
       lr_warmup_step=2000,
       lr_drop_step=15000,
       # classification loss
       alpha=0.25,
-      gamma=2.0,
+      gamma=1.5,
       # localization loss
       delta=0.1,
       box_loss_weight=50.0,
@@ -335,4 +371,5 @@ def default_hparams():
       # output detection
       box_max_detected=100,
       box_iou_threshold=0.5,
+      use_bfloat16=False,
   )

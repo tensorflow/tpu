@@ -88,11 +88,11 @@ func (l *loggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 }
 
 // New creates a new Ctrl instance with fully populated control plane values.
-func New(ctx context.Context, config config.Config, ctpuVersion string, logRequests bool) (*Ctrl, error) {
+func New(ctx context.Context, config *config.Config, ctpuVersion string, logRequests bool) (*Ctrl, error) {
 
 	var client *http.Client
 	var err error
-	if config.Environment() == "devshell" {
+	if config.Environment == "devshell" {
 		ts := &devshellTokenSource{}
 		firstToken, err := ts.Token()
 		if err != nil {
@@ -110,22 +110,24 @@ func New(ctx context.Context, config config.Config, ctpuVersion string, logReque
 		client.Transport = &loggingRoundTripper{underlying: client.Transport}
 	}
 
-	serviceMgmt, err := newServiceManagementCP(config, client, ctpuVersion)
+	userAgent := fmt.Sprintf("ctpu/%s env/%s", ctpuVersion, config.Environment)
+
+	serviceMgmt, err := newServiceManagementCP(config, client, userAgent)
 	if err != nil {
 		return nil, err
 	}
 
-	gce, err := newGCECP(config, client, serviceMgmt, ctpuVersion)
+	gce, err := newGCECP(config, client, serviceMgmt, userAgent)
 	if err != nil {
 		return nil, err
 	}
 
-	resourceMgmt, err := newResourceManagementCP(config, client, ctpuVersion)
+	resourceMgmt, err := newResourceManagementCP(config, client, userAgent)
 	if err != nil {
 		return nil, err
 	}
 
-	tpu, err := newTPUCP(config, client, serviceMgmt, ctpuVersion)
+	tpu, err := newTPUCP(config, client, serviceMgmt, userAgent)
 	if err != nil {
 		return nil, err
 	}

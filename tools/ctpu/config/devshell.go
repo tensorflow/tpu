@@ -17,6 +17,7 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"strings"
 )
@@ -35,9 +36,9 @@ func devshellEnvParseError(e string) error {
 	return fmt.Errorf("devshell: unexpected environment variable value: %q", e)
 }
 
-func devshellConfig() (*envConfig, error) {
-	cfg := envConfig{
-		environment: "devshell",
+func devshellConfig() (*Config, error) {
+	cfg := Config{
+		Environment: "devshell",
 	}
 	for _, e := range os.Environ() {
 		pair := strings.Split(e, "=")
@@ -46,20 +47,20 @@ func devshellConfig() (*envConfig, error) {
 			if len(pair) != 2 {
 				return nil, devshellEnvParseError(e)
 			}
-			cfg.project = pair[1]
+			cfg.Project = pair[1]
 		case "DEVSHELL_GCLOUD_CONFIG":
 			if len(pair) != 2 {
 				return nil, devshellEnvParseError(e)
 			}
-			cfg.activeConfiguration = pair[1]
+			cfg.ActiveConfiguration = pair[1]
 		default:
 			// Nothing
 		}
 	}
 
 	// TODO(saeta): Investigate falling back to the GCLOUDSDK_CONFIG env var.
-	if cfg.project == "" {
-		return nil, fmt.Errorf("devshell: could not find DEVSHELL_PROJECT_ID")
+	if cfg.Project == "" {
+		log.Printf("WARNING: devshell: could not find DEVSHELL_PROJECT_ID")
 	}
 	return &cfg, nil
 }

@@ -24,6 +24,7 @@ from __future__ import division
 from __future__ import print_function
 
 import os
+from absl import flags
 import tensorflow as tf
 
 import inception_preprocessing
@@ -38,195 +39,190 @@ from tensorflow.contrib.training.python.training import evaluation
 
 
 # Cloud TPU Cluster Resolvers
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
+    'tpu', default=None,
+    help='The Cloud TPU to use for training. This should be either the name '
+    'used when creating the Cloud TPU, or a grpc://ip.address.of.tpu:8470 url.')
+flags.DEFINE_string(
     'gcp_project', default=None,
     help='Project name for the Cloud TPU-enabled project. If not specified, we '
     'will attempt to automatically detect the GCE project from metadata.')
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     'tpu_zone', default=None,
     help='GCE zone where the Cloud TPU is located in. If not specified, we '
     'will attempt to automatically detect the GCE project from metadata.')
-tf.flags.DEFINE_string(
-    'tpu_name', default=None,
-    help='Name of the Cloud TPU for Cluster Resolvers. You must specify either '
-    'this flag or --master.')
 
 # Model specific paramenters
-tf.flags.DEFINE_string(
-    'master', default=None,
-    help='GRPC URL of the master (e.g. grpc://ip.address.of.tpu:8470). You '
-    'must specify either this flag or --tpu_name.')
-
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     'data_dir', '',
     'Directory where input data is stored')
 
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     'model_dir', None,
     'Directory where model output is stored')
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     'num_shards', 8,
     'Number of shards (workers).')
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     'iterations', 100,
     'Number of iterations per TPU training loop.')
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     'train_batch_size', 1024,
     'Global (not per-shard) batch size for training')
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     'eval_total_size', 0,
     'Total batch size for evaluation, use the entire validation set if 0')
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     'eval_batch_size', 1024,
     'Global (not per-shard) batch size for evaluation')
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     'train_steps', 8000000,
     'Number of steps use for training.')
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     'train_steps_per_eval', 2000,
     'Number of training steps to run between evaluations.')
 
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     'mode', 'train_and_eval',
     'Mode to run: train, eval, train_and_eval')
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     'min_eval_interval', 180,
     'Minimum number of seconds between evaluations')
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     'eval_timeout', None,
     'Evaluation timeout: Maximum number of seconds that '
     'may elapse while no new checkpoints are observed')
 
-tf.flags.DEFINE_bool(
+flags.DEFINE_bool(
     'use_tpu', True,
     'Use TPUs rather than plain CPUs')
 
-tf.flags.DEFINE_boolean(
+flags.DEFINE_boolean(
     'per_host_input_for_training', True,
     'If true, input_fn is invoked per host rather than per shard.')
 
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     'use_data', 'real',
     'One of "fake","real"')
 
-tf.flags.DEFINE_float(
+flags.DEFINE_float(
     'learning_rate', 0.165,
     'Learning rate.')
 
-tf.flags.DEFINE_float(
+flags.DEFINE_float(
     'depth_multiplier', 1.0,
     'Depth Multiplier on Inception')
 
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     'optimizer', 'RMS',
     'Optimizer (one of sgd, RMS, momentum)')
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     'num_classes', 1001,
     'Number of classes to distinguish')
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     'width', 224,
     'Width of input image')
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     'height', 224,
     'Height of input image')
 
-tf.flags.DEFINE_bool(
+flags.DEFINE_bool(
     'transpose_enabled', False,
     'Boolean to enable/disable explicit I/O transpose')
 
-tf.flags.DEFINE_bool(
+flags.DEFINE_bool(
     'use_fused_batchnorm', True,
     'Enable fused batchrnom')
 
-tf.flags.DEFINE_bool(
+flags.DEFINE_bool(
     'log_device_placement', False,
     'Boolean to enable/disable log device placement')
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     'save_summary_steps', 100,
     'Number of steps which must have run before showing summaries.')
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     'save_checkpoints_secs', 1000,
     'Interval (in seconds) at which the model data '
     'should be checkpointed. Set to 0 to disable.')
 
-tf.flags.DEFINE_bool(
+flags.DEFINE_bool(
     'moving_average', True,
     'Whether to enable moving average computation on variables')
 
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     'preprocessing', 'inception',
     'Preprocessing stage to use: one of inception or vgg')
 
-tf.flags.DEFINE_bool(
+flags.DEFINE_bool(
     'use_annotated_bbox', False,
     'If true, use annotated bounding box as input to cropping function, '
     'else use full image size')
 
-tf.flags.DEFINE_float(
+flags.DEFINE_float(
     'learning_rate_decay', 0.94,
     'Exponential decay rate used in learning rate adjustment')
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     'learning_rate_decay_epochs', 3,
     'Exponential decay epochs used in learning rate adjustment')
 
-tf.flags.DEFINE_bool(
+flags.DEFINE_bool(
     'use_logits', True,
     'Use logits if true, else use predictions')
 
-tf.flags.DEFINE_bool(
+flags.DEFINE_bool(
     'display_tensors', False,
     'Whether to dump prediction tensors for comparison')
 
-tf.flags.DEFINE_bool(
+flags.DEFINE_bool(
     'clear_update_collections', True,
     'Set batchnorm update_collections to None if true, else use default value')
 
 # Dataset specific paramenters
-tf.flags.DEFINE_bool(
+flags.DEFINE_bool(
     'prefetch_enabled', True,
     'Boolean to enable/disable prefetching')
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     'prefetch_dataset_buffer_size', 8*1024*1024,
     'Number of bytes in read buffer. 0 means no buffering.')
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     'num_files_infeed', 8,
     'Number of training files to read in parallel.')
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     'num_parallel_calls', 64,
     'Number of elements to process in parallel (by mapper)')
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     'initial_shuffle_buffer_size', 1024,
     'Number of elements from dataset that shuffler will sample from. '
     'This shuffling is done before any other operations. '
     'Set to 0 to disable')
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     'followup_shuffle_buffer_size', 1000,
     'Number of elements from dataset that shuffler will sample from. '
     'This shuffling is done after prefetching is done. '
     'Set to 0 to disable')
 
 
-FLAGS = tf.flags.FLAGS
+FLAGS = flags.FLAGS
 
 # Dataset constants
 _NUM_TRAIN_IMAGES = 1281167
@@ -262,7 +258,7 @@ class InputPipeline(object):
   The validation data is in the same format but sharded in 128 files.
 
   The fortmat of the data required is created by the script at:
-      https://github.com/tensorflow/tpu-demos/blob/master/cloud_tpu/datasets/imagenet_to_gcs.py
+      https://github.com/tensorflow/tpu/blob/master/tools/datasets/imagenet_to_gcs.py
 
   Args:
     is_training: `bool` for whether the input is for training
@@ -355,13 +351,8 @@ class InputPipeline(object):
     if FLAGS.use_data == 'real':
       file_pattern = os.path.join(
           self.data_dir, 'train-*' if self.is_training else 'validation-*')
-      dataset = tf.data.Dataset.list_files(file_pattern)
-
-      # the set of operations that follow are based on guidelines
-      # discussed in new pipeline best usage presentation.
-      if self.is_training and FLAGS.initial_shuffle_buffer_size > 0:
-        dataset = dataset.shuffle(
-            buffer_size=FLAGS.initial_shuffle_buffer_size)
+      dataset = tf.data.Dataset.list_files(file_pattern,
+                                           shuffle=self.is_training)
 
       if self.is_training:
         dataset = dataset.repeat()
@@ -569,21 +560,10 @@ class LoadEMAHook(tf.train.SessionRunHook):
 def main(unused_argv):
   del unused_argv  # Unused
 
-  if FLAGS.master is None and FLAGS.tpu_name is None:
-    raise RuntimeError('You must specify either --master or --tpu_name.')
-
-  if FLAGS.master is not None:
-    if FLAGS.tpu_name is not None:
-      tf.logging.warn('Both --master and --tpu_name are set. Ignoring '
-                      '--tpu_name and using --master.')
-    tpu_grpc_url = FLAGS.master
-  else:
-    tpu_cluster_resolver = (
-        tf.contrib.cluster_resolver.TPUClusterResolver(
-            tpu_names=[FLAGS.tpu_name],
+  tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
+            FLAGS.tpu,
             zone=FLAGS.tpu_zone,
-            project=FLAGS.gcp_project))
-    tpu_grpc_url = tpu_cluster_resolver.get_master()
+            project=FLAGS.gcp_project)
 
   batch_size_per_shard = FLAGS.train_batch_size // FLAGS.num_shards
   params = {
@@ -618,8 +598,7 @@ def main(unused_argv):
                                  FLAGS.mode == 'train' else True)
 
   run_config = tpu_config.RunConfig(
-      master=tpu_grpc_url,
-      evaluation_master=tpu_grpc_url,
+      cluster=tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
       save_checkpoints_secs=FLAGS.save_checkpoints_secs,
       save_summary_steps=FLAGS.save_summary_steps,

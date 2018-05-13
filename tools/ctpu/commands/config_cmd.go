@@ -22,13 +22,25 @@ import (
 	"context"
 	"flag"
 	"github.com/google/subcommands"
+	"github.com/tensorflow/tpu/tools/ctpu/config"
 )
 
-type configCmd struct{}
+// ConfigGcloudCLI encapsulates interaction with the gcloud CLI toolchain.
+type ConfigGcloudCLI interface {
+	// IsGcloudInstalled returns true if gcloud is installed.
+	IsGcloudInstalled() bool
+	// PrintInstallInstructions prints install instructions to the console.
+	PrintInstallInstructions()
+}
+
+type configCmd struct {
+	cfg *config.Config
+	cli ConfigGcloudCLI
+}
 
 // ConfigCommand creates the config subcommand.
-func ConfigCommand() subcommands.Command {
-	return &configCmd{}
+func ConfigCommand(cfg *config.Config, cli ConfigGcloudCLI) subcommands.Command {
+	return &configCmd{cfg, cli}
 }
 
 func (configCmd) Name() string {
@@ -36,6 +48,7 @@ func (configCmd) Name() string {
 }
 
 func (c *configCmd) SetFlags(f *flag.FlagSet) {
+	c.cfg.SetFlags(f) // Allow users to specify cfg flags either before or after the subcommand name.
 }
 
 func (configCmd) Synopsis() string {
@@ -46,21 +59,34 @@ func (configCmd) Usage() string {
 `
 }
 
+type configCmdAlias struct {
+	configCmd
+}
+
+// ConfigCommandAlias creates an alias to the config command with a shorter name.
+func ConfigCommandAlias(cfg *config.Config, cli ConfigGcloudCLI) subcommands.Command {
+	return &configCmdAlias{configCmd{cfg: cfg, cli: cli}}
+}
+func (configCmdAlias) Name() string     { return "cfg" }
+func (configCmdAlias) Synopsis() string { return "alias to ctpu print-config" }
+func (configCmdAlias) Usage() string    { return "ctpu cfg\n" }
+
 func (c *configCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	libs, err := parseArgs(args)
+	err := c.cfg.Validate()
 	if err != nil {
 		log.Print(err)
 		return subcommands.ExitFailure
 	}
+
 	fmt.Printf("ctpu configuration:\n\tname: %s\n\tproject: %s\n\tzone: %s\n",
-		libs.cfg.FlockName(), libs.cfg.Project(), libs.cfg.Zone())
+		c.cfg.FlockName, c.cfg.Project, c.cfg.Zone)
 	fmt.Printf("If you would like to change the configuration for a single command invocation, please use the command line flags.\n")
-	if libs.cfg.Environment() == "gcloud" {
+	if c.cfg.Environment == "gcloud" {
 		fmt.Printf("If you would like to change the configuration generally, see `gcloud config configurations`.\n")
 	}
 
-	if !libs.cli.IsGcloudInstalled() {
-		libs.cli.PrintInstallInstructions()
+	if !c.cli.IsGcloudInstalled() {
+		c.cli.PrintInstallInstructions()
 		return subcommands.ExitFailure
 	}
 	return subcommands.ExitSuccess

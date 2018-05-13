@@ -21,8 +21,8 @@ from __future__ import print_function
 
 import os
 
+from absl import flags
 from six.moves import xrange  # pylint: disable=redefined-builtin
-
 import tensorflow as tf
 
 from tensorflow.contrib import slim
@@ -34,32 +34,32 @@ from tensorflow.contrib.tpu.python.tpu import tpu_estimator
 from tensorflow.contrib.tpu.python.tpu import tpu_optimizer
 
 
-tf.flags.DEFINE_float('learning_rate', 0.02, 'Learning rate.')
-tf.flags.DEFINE_float('depth_multiplier', 1.0, 'Depth Multiplier on Inception')
-tf.flags.DEFINE_integer('train_steps', 800,
-                        'Total number of steps. Note that the actual number of '
-                        'steps is the next multiple of --iterations greater '
-                        'than this value.')
-tf.flags.DEFINE_integer('save_checkpoints_secs', None,
-                        'Seconds between checkpoint saves')
-tf.flags.DEFINE_bool('use_tpu', True, 'Use TPUs rather than plain CPUs')
-tf.flags.DEFINE_string('use_data', 'fake', 'Data from "fake","real"')
-tf.flags.DEFINE_string('data_dir', '', 'Path of the data (for use_data=real)')
-tf.flags.DEFINE_string('master', 'local',
-                       'BNS name of the TensorFlow master to use.')
-tf.flags.DEFINE_string('model_dir', None, 'Estimator model_dir')
-tf.flags.DEFINE_integer('iterations', 40,
-                        'Number of iterations per TPU training loop.')
-tf.flags.DEFINE_string('optimizer', 'momentum',
-                       'optimizer (one of sgd, rms, momentum)')
-tf.flags.DEFINE_integer('num_shards', 8, 'Number of shards (TPU chips).')
-tf.flags.DEFINE_integer('batch_size', 64,
-                        'Global batch_size, not the per-shard batch_size')
-tf.flags.DEFINE_integer('num_labels', 1024, 'number of classes to distinguish')
-tf.flags.DEFINE_integer('width', 304, 'width of input image')
-tf.flags.DEFINE_integer('height', 304, 'height of input image')
+flags.DEFINE_float('learning_rate', 0.02, 'Learning rate.')
+flags.DEFINE_float('depth_multiplier', 1.0, 'Depth Multiplier on Inception')
+flags.DEFINE_integer('train_steps', 800,
+                     'Total number of steps. Note that the actual number of '
+                     'steps is the next multiple of --iterations greater '
+                     'than this value.')
+flags.DEFINE_integer('save_checkpoints_secs', None,
+                     'Seconds between checkpoint saves')
+flags.DEFINE_bool('use_tpu', True, 'Use TPUs rather than plain CPUs')
+flags.DEFINE_string('use_data', 'fake', 'Data from "fake","real"')
+flags.DEFINE_string('data_dir', '', 'Path of the data (for use_data=real)')
+flags.DEFINE_string('master', 'local',
+                    'BNS name of the TensorFlow master to use.')
+flags.DEFINE_string('model_dir', None, 'Estimator model_dir')
+flags.DEFINE_integer('iterations', 40,
+                     'Number of iterations per TPU training loop.')
+flags.DEFINE_string('optimizer', 'momentum',
+                    'optimizer (one of sgd, rms, momentum)')
+flags.DEFINE_integer('num_shards', 8, 'Number of shards (TPU chips).')
+flags.DEFINE_integer('batch_size', 64,
+                     'Global batch_size, not the per-shard batch_size')
+flags.DEFINE_integer('num_labels', 1024, 'number of classes to distinguish')
+flags.DEFINE_integer('width', 304, 'width of input image')
+flags.DEFINE_integer('height', 304, 'height of input image')
 
-FLAGS = tf.flags.FLAGS
+FLAGS = flags.FLAGS
 
 
 def inception_v3_arg_scope(is_training=True,

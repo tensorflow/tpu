@@ -22,6 +22,7 @@ from __future__ import division
 from __future__ import print_function
 
 import os
+from absl import flags
 import absl.logging as _logging  # pylint: disable=unused-import
 import tensorflow as tf
 
@@ -32,48 +33,43 @@ from tensorflow.contrib.tpu.python.tpu import tpu_estimator
 from tensorflow.contrib.tpu.python.tpu import tpu_optimizer
 from tensorflow.contrib.training.python.training import evaluation
 
-FLAGS = tf.flags.FLAGS
+FLAGS = flags.FLAGS
 
 # Cloud TPU Cluster Resolvers
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
+    'tpu', default=None,
+    help='The Cloud TPU to use for training. This should be either the name '
+    'used when creating the Cloud TPU, or a grpc://ip.address.of.tpu:8470 url.')
+flags.DEFINE_string(
     "gcp_project", default=None,
     help="Project name for the Cloud TPU-enabled project. If not specified, we "
     "will attempt to automatically detect the GCE project from metadata.")
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     "tpu_zone", default=None,
     help="GCE zone where the Cloud TPU is located in. If not specified, we "
     "will attempt to automatically detect the GCE project from metadata.")
-tf.flags.DEFINE_string(
-    "tpu_name", default=None,
-    help="Name of the Cloud TPU for Cluster Resolvers. You must specify either "
-    "this flag or --master.")
 
 # Model specific paramenters
-tf.flags.DEFINE_string(
-    "master", default=None,
-    help="GRPC URL of the master (e.g. grpc://ip.address.of.tpu:8470). You "
-    "must specify either this flag or --tpu_name.")
-
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     "data_dir",
     default="",
     help="The directory where the ImageNet input data is stored.")
 
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     "model_dir",
     default="",
     help="The directory where the model will be stored.")
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     "train_batch_size", default=1024, help="Batch size for training.")
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     "eval_batch_size", default=1024, help="Batch size for evaluation.")
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     "num_shards", default=8, help="Number of shards (TPU cores).")
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     "iterations_per_loop",
     default=None,
     help=("Number of interior TPU cycles to run before returning to the host. "
@@ -83,18 +79,18 @@ tf.flags.DEFINE_integer(
           "set the iterations_per_loop to be as large as possible (i.e. "
           "perform every call to train in a single TPU loop."))
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     "prefetch_dataset_buffer_size", 8 * 1024 * 1024,
     "Number of bytes prefetched in read buffer. 0 means no buffering.")
 
-tf.flags.DEFINE_integer("num_files_infeed", 8,
-                        "Number of training files to read in parallel.")
+flags.DEFINE_integer("num_files_infeed", 8,
+                     "Number of training files to read in parallel.")
 
-tf.flags.DEFINE_integer("shuffle_buffer_size", 1000,
-                        "Size of the shuffle buffer used to randomize ordering")
+flags.DEFINE_integer("shuffle_buffer_size", 1000,
+                     "Size of the shuffle buffer used to randomize ordering")
 
 # For mode=train and mode=train_and_eval
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     "steps_per_checkpoint",
     default=1000,
     help=("Controls how often checkpoints are generated. More steps per "
@@ -102,23 +98,23 @@ tf.flags.DEFINE_integer(
           "steps/sec"))
 
 # For mode=eval
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     "min_eval_interval",
     default=180,
     help="Minimum seconds between evaluations.")
 
 # For mode=eval
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     "eval_timeout",
     default=None,
     help="Maximum seconds between checkpoints before evaluation terminates.")
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     "network_depth",
     default=121,
     help="Number of levels in the Densenet network")
 
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer(
     "train_steps",
     default=130000,  # Roughly 100 epochs
     help="The number of steps to use for training.")
@@ -126,7 +122,7 @@ tf.flags.DEFINE_integer(
 # For mode=train_and_eval, evaluation occurs at each steps_per_checkpoint
 # Note: independently of steps_per_checkpoint, estimator will save the most
 # recent checkpoint every 10 minutes by default for train_and_eval
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     "mode",
     default="train_and_eval",
     help=("Mode to run: train, eval, train_and_eval "
@@ -209,7 +205,7 @@ class ImageNetInput(object):
     # Shuffle the filenames to ensure better randomization
     file_pattern = os.path.join(self.data_dir, "train-*"
                                 if self.is_training else "validation-*")
-    dataset = tf.data.Dataset.list_files(file_pattern)
+    dataset = tf.data.Dataset.list_files(file_pattern, shuffle=False)
     if self.is_training:
       dataset = dataset.shuffle(buffer_size=1024)  # 1024 files in dataset
 
@@ -231,8 +227,7 @@ class ImageNetInput(object):
     dataset = dataset.apply(
         tf.contrib.data.batch_and_drop_remainder(batch_size))
     dataset = dataset.prefetch(2)  # Prefetch overlaps in-feed with training
-    images, labels = dataset.make_one_shot_iterator().get_next()
-    return images, labels
+    return dataset
 
 
 def model_fn(features, labels, mode, params):
@@ -311,21 +306,10 @@ def model_fn(features, labels, mode, params):
 
 
 def main(unused_argv):
-  if FLAGS.master is None and FLAGS.tpu_name is None:
-    raise RuntimeError("You must specify either --master or --tpu_name.")
-
-  if FLAGS.master is not None:
-    if FLAGS.tpu_name is not None:
-      tf.logging.warn("Both --master and --tpu_name are set. Ignoring "
-                      "--tpu_name and using --master.")
-    tpu_grpc_url = FLAGS.master
-  else:
-    tpu_cluster_resolver = (
-        tf.contrib.cluster_resolver.TPUClusterResolver(
-            tpu_names=[FLAGS.tpu_name],
-            zone=FLAGS.tpu_zone,
-            project=FLAGS.gcp_project))
-    tpu_grpc_url = tpu_cluster_resolver.get_master()
+  tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
+      FLAGS.tpu,
+      zone=FLAGS.tpu_zone,
+      project=FLAGS.gcp_project)
 
   batches_per_epoch = _NUM_TRAIN_IMAGES / FLAGS.train_batch_size
   steps_per_checkpoint = FLAGS.steps_per_checkpoint
@@ -340,8 +324,7 @@ def main(unused_argv):
   }
 
   config = tpu_config.RunConfig(
-      master=tpu_grpc_url,
-      evaluation_master=tpu_grpc_url,
+      cluster=tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
       save_checkpoints_steps=steps_per_checkpoint,
       log_step_count_steps=iterations_per_loop,

@@ -18,51 +18,26 @@ package ctrl
 import (
 	"testing"
 
+	"github.com/tensorflow/tpu/tools/ctpu/config"
 	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/tpu/v1alpha1"
 )
 
-type testConfig struct {
-	project string
-	zone    string
-	flock   string
-}
-
-func (t *testConfig) ActiveConfiguration() string {
-	return ""
-}
-
-func (t *testConfig) FlockName() string {
-	return t.flock
-}
-
-func (t *testConfig) IPRange() string {
-	return ""
-}
-
-func (t *testConfig) Project() string {
-	return t.project
-}
-
-func (t *testConfig) Zone() string {
-	return t.zone
-}
-
-func (t *testConfig) Environment() string {
-	return ""
-}
-
 func TestCreateParentPath(t *testing.T) {
-	cfg := testConfig{"testProject", "us-central1-f", "alice"}
-	cp := TPUCP{config: &cfg}
+	cfg := &config.Config{
+		Project:   "testProject",
+		Zone:      "us-central1-f",
+		FlockName: "alice",
+	}
+	cp := TPUCP{config: cfg}
 
 	expected := "projects/testProject/locations/us-central1-f"
 	if cp.parentPath() != expected {
 		t.Errorf("wrong parent path: got %s, want %s", cp.parentPath(), expected)
 	}
 
-	cfg.project = "otherProject"
-	cfg.zone = "us-central1-c"
+	cfg.Project = "otherProject"
+	cfg.Zone = "us-central1-c"
 	expected = "projects/otherProject/locations/us-central1-c"
 	if cp.parentPath() != expected {
 		t.Errorf("wrong parent path: got %s, want %s", cp.parentPath(), expected)
@@ -70,17 +45,21 @@ func TestCreateParentPath(t *testing.T) {
 }
 
 func TestNodeName(t *testing.T) {
-	cfg := testConfig{"testProject", "us-central1-f", "alice"}
-	cp := TPUCP{config: &cfg}
+	cfg := &config.Config{
+		Project:   "testProject",
+		Zone:      "us-central1-f",
+		FlockName: "alice",
+	}
+	cp := TPUCP{config: cfg}
 
 	expected := "projects/testProject/locations/us-central1-f/nodes/alice"
 	if cp.nodeName() != expected {
 		t.Errorf("wrong node name: got %s, want %s", cp.nodeName(), expected)
 	}
 
-	cfg.project = "otherProject"
-	cfg.zone = "us-central1-c"
-	cfg.flock = "bob"
+	cfg.Project = "otherProject"
+	cfg.Zone = "us-central1-c"
+	cfg.FlockName = "bob"
 	expected = "projects/otherProject/locations/us-central1-c/nodes/bob"
 	if cp.nodeName() != expected {
 		t.Errorf("wrong node name: got %s, want %s", cp.nodeName(), expected)
@@ -153,5 +132,35 @@ func TestCidrBlockErrorHandling(t *testing.T) {
 	got, err := g.selectCidrBlock(malformed)
 	if err == nil {
 		t.Fatalf("g.selectCidrBlock(--malformed--) = %v, %v, want: non-nil error value", got, err)
+	}
+}
+
+func TestCidrBlockLegacyNetwork(t *testing.T) {
+	includesLegacy := []*compute.Route{
+		{DestRange: "0.0.0.0/0"},
+		{DestRange: "10.240.0.0/16"},
+	}
+
+	g := TPUCP{}
+	got, err := g.selectCidrBlock(includesLegacy)
+	if err == nil {
+		t.Fatalf("g.selectCidrBlock(%#v) = %v, %v, want: non-nil error value", includesLegacy, got, err)
+	}
+}
+
+func TestCidrBlockLargeNetblocks(t *testing.T) {
+	largeNetBlocks := []string{"10.240.0.0/12", "10.224.0.0/11", "10.128.0.0/9"}
+
+	for _, netblock := range largeNetBlocks {
+		networks := []*compute.Route{
+			{DestRange: "0.0.0.0/0"},
+			{DestRange: netblock},
+		}
+
+		g := TPUCP{}
+		got, err := g.selectCidrBlock(networks)
+		if err == nil {
+			t.Fatalf("g.selectCidrBlock(%q) = %v, %v, want: non-nil error value", netblock, got, err)
+		}
 	}
 }

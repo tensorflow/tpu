@@ -21,6 +21,7 @@ from __future__ import print_function
 
 import os
 
+from absl import flags
 import tensorflow as tf
 
 import dataloader
@@ -31,86 +32,81 @@ from tensorflow.contrib.training.python.training import evaluation
 
 
 # Cloud TPU Cluster Resolvers
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
+    'tpu', default=None,
+    help='The Cloud TPU to use for training. This should be either the name '
+    'used when creating the Cloud TPU, or a grpc://ip.address.of.tpu:8470 url.')
+flags.DEFINE_string(
     'gcp_project', default=None,
     help='Project name for the Cloud TPU-enabled project. If not specified, we '
     'will attempt to automatically detect the GCE project from metadata.')
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     'tpu_zone', default=None,
     help='GCE zone where the Cloud TPU is located in. If not specified, we '
     'will attempt to automatically detect the GCE project from metadata.')
-tf.flags.DEFINE_string(
-    'tpu_name', default=None,
-    help='Name of the Cloud TPU for Cluster Resolvers. You must specify either '
-    'this flag or --master.')
 
 # Model specific paramenters
-tf.flags.DEFINE_string(
-    'master', default=None,
-    help='GRPC URL of the master (e.g. grpc://ip.address.of.tpu:8470). You '
-    'must specify either this flag or --tpu_name.')
-
-tf.flags.DEFINE_bool('use_tpu', True, 'Use TPUs rather than CPUs')
-tf.flags.DEFINE_string('model_dir', None, 'Location of model_dir')
-tf.flags.DEFINE_string('resnet_checkpoint', '',
-                       'Location of the ResNet50 checkpoint to use for model '
-                       'initialization.')
-tf.flags.DEFINE_string('hparams', '',
-                       'Comma separated k=v pairs of hyperparameters.')
-tf.flags.DEFINE_integer(
+flags.DEFINE_string(
+    'eval_master', default='',
+    help='GRPC URL of the eval master. Set to an appropiate value when running '
+    'on CPU/GPU')
+flags.DEFINE_bool('use_tpu', True, 'Use TPUs rather than CPUs')
+flags.DEFINE_bool(
+    'use_xla', False,
+    'Use XLA even if use_tpu is false.  If use_tpu is true, we always use XLA, '
+    'and this flag has no effect.')
+flags.DEFINE_string('model_dir', None, 'Location of model_dir')
+flags.DEFINE_string('resnet_checkpoint', '',
+                    'Location of the ResNet50 checkpoint to use for model '
+                    'initialization.')
+flags.DEFINE_string('hparams', '',
+                    'Comma separated k=v pairs of hyperparameters.')
+flags.DEFINE_integer(
     'num_shards', default=8, help='Number of shards (TPU cores)')
-tf.flags.DEFINE_integer('train_batch_size', 64, 'training batch size')
-tf.flags.DEFINE_integer('eval_batch_size', 1,
-                        'evaluation batch size')
-tf.flags.DEFINE_integer('eval_steps', 5000, 'evaluation steps')
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer('train_batch_size', 64, 'training batch size')
+flags.DEFINE_integer('eval_steps', 5000, 'evaluation steps')
+flags.DEFINE_integer(
     'iterations_per_loop', 100, 'Number of iterations per TPU training loop')
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     'training_file_pattern', None,
     'Glob for training data files (e.g., COCO train - minival set)')
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     'validation_file_pattern', None,
     'Glob for evaluation tfrecords (e.g., COCO val2017 set)')
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     'val_json_file',
     '',
     'COCO validation JSON containing golden bounding boxes.')
-tf.flags.DEFINE_integer('num_examples_per_epoch', 120000,
-                        'Number of examples in one epoch')
-tf.flags.DEFINE_integer('num_epochs', 15, 'Number of epochs for training')
-tf.flags.DEFINE_string('mode', 'train',
-                       'Mode to run: train or eval (default: train)')
+flags.DEFINE_integer('num_examples_per_epoch', 120000,
+                     'Number of examples in one epoch')
+flags.DEFINE_integer('num_epochs', 15, 'Number of epochs for training')
+flags.DEFINE_string('mode', 'train',
+                    'Mode to run: train or eval (default: train)')
+flags.DEFINE_bool('eval_after_training', False, 'Run one eval after the '
+                  'training finishes.')
 # For Eval mode
-tf.flags.DEFINE_integer('min_eval_interval', 180,
-                        'Minimum seconds between evaluations.')
-tf.flags.DEFINE_integer(
+flags.DEFINE_integer('min_eval_interval', 180,
+                     'Minimum seconds between evaluations.')
+flags.DEFINE_integer(
     'eval_timeout', None,
     'Maximum seconds between checkpoints before evaluation terminates.')
 
 
-FLAGS = tf.flags.FLAGS
+FLAGS = flags.FLAGS
 
 
 def main(argv):
   del argv  # Unused.
 
-  # Check flag values
-  if FLAGS.master is None and FLAGS.tpu_name is None:
-    raise RuntimeError('You must specify either --master or --tpu_name.')
-
-  if FLAGS.master is not None:
-    if FLAGS.tpu_name is not None:
-      tf.logging.warn('Both --master and --tpu_name are set. Ignoring '
-                      '--tpu_name and using --master.')
-    tpu_grpc_url = FLAGS.master
-  else:
-    tpu_cluster_resolver = (
-        tf.contrib.cluster_resolver.TPUClusterResolver(
-            tpu_names=[FLAGS.tpu_name],
-            zone=FLAGS.tpu_zone,
-            project=FLAGS.gcp_project))
+  if FLAGS.use_tpu:
+    tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
+        FLAGS.tpu,
+        zone=FLAGS.tpu_zone,
+        project=FLAGS.gcp_project)
     tpu_grpc_url = tpu_cluster_resolver.get_master()
-  tf.Session.reset(tpu_grpc_url)
+    tf.Session.reset(tpu_grpc_url)
+  else:
+    tpu_cluster_resolver = None
 
   if FLAGS.mode is 'train' and FLAGS.training_file_pattern is None:
     raise RuntimeError('You must specify --training_file_pattern for training.')
@@ -132,29 +128,58 @@ def main(argv):
       val_json_file=FLAGS.val_json_file,
       mode=FLAGS.mode,
   )
+  config_proto = tf.ConfigProto(
+      allow_soft_placement=True, log_device_placement=False)
+  if FLAGS.use_xla and not FLAGS.use_tpu:
+    config_proto.graph_options.optimizer_options.global_jit_level = (
+        tf.OptimizerOptions.ON_1)
+
   run_config = tpu_config.RunConfig(
-      master=FLAGS.master,
-      evaluation_master=FLAGS.master,
+      cluster=tpu_cluster_resolver,
+      evaluation_master=FLAGS.eval_master,
       model_dir=FLAGS.model_dir,
       log_step_count_steps=FLAGS.iterations_per_loop,
-      session_config=tf.ConfigProto(
-          allow_soft_placement=True, log_device_placement=False),
+      session_config=config_proto,
       tpu_config=tpu_config.TPUConfig(FLAGS.iterations_per_loop,
                                       FLAGS.num_shards))
 
   # TPU Estimator
   if FLAGS.mode == 'train':
-    estimator = tpu_estimator.TPUEstimator(
-        model_fn=retinanet_model.retinanet_50_model_fn,
+    train_estimator = tpu_estimator.TPUEstimator(
+        model_fn=retinanet_model.retinanet_model_fn,
         use_tpu=FLAGS.use_tpu,
         train_batch_size=FLAGS.train_batch_size,
         config=run_config,
         params=params)
-    estimator.train(
+    train_estimator.train(
         input_fn=dataloader.InputReader(FLAGS.training_file_pattern,
                                         is_training=True),
-        steps=int((FLAGS.num_epochs * FLAGS.num_examples_per_epoch) /
-                  FLAGS.train_batch_size))
+        max_steps=int((FLAGS.num_epochs * FLAGS.num_examples_per_epoch) /
+                      FLAGS.train_batch_size))
+
+    if FLAGS.eval_after_training:
+      # Run evaluation after training finishes.
+      eval_params = dict(
+          params,
+          use_tpu=False,
+          input_rand_hflip=False,
+          skip_crowd=False,
+          resnet_checkpoint=None,
+          is_training_bn=False,
+          use_bfloat16=False,
+      )
+      eval_estimator = tpu_estimator.TPUEstimator(
+          model_fn=retinanet_model.retinanet_model_fn,
+          use_tpu=False,
+          train_batch_size=FLAGS.train_batch_size,
+          eval_batch_size=1,
+          config=run_config,
+          params=eval_params)
+      eval_results = eval_estimator.evaluate(
+          input_fn=dataloader.InputReader(FLAGS.validation_file_pattern,
+                                          is_training=False),
+          steps=FLAGS.eval_steps)
+      tf.logging.info('Eval results: %s' % eval_results)
 
   elif FLAGS.mode == 'eval':
     # eval only runs on CPU or GPU host with batch_size = 1
@@ -165,14 +190,17 @@ def main(argv):
         params,
         use_tpu=False,
         input_rand_hflip=False,
+        skip_crowd=False,
         resnet_checkpoint=None,
         is_training_bn=False,
+        use_bfloat16=False,
     )
 
-    estimator_eval = tpu_estimator.TPUEstimator(
-        model_fn=retinanet_model.retinanet_50_model_fn,
+    eval_estimator = tpu_estimator.TPUEstimator(
+        model_fn=retinanet_model.retinanet_model_fn,
         use_tpu=False,
         eval_batch_size=1,
+        train_batch_size=FLAGS.train_batch_size,
         config=run_config,
         params=eval_params)
 
@@ -190,7 +218,7 @@ def main(argv):
 
       tf.logging.info('Starting to evaluate.')
       try:
-        eval_results = estimator_eval.evaluate(
+        eval_results = eval_estimator.evaluate(
             input_fn=dataloader.InputReader(FLAGS.validation_file_pattern,
                                             is_training=False),
             steps=FLAGS.eval_steps)

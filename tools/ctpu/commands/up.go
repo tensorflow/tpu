@@ -23,11 +23,55 @@ import (
 	"context"
 	"flag"
 	"github.com/google/subcommands"
+	"github.com/tensorflow/tpu/tools/ctpu/config"
 	"github.com/tensorflow/tpu/tools/ctpu/ctrl"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/api/tpu/v1alpha1"
 )
 
+// UpTPUCP abstracts the control plane interface required for the up command.
+type UpTPUCP interface {
+	// Instance retrieves the instance from the control plane (if available).
+	Instance() (*ctrl.TPUInstance, error)
+	// CreateInstance requests the creation of the instance.
+	CreateInstance(version string) error
+	// ListVersions retrieves the list of available TensorFlow versions.
+	ListVersions() ([]*tpu.TensorFlowVersion, error)
+}
+
+// UpGCECP abstracts the control plane interface requred for the up command.
+type UpGCECP interface {
+	// Instance retrieves the instance from the control plane (if available).
+	Instance() (*ctrl.GCEInstance, error)
+	// CreateInstance requests the creation of the instance.
+	CreateInstance(*ctrl.GCECreateRequest) error
+	// StartInstance requests the starting of the instance.
+	StartInstance() error
+}
+
+// UpResourceManagementCP abstracts the control plane interface required for the up command.
+type UpResourceManagementCP interface {
+	// AddTPUUserAgent authorizes the TPU user agent, if required.
+	AddTPUUserAgent(tpuUserAgent string) error
+}
+
+// UpGcloudCLI abstracts the interaction with the gcloud command line tools for the up command.
+type UpGcloudCLI interface {
+	// IsGcloudInstalled determines if the gcloud command line tool is installed and available on the path.
+	IsGcloudInstalled() bool
+	// SSHToInstance takes over the process and turns it into an ssh connection to the GCE instance of the flock.
+	SSHToInstance(forwardPorts, forwardAgent bool, tpuInstance *ctrl.TPUInstance) error
+	// PrintInstallInstructions prints instructions to the console for how to install gcloud.
+	PrintInstallInstructions()
+}
+
 type upCmd struct {
+	cfg *config.Config
+	tpu UpTPUCP
+	gce UpGCECP
+	rmg UpResourceManagementCP
+	cli UpGcloudCLI
+
 	dryRun       bool
 	vmOnly       bool
 	forwardPorts bool
@@ -39,8 +83,14 @@ type upCmd struct {
 }
 
 // UpCommand creates the up command.
-func UpCommand() subcommands.Command {
-	return &upCmd{}
+func UpCommand(cfg *config.Config, tpu UpTPUCP, gce UpGCECP, rmg UpResourceManagementCP, cli UpGcloudCLI) subcommands.Command {
+	return &upCmd{
+		cfg: cfg,
+		tpu: tpu,
+		gce: gce,
+		rmg: rmg,
+		cli: cli,
+	}
 }
 
 func (upCmd) Name() string {
@@ -48,6 +98,7 @@ func (upCmd) Name() string {
 }
 
 func (c *upCmd) SetFlags(f *flag.FlagSet) {
+	c.cfg.SetFlags(f) // Allow users to specify cfg flags either before or after the subcommand name.
 	f.BoolVar(&c.dryRun, "dry-run", false,
 		"Do not make changes; print only what would have happened.")
 	f.BoolVar(&c.vmOnly, "vm-only", false,
@@ -85,22 +136,22 @@ func (c *upCmd) gceImageFamily() (string, error) {
 		return "", err
 	}
 	if parsed.Modifier != "" {
-		return "", fmt.Errorf("invalid tensorflow version %q (non-empty modifier)", c.tfVersion)
+		return "", fmt.Errorf("invalid tensorflow version %q (non-empty modifier); please set the --gce-image flag", c.tfVersion)
 	}
 	return fmt.Sprintf("tf-%d-%d", parsed.Major, parsed.Minor), nil
 }
 
-func (c *upCmd) upVM(libs *libs) error {
+func (c *upCmd) upVM() error {
 	// Create the GCE VM
-	vm, err := libs.gce.Instance()
+	vm, err := c.gce.Instance()
 	if err != nil {
 		log.Print(err)
 		return err
 	}
 	if vm == nil {
-		log.Printf("Creating GCE VM %s (this may take a minute)...\n", libs.cfg.FlockName())
+		log.Printf("Creating GCE VM %s (this may take a minute)...\n", c.cfg.FlockName)
 		imageFamily, err := c.gceImageFamily()
-		if err != nil {
+		if err != nil && c.gceImage == "" {
 			log.Print(err)
 			return err
 		}
@@ -112,28 +163,28 @@ func (c *upCmd) upVM(libs *libs) error {
 				MachineType:       c.machineType,
 				DiskSizeGb:        c.diskSizeGb,
 			}
-			err = libs.gce.CreateInstance(req)
+			err = c.gce.CreateInstance(req)
 			if err != nil {
 				log.Print(err)
 				return err
 			}
 		}
-		log.Printf("Created GCE VM %s!\n", libs.cfg.FlockName())
+		log.Printf("Created GCE VM %s!\n", c.cfg.FlockName)
 	} else {
 		if !strings.HasSuffix(vm.Instance.MachineType, c.machineType) {
 			log.Printf("Warning: GCE VM machine type is not %q: actual: %q", c.machineType, vm.Instance.MachineType)
 		}
 
 		if !vm.IsRunning() {
-			log.Printf("Starting GCE VM %s...\n", libs.cfg.FlockName())
+			log.Printf("Starting GCE VM %s...\n", c.cfg.FlockName)
 			if !c.dryRun {
-				err = libs.gce.StartInstance()
+				err = c.gce.StartInstance()
 			}
 			if err != nil {
 				log.Print(err)
 				return err
 			}
-			log.Printf("Started GCE VM %s!\n", libs.cfg.FlockName())
+			log.Printf("Started GCE VM %s!\n", c.cfg.FlockName)
 		} else {
 			log.Printf("VM already running.")
 		}
@@ -141,25 +192,25 @@ func (c *upCmd) upVM(libs *libs) error {
 	return nil
 }
 
-func (c *upCmd) upTPU(libs *libs) (*ctrl.TPUInstance, error) {
-	tpu, err := libs.tpu.Instance()
+func (c *upCmd) upTPU() (*ctrl.TPUInstance, error) {
+	tpu, err := c.tpu.Instance()
 	if err != nil {
 		log.Printf("%v", err)
 		return nil, err
 	}
 	if tpu == nil {
-		log.Printf("Creating TPU %s (this may take a few minutes)...\n", libs.cfg.FlockName())
+		log.Printf("Creating TPU %s (this may take a few minutes)...\n", c.cfg.FlockName)
 		if !c.dryRun {
-			err = libs.tpu.CreateInstance(c.tfVersion)
+			err = c.tpu.CreateInstance(c.tfVersion)
 			if err != nil {
 				log.Printf("%v", err)
 				return nil, err
 			}
 		}
-		log.Printf("Created TPU %s!\n", libs.cfg.FlockName())
+		log.Printf("Created TPU %s!\n", c.cfg.FlockName)
 
 		// Refresh the instance to get the service account the TPU runs as.
-		tpu, err = libs.tpu.Instance()
+		tpu, err = c.tpu.Instance()
 		if err != nil {
 			log.Printf("error refreshing TPU instance after creation - %#v", err)
 			return nil, err
@@ -169,7 +220,7 @@ func (c *upCmd) upTPU(libs *libs) (*ctrl.TPUInstance, error) {
 			log.Printf("%v", err)
 			return nil, err
 		}
-		err = libs.rmg.AddTPUUserAgent(tpu.ServiceAccount)
+		err = c.rmg.AddTPUUserAgent(tpu.ServiceAccount)
 		if err != nil {
 			log.Printf("error adding the TPU's service account to the project's access control lists: %#v", err)
 			return nil, err
@@ -186,8 +237,8 @@ func (c *upCmd) upTPU(libs *libs) (*ctrl.TPUInstance, error) {
 }
 
 // ConfigureTFVersion ensures the selected version is appropriate.
-func (c *upCmd) ConfigureTFVersion(libs *libs) error {
-	rawVersions, err := libs.tpu.ListVersions()
+func (c *upCmd) ConfigureTFVersion() error {
+	rawVersions, err := c.tpu.ListVersions()
 	if err != nil {
 		return err
 	}
@@ -216,18 +267,19 @@ func (c *upCmd) ConfigureTFVersion(libs *libs) error {
 }
 
 func (c *upCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	libs, err := parseArgs(args)
+	err := c.cfg.Validate()
 	if err != nil {
 		log.Print(err)
 		return subcommands.ExitFailure
 	}
-	if !libs.cli.IsGcloudInstalled() {
-		libs.cli.PrintInstallInstructions()
+
+	if !c.cli.IsGcloudInstalled() {
+		c.cli.PrintInstallInstructions()
 		return subcommands.ExitFailure
 	}
 
 	// TF Version check.
-	err = c.ConfigureTFVersion(libs)
+	err = c.ConfigureTFVersion()
 	if err != nil {
 		log.Print(err)
 		return subcommands.ExitFailure
@@ -238,12 +290,12 @@ func (c *upCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...interf
 
 	// Create the GCE VM
 	g.Go(func() error {
-		return c.upVM(libs)
+		return c.upVM()
 	})
 
 	// Create the Cloud TPU
 	g.Go(func() (err error) {
-		tpu, err = c.upTPU(libs)
+		tpu, err = c.upTPU()
 		return err
 	})
 
@@ -257,7 +309,7 @@ func (c *upCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...interf
 	} else {
 		fmt.Println("About to ssh...")
 	}
-	if err := libs.cli.SSHToInstance(c.forwardPorts, c.forwardAgent, tpu); err != nil {
+	if err := c.cli.SSHToInstance(c.forwardPorts, c.forwardAgent, tpu); err != nil {
 		log.Printf("Could not ssh to instance: %v\n", err)
 		return subcommands.ExitFailure
 	}
