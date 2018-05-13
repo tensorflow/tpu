@@ -33,6 +33,7 @@ import io
 import json
 import multiprocessing
 import os
+from absl import flags
 import numpy as np
 import PIL.Image
 
@@ -41,21 +42,19 @@ from research.object_detection.utils import dataset_util
 from research.object_detection.utils import label_map_util
 
 import tensorflow as tf
-
-flags = tf.app.flags
-tf.flags.DEFINE_boolean('include_masks', False,
-                        'Whether to include instance segmentations masks '
-                        '(PNG encoded) in the result. default: False.')
-tf.flags.DEFINE_string('train_image_dir', '', 'Training image directory.')
-tf.flags.DEFINE_string('val_image_dir', '', 'Validation image directory.')
-tf.flags.DEFINE_string('test_image_dir', '', 'Test image directory.')
-tf.flags.DEFINE_string('train_annotations_file', '',
-                       'Training annotations JSON file.')
-tf.flags.DEFINE_string('val_annotations_file', '',
-                       'Validation annotations JSON file.')
-tf.flags.DEFINE_string('testdev_annotations_file', '',
-                       'Test-dev annotations JSON file.')
-tf.flags.DEFINE_string('output_dir', '/tmp/', 'Output data directory.')
+flags.DEFINE_boolean('include_masks', False,
+                     'Whether to include instance segmentations masks '
+                     '(PNG encoded) in the result. default: False.')
+flags.DEFINE_string('train_image_dir', '', 'Training image directory.')
+flags.DEFINE_string('val_image_dir', '', 'Validation image directory.')
+flags.DEFINE_string('test_image_dir', '', 'Test image directory.')
+flags.DEFINE_string('train_annotations_file', '',
+                    'Training annotations JSON file.')
+flags.DEFINE_string('val_annotations_file', '',
+                    'Validation annotations JSON file.')
+flags.DEFINE_string('testdev_annotations_file', '',
+                    'Test-dev annotations JSON file.')
+flags.DEFINE_string('output_dir', '/tmp/', 'Output data directory.')
 
 FLAGS = flags.FLAGS
 

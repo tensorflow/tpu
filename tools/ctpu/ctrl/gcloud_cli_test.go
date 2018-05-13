@@ -16,6 +16,7 @@
 package ctrl
 
 import (
+	"os"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -24,10 +25,10 @@ import (
 )
 
 func TestMakeExecCommandNoForwarding(t *testing.T) {
-	cfg := &config.TestConfig{
-		FlockNameVal: "testuser123",
-		ProjectVal:   "testProject",
-		ZoneVal:      "us-central1-q",
+	cfg := &config.Config{
+		FlockName: "testuser123",
+		Project:   "testProject",
+		Zone:      "us-central1-q",
 	}
 	cli := GCloudCLI{cfg}
 	cmd := cli.makeExecCommand(false, false, nil)
@@ -40,6 +41,9 @@ func TestMakeExecCommandNoForwarding(t *testing.T) {
 		"--project",
 		"testProject",
 		"testuser123",
+		"--",
+		"-o",
+		"SendEnv=TPU_NAME",
 	}
 	if !cmp.Equal(cmd, expected) {
 		t.Errorf("incorrect command, got: %v, want: %v", cmd, expected)
@@ -47,10 +51,10 @@ func TestMakeExecCommandNoForwarding(t *testing.T) {
 }
 
 func TestMakeExecCommandForwardAgent(t *testing.T) {
-	cfg := &config.TestConfig{
-		FlockNameVal: "testuser321",
-		ProjectVal:   "otherTestProject",
-		ZoneVal:      "us-central1-x",
+	cfg := &config.Config{
+		FlockName: "testuser321",
+		Project:   "otherTestProject",
+		Zone:      "us-central1-x",
 	}
 	cli := GCloudCLI{cfg}
 	cmd := cli.makeExecCommand(false, true, nil)
@@ -64,6 +68,8 @@ func TestMakeExecCommandForwardAgent(t *testing.T) {
 		"otherTestProject",
 		"testuser321",
 		"--",
+		"-o",
+		"SendEnv=TPU_NAME",
 		"-A",
 	}
 	if !cmp.Equal(cmd, expected) {
@@ -72,10 +78,10 @@ func TestMakeExecCommandForwardAgent(t *testing.T) {
 }
 
 func TestMakeExecCommandNoTPU(t *testing.T) {
-	cfg := &config.TestConfig{
-		FlockNameVal: "testuser321",
-		ProjectVal:   "otherTestProject",
-		ZoneVal:      "us-central1-x",
+	cfg := &config.Config{
+		FlockName: "testuser321",
+		Project:   "otherTestProject",
+		Zone:      "us-central1-x",
 	}
 	cli := GCloudCLI{cfg}
 	cmd := cli.makeExecCommand(true, false, nil)
@@ -89,6 +95,8 @@ func TestMakeExecCommandNoTPU(t *testing.T) {
 		"otherTestProject",
 		"testuser321",
 		"--",
+		"-o",
+		"SendEnv=TPU_NAME",
 		"-L",
 		"6006:localhost:6006",
 		"-L",
@@ -100,10 +108,10 @@ func TestMakeExecCommandNoTPU(t *testing.T) {
 }
 
 func TestMakeExecCommandWithTPU(t *testing.T) {
-	cfg := &config.TestConfig{
-		FlockNameVal: "testuser321",
-		ProjectVal:   "otherTestProject",
-		ZoneVal:      "us-central1-x",
+	cfg := &config.Config{
+		FlockName: "testuser321",
+		Project:   "otherTestProject",
+		Zone:      "us-central1-x",
 	}
 	tpu := &TPUInstance{&tpu.Node{
 		NetworkEndpoints: []*tpu.NetworkEndpoint{
@@ -124,6 +132,8 @@ func TestMakeExecCommandWithTPU(t *testing.T) {
 		"otherTestProject",
 		"testuser321",
 		"--",
+		"-o",
+		"SendEnv=TPU_NAME",
 		"-L",
 		"6006:localhost:6006",
 		"-L",
@@ -139,10 +149,10 @@ func TestMakeExecCommandWithTPU(t *testing.T) {
 }
 
 func TestMakeExecCommandWithTPUAndAgentForwarding(t *testing.T) {
-	cfg := &config.TestConfig{
-		FlockNameVal: "testuser321",
-		ProjectVal:   "otherTestProject",
-		ZoneVal:      "us-central1-x",
+	cfg := &config.Config{
+		FlockName: "testuser321",
+		Project:   "otherTestProject",
+		Zone:      "us-central1-x",
 	}
 	tpu := &TPUInstance{&tpu.Node{
 		NetworkEndpoints: []*tpu.NetworkEndpoint{
@@ -163,6 +173,8 @@ func TestMakeExecCommandWithTPUAndAgentForwarding(t *testing.T) {
 		"otherTestProject",
 		"testuser321",
 		"--",
+		"-o",
+		"SendEnv=TPU_NAME",
 		"-A",
 		"-L",
 		"6006:localhost:6006",
@@ -179,11 +191,11 @@ func TestMakeExecCommandWithTPUAndAgentForwarding(t *testing.T) {
 }
 
 func TestMakeExecCommandInDevshell(t *testing.T) {
-	cfg := &config.TestConfig{
-		FlockNameVal:   "testuser321",
-		ProjectVal:     "otherTestProject",
-		ZoneVal:        "us-central1-x",
-		EnvironmentVal: "devshell",
+	cfg := &config.Config{
+		FlockName:   "testuser321",
+		Project:     "otherTestProject",
+		Zone:        "us-central1-x",
+		Environment: "devshell",
 	}
 	tpu := &TPUInstance{&tpu.Node{
 		NetworkEndpoints: []*tpu.NetworkEndpoint{
@@ -204,6 +216,8 @@ func TestMakeExecCommandInDevshell(t *testing.T) {
 		"otherTestProject",
 		"testuser321",
 		"--",
+		"-o",
+		"SendEnv=TPU_NAME",
 		"-L",
 		"8080:localhost:6006",
 		"-L",
@@ -212,5 +226,16 @@ func TestMakeExecCommandInDevshell(t *testing.T) {
 	}
 	if !cmp.Equal(cmd, expected) {
 		t.Errorf("incorrect command, got: %v, want: %v", cmd, expected)
+	}
+}
+
+func TestMakeEnviron(t *testing.T) {
+	env := os.Environ()
+	want := append(env, "TPU_NAME=my_flock_name")
+	cfg := &config.Config{FlockName: "my_flock_name"}
+	cli := GCloudCLI{cfg}
+	got := cli.MakeEnviron()
+	if !cmp.Equal(want, got) {
+		t.Errorf("cli.MakeEnviron() = %v, want: %v", got, want)
 	}
 }

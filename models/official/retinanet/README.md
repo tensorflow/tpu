@@ -1,4 +1,4 @@
-# Training RetinaNet on the Cloud TPU.
+# Training RetinaNet on Cloud TPU
 
 This folder contains an implementation of the
 [RetinaNet](https://arxiv.org/pdf/1708.02002.pdf) object detection model.
@@ -19,7 +19,7 @@ ls /usr/share/tpu/models/official/retinanet/
 If they are not available, you can find the latest version on GitHub:
 
 ```
-git clone http://github.com/tensorflow/tpu/
+git clone https://github.com/tensorflow/tpu/
 ls tpu/models/official/retinanet
 ```
 
@@ -27,14 +27,14 @@ ls tpu/models/official/retinanet
 
 ### Setting up our TPU VM
 
-The commands below assume you have started a TPU VM and set its IP in an
+The commands below assume you have started a TPU VM and set its name in an
 environment variable:
 
 ```
-export TPU_IP=10.240.10.2
-export GRPC_SERVER=grpc://${TPU_IP}:8470
-```
+gcloud beta compute tpus list
+export TPU_NAME=my-tpu-name
 
+```
 See the [quickstart documentation](https://cloud.google.com/tpu/docs/quickstart)
 for how to start a TPU VM.
 
@@ -110,7 +110,7 @@ RESNET_CHECKPOINT=gs://cloud-tpu-artifacts/resnet/resnet-nhwc-2018-02-07/model.c
 MODEL_DIR=${GCS_BUCKET}/retinanet-model
 
 python tpu/models/official/retinanet_main.py \
- --master=${GRPC_SERVER} \
+ --tpu=${TPU_NAME} \
  --train_batch_size=64 \
  --training_file_pattern=${GCS_BUCKET}/coco/train-* \
  --resnet_checkpoint=${RESNET_CHECKPOINT} \
@@ -195,8 +195,6 @@ gcloud compute instances create\
 ```
 
 We can now connect to the evaluation VM and start the evaluation loop.
-Note that we specify an empty value for our `--master` flag: this will force
-our evaluation to run on the local machine.
 
 ### Installing packages and checking the RetinaNet Model
 
@@ -226,7 +224,7 @@ test that we can read our model directory and validation files.
 gsutil cp ${GCS_BUCKET}/coco/instances_val2017.json .
 
 python tpu/models/official/retinanet/retinanet_main.py  \
- --master= \
+ --use_tpu=False \
  --validation_file_pattern=${GCS_BUCKET}/coco/val-* \
  --val_json_file=./instances_val_2017.json \
  --model_dir=${GCS_BUCKET}/retinanet-model/ \
@@ -243,7 +241,7 @@ dataset:
 
 ```
 python tpu/models/official/retinanet/retinanet_main.py  \
- --master= \
+ --use_tpu=False \
  --validation_file_pattern=${GCS_BUCKET}/coco/val-* \
  --val_json_file=./instances_val2017.json
  --model_dir=${GCS_BUCKET}/retinanet-model/ \
@@ -265,7 +263,7 @@ COCO data.  Complete training takes approximately 6 hours.
 
 ```
 python tpu/models/official/retinanet/retinanet_main.py \
- --master=${GRPC_SERVER} \
+ --tpu=${TPU_NAME} \
  --train_batch_size=64 \
  --training_file_pattern=${GCS_BUCKET}/coco/train-* \
  --resnet_checkpoint=${RESNET_CHECKPOINT} \

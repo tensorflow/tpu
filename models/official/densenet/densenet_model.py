@@ -21,6 +21,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from absl import flags
 from six.moves import xrange  # pylint: disable=redefined-builtin
 import tensorflow as tf
 
@@ -28,9 +29,8 @@ import tensorflow as tf
 _BATCH_NORM_DECAY = 0.997
 _BATCH_NORM_EPSILON = 1e-5
 
-FLAGS = tf.flags.FLAGS
-tf.flags.DEFINE_bool("use_bottleneck", False,
-                     "Use bottleneck convolution layers")
+FLAGS = flags.FLAGS
+flags.DEFINE_bool("use_bottleneck", False, "Use bottleneck convolution layers")
 
 
 def conv(image, filters, strides=1, kernel_size=3):

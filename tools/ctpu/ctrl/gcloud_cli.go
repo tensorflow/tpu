@@ -26,7 +26,7 @@ import (
 
 // GCloudCLI abstracts away interacting with a locally installed GCloud to facilitate testing
 type GCloudCLI struct {
-	Config config.Config
+	Config *config.Config
 }
 
 // IsGcloudInstalled returnes true if the gcloud cli is installed, false otherwise.
@@ -47,19 +47,17 @@ func (g GCloudCLI) makeExecCommand(forwardPorts, forwardAgent bool, tpuInstance 
 		"compute",
 		"ssh",
 		"--zone",
-		g.Config.Zone(),
+		g.Config.Zone,
 		"--project",
-		g.Config.Project(),
-		g.Config.FlockName(),
+		g.Config.Project,
+		g.Config.FlockName,
 	}
-	if forwardPorts || forwardAgent {
-		command = append(command, "--")
-	}
-	if forwardAgent && g.Config.Environment() != "devshell" {
+	command = append(command, "--", "-o", "SendEnv=TPU_NAME") // Always send the TPU_NAME environment variable.
+	if forwardAgent && g.Config.Environment != "devshell" {
 		command = append(command, "-A")
 	}
 	if forwardPorts {
-		if g.Config.Environment() == "devshell" {
+		if g.Config.Environment == "devshell" {
 			command = append(command, "-L", "8080:localhost:6006", "-L", "8081:localhost:8888")
 			command = append(command, "-y") // Suppresses channel errors from ssh.
 		} else {
@@ -70,6 +68,15 @@ func (g GCloudCLI) makeExecCommand(forwardPorts, forwardAgent bool, tpuInstance 
 		}
 	}
 	return command
+}
+
+// MakeEnviron creates an environment that includes the extra environment variable TPU_NAME
+//
+// This new environment is then suitable for use when calling execve to execute the gcloud tool.
+func (g GCloudCLI) MakeEnviron() []string {
+	env := os.Environ()
+	env = append(env, fmt.Sprintf("TPU_NAME=%s", g.Config.FlockName))
+	return env
 }
 
 // SSHToInstance opens an ssh connection to the GCE VM in the flock.
@@ -84,5 +91,5 @@ func (g GCloudCLI) SSHToInstance(forwardPorts, forwardAgent bool, tpuInstance *T
 	if err != nil {
 		return err
 	}
-	return syscall.Exec(path, g.makeExecCommand(forwardPorts, forwardAgent, tpuInstance), os.Environ())
+	return syscall.Exec(path, g.makeExecCommand(forwardPorts, forwardAgent, tpuInstance), g.MakeEnviron())
 }

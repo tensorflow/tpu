@@ -376,7 +376,7 @@ def get_split(split_name, dataset_dir):
     raise ValueError("split name %s was not recognized." % split_name)
 
   file_pattern = os.path.join(dataset_dir, _FILE_PATTERN % split_name)
-  return tf.data.Dataset.list_files(file_pattern)
+  return tf.data.Dataset.list_files(file_pattern, shuffle=False)
 
 
 class InputReader(object):

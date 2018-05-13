@@ -22,20 +22,25 @@ import (
 	"context"
 	"flag"
 	"github.com/google/subcommands"
+	"github.com/tensorflow/tpu/tools/ctpu/config"
 )
 
-type quotaCmd struct{}
+type quotaCmd struct {
+	cfg *config.Config
+}
 
 // QuotaCommand creates the quota command.
-func QuotaCommand() subcommands.Command {
-	return &quotaCmd{}
+func QuotaCommand(config *config.Config) subcommands.Command {
+	return &quotaCmd{config}
 }
 
 func (quotaCmd) Name() string {
 	return "quota"
 }
 
-func (quotaCmd) SetFlags(f *flag.FlagSet) {}
+func (c *quotaCmd) SetFlags(f *flag.FlagSet) {
+	c.cfg.SetFlags(f) // Allow users to specify cfg flags either before or after the subcommand name.
+}
 
 func (quotaCmd) Synopsis() string {
 	return "prints URL where quota can be seen"
@@ -46,14 +51,15 @@ func (quotaCmd) Usage() string {
 `
 }
 
-func (quotaCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	libs, err := parseArgs(args)
+func (q *quotaCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	err := q.cfg.Validate()
 	if err != nil {
-		log.Printf("%v\n", err)
+		log.Print(err)
 		return subcommands.ExitFailure
 	}
 
-	fmt.Printf("Quotas cannot currently be displayed within ctpu. To view your quota, open:\n\thttps://console.cloud.google.com/iam-admin/quotas?project=%s&service=tpu.googleapis.com\n", libs.cfg.Project())
+	fmt.Printf("Quotas cannot currently be displayed within ctpu. To view your quota, open:\n\thttps://console.cloud.google.com/iam-admin/quotas?project=%s&service=tpu.googleapis.com\n\n", q.cfg.Project)
+	fmt.Printf("Request additional quota from:\n\thttps://console.cloud.google.com/iam-admin/quotas?project=%s&service=tpu.googleapis.com\n", q.cfg.Project)
 
 	return subcommands.ExitSuccess
 }

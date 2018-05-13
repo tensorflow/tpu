@@ -21,6 +21,7 @@ from __future__ import print_function
 import os
 
 # Standard Imports
+from absl import flags
 import absl.logging as _logging  # pylint: disable=unused-import
 import numpy as np
 import tensorflow as tf
@@ -34,47 +35,41 @@ from tensorflow.contrib.tpu.python.tpu import tpu_estimator
 from tensorflow.contrib.tpu.python.tpu import tpu_optimizer
 from tensorflow.python.estimator import estimator
 
-FLAGS = tf.flags.FLAGS
+FLAGS = flags.FLAGS
 
 # Cloud TPU Cluster Resolvers
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
+    'tpu', default=None,
+    help='The Cloud TPU to use for training. This should be either the name '
+    'used when creating the Cloud TPU, or a grpc://ip.address.of.tpu:8470 url.')
+flags.DEFINE_string(
     'gcp_project', default=None,
     help='Project name for the Cloud TPU-enabled project. If not specified, we '
     'will attempt to automatically detect the GCE project from metadata.')
-tf.flags.DEFINE_string(
+flags.DEFINE_string(
     'tpu_zone', default=None,
     help='GCE zone where the Cloud TPU is located in. If not specified, we '
     'will attempt to automatically detect the GCE project from metadata.')
-tf.flags.DEFINE_string(
-    'tpu_name', default=None,
-    help='Name of the Cloud TPU for Cluster Resolvers. You must specify either '
-    'this flag or --master.')
 
 # Model specific paramenters
-tf.flags.DEFINE_string(
-    'master', default=None,
-    help='GRPC URL of the master (e.g. grpc://ip.address.of.tpu:8470). You '
-    'must specify either this flag or --tpu_name.')
-tf.flags.DEFINE_string('dataset', 'mnist',
-                       'One of ["mnist", "cifar"]. Requires additional flags')
-tf.flags.DEFINE_string('model_dir',
-                       '', 'Output model directory')
-tf.flags.DEFINE_integer('noise_dim',
-                        64, 'Number of dimensions for the noise vector')
-tf.flags.DEFINE_integer('batch_size',
-                        1024, 'Batch size for both generator and discriminator')
-tf.flags.DEFINE_integer('num_shards',
-                        8, 'Number of TPU chips')
-tf.flags.DEFINE_integer('train_steps',
-                        1000, 'Number of training steps')
-tf.flags.DEFINE_integer('train_steps_per_eval',
-                        50, 'Steps per eval and image generation')
-tf.flags.DEFINE_float('learning_rate', 0.0002,
-                      'LR for both D and G')
-tf.flags.DEFINE_boolean('eval_loss', False,
-                        'Evaluate discriminator and generator loss during eval')
-tf.flags.DEFINE_boolean('use_tpu',
-                        True, 'Use TPU for training')
+flags.DEFINE_string('dataset', 'mnist',
+                    'One of ["mnist", "cifar"]. Requires additional flags')
+flags.DEFINE_string('model_dir', '', 'Output model directory')
+flags.DEFINE_integer('noise_dim', 64,
+                     'Number of dimensions for the noise vector')
+flags.DEFINE_integer('batch_size', 1024,
+                     'Batch size for both generator and discriminator')
+flags.DEFINE_integer('num_shards', None, 'Number of TPU chips')
+flags.DEFINE_integer('train_steps', 10000, 'Number of training steps')
+flags.DEFINE_integer('train_steps_per_eval', 1000,
+                     'Steps per eval and image generation')
+flags.DEFINE_integer('iterations_per_loop', 100,
+                     'Steps per interior TPU loop. Should be less than'
+                     ' --train_steps_per_eval')
+flags.DEFINE_float('learning_rate', 0.0002, 'LR for both D and G')
+flags.DEFINE_boolean('eval_loss', False,
+                     'Evaluate discriminator and generator loss during eval')
+flags.DEFINE_boolean('use_tpu', True, 'Use TPU for training')
 
 _NUM_VIZ_IMAGES = 100   # For generating a 10x10 grid of generator samples
 
@@ -91,27 +86,26 @@ def model_fn(features, labels, mode, params):
     ###########
     # PREDICT #
     ###########
-    # Generate fixed random noise on device instead of feeding via input_fn
-    np.random.seed(0)
-    random_noise = tf.constant(
-        np.random.randn(_NUM_VIZ_IMAGES, FLAGS.noise_dim), dtype=tf.float32)
+    # Pass only noise to PREDICT mode
+    random_noise = features['random_noise']
     predictions = {
-        'generated_images': model.generator(random_noise,
-                                            is_training=False)
+        'generated_images': model.generator(random_noise, is_training=False)
     }
 
     return tpu_estimator.TPUEstimatorSpec(mode=mode, predictions=predictions)
 
-  random_noise = tf.random_normal([params['batch_size'], FLAGS.noise_dim])
-  true_samples = features
+  # Use params['batch_size'] for the batch size inside model_fn
+  batch_size = params['batch_size']   # pylint: disable=unused-variable
+  real_images = features['real_images']
+  random_noise = features['random_noise']
 
   is_training = (mode == tf.estimator.ModeKeys.TRAIN)
-  generated_samples = model.generator(random_noise,
-                                      is_training=is_training)
+  generated_images = model.generator(random_noise,
+                                     is_training=is_training)
 
   # Get logits from discriminator
-  d_on_data_logits = tf.squeeze(model.discriminator(true_samples))
-  d_on_g_logits = tf.squeeze(model.discriminator(generated_samples))
+  d_on_data_logits = tf.squeeze(model.discriminator(real_images))
+  d_on_g_logits = tf.squeeze(model.discriminator(generated_images))
 
   # Calculate discriminator loss
   d_loss_on_data = tf.nn.sigmoid_cross_entropy_with_logits(
@@ -183,35 +177,42 @@ def model_fn(features, labels, mode, params):
 
 def generate_input_fn(is_training):
   """Creates input_fn depending on whether the code is training or not."""
-  return dataset.InputFunction(is_training)
+  return dataset.InputFunction(is_training, FLAGS.noise_dim)
+
+
+def noise_input_fn(params):
+  """Input function for generating samples for PREDICT mode.
+
+  Generates a single Tensor of fixed random noise. Use tf.data.Dataset to
+  signal to the estimator when to terminate the generator returned by
+  predict().
+
+  Args:
+    params: param `dict` passed by TPUEstimator.
+
+  Returns:
+    1-element `dict` containing the randomly generated noise.
+  """
+  np.random.seed(0)
+  noise_dataset = tf.data.Dataset.from_tensors(tf.constant(
+      np.random.randn(params['batch_size'], FLAGS.noise_dim), dtype=tf.float32))
+  noise = noise_dataset.make_one_shot_iterator().get_next()
+  return {'random_noise': noise}, None
 
 
 def main(argv):
   del argv
-
-  if FLAGS.master is None and FLAGS.tpu_name is None:
-    raise RuntimeError('You must specify either --master or --tpu_name.')
-
-  if FLAGS.master is not None:
-    if FLAGS.tpu_name is not None:
-      tf.logging.warn('Both --master and --tpu_name are set. Ignoring '
-                      '--tpu_name and using --master.')
-    tpu_grpc_url = FLAGS.master
-  else:
-    tpu_cluster_resolver = (
-        tf.contrib.cluster_resolver.TPUClusterResolver(
-            tpu_names=[FLAGS.tpu_name],
-            zone=FLAGS.tpu_zone,
-            project=FLAGS.gcp_project))
-    tpu_grpc_url = tpu_cluster_resolver.get_master()
+  tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
+      FLAGS.tpu,
+      zone=FLAGS.tpu_zone,
+      project=FLAGS.gcp_project)
 
   config = tpu_config.RunConfig(
-      master=tpu_grpc_url,
-      evaluation_master=tpu_grpc_url,
+      cluster=tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
       tpu_config=tpu_config.TPUConfig(
           num_shards=FLAGS.num_shards,
-          iterations_per_loop=FLAGS.train_steps_per_eval))
+          iterations_per_loop=FLAGS.iterations_per_loop))
 
   # Set module-level global variable so that model_fn and input_fn can be
   # identical for each different kind of dataset and model
@@ -225,12 +226,20 @@ def main(argv):
   else:
     raise ValueError('Invalid dataset: %s' % FLAGS.dataset)
 
+  # TPU-based estimator used for TRAIN and EVAL
   est = tpu_estimator.TPUEstimator(
       model_fn=model_fn,
       use_tpu=FLAGS.use_tpu,
       config=config,
       train_batch_size=FLAGS.batch_size,
       eval_batch_size=FLAGS.batch_size)
+
+  # CPU-based estimator used for PREDICT (generating images)
+  cpu_est = tpu_estimator.TPUEstimator(
+      model_fn=model_fn,
+      use_tpu=False,
+      config=config,
+      predict_batch_size=_NUM_VIZ_IMAGES)
 
   tf.gfile.MakeDirs(os.path.join(FLAGS.model_dir, 'generated_images'))
 
@@ -253,10 +262,9 @@ def main(argv):
       tf.logging.info(metrics)
 
     # Render some generated images
-    # input_fn is a stub because noise is generated in the graph
-    generated_iter = est.predict(input_fn=lambda params: (None, None))
-    images = [generated_iter.next()['generated_images'][:, :, :]
-              for _ in range(_NUM_VIZ_IMAGES)]
+    generated_iter = cpu_est.predict(input_fn=noise_input_fn)
+    images = [p['generated_images'][:, :, :] for p in generated_iter]
+    assert len(images) == _NUM_VIZ_IMAGES
     image_rows = [np.concatenate(images[i:i+10], axis=0)
                   for i in range(0, _NUM_VIZ_IMAGES, 10)]
     tiled_image = np.concatenate(image_rows, axis=1)

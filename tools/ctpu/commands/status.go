@@ -19,24 +19,44 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync"
 
 	"context"
 	"flag"
 	"github.com/fatih/color"
 	"github.com/google/subcommands"
+	"github.com/tensorflow/tpu/tools/ctpu/config"
 	"github.com/tensorflow/tpu/tools/ctpu/ctrl"
 )
 
-type sprintfFunc func(format string, a ...interface{}) string
+// StatusTPUCP encapsulates the control plane interfaces required to execute the Status command.
+type StatusTPUCP interface {
+	// Instance retrieves the TPU instance (if available).
+	Instance() (*ctrl.TPUInstance, error)
+}
+
+// StatusGCECP encapsulates the control plane interfaces required to execute the Status command.
+type StatusGCECP interface {
+	// Instance retrieves the GCE instance (if available).
+	Instance() (*ctrl.GCEInstance, error)
+}
 
 type statusCmd struct {
+	cfg *config.Config
+	tpu StatusTPUCP
+	gce StatusGCECP
+
 	details bool
 	noColor bool
 }
 
 // StatusCommand creates the status command.
-func StatusCommand() subcommands.Command {
-	return &statusCmd{}
+func StatusCommand(cfg *config.Config, tpu StatusTPUCP, gce StatusGCECP) subcommands.Command {
+	return &statusCmd{
+		cfg: cfg,
+		tpu: tpu,
+		gce: gce,
+	}
 }
 
 func (statusCmd) Name() string {
@@ -44,6 +64,7 @@ func (statusCmd) Name() string {
 }
 
 func (s *statusCmd) SetFlags(f *flag.FlagSet) {
+	s.cfg.SetFlags(f) // Allow users to specify cfg flags either before or after the subcommand name.
 	f.BoolVar(&s.details, "details", false,
 		"Prints out more details about the state of the GCE VM and Cloud TPU.")
 	f.BoolVar(&s.noColor, "no-color", false, "Disable color in the output.")
@@ -57,6 +78,21 @@ func (statusCmd) Usage() string {
 	return `ctpu status [--no-color]
 `
 }
+
+type statusCmdAlias struct {
+	statusCmd
+}
+
+// StatusCommandAlias creates an alias for the status command with a shorter name.
+func StatusCommandAlias(cfg *config.Config, tpu StatusTPUCP, gce StatusGCECP) subcommands.Command {
+	return &statusCmdAlias{statusCmd{cfg: cfg, tpu: tpu, gce: gce}}
+}
+
+func (statusCmdAlias) Name() string { return "st" }
+func (statusCmdAlias) Synopsis() string {
+	return "alias to ctpu status (retrieves info on current instances)"
+}
+func (statusCmdAlias) Usage() string { return "ctpu st\n" }
 
 func (s *statusCmd) runnableStatus(exists, isRunning bool, status string) string {
 	if !exists {
@@ -102,25 +138,48 @@ func (s *statusCmd) tpuStatus(tpu *ctrl.TPUInstance) string {
 }
 
 func (s *statusCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	libs, err := parseArgs(args)
+	err := s.cfg.Validate()
 	if err != nil {
 		log.Print(err)
 		return subcommands.ExitFailure
 	}
+
 	if s.noColor {
 		color.NoColor = true
 	}
 
-	vm, err := libs.gce.Instance()
-	if err != nil {
-		log.Print(err)
-		return subcommands.ExitFailure
-	}
+	var vm *ctrl.GCEInstance
+	var tpu *ctrl.TPUInstance
+	var exitTPU, exitVM subcommands.ExitStatus
+	var wg sync.WaitGroup
+	wg.Add(2)
 
-	tpu, err := libs.tpu.Instance()
-	if err != nil {
-		log.Print(err)
-		return subcommands.ExitFailure
+	go func() {
+		var err error
+		vm, err = s.gce.Instance()
+		if err != nil {
+			log.Print(err)
+			exitVM = subcommands.ExitFailure
+		}
+		wg.Done()
+	}()
+
+	go func() {
+		var err error
+		tpu, err = s.tpu.Instance()
+		if err != nil {
+			log.Print(err)
+			exitTPU = subcommands.ExitFailure
+		}
+		wg.Done()
+	}()
+
+	wg.Wait()
+	if exitTPU != subcommands.ExitSuccess {
+		return exitTPU
+	}
+	if exitVM != subcommands.ExitSuccess {
+		return exitVM
 	}
 
 	fmt.Printf(`%s

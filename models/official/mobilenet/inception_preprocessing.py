@@ -19,24 +19,25 @@ from __future__ import division
 from __future__ import print_function
 
 # Standard Imports
+from absl import flags
 import tensorflow as tf
 
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import random_ops
 
 
-tf.flags.DEFINE_float(
+flags.DEFINE_float(
     'cb_distortion_range', 0.1, 'Cb distortion range +/-')
 
-tf.flags.DEFINE_float(
+flags.DEFINE_float(
     'cr_distortion_range', 0.1, 'Cr distortion range +/-')
 
-tf.flags.DEFINE_boolean(
+flags.DEFINE_boolean(
     'use_fast_color_distort', True,
     'apply fast color/chroma distortion if True, else apply'
     'brightness/saturation/hue/contrast distortion')
 
-FLAGS = tf.flags.FLAGS
+FLAGS = flags.FLAGS
 
 
 def apply_with_random_selector(x, func, num_cases):

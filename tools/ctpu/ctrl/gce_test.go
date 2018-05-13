@@ -24,14 +24,14 @@ import (
 )
 
 func TestMakeCreateInstance(t *testing.T) {
-	cfg := config.TestConfig{
-		ActiveConfigurationVal: "ctpu9",
-		FlockNameVal:           "testFlock",
-		ProjectVal:             "ctpu-test-project",
-		ZoneVal:                "us-central1-c",
+	cfg := &config.Config{
+		ActiveConfiguration: "ctpu9",
+		FlockName:           "testFlock",
+		Project:             "ctpu-test-project",
+		Zone:                "us-central1-c",
 	}
 	cp := GCECP{
-		config: &cfg,
+		config: cfg,
 	}
 	request := GCECreateRequest{
 		ImageName:   "my_image_name",
