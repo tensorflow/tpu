@@ -239,7 +239,7 @@ RMSPROP_EPSILON = 1.0              # Epsilon term for RMSProp.
 MOVING_AVERAGE_DECAY = 0.995
 
 # Batchnorm moving mean/variance parameters
-BATCH_NORM_DECAY = 0.9976
+BATCH_NORM_DECAY = 0.995
 BATCH_NORM_EPSILON = 1e-3
 
 
