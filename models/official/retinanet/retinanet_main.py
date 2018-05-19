@@ -137,7 +137,7 @@ def main(argv):
       mode=FLAGS.mode,
   )
   run_config = tpu_config.RunConfig(
-      master=FLAGS.master,
+      master=tpu_grpc_url,
       evaluation_master=FLAGS.eval_master,
       model_dir=FLAGS.model_dir,
       log_step_count_steps=FLAGS.iterations_per_loop,
