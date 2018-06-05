@@ -21,6 +21,7 @@ import (
 
 	"context"
 	"flag"
+	"github.com/fatih/color"
 	"github.com/google/subcommands"
 	"github.com/tensorflow/tpu/tools/ctpu/config"
 	"github.com/tensorflow/tpu/tools/ctpu/ctrl"
@@ -31,7 +32,7 @@ type PauseGCECP interface {
 	// Instance retrieves the instance from the control plane (if available).
 	Instance() (*ctrl.GCEInstance, error)
 	// StopInstance requests the halting of the instance.
-	StopInstance(bool) error
+	StopInstance() (ctrl.LongRunningOperation, error)
 }
 
 // PauseTPUCP abstracts the control plane interfaces required for the pause command.
@@ -39,7 +40,7 @@ type PauseTPUCP interface {
 	// Instance retrieves the instance from the control plane (if available).
 	Instance() (*ctrl.TPUInstance, error)
 	// DeleteInstance requests the deletion of the instance.
-	DeleteInstance(bool) error
+	DeleteInstance() (ctrl.LongRunningOperation, error)
 }
 
 type pauseCmd struct {
@@ -93,27 +94,46 @@ func (c *pauseCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...int
 		return subcommands.ExitFailure
 	}
 
-	var exitTPU, exitVM subcommands.ExitStatus
-	var wg sync.WaitGroup
-	wg.Add(2)
-
-	go func() {
-		exitTPU = cleanUpTPU(c.cfg, c.tpu.Instance, c.tpu.DeleteInstance, c.dryRun, c.waitForAsync)
-		wg.Done()
-	}()
-
-	go func() {
-		if !c.tpuOnly {
-			exitVM = cleanUpVM(c.cfg, c.gce.Instance, c.gce.StopInstance, c.dryRun, "Stopping", c.waitForAsync, true)
+	if !c.tpuCmd.skipConfirmation {
+		c.tpuCmd.printConfig(c.cfg)
+		ok, err := askForConfirmation("About to shut down your resources. OK?")
+		if err != nil {
+			log.Fatalf("Pause confirmation error: %v", err)
 		}
-		wg.Done()
-	}()
-
-	wg.Wait()
-
-	if exitTPU != 0 {
-		return exitTPU
+		if !ok {
+			color.Red("Exiting without making any changes.\n")
+			return subcommands.ExitUsageError
+		}
 	}
 
-	return exitVM
+	var tpuOp, gceOp ctrl.LongRunningOperation
+	var tpuErr, gceErr error
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		tpuOp, tpuErr = cleanUpTPU(c.cfg, c.tpu.Instance, c.tpu.DeleteInstance, c.dryRun)
+		wg.Done()
+	}()
+	go func() {
+		gceOp, gceErr = cleanUpVM(c.cfg, c.gce.Instance, c.gce.StopInstance, c.dryRun, "Stopping", true)
+		wg.Done()
+	}()
+	wg.Wait()
+
+	if tpuErr != nil {
+		log.Print(tpuErr)
+	}
+	if gceErr != nil {
+		log.Print(gceErr)
+	}
+	if tpuErr != nil || gceErr != nil {
+		return subcommands.ExitFailure
+	}
+
+	err = waitForLongRunningOperations("pause", c.skipWaiting, gceOp, tpuOp)
+	if err != nil {
+		log.Print(err)
+		return subcommands.ExitFailure
+	}
+	return subcommands.ExitSuccess
 }

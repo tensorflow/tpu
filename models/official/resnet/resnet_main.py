@@ -102,6 +102,12 @@ flags.DEFINE_integer(
           ' possible (i.e. up to --train_steps, which evaluates the model only'
           ' after finishing the entire training regime).'))
 
+flags.DEFINE_integer(
+    'eval_timeout',
+    default=None,
+    help=(
+        'Maximum seconds between checkpoints before evaluation terminates.'))
+
 flags.DEFINE_bool(
     'skip_host_call', default=False,
     help=('Skip the host_call which is executed every training step. This is'
@@ -401,7 +407,8 @@ def main(unused_argv):
     eval_steps = NUM_EVAL_IMAGES // FLAGS.eval_batch_size
 
     # Run evaluation when there's a new checkpoint
-    for ckpt in evaluation.checkpoints_iterator(FLAGS.model_dir):
+    for ckpt in evaluation.checkpoints_iterator(
+        FLAGS.model_dir, timeout=FLAGS.eval_timeout):
       tf.logging.info('Starting to evaluate.')
       try:
         start_timestamp = time.time()  # This time will include compilation time

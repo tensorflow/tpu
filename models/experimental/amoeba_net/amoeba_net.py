@@ -19,7 +19,7 @@ GCP Run Example
 python amoeba_net.py --data_dir=gs://cloud-tpu-datasets/imagenet-data --model_dir=gs://cloud-tpu-ckpts/models/ameoba_net_x/ \
 --drop_connect_keep_prob=1.0 --cell_name=evol_net_x --num_cells=12 --reduction_size=256 --image_size=299 --num_epochs=48 \
 --train_batch_size=256 --num_epochs_per_eval=4 --lr_decay_value=0.89 --lr_num_epochs_per_decay=1 --alsologtostderr \
---tpu_name=huangyp-tpu-0
+--tpu=huangyp-tpu-0
 """
 # pylint: enable=line-too-long
 
@@ -164,6 +164,10 @@ flags.DEFINE_integer(
 flags.DEFINE_bool(
     'use_bp16', True, 'If True, use bfloat16 for activations')
 
+flags.DEFINE_integer(
+    'eval_timeout', 60*60*24,
+    'Maximum seconds between checkpoints before evaluation terminates.')
+
 FLAGS = flags.FLAGS
 
 
@@ -223,7 +227,7 @@ def override_with_flags(hparams):
   ]
   for flag_name in override_flag_names:
     flag_value = getattr(FLAGS, flag_name, 'INVALID')
-    if flag_value is 'INVALID':
+    if flag_value == 'INVALID':
       tf.logging.fatal('Unknown flag %s.' % str(flag_name))
     if flag_value is not None:
       _set_or_add_hparam(hparams, flag_name, flag_value)
@@ -265,7 +269,7 @@ def _terminate_eval():
 def _get_next_checkpoint():
   return evaluation.checkpoints_iterator(
       FLAGS.model_dir,
-      timeout=60*60*24,
+      timeout=FLAGS.eval_timeout,
       timeout_fn=_terminate_eval)
 
 

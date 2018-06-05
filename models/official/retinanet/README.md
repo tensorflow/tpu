@@ -72,8 +72,8 @@ instructions for details on how to do this.
 Once you have a data directory available, you can run the preprocessing script:
 
 ```
-cd tpu/tools/dataset
-bash download_and_preprocess_coco.sh /data/dir/coco
+cd tpu/tools/datasets
+bash download_and_preprocess_coco.sh ./data/dir/coco
 ```
 
 This will install the required libraries and then run the preprocessing script.
@@ -86,8 +86,8 @@ training.  We can use `gsutil` to copy the files over.  We also want to save the
 annotation files: we use these to validate our model performance:
 
 ```
-gsutil -m cp /data/dir/coco/*.tfrecord ${GCS_BUCKET}/coco
-gsutil cp /data/dir/coco/raw-data/annotations/*.json ${GCS_BUCKET}/coco
+gsutil -m cp ./data/dir/coco/*.tfrecord ${GCS_BUCKET}/coco
+gsutil cp ./data/dir/coco/raw-data/annotations/*.json ${GCS_BUCKET}/coco
 ```
 
 ## Installing extra packages
@@ -109,7 +109,7 @@ make sure everything is working and we can write out checkpoints successfully:
 RESNET_CHECKPOINT=gs://cloud-tpu-artifacts/resnet/resnet-nhwc-2018-02-07/model.ckpt-112603
 MODEL_DIR=${GCS_BUCKET}/retinanet-model
 
-python tpu/models/official/retinanet_main.py \
+python tpu/models/official/retinanet/retinanet_main.py \
  --tpu=${TPU_NAME} \
  --train_batch_size=64 \
  --training_file_pattern=${GCS_BUCKET}/coco/train-* \
@@ -174,7 +174,7 @@ bash -c 'echo "deb http://developer.download.nvidia.com/compute/machine-learning
 apt-get update
 apt-get install -y --no-install-recommends libcudnn7=7.0.5.15-1+cuda9.0
 apt install -y python-pip python-tk
-pip install tensorflow-gpu==1.6.0rc0
+pip install tensorflow-gpu==1.8
 HERE
 
 sudo bash /tmp/setup.sh
@@ -226,7 +226,7 @@ gsutil cp ${GCS_BUCKET}/coco/instances_val2017.json .
 python tpu/models/official/retinanet/retinanet_main.py  \
  --use_tpu=False \
  --validation_file_pattern=${GCS_BUCKET}/coco/val-* \
- --val_json_file=./instances_val_2017.json \
+ --val_json_file=./instances_val2017.json \
  --model_dir=${GCS_BUCKET}/retinanet-model/ \
  --hparams=image_size=640 \
  --mode=eval \
@@ -243,7 +243,7 @@ dataset:
 python tpu/models/official/retinanet/retinanet_main.py  \
  --use_tpu=False \
  --validation_file_pattern=${GCS_BUCKET}/coco/val-* \
- --val_json_file=./instances_val2017.json
+ --val_json_file=./instances_val2017.json \
  --model_dir=${GCS_BUCKET}/retinanet-model/ \
  --hparams=image_size=640 \
  --num_epochs=15 \

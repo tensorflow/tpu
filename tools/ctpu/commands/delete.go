@@ -16,12 +16,12 @@
 package commands
 
 import (
-	"fmt"
 	"log"
 	"sync"
 
 	"context"
 	"flag"
+	"github.com/fatih/color"
 	"github.com/google/subcommands"
 	"github.com/tensorflow/tpu/tools/ctpu/config"
 	"github.com/tensorflow/tpu/tools/ctpu/ctrl"
@@ -32,7 +32,7 @@ type DeleteGCECP interface {
 	// Instance retrieves the instance from the control plane (if available).
 	Instance() (*ctrl.GCEInstance, error)
 	// DeleteInstance requests the deletion of the instance.
-	DeleteInstance(bool) error
+	DeleteInstance() (ctrl.LongRunningOperation, error)
 }
 
 // DeleteTPUCP abstratcs the control plane interfaces required for the delete command.
@@ -40,7 +40,7 @@ type DeleteTPUCP interface {
 	// Instance retrieves the instance from the control plane (if available).
 	Instance() (*ctrl.TPUInstance, error)
 	// DeleteInstance requests the deletion of the instance.
-	DeleteInstance(bool) error
+	DeleteInstance() (ctrl.LongRunningOperation, error)
 }
 
 type deleteCmd struct {
@@ -48,7 +48,6 @@ type deleteCmd struct {
 	gce DeleteGCECP
 	tpu DeleteTPUCP
 
-	skipConfirmation bool
 	tpuCmd
 }
 
@@ -62,7 +61,6 @@ func (deleteCmd) Name() string {
 }
 
 func (d *deleteCmd) SetFlags(f *flag.FlagSet) {
-	f.BoolVar(&d.skipConfirmation, "noconf", false, "Skip confirmation about deleting resources.")
 	d.cfg.SetFlags(f) // Allow users to specify cfg flags either before or after the subcommand name.
 	d.tpuCmd.SetFlags(f)
 }
@@ -96,36 +94,46 @@ func (c *deleteCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...in
 		return subcommands.ExitFailure
 	}
 
-	if !c.skipConfirmation {
+	if !c.tpuCmd.skipConfirmation {
+		c.tpuCmd.printConfig(c.cfg)
 		ok, err := askForConfirmation("About to permanently delete your resources. Ok?")
 		if err != nil {
 			log.Fatalf("Delete confirmation error: %v", err)
 		}
 		if !ok {
-			fmt.Printf("Exiting without making any changes.\n")
+			color.Red("Exiting without making any changes.\n")
 			return subcommands.ExitUsageError
 		}
 	}
 
-	var exitTPU, exitVM subcommands.ExitStatus
+	var tpuOp, gceOp ctrl.LongRunningOperation
+	var tpuErr, gceErr error
 	var wg sync.WaitGroup
 	wg.Add(2)
-
 	go func() {
-		exitTPU = cleanUpTPU(c.cfg, c.tpu.Instance, c.tpu.DeleteInstance, c.dryRun, c.waitForAsync)
+		tpuOp, tpuErr = cleanUpTPU(c.cfg, c.tpu.Instance, c.tpu.DeleteInstance, c.dryRun)
 		wg.Done()
 	}()
 	go func() {
-		if !c.tpuOnly {
-			exitVM = cleanUpVM(c.cfg, c.gce.Instance, c.gce.DeleteInstance, c.dryRun, "Deleting", c.waitForAsync, false)
-		}
+		gceOp, gceErr = cleanUpVM(c.cfg, c.gce.Instance, c.gce.DeleteInstance, c.dryRun, "Deleting", false)
 		wg.Done()
 	}()
-
 	wg.Wait()
 
-	if exitTPU != 0 {
-		return exitTPU
+	if tpuErr != nil {
+		log.Print(tpuErr)
 	}
-	return exitVM
+	if gceErr != nil {
+		log.Print(gceErr)
+	}
+	if tpuErr != nil || gceErr != nil {
+		return subcommands.ExitFailure
+	}
+
+	err = waitForLongRunningOperations("delete", c.skipWaiting, gceOp, tpuOp)
+	if err != nil {
+		log.Print(err)
+		return subcommands.ExitFailure
+	}
+	return subcommands.ExitSuccess
 }

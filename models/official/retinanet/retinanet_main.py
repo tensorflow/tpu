@@ -123,6 +123,7 @@ def main(argv):
   params = dict(
       hparams.values(),
       num_shards=FLAGS.num_shards,
+      num_examples_per_epoch=FLAGS.num_examples_per_epoch,
       use_tpu=FLAGS.use_tpu,
       resnet_checkpoint=FLAGS.resnet_checkpoint,
       val_json_file=FLAGS.val_json_file,

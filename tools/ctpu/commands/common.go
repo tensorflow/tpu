@@ -27,15 +27,16 @@ import (
 	"strings"
 
 	"flag"
-	"github.com/google/subcommands"
 	"github.com/tensorflow/tpu/tools/ctpu/config"
 	"github.com/tensorflow/tpu/tools/ctpu/ctrl"
+	"golang.org/x/sync/errgroup"
 )
 
 type tpuCmd struct {
-	dryRun       bool
-	tpuOnly      bool
-	waitForAsync bool
+	dryRun           bool
+	tpuOnly          bool
+	skipWaiting      bool
+	skipConfirmation bool
 }
 
 func (c *tpuCmd) SetFlags(f *flag.FlagSet) {
@@ -43,58 +44,94 @@ func (c *tpuCmd) SetFlags(f *flag.FlagSet) {
 		"Do not make changes; print only what would have happened.")
 	f.BoolVar(&c.tpuOnly, "tpu_only", false,
 		"Do not pause the GCE VM, only pause the TPU (useful if you want to edit code on the VM without paying for the TPU).")
-	f.BoolVar(&c.waitForAsync, "wait-for-async-ops", false,
-		"Wait for asynchronous operations to complete (e.g. TPU termination, GCE VM halting)")
+	f.BoolVar(&c.skipWaiting, "nowait", false,
+		"Don't wait for asynchronous operations to complete (e.g. TPU deletion, GCE VM halting)")
+	f.BoolVar(&c.skipConfirmation, "noconf", false, "Skip confirmation about deleting resources.")
+}
+
+func (tpuCmd) printConfig(cfg *config.Config) {
+	fmt.Printf(`ctpu will use the following configuration values:
+	Name:          %s
+	Zone:          %s
+	GCP Project:   %s
+`, cfg.FlockName, cfg.Zone, cfg.Project)
 }
 
 type tpuInstanceFn func() (*ctrl.TPUInstance, error)
 type gceInstanceFn func() (*ctrl.GCEInstance, error)
-type cpCommand func(bool) error
+type cpCommand func() (ctrl.LongRunningOperation, error)
 
-func cleanUpVM(cfg *config.Config, gceCP gceInstanceFn, vmCommand cpCommand, dryRun bool, actionName string, waitForAsync, requiresRunning bool) subcommands.ExitStatus {
+func cleanUpVM(cfg *config.Config, gceCP gceInstanceFn, vmCommand cpCommand, dryRun bool, actionName string, requiresRunning bool) (ctrl.LongRunningOperation, error) {
 	vm, err := gceCP()
 	if err != nil {
-		log.Print(err)
-		return 1
+		return nil, err
 	}
 	if vm == nil {
-		log.Printf("No GCE VM %s found.\n", cfg.FlockName)
+		log.Printf("No GCE VM %q found.\n", cfg.FlockName)
+		return nil, nil
 	} else if !vm.IsRunning() && requiresRunning {
 		log.Printf("GCE VM %s not running.\n", cfg.FlockName)
+		return nil, nil
 	} else {
-		log.Printf("%s GCE VM %s...\n", actionName, cfg.FlockName)
+		log.Printf("%s GCE VM %q...\n", actionName, cfg.FlockName)
 		if !dryRun {
-			err = vmCommand(waitForAsync)
-			if err != nil {
-				log.Print(err)
-				return subcommands.ExitFailure
-			}
+			return vmCommand()
 		}
-		log.Printf("%s GCE VM %s complete!\n", actionName, cfg.FlockName)
+		return nil, nil
 	}
-	return subcommands.ExitSuccess
 }
 
-func cleanUpTPU(cfg *config.Config, tpuCP tpuInstanceFn, tpuCommand cpCommand, dryRun, waitForAsync bool) subcommands.ExitStatus {
+func cleanUpTPU(cfg *config.Config, tpuCP tpuInstanceFn, tpuCommand cpCommand, dryRun bool) (ctrl.LongRunningOperation, error) {
 	tpu, err := tpuCP()
 	if err != nil {
-		log.Print(err)
-		return subcommands.ExitFailure
+		return nil, err
 	}
 	if tpu == nil {
 		log.Printf("No TPU %s found.\n", cfg.FlockName)
+		return nil, nil
 	} else {
 		log.Printf("Deleting TPU %s...\n", cfg.FlockName)
 		if !dryRun {
-			err = tpuCommand(waitForAsync)
-			if err != nil {
-				log.Print(err)
-				return subcommands.ExitFailure
-			}
+			return tpuCommand()
 		}
-		log.Printf("Deleting TPU %s complete!\n", cfg.FlockName)
+		return nil, nil
 	}
-	return subcommands.ExitSuccess
+}
+
+func waitForLongRunningOperations(operation string, skipWaiting bool, gceOp, tpuOp ctrl.LongRunningOperation) error {
+	if skipWaiting {
+		if gceOp != nil || tpuOp != nil {
+			fmt.Printf(`All %s operations have been initiated successfully.
+	Exiting early due to the --nowait flag.
+`, operation)
+		}
+		return nil
+	}
+
+	fmt.Printf(`All %q operations have been initiated successfully. They will
+run to completion even if you kill ctpu (e.g. by pressing Ctrl-C). When the
+operations have finished running, ctpu will exit. If you would like your shell
+back, you can press Ctrl-C now. Note: Next time you run ctpu, you can pass the
+--nowait flag to get your shell back immediately.
+`, operation)
+
+	var g errgroup.Group
+
+	if gceOp != nil {
+		g.Go(func() error {
+			return gceOp.LoopUntilComplete()
+		})
+	}
+	if tpuOp != nil {
+		g.Go(func() error {
+			return tpuOp.LoopUntilComplete()
+		})
+	}
+	err := g.Wait()
+	if err == nil {
+		fmt.Printf("ctpu %s completed successfully.\n", operation)
+	}
+	return err
 }
 
 var versionRegex = regexp.MustCompile("^(\\d+)\\.(\\d+)(.*)$")

@@ -35,11 +35,93 @@ from tensorflow.contrib.tpu.python.tpu import bfloat16
 from tensorflow.contrib.tpu.python.tpu import tpu_estimator
 from tensorflow.contrib.tpu.python.tpu import tpu_optimizer
 
+_WEIGHT_DECAY = 1e-4
+
+
+def _update_learning_rate_schedule_parameters(params):
+  """Updates params that are related to the learning rate schedule.
+
+  This function adjusts the learning schedule based on the given batch size and
+  other LR-schedule-related parameters. The default values specified in the
+  default_hparams() are for training with a batch size of 64.
+
+  For other batch sizes that train with the same schedule w.r.t. the number of
+  epochs, this function handles the learning rate schedule.
+
+    For batch size=64, the default values are listed below:
+      learning_rate=0.08,
+      lr_warmup_init=0.1,
+      lr_warmup_epoch=1.0,
+      first_lr_drop_epoch=8.0,
+      second_lr_drop_epoch=11.0;
+    The values are converted to a LR schedule listed below:
+      learning_rate=0.08,
+      lr_warmup_init=0.1,
+      lr_warmup_step=1875,
+      first_lr_drop_step=15000,
+      second_lr_drop_step=20625;
+    For batch size=8, the default values will have the following LR shedule:
+      learning_rate=0.01,
+      lr_warmup_init=0.8,
+      lr_warmup_step=15000,
+      first_lr_drop_step=120000,
+      second_lr_drop_step=165000;
+    For batch size=256 the default values will have the following LR shedule:
+      learning_rate=0.32,
+      lr_warmup_init=0.025,
+      lr_warmup_step=468,
+      first_lr_drop_step=3750,
+      second_lr_drop_step=5157.
+
+  For training with different schedules, such as extended schedule with double
+  number of epochs, adjust the values in default_hparams(). Note that the
+  values are w.r.t. a batch size of 64.
+
+    For batch size=64, 1x schedule (default values),
+      learning_rate=0.08,
+      lr_warmup_init=0.1,
+      lr_warmup_step=1875,
+      first_lr_drop_step=15000,
+      second_lr_drop_step=20625;
+    For batch size=64, 2x schedule, *lr_drop_epoch are doubled.
+      first_lr_drop_epoch=16.0,
+      second_lr_drop_epoch=22.0;
+    The values are converted to a LR schedule listed below:
+      learning_rate=0.08,
+      lr_warmup_init=0.1,
+      lr_warmup_step=1875,
+      first_lr_drop_step=30000,
+      second_lr_drop_step=41250.
+
+  Args:
+    params: a parameter dictionary that includes learning_rate,
+      lr_warmup_init, lr_warmup_epoch, first_lr_drop_epoch,
+      and second_lr_drop_epoch.
+  """
+  _DEFAULT_BATCH_SIZE = 64  # pylint: disable=invalid-name
+  # params['batch_size'] is per-shard within model_fn if use_tpu=true.
+  batch_size = (params['batch_size'] * params['num_shards'] if params['use_tpu']
+                else params['batch_size'])
+  # Learning rate is proportional to the batch size
+  params['learning_rate'] = (params['learning_rate'] * batch_size /
+                             _DEFAULT_BATCH_SIZE)
+  # Initial LR scale is reversely proportional to the batch size
+  reverse_batch_ratio = float(_DEFAULT_BATCH_SIZE / batch_size)
+  params['lr_warmup_init'] = int(params['lr_warmup_init'] *
+                                 reverse_batch_ratio)
+  steps_per_epoch = params['num_examples_per_epoch'] / float(batch_size)
+  params['lr_warmup_step'] = int(params['lr_warmup_epoch'] * steps_per_epoch)
+  params['first_lr_drop_step'] = int(params['first_lr_drop_epoch'] *
+                                     steps_per_epoch)
+  params['second_lr_drop_step'] = int(params['second_lr_drop_epoch'] *
+                                      steps_per_epoch)
+
 
 # A collection of Learning Rate schecules:
 # third_party/tensorflow_models/object_detection/utils/learning_schedules.py
 def _learning_rate_schedule(base_learning_rate, lr_warmup_init, lr_warmup_step,
-                            lr_drop_step, global_step):
+                            first_lr_drop_step, second_lr_drop_step,
+                            global_step):
   """Handles linear scaling rule, gradual warmup, and LR decay."""
   # lr_warmup_init is the starting learning rate; the learning rate is linearly
   # scaled up to the full learning rate after `lr_warmup_steps` before decaying.
@@ -48,7 +130,9 @@ def _learning_rate_schedule(base_learning_rate, lr_warmup_init, lr_warmup_step,
       (lr_warmup_init + lr_warmup_remainder * (float(step) / lr_warmup_step),
        step) for step in range(0, lr_warmup_step, max(1, lr_warmup_step // 100))
   ]
-  lr_schedule = linear_warmup + [[1.0, lr_warmup_step], [0.1, lr_drop_step]]
+  lr_schedule = linear_warmup + [[1.0, lr_warmup_step],
+                                 [0.1, first_lr_drop_step],
+                                 [0.01, second_lr_drop_step]]
   learning_rate = base_learning_rate
   for mult, start_global_step in lr_schedule:
     learning_rate = tf.where(global_step < start_global_step, learning_rate,
@@ -174,6 +258,9 @@ def _detection_loss(cls_outputs, box_outputs, labels, params):
   cls_loss = tf.add_n(cls_losses)
   box_loss = tf.add_n(box_losses)
   total_loss = cls_loss + params['box_loss_weight'] * box_loss
+  total_loss += _WEIGHT_DECAY * tf.add_n(
+      [tf.nn.l2_loss(v) for v in tf.trainable_variables()
+       if 'batch_normalization' not in v.name])
   return total_loss, cls_loss, box_loss
 
 
@@ -240,10 +327,12 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
     scaffold_fn = None
 
   # Set up training loss and learning rate.
+  _update_learning_rate_schedule_parameters(params)
   global_step = tf.train.get_global_step()
   learning_rate = _learning_rate_schedule(
       params['learning_rate'], params['lr_warmup_init'],
-      params['lr_warmup_step'], params['lr_drop_step'], global_step)
+      params['lr_warmup_step'], params['first_lr_drop_step'],
+      params['second_lr_drop_step'], global_step)
   # cls_loss and box_loss are for logging. only total_loss is optimized.
   total_loss, cls_loss, box_loss = _detection_loss(cls_outputs, box_outputs,
                                                    labels, params)
@@ -358,8 +447,9 @@ def default_hparams():
       momentum=0.9,
       learning_rate=0.08,
       lr_warmup_init=0.1,
-      lr_warmup_step=2000,
-      lr_drop_step=15000,
+      lr_warmup_epoch=1.0,
+      first_lr_drop_epoch=8.0,
+      second_lr_drop_epoch=11.0,
       # classification loss
       alpha=0.25,
       gamma=1.5,

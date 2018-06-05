@@ -26,13 +26,14 @@ import (
 func testUpWorkflow(t *testing.T, libs *testLibs, expectedGCEAction, expectedTPUAction string, aclServiceAccount bool) {
 	t.Helper()
 	c := upCmd{
-		cfg:         libs.cfg,
-		tpu:         libs.tpu,
-		gce:         libs.gce,
-		rmg:         libs.rmg,
-		cli:         libs.cli,
-		machineType: "n1-standard-2",
-		diskSizeGb:  250,
+		cfg:              libs.cfg,
+		tpu:              libs.tpu,
+		gce:              libs.gce,
+		rmg:              libs.rmg,
+		cli:              libs.cli,
+		machineType:      "n1-standard-2",
+		diskSizeGb:       250,
+		skipConfirmation: true,
 	}
 
 	exit := c.Execute(context.Background(), nil)
@@ -84,6 +85,26 @@ func TestUpStarting(t *testing.T) {
 	testUpWorkflow(t, libs, "START", "CREATE-1.6", true)
 }
 
+func TestUpAPIDisabled(t *testing.T) {
+	libs := newTestLibs()
+	libs.tpu.apiDisabled = true
+	libs.tpu.postCreateInstance = &tpu.Node{State: "READY", ServiceAccount: "compute-123@gserviceaccounts.com"}
+	libs.tpu.SetTfVersions("1.6", "1.7")
+	testUpWorkflow(t, libs, "CREATE", "CREATE-1.7", true)
+	if libs.gce.createRequest == nil {
+		t.Fatalf("createRequest was nil")
+	}
+	if libs.gce.createRequest.ImageFamily != "tf-1-7" {
+		t.Errorf("createRequest.ImageFamily = %q, want: %q", libs.gce.createRequest.ImageFamily, "tf-1-7")
+	}
+	if libs.gce.createRequest.MachineType != "n1-standard-2" {
+		t.Errorf("createRequest.MachineType = %q, want: %q", libs.gce.createRequest.MachineType, "n1-standard-2")
+	}
+	if libs.gce.createRequest.DiskSizeGb != 250 {
+		t.Errorf("createRequest.ImageFamily = %d, want: %d", libs.gce.createRequest.DiskSizeGb, 250)
+	}
+}
+
 func TestUpMissingGcloud(t *testing.T) {
 	libs := newTestLibs()
 	libs.cli.isInstalled = false
@@ -105,11 +126,12 @@ func TestUpNoAvailableTfVersions(t *testing.T) {
 	libs.tpu.postCreateInstance = &tpu.Node{State: "READY", ServiceAccount: "compute-123@gserviceaccounts.com"}
 	libs.tpu.SetTfVersions("nightly")
 	c := upCmd{
-		cfg: libs.cfg,
-		tpu: libs.tpu,
-		gce: libs.gce,
-		rmg: libs.rmg,
-		cli: libs.cli,
+		cfg:              libs.cfg,
+		tpu:              libs.tpu,
+		gce:              libs.gce,
+		rmg:              libs.rmg,
+		cli:              libs.cli,
+		skipConfirmation: true,
 	}
 	exit := c.Execute(context.Background(), nil)
 	if exit != 1 {
@@ -122,12 +144,13 @@ func TestUpNoAvailableTfVersionsSetViaFlag(t *testing.T) {
 	libs.tpu.postCreateInstance = &tpu.Node{State: "READY", ServiceAccount: "compute-123@gserviceaccounts.com"}
 	libs.tpu.SetTfVersions("nightly")
 	c := upCmd{
-		cfg:       libs.cfg,
-		tpu:       libs.tpu,
-		gce:       libs.gce,
-		rmg:       libs.rmg,
-		cli:       libs.cli,
-		tfVersion: "nightly",
+		cfg:              libs.cfg,
+		tpu:              libs.tpu,
+		gce:              libs.gce,
+		rmg:              libs.rmg,
+		cli:              libs.cli,
+		tfVersion:        "nightly",
+		skipConfirmation: true,
 	}
 	exit := c.Execute(context.Background(), nil)
 	if exit != 0 {

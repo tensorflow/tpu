@@ -32,6 +32,35 @@ import (
 
 const tpuServiceAPIName = "tpu.googleapis.com"
 
+type tpuLongRunningOperation struct {
+	cp *TPUCP
+	op *tpu.Operation
+}
+
+func (o *tpuLongRunningOperation) LoopUntilComplete() error {
+	if o.op.Error != nil {
+		return errors.New(o.op.Error.Message)
+	}
+	for i := 0; i < tpuMaxLoops; i++ {
+		time.Sleep(5 * time.Second) // Poll every 5 seconds
+		op, err := o.cp.operations.Get(o.op.Name).Do()
+		if err != nil {
+			return err
+		}
+		if op.Error != nil {
+			return fmt.Errorf("error retrieving TPU operation: %#v, op.Error: %#v", op, op.Error)
+		}
+		if op.Done {
+			return nil
+		}
+		// Every 20 seconds
+		if i%4 == 0 {
+			log.Println("TPU operation still running...")
+		}
+	}
+	return fmt.Errorf("TPU operation still pending after 15 minutes: %q", o.op.Name)
+}
+
 // TPUCP contains an abstract representation of the Cloud TPU control plane.
 //
 // It is intentionally small so that other packages in the ctpu tool can be effectively
@@ -91,34 +120,45 @@ func (i *TPUInstance) NodeName() string {
 	return parts[len(parts)-1]
 }
 
-// Instance retrieves the Instance from the TPU control plane.
-func (g *TPUCP) Instance() (*TPUInstance, error) {
+// OptionallyRetrieveInstance retrieves the Instance from the TPU control plane.
+//
+// If enableAPIIfRequired is false and the TPU API has not been enabled, it returns immediately and does not enable the API.
+func (g *TPUCP) OptionallyRetrieveInstance(enableAPIIfRequired bool) (instance *TPUInstance, apiEnabled bool, err error) {
 	node, err := g.nodes.Get(g.nodeName()).Do()
 	googError, ok := err.(*googleapi.Error)
 	if ok && googError != nil && googError.Code == 404 {
-		return nil, nil
+		return nil, true, nil
 	}
 	if ok && googError != nil && googError.Code == 403 {
 		// Check to see if the TPU API hasn't yet been enabled
 		enabled, err := g.serviceMgmt.checkIfEnabled(tpuServiceAPIName)
 		if err != nil {
-			return nil, fmt.Errorf("error encountered while determining if API has been enabled: %#v, underlying error returned from the TPU API: %#v", err, googError)
+			return nil, false, fmt.Errorf("error encountered while determining if API has been enabled: %#v, underlying error returned from the TPU API: %#v", err, googError)
 		}
 		if !enabled {
+			if !enableAPIIfRequired {
+				return nil, false, nil
+			}
 			log.Printf("Enabling the TPU API (this may take a while)...")
 			err = g.serviceMgmt.enableService(tpuServiceAPIName)
 			if err != nil {
-				return nil, err
+				return nil, false, err
 			}
 			log.Printf("Successfully enabled the TPU API.")
 			// Retry getting the instance after enabling the API.
-			return g.Instance()
+			return g.OptionallyRetrieveInstance(enableAPIIfRequired)
 		}
 	}
 	if node == nil {
-		return nil, nil
+		return nil, true, nil
 	}
-	return &TPUInstance{node}, nil
+	return &TPUInstance{node}, true, nil
+}
+
+// Instance retrieves the instance from the TPU control plane.
+func (g *TPUCP) Instance() (*TPUInstance, error) {
+	instance, _, err := g.OptionallyRetrieveInstance(true)
+	return instance, err
 }
 
 // ListInstances lists all TPUs within a zone of the GCP project.
@@ -163,30 +203,6 @@ func (g *TPUCP) ListLocations() ([]*tpu.Location, error) {
 }
 
 const tpuMaxLoops = 180 // 15 minutes in 5 second increments
-
-func (g *TPUCP) loopUntilOperationComplete(operation *tpu.Operation) error {
-	if operation.Error != nil {
-		return errors.New(operation.Error.Message)
-	}
-	for i := 0; i < tpuMaxLoops; i++ {
-		time.Sleep(5 * time.Second) // Poll every 5 seconds
-		op, err := g.operations.Get(operation.Name).Do()
-		if err != nil {
-			return err
-		}
-		if op.Error != nil {
-			return fmt.Errorf("error retrieving TPU operation: %#v, op.Error: %#v", op, op.Error)
-		}
-		if op.Done {
-			return nil
-		}
-		// Every 20 seconds
-		if i%4 == 0 {
-			log.Println("TPU operation still running...")
-		}
-	}
-	return fmt.Errorf("TPU operation still pending after 15 minutes: %q", operation.Name)
-}
 
 func (g *TPUCP) parentPath() string {
 	return fmt.Sprintf("projects/%s/locations/%s", g.config.Project, g.config.Zone)
@@ -235,15 +251,15 @@ func (g *TPUCP) selectCidrBlock(routes []*compute.Route) (string, error) {
 }
 
 // CreateInstance creates the Cloud TPU with an API call to the TPU control plane.
-func (g *TPUCP) CreateInstance(version string) error {
+func (g *TPUCP) CreateInstance(version string) (LongRunningOperation, error) {
 	routes, err := g.compute.Routes.List(g.config.Project).Do()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	cidrBlock, err := g.selectCidrBlock(routes.Items)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	node := tpu.Node{
@@ -257,12 +273,11 @@ func (g *TPUCP) CreateInstance(version string) error {
 	if err != nil {
 		googErr, ok := err.(*googleapi.Error)
 		if ok && googErr.Code == 429 {
-			return fmt.Errorf("TPU quota exceeded on project %q", g.config.Project)
+			return nil, fmt.Errorf("TPU quota exceeded on project %q", g.config.Project)
 		}
-		return err
+		return nil, err
 	}
-
-	return g.loopUntilOperationComplete(op)
+	return &tpuLongRunningOperation{g, op}, nil
 }
 
 // StartInstance starts a previously stopped Cloud TPU with an API call to the TPU control plane.
@@ -280,13 +295,13 @@ func (g *TPUCP) nodeName() string {
 }
 
 // DeleteInstance deletes a previously created Cloud TPU with an API call to the TPU control plane.
-func (g *TPUCP) DeleteInstance(waitForAsync bool) error {
+func (g *TPUCP) DeleteInstance() (LongRunningOperation, error) {
 	op, err := g.nodes.Delete(g.nodeName()).Do()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if !waitForAsync {
-		return nil
+	if op.Error != nil {
+		return nil, errors.New(op.Error.Message)
 	}
-	return g.loopUntilOperationComplete(op)
+	return &tpuLongRunningOperation{g, op}, nil
 }

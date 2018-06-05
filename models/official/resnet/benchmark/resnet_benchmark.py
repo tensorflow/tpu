@@ -42,17 +42,16 @@ CKPT_PATTERN = r'model\.ckpt-(?P<gs>[0-9]+)\.data'
 
 
 def main(unused_argv):
-    tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
-        FLAGS.tpu,
-        zone=FLAGS.tpu_zone,
-        project=FLAGS.gcp_project)
+  tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
+      FLAGS.tpu,
+      zone=FLAGS.tpu_zone,
+      project=FLAGS.gcp_project)
 
   config = tpu_config.RunConfig(
       cluster=tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
       save_checkpoints_steps=FLAGS.iterations_per_loop,
       keep_checkpoint_max=None,
-      cluster=tpu_cluster_resolver,
       tpu_config=tpu_config.TPUConfig(
           iterations_per_loop=FLAGS.iterations_per_loop,
           num_shards=FLAGS.num_cores,
@@ -70,10 +69,12 @@ def main(unused_argv):
   imagenet_train = imagenet_input.ImageNetInput(
       is_training=True,
       data_dir=FLAGS.data_dir,
+      use_bfloat16=True,
       transpose_input=FLAGS.transpose_input)
   imagenet_eval = imagenet_input.ImageNetInput(
       is_training=False,
       data_dir=FLAGS.data_dir,
+      use_bfloat16=True,
       transpose_input=FLAGS.transpose_input)
 
   if FLAGS.mode == 'train':

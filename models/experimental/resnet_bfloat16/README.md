@@ -31,7 +31,7 @@ values):
 
 ```
 python resnet_main.py \
-  --tpu_name=$TPU_NAME \
+  --tpu=$TPU_NAME \
   --data_dir=$DATA_DIR \
   --model_dir=$MODEL_DIR
 ```
@@ -126,3 +126,17 @@ steps per second and images per second are logged during training. Total
 training time excluding evaluation but including the time it takes to compile
 and initialize the graph is also logged and can be explicitly calculated by
 subtracting the start timestamp from the end timestamp on the logs.
+
+### Training using a faster learning rate schedule
+
+The `--use_fast_lr` option will allow the ResNet model to use a much more
+aggressive learning rate schedule first introduced by [fast.ai](http://www.fast.ai/).
+
+Using this learning rate schedule requires another copy of the ImageNet
+data set that is resized to 160 pixels on the long edge to be passed into the
+`--data_dir_small` command-line flag.
+
+To prepare the small version of the ImageNet data, you will need to download the
+raw ImageNet data and resize the images to fit a 160x160 bounding box using a
+third party application before running the [the ImageNet to TFRecord conversion
+script](https://github.com/tensorflow/tpu/blob/master/tools/datasets/imagenet_to_gcs.py).
