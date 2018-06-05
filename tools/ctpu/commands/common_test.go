@@ -49,12 +49,25 @@ func newTestLibs() *testLibs {
 	}
 }
 
+type testLongRunningOperation struct {
+	err error
+}
+
+func (t *testLongRunningOperation) LoopUntilComplete() error {
+	if t.err != nil {
+		return t.err
+	}
+	return nil
+}
+
 type testGCECP struct {
 	instance            *compute.Instance
 	OperationsPerformed []string
 	instances           []compute.Instance
 
 	createRequest *ctrl.GCECreateRequest
+
+	apiDisabled bool
 }
 
 // Instance gets an instance associated with this control plane mock.
@@ -63,6 +76,17 @@ func (cp *testGCECP) Instance() (*ctrl.GCEInstance, error) {
 		return &ctrl.GCEInstance{cp.instance}, nil
 	}
 	return nil, nil
+}
+
+func (cp *testGCECP) OptionallyRetrieveInstance(enableAPIIfRequired bool) (*ctrl.GCEInstance, bool, error) {
+	if !enableAPIIfRequired && cp.apiDisabled {
+		return nil, false, nil
+	}
+	cp.apiDisabled = false
+	if cp.instance != nil {
+		return &ctrl.GCEInstance{cp.instance}, true, nil
+	}
+	return nil, true, nil
 }
 
 // ListInstances lists all GCE instances in a given zone.
@@ -75,30 +99,30 @@ func (cp *testGCECP) ListInstances() ([]*ctrl.GCEInstance, error) {
 }
 
 // CreateInstance simulates creating the instance associated with this control plane mock.
-func (cp *testGCECP) CreateInstance(req *ctrl.GCECreateRequest) error {
+func (cp *testGCECP) CreateInstance(req *ctrl.GCECreateRequest) (ctrl.LongRunningOperation, error) {
 	if cp.createRequest == nil {
 		cp.createRequest = req
 	}
 	cp.OperationsPerformed = append(cp.OperationsPerformed, "CREATE")
-	return nil
+	return &testLongRunningOperation{}, nil
 }
 
 // StartInstance simulates starting the instance.
-func (cp *testGCECP) StartInstance() error {
+func (cp *testGCECP) StartInstance() (ctrl.LongRunningOperation, error) {
 	cp.OperationsPerformed = append(cp.OperationsPerformed, "START")
-	return nil
+	return &testLongRunningOperation{}, nil
 }
 
 // StopInstance simulates stopping the instance.
-func (cp *testGCECP) StopInstance(bool) error {
+func (cp *testGCECP) StopInstance() (ctrl.LongRunningOperation, error) {
 	cp.OperationsPerformed = append(cp.OperationsPerformed, "STOP")
-	return nil
+	return &testLongRunningOperation{}, nil
 }
 
 // DeleteInstance simulates deleting the instance.
-func (cp *testGCECP) DeleteInstance(bool) error {
+func (cp *testGCECP) DeleteInstance() (ctrl.LongRunningOperation, error) {
 	cp.OperationsPerformed = append(cp.OperationsPerformed, "DELETE")
-	return nil
+	return &testLongRunningOperation{}, nil
 }
 
 type testTPUCP struct {
@@ -109,6 +133,8 @@ type testTPUCP struct {
 
 	tfVersions   []*tpu.TensorFlowVersion
 	tpuLocations []*tpu.Location
+
+	apiDisabled bool
 }
 
 func (cp *testTPUCP) Instance() (*ctrl.TPUInstance, error) {
@@ -116,6 +142,17 @@ func (cp *testTPUCP) Instance() (*ctrl.TPUInstance, error) {
 		return &ctrl.TPUInstance{cp.instance}, nil
 	}
 	return nil, nil
+}
+
+func (cp *testTPUCP) OptionallyRetrieveInstance(enableAPIIfRequired bool) (*ctrl.TPUInstance, bool, error) {
+	if !enableAPIIfRequired && cp.apiDisabled {
+		return nil, false, nil
+	}
+	cp.apiDisabled = false
+	if cp.instance != nil {
+		return &ctrl.TPUInstance{cp.instance}, true, nil
+	}
+	return nil, true, nil
 }
 
 func (cp *testTPUCP) ListInstances() ([]*ctrl.TPUInstance, error) {
@@ -134,16 +171,16 @@ func (cp *testTPUCP) ListLocations() ([]*tpu.Location, error) {
 	return cp.tpuLocations, nil
 }
 
-func (cp *testTPUCP) CreateInstance(version string) error {
+func (cp *testTPUCP) CreateInstance(version string) (ctrl.LongRunningOperation, error) {
 	cp.OperationsPerformed = append(cp.OperationsPerformed, fmt.Sprintf("CREATE-%s", version))
 	cp.instance = cp.postCreateInstance
 	cp.postCreateInstance = nil
-	return nil
+	return &testLongRunningOperation{}, nil
 }
 
-func (cp *testTPUCP) DeleteInstance(bool) error {
+func (cp *testTPUCP) DeleteInstance() (ctrl.LongRunningOperation, error) {
 	cp.OperationsPerformed = append(cp.OperationsPerformed, "DELETE")
-	return nil
+	return &testLongRunningOperation{}, nil
 }
 
 func (cp *testTPUCP) SetTfVersions(versions ...string) {

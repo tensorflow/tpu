@@ -26,11 +26,23 @@ import (
 	"google.golang.org/api/tpu/v1alpha1"
 )
 
+type restartTestLRO struct {
+	wait bool
+}
+
+func (r *restartTestLRO) LoopUntilComplete() error {
+	r.wait = true
+	return nil
+}
+
 type restartTestTPUCP struct {
 	t *testing.T
 
 	instance    *ctrl.TPUInstance
 	instanceErr error
+
+	createLRO *restartTestLRO
+	deleteLRO *restartTestLRO
 
 	calledDelete bool
 	calledCreate bool
@@ -43,26 +55,23 @@ func (r *restartTestTPUCP) Instance() (*ctrl.TPUInstance, error) {
 	return r.instance, r.instanceErr
 }
 
-func (r *restartTestTPUCP) CreateInstance(version string) error {
+func (r *restartTestTPUCP) CreateInstance(version string) (ctrl.LongRunningOperation, error) {
 	r.t.Helper()
 	if r.calledCreate {
 		r.t.Errorf("Already called CreateInstance")
 	}
 	r.calledCreate = true
 	r.createArg = version
-	return r.createErr
+	return r.createLRO, r.createErr
 }
 
-func (r *restartTestTPUCP) DeleteInstance(wait bool) error {
+func (r *restartTestTPUCP) DeleteInstance() (ctrl.LongRunningOperation, error) {
 	r.t.Helper()
 	if r.calledDelete {
 		r.t.Errorf("Already called DeleteInstance")
 	}
 	r.calledDelete = true
-	if !wait {
-		r.t.Errorf("Wait was not set when calling DeleteInstance")
-	}
-	return r.deleteErr
+	return r.deleteLRO, r.deleteErr
 }
 
 func TestRestartTPU(t *testing.T) {
@@ -123,9 +132,13 @@ func TestRestartTPU(t *testing.T) {
 		if tt.node != nil {
 			instance = &ctrl.TPUInstance{tt.node}
 		}
+		createLRO := &restartTestLRO{}
+		deleteLRO := &restartTestLRO{}
 		cp := &restartTestTPUCP{
-			t:        t,
-			instance: instance,
+			t:         t,
+			instance:  instance,
+			createLRO: createLRO,
+			deleteLRO: deleteLRO,
 		}
 		cmd := &restartCmd{tt.cfg, cp, true}
 		resp := cmd.Execute(context.Background(), nil, nil)
@@ -144,6 +157,12 @@ func TestRestartTPU(t *testing.T) {
 		}
 		if shouldCallCP && cp.createArg != tt.node.TensorflowVersion {
 			t.Errorf("cmd.Execute(%q).createArg = %v, want: %v", tt.name, cp.createArg, tt.node.TensorflowVersion)
+		}
+		if shouldCallCP && !createLRO.wait {
+			t.Errorf("cmd.Execute(%q).createLRO.wait = %v, want: true", tt.name, createLRO.wait)
+		}
+		if shouldCallCP && !deleteLRO.wait {
+			t.Errorf("cmd.Execute(%q).deleteLRO.wait = %v, want: true", tt.name, deleteLRO.wait)
 		}
 	}
 }

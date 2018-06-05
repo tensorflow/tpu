@@ -30,6 +30,7 @@ func testPauseWorkflow(t *testing.T, libs *testLibs, expectedGCEAction, expected
 		gce: libs.gce,
 		tpu: libs.tpu,
 	}
+	c.tpuCmd.skipConfirmation = true
 
 	exit := c.Execute(context.Background(), nil)
 	if exit != 0 {

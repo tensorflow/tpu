@@ -446,7 +446,6 @@ def class_net(images, level, num_classes, num_anchors=6, is_training_bn=False):
         kernel_size=(3, 3),
         bias_initializer=tf.zeros_initializer(),
         kernel_initializer=tf.random_normal_initializer(stddev=0.01),
-        kernel_regularizer=tf.contrib.layers.l2_regularizer(_WEIGHT_DECAY),
         activation=None,
         padding='same',
         name='class-%d' % i)
@@ -462,7 +461,6 @@ def class_net(images, level, num_classes, num_anchors=6, is_training_bn=False):
       kernel_size=(3, 3),
       bias_initializer=tf.constant_initializer(-np.log((1 - 0.01) / 0.01)),
       kernel_initializer=tf.random_normal_initializer(stddev=0.01),
-      kernel_regularizer=tf.contrib.layers.l2_regularizer(_WEIGHT_DECAY),
       padding='same',
       name='class-predict')
 
@@ -479,7 +477,6 @@ def box_net(images, level, num_anchors=6, is_training_bn=False):
         activation=None,
         bias_initializer=tf.zeros_initializer(),
         kernel_initializer=tf.random_normal_initializer(stddev=0.01),
-        kernel_regularizer=tf.contrib.layers.l2_regularizer(_WEIGHT_DECAY),
         padding='same',
         name='box-%d' % i)
     # The convolution layers in the box net are shared among all levels, but
@@ -494,7 +491,6 @@ def box_net(images, level, num_anchors=6, is_training_bn=False):
       kernel_size=(3, 3),
       bias_initializer=tf.zeros_initializer(),
       kernel_initializer=tf.random_normal_initializer(stddev=0.01),
-      kernel_regularizer=tf.contrib.layers.l2_regularizer(_WEIGHT_DECAY),
       padding='same',
       name='box-predict')
 

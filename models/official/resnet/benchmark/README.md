@@ -12,7 +12,7 @@ generate checkpoints at every epoch and evaluate in a separate job.
 Train the model (roughly 90 epochs, 1 checkpoint per epoch):
 ```
 python resnet_benchmark.py \
-  --tpu_name=[TPU NAME] \
+  --tpu=[TPU NAME] \
   --mode=train \
   --data_dir=[PATH TO DATA] \
   --model_dir=[PATH TO MODEL] \
@@ -24,7 +24,7 @@ python resnet_benchmark.py \
 Evaluate the model (run after train completes):
 ```
 python resnet_benchmark.py \
-  --tpu_name=[TPU NAME] \
+  --tpu=[TPU NAME] \
   --mode=eval \
   --data_dir=[PATH TO DATA] \
   --model_dir=[PATH TO MODEL]

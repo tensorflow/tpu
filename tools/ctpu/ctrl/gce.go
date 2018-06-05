@@ -31,6 +31,36 @@ import (
 
 const gceServiceAPIName = "compute.googleapis.com"
 
+// gceLongRunningOperation is returned when a control plane operation might take a while to complete.
+type gceLongRunningOperation struct {
+	cp *GCECP
+	op *compute.Operation
+}
+
+func (o *gceLongRunningOperation) LoopUntilComplete() error {
+	if o.op.Error != nil {
+		return errors.New(o.op.Error.Errors[0].Message)
+	}
+	for i := 0; i < gceMaxLoops; i++ {
+		time.Sleep(5 * time.Second) // Poll every 5 seconds
+		op, err := o.cp.computeService.ZoneOperations.Get(o.cp.config.Project, o.cp.config.Zone, o.op.Name).Do()
+		if err != nil {
+			return err
+		}
+		if op.Error != nil {
+			return fmt.Errorf("error retrieving GCE zone operation: %#v", op)
+		}
+		if op.Status == "DONE" {
+			return nil
+		}
+		// Every 30 seconds
+		if i%6 == 0 {
+			log.Println("GCE operation still running...")
+		}
+	}
+	return fmt.Errorf("GCE operation still pending after 10 minutes: %q", o.op.Name)
+}
+
 // GCECP contains an abstract representation of the GCE control plane.
 //
 // It is intentionally small so that other packages in the ctpu tool can be effectively
@@ -75,34 +105,45 @@ func (i *GCEInstance) IsFlockVM() bool {
 	return ok
 }
 
-// Instance retrieves the Instance from the GCE control plane.
-func (g *GCECP) Instance() (*GCEInstance, error) {
+// OptionallyRetrieveInstance retrieves the instance from the GCE control plane.
+//
+// If enableAPIIfRequired is false and the GCE API has not been enabled, it returns immediately and does not enable the API.
+func (g *GCECP) OptionallyRetrieveInstance(enableAPIIfRequired bool) (gceInstance *GCEInstance, apiEnabled bool, err error) {
 	instance, err := g.computeService.Instances.Get(g.config.Project, g.config.Zone, g.config.FlockName).Do()
 	googError, ok := err.(*googleapi.Error)
 	if ok && googError != nil && googError.Code == 404 {
-		return nil, nil
+		return nil, true, nil
 	}
 	if ok && googError != nil && googError.Code == 403 {
 		// Check to see if the GCE API hasn't yet been enabled.
 		enabled, err := g.serviceMgmt.checkIfEnabled(gceServiceAPIName)
 		if err != nil {
-			return nil, fmt.Errorf("error encountered while determining if API has been enabled: %#v, underlying error returned from the GCE API: %#v", err, googError)
+			return nil, false, fmt.Errorf("error encountered while determining if API has been enabled: %#v, underlying error returned from the GCE API: %#v", err, googError)
 		}
 		if !enabled {
+			if !enableAPIIfRequired {
+				return nil, false, nil
+			}
 			log.Printf("Enabling the GCE API (this may take a while)...")
 			err = g.serviceMgmt.enableService(gceServiceAPIName)
 			if err != nil {
-				return nil, err
+				return nil, false, err
 			}
 			log.Printf("Successfully enabled the GCE API.")
 			// Retry getting the instance after enabling the API.
-			return g.Instance()
+			return g.OptionallyRetrieveInstance(enableAPIIfRequired)
 		}
 	}
 	if instance == nil {
-		return nil, nil
+		return nil, true, nil
 	}
-	return &GCEInstance{instance}, err
+	return &GCEInstance{instance}, true, err
+}
+
+// Instance retrieves the Instance from the GCE control plane.
+func (g *GCECP) Instance() (*GCEInstance, error) {
+	instance, _, err := g.OptionallyRetrieveInstance(true)
+	return instance, err
 }
 
 // ListInstances lists all GCE instances in a given zone.
@@ -124,30 +165,6 @@ func (g *GCECP) ListInstances() ([]*GCEInstance, error) {
 }
 
 const gceMaxLoops = 120 // 10 minutes in 5 second increments
-
-func (g *GCECP) loopUntilOperationComplete(operation *compute.Operation) error {
-	if operation.Error != nil {
-		return errors.New(operation.Error.Errors[0].Message)
-	}
-	for i := 0; i < gceMaxLoops; i++ {
-		time.Sleep(5 * time.Second) // Poll every 5 seconds
-		op, err := g.computeService.ZoneOperations.Get(g.config.Project, g.config.Zone, operation.Name).Do()
-		if err != nil {
-			return err
-		}
-		if op.Error != nil {
-			return fmt.Errorf("error retrieving GCE zone operation: %#v", op)
-		}
-		if op.Status == "DONE" {
-			return nil
-		}
-		// Every 30 seconds
-		if i%6 == 0 {
-			log.Println("GCE operation still running...")
-		}
-	}
-	return fmt.Errorf("GCE operation still pending after 10 minutes: %q", operation.Name)
-}
 
 // GCECreateRequest captures all the configurable parameters involved in creating the GCE VM.
 type GCECreateRequest struct {
@@ -174,15 +191,15 @@ type GCECreateRequest struct {
 var conflictRegex = regexp.MustCompile("The resource 'projects/[^/]+/zones/([^/]+)/instances/([^']+)' already exists")
 
 // CreateInstance creates the GCE instance with an API call to the GCE control plane.
-func (g *GCECP) CreateInstance(request *GCECreateRequest) (err error) {
+func (g *GCECP) CreateInstance(request *GCECreateRequest) (lro LongRunningOperation, err error) {
 	if request.ImageName == "" && request.ImageFamily != "" {
 		request.ImageName, err = g.resolveImageFamily(request.ImageFamily)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 	if request.ImageName == "" {
-		return fmt.Errorf("could not create GCE Instance without a base image")
+		return nil, fmt.Errorf("could not create GCE Instance without a base image")
 	}
 	instance := g.makeCreateInstance(request)
 	op, err := g.computeService.Instances.Insert(g.config.Project, g.config.Zone, instance).Do()
@@ -192,45 +209,51 @@ func (g *GCECP) CreateInstance(request *GCECreateRequest) (err error) {
 			// Conflict, another GCE VM already exists.
 			submatches := conflictRegex.FindStringSubmatch(googErr.Message)
 			if len(submatches) == 3 && submatches[2] == g.config.FlockName && submatches[1] != g.config.Zone {
-				return fmt.Errorf("while trying to create a GCE VM in zone %q, ctpu discovered another GCE VM of the same name (%q) has already been created in another zone (%q). Either use a new name (using the --name global flag), or use the other zone", g.config.Zone, g.config.FlockName, submatches[1])
+				return nil, fmt.Errorf("while trying to create a GCE VM in zone %q, ctpu discovered another GCE VM of the same name (%q) has already been created in another zone (%q). Either use a new name (using the --name global flag), or use the other zone", g.config.Zone, g.config.FlockName, submatches[1])
 			}
 		}
-		return err
+		return nil, err
 	}
-	return g.loopUntilOperationComplete(op)
+	if op.Error != nil {
+		return nil, errors.New(op.Error.Errors[0].Message)
+	}
+	return &gceLongRunningOperation{g, op}, nil
 }
 
 // StartInstance starts a previously stopped GCE instance with an API call to the GCE control plane.
-func (g *GCECP) StartInstance() error {
+func (g *GCECP) StartInstance() (LongRunningOperation, error) {
 	op, err := g.computeService.Instances.Start(g.config.Project, g.config.Zone, g.config.FlockName).Do()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return g.loopUntilOperationComplete(op)
+	if op.Error != nil {
+		return nil, errors.New(op.Error.Errors[0].Message)
+	}
+	return &gceLongRunningOperation{g, op}, nil
 }
 
 // StopInstance stops a previously started GCE instance with an API call to the GCE control plane.
-func (g *GCECP) StopInstance(waitForAsync bool) error {
+func (g *GCECP) StopInstance() (LongRunningOperation, error) {
 	op, err := g.computeService.Instances.Stop(g.config.Project, g.config.Zone, g.config.FlockName).Do()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if !waitForAsync {
-		return nil
+	if op.Error != nil {
+		return nil, errors.New(op.Error.Errors[0].Message)
 	}
-	return g.loopUntilOperationComplete(op)
+	return &gceLongRunningOperation{g, op}, nil
 }
 
 // DeleteInstance deletes a previously created GCE instance with an API call to the GCE control plane.
-func (g *GCECP) DeleteInstance(waitForAsync bool) error {
+func (g *GCECP) DeleteInstance() (LongRunningOperation, error) {
 	op, err := g.computeService.Instances.Delete(g.config.Project, g.config.Zone, g.config.FlockName).Do()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if !waitForAsync {
-		return nil
+	if op.Error != nil {
+		return nil, errors.New(op.Error.Errors[0].Message)
 	}
-	return g.loopUntilOperationComplete(op)
+	return &gceLongRunningOperation{g, op}, nil
 }
 
 func (g *GCECP) resolveImageFamily(family string) (string, error) {

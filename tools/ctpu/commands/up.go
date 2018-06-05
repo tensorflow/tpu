@@ -22,6 +22,7 @@ import (
 
 	"context"
 	"flag"
+	"github.com/fatih/color"
 	"github.com/google/subcommands"
 	"github.com/tensorflow/tpu/tools/ctpu/config"
 	"github.com/tensorflow/tpu/tools/ctpu/ctrl"
@@ -33,8 +34,10 @@ import (
 type UpTPUCP interface {
 	// Instance retrieves the instance from the control plane (if available).
 	Instance() (*ctrl.TPUInstance, error)
+	// OptionallyRetrieveInstance retrieves the instance, but can optionally not enable the TPU API.
+	OptionallyRetrieveInstance(bool) (*ctrl.TPUInstance, bool, error)
 	// CreateInstance requests the creation of the instance.
-	CreateInstance(version string) error
+	CreateInstance(version string) (ctrl.LongRunningOperation, error)
 	// ListVersions retrieves the list of available TensorFlow versions.
 	ListVersions() ([]*tpu.TensorFlowVersion, error)
 }
@@ -43,10 +46,12 @@ type UpTPUCP interface {
 type UpGCECP interface {
 	// Instance retrieves the instance from the control plane (if available).
 	Instance() (*ctrl.GCEInstance, error)
+	// OptionallyRetrieveInstance retrieves the instance, but can optionally not enable the TPU API.
+	OptionallyRetrieveInstance(bool) (*ctrl.GCEInstance, bool, error)
 	// CreateInstance requests the creation of the instance.
-	CreateInstance(*ctrl.GCECreateRequest) error
+	CreateInstance(*ctrl.GCECreateRequest) (ctrl.LongRunningOperation, error)
 	// StartInstance requests the starting of the instance.
-	StartInstance() error
+	StartInstance() (ctrl.LongRunningOperation, error)
 }
 
 // UpResourceManagementCP abstracts the control plane interface required for the up command.
@@ -72,14 +77,16 @@ type upCmd struct {
 	rmg UpResourceManagementCP
 	cli UpGcloudCLI
 
-	dryRun       bool
-	vmOnly       bool
-	forwardPorts bool
-	forwardAgent bool
-	tfVersion    string
-	gceImage     string
-	diskSizeGb   int64
-	machineType  string
+	skipConfirmation bool
+	printWelcome     bool
+	dryRun           bool
+	vmOnly           bool
+	forwardPorts     bool
+	forwardAgent     bool
+	tfVersion        string
+	gceImage         string
+	diskSizeGb       int64
+	machineType      string
 }
 
 // UpCommand creates the up command.
@@ -113,6 +120,8 @@ func (c *upCmd) SetFlags(f *flag.FlagSet) {
 		"Override the automatically chosen GCE Image. Use this flag when you're using your own custom images instead of the provided ones with TensorFlow pre-installed.")
 	f.Int64Var(&c.diskSizeGb, "disk-size-gb", 250, "Configures the root volume size of your GCE VM.")
 	f.StringVar(&c.machineType, "machine-type", "n1-standard-2", "Configures the size of your GCE VM.")
+	f.BoolVar(&c.skipConfirmation, "noconf", false, "Skip confirmation when running the up subcommand.")
+	f.BoolVar(&c.printWelcome, "print-welcome", false, "Always print the welcome message.")
 }
 
 func (upCmd) Synopsis() string {
@@ -120,7 +129,7 @@ func (upCmd) Synopsis() string {
 }
 
 func (upCmd) Usage() string {
-	return `ctpu up [--dry-run]
+	return `ctpu up [--noconf] [--dry-run]
 `
 }
 
@@ -139,6 +148,22 @@ func (c *upCmd) gceImageFamily() (string, error) {
 		return "", fmt.Errorf("invalid tensorflow version %q (non-empty modifier); please set the --gce-image flag", c.tfVersion)
 	}
 	return fmt.Sprintf("tf-%d-%d", parsed.Major, parsed.Minor), nil
+}
+
+func (upCmd) printFirstTimeMessages() {
+	c := color.New(color.Bold, color.Underline)
+	fmt.Printf("\n         ")
+	c.Println("Welcome to ctpu!")
+	fmt.Printf(`
+After confirming the configuration looks correct, ctpu will enable the
+necessary service APIs, start a Cloud TPU with the latest released TensorFlow
+version, and start a Compute Engine VM with a compatible version of TensorFlow
+pre-installed. When everything is ready, ctpu will automatically open an ssh
+connection to your new VM and port-forward commonly used ports. For more
+details, see the documentation at:
+      https://github.com/tensorflow/tpu/tools/ctpu
+
+`)
 }
 
 func (c *upCmd) upVM() error {
@@ -163,7 +188,12 @@ func (c *upCmd) upVM() error {
 				MachineType:       c.machineType,
 				DiskSizeGb:        c.diskSizeGb,
 			}
-			err = c.gce.CreateInstance(req)
+			op, err := c.gce.CreateInstance(req)
+			if err != nil {
+				log.Print(err)
+				return err
+			}
+			err = op.LoopUntilComplete()
 			if err != nil {
 				log.Print(err)
 				return err
@@ -178,11 +208,16 @@ func (c *upCmd) upVM() error {
 		if !vm.IsRunning() {
 			log.Printf("Starting GCE VM %s...\n", c.cfg.FlockName)
 			if !c.dryRun {
-				err = c.gce.StartInstance()
-			}
-			if err != nil {
-				log.Print(err)
-				return err
+				op, err := c.gce.StartInstance()
+				if err != nil {
+					log.Print(err)
+					return err
+				}
+				err = op.LoopUntilComplete()
+				if err != nil {
+					log.Print(err)
+					return err
+				}
 			}
 			log.Printf("Started GCE VM %s!\n", c.cfg.FlockName)
 		} else {
@@ -201,9 +236,14 @@ func (c *upCmd) upTPU() (*ctrl.TPUInstance, error) {
 	if tpu == nil {
 		log.Printf("Creating TPU %s (this may take a few minutes)...\n", c.cfg.FlockName)
 		if !c.dryRun {
-			err = c.tpu.CreateInstance(c.tfVersion)
+			op, err := c.tpu.CreateInstance(c.tfVersion)
 			if err != nil {
-				log.Printf("%v", err)
+				log.Print(err)
+				return nil, err
+			}
+			err = op.LoopUntilComplete()
+			if err != nil {
+				log.Print(err)
 				return nil, err
 			}
 		}
@@ -266,25 +306,7 @@ func (c *upCmd) ConfigureTFVersion() error {
 	return fmt.Errorf("%q TensorFlow version not available; to see available versions, execute ctpu tf-versions", c.tfVersion)
 }
 
-func (c *upCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	err := c.cfg.Validate()
-	if err != nil {
-		log.Print(err)
-		return subcommands.ExitFailure
-	}
-
-	if !c.cli.IsGcloudInstalled() {
-		c.cli.PrintInstallInstructions()
-		return subcommands.ExitFailure
-	}
-
-	// TF Version check.
-	err = c.ConfigureTFVersion()
-	if err != nil {
-		log.Print(err)
-		return subcommands.ExitFailure
-	}
-
+func (c *upCmd) launchInstances(ctx context.Context) (*ctrl.TPUInstance, error) {
 	var tpu *ctrl.TPUInstance
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -300,6 +322,91 @@ func (c *upCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...interf
 	})
 
 	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+	return tpu, nil
+}
+
+func (c *upCmd) confirmExecution(tpuAPIEnabled bool) (bool, error) {
+	if !tpuAPIEnabled || c.printWelcome {
+		c.printFirstTimeMessages()
+	}
+	tfVersion := c.tfVersion
+	if !tpuAPIEnabled && tfVersion == "" {
+		tfVersion = "<set after TPU API enabled>"
+	}
+	fmt.Printf(`ctpu will use the following configuration values:
+	Name:                 %s
+	Zone:                 %s
+	GCP Project:          %s
+	TensorFlow Version:   %s
+`, c.cfg.FlockName, c.cfg.Zone, c.cfg.Project, tfVersion)
+	return askForConfirmation("OK to create your Cloud TPU resources with the above configuration?")
+}
+
+func (c *upCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	err := c.cfg.Validate()
+	if err != nil {
+		log.Print(err)
+		return subcommands.ExitFailure
+	}
+
+	if !c.cli.IsGcloudInstalled() {
+		c.cli.PrintInstallInstructions()
+		return subcommands.ExitFailure
+	}
+
+	// Determine if the APIs have been enabled and/or if there are instances running
+	tpuInstance, tpuEnabled, err := c.tpu.OptionallyRetrieveInstance(false)
+	gceInstance, _, err := c.gce.OptionallyRetrieveInstance(false)
+	alreadyRunning := tpuInstance != nil && tpuInstance.IsRunning() && gceInstance != nil && gceInstance.IsRunning()
+
+	if tpuEnabled {
+		// TF Version check.
+		err = c.ConfigureTFVersion()
+		if err != nil {
+			log.Print(err)
+			return subcommands.ExitFailure
+		}
+	}
+
+	if !alreadyRunning && !c.skipConfirmation {
+		confirmed, err := c.confirmExecution(tpuEnabled)
+		if err != nil {
+			log.Print(err)
+			return subcommands.ExitFailure
+		}
+		if !confirmed {
+			color.Red("Canceling ctpu; no changes have been made.")
+			fmt.Printf(`
+You can override the inferred configuration using flags on the command line (e.g.
+--zone, --project, --name) for a given ctpu execution.
+`)
+			return subcommands.ExitUsageError
+		}
+	}
+
+	if !tpuEnabled {
+		origTFVersion := c.tfVersion
+		// Enable the API by attempting to retrieve the instance.
+		_, err := c.tpu.Instance()
+		if err != nil {
+			log.Print(err)
+			return subcommands.ExitFailure
+		}
+		// TF Version check.
+		err = c.ConfigureTFVersion()
+		if err != nil {
+			log.Print(err)
+			return subcommands.ExitFailure
+		}
+		if origTFVersion == "" {
+			fmt.Printf("Selected TensorFlow version: %q. Launching instances...\n", c.tfVersion)
+		}
+	}
+
+	tpu, err := c.launchInstances(ctx)
+	if err != nil {
 		fmt.Printf("%v\n", err)
 		return subcommands.ExitFailure
 	}

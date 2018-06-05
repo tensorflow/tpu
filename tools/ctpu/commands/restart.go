@@ -31,9 +31,9 @@ type RestartTPUCP interface {
 	// Instance retrieves the instance from the control plane (if available).
 	Instance() (*ctrl.TPUInstance, error)
 	// CreateInstance requests the creation of the instance.
-	CreateInstance(version string) error
+	CreateInstance(version string) (ctrl.LongRunningOperation, error)
 	// DeleteInstance requests the deletion of the instance.
-	DeleteInstance(bool) error
+	DeleteInstance() (ctrl.LongRunningOperation, error)
 }
 
 type restartCmd struct {
@@ -97,9 +97,27 @@ func (r *restartCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...i
 		}
 	}
 	log.Printf("Deleting your Cloud TPU ahead of re-creating it...")
-	r.tpu.DeleteInstance(true)
+	op, err := r.tpu.DeleteInstance()
+	if err != nil {
+		log.Print(err)
+		return subcommands.ExitFailure
+	}
+	err = op.LoopUntilComplete()
+	if err != nil {
+		log.Print(err)
+		return subcommands.ExitFailure
+	}
 	log.Printf("Re-creating your Cloud TPU instance...")
-	r.tpu.CreateInstance(version)
+	op, err = r.tpu.CreateInstance(version)
+	if err != nil {
+		log.Print(err)
+		return subcommands.ExitFailure
+	}
+	err = op.LoopUntilComplete()
+	if err != nil {
+		log.Print(err)
+		return subcommands.ExitFailure
+	}
 	log.Printf("Restart complete!")
 	return subcommands.ExitSuccess
 }

@@ -21,6 +21,7 @@ from __future__ import print_function
 import os
 
 import tensorflow as tf
+import functools
 
 import resnet_preprocessing
 
@@ -42,7 +43,6 @@ def image_serving_input_fn():
       _preprocess_image, image_bytes_list, back_prop=False, dtype=tf.float32)
   return tf.estimator.export.ServingInputReceiver(
       images, {'image_bytes': image_bytes_list})
-
 
 class ImageNetInput(object):
   """Generates ImageNet input_fn for training or evaluation.
@@ -73,7 +73,24 @@ class ImageNetInput(object):
     self.is_training = is_training
     self.use_bfloat16 = use_bfloat16
     self.data_dir = data_dir
+    if self.data_dir == 'null' or self.data_dir == '':
+      self.data_dir = None
     self.transpose_input = transpose_input
+
+  def set_shapes(self, batch_size, images, labels):
+    """Statically set the batch_size dimension."""
+    if self.transpose_input:
+      images.set_shape(images.get_shape().merge_with(
+          tf.TensorShape([None, None, None, batch_size])))
+      labels.set_shape(labels.get_shape().merge_with(
+          tf.TensorShape([batch_size])))
+    else:
+      images.set_shape(images.get_shape().merge_with(
+          tf.TensorShape([batch_size, None, None, None])))
+      labels.set_shape(labels.get_shape().merge_with(
+          tf.TensorShape([batch_size])))
+
+    return images, labels
 
   def dataset_parser(self, value):
     """Parse an ImageNet record from a serialized string Tensor."""
@@ -126,7 +143,8 @@ class ImageNetInput(object):
     Returns:
       A `tf.data.Dataset` object.
     """
-    if self.data_dir == 'null':
+    if self.data_dir == None:
+      tf.logging.info('Using fake input.')
       return self.input_fn_null(params)
 
     # Retrieves the batch size for the current shard. The # of shards is
@@ -166,23 +184,8 @@ class ImageNetInput(object):
           lambda images, labels: (tf.transpose(images, [1, 2, 3, 0]), labels),
           num_parallel_calls=8)
 
-    def set_shapes(images, labels):
-      """Statically set the batch_size dimension."""
-      if self.transpose_input:
-        images.set_shape(images.get_shape().merge_with(
-            tf.TensorShape([None, None, None, batch_size])))
-        labels.set_shape(labels.get_shape().merge_with(
-            tf.TensorShape([batch_size])))
-      else:
-        images.set_shape(images.get_shape().merge_with(
-            tf.TensorShape([batch_size, None, None, None])))
-        labels.set_shape(labels.get_shape().merge_with(
-            tf.TensorShape([batch_size])))
-
-      return images, labels
-
     # Assign static batch size dimension
-    dataset = dataset.map(set_shapes)
+    dataset = dataset.map(functools.partial(self.set_shapes, batch_size))
 
     # Prefetch overlaps in-feed with training
     dataset = dataset.prefetch(tf.contrib.data.AUTOTUNE)
@@ -196,10 +199,12 @@ class ImageNetInput(object):
 
     dataset = dataset.apply(
         tf.contrib.data.batch_and_drop_remainder(batch_size))
+    if self.transpose_input:
+      dataset = dataset.map(
+          lambda images, labels: (tf.transpose(images, [1, 2, 3, 0]), labels),
+          num_parallel_calls=8)
 
-    dataset = dataset.map(
-        lambda images, labels: (tf.transpose(images, [1, 2, 3, 0]), labels),
-        num_parallel_calls=8)
+    dataset = dataset.map(functools.partial(self.set_shapes, batch_size))
 
     dataset = dataset.prefetch(32)     # Prefetch overlaps in-feed with training
     tf.logging.info('Input dataset: %s', str(dataset))

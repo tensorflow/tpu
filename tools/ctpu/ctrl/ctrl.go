@@ -41,6 +41,12 @@ import (
 	"google.golang.org/api/tpu/v1alpha1"
 )
 
+// LongRunningOperation represents asynchronous control plane operations.
+type LongRunningOperation interface {
+	// LoopUntilComplete pools the control plane until the operation is complete.
+	LoopUntilComplete() error
+}
+
 // Ctrl contains the set of Control Plane APIs required to manage Cloud TPU flocks.
 type Ctrl struct {
 	client             *http.Client

@@ -45,7 +45,7 @@ values):
 
 ```
 python amoeba_net.py \
-  --tpu_name=$TPU_NAME \
+  --tpu=$TPU_NAME \
   --data_dir=$DATA_DIR \
   --model_dir=$MODEL_DIR
 ```
@@ -69,7 +69,7 @@ hours using the following command:
 
 ```
 python amoeba_net.py \
-  --tpu_name=$TPU_NAME \
+  --tpu=$TPU_NAME \
   --data_dir=$DATA_DIR \
   --model_dir=$MODEL_DIR \
   --num_cells=6 \
