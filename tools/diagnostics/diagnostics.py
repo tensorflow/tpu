@@ -142,7 +142,7 @@ class Diagnostics(object):
   def _gather_tpu_stats(self):
     """Information about the TPU."""
     output = subprocess.check_output(
-        ['gcloud', 'alpha', 'compute', 'tpu-nodes', 'list',
+        ['gcloud', 'alpha', 'compute', 'tpus', 'list',
          '--zone=%s' % self.gce_vm_zone, '--project=%s' % self.project_id])
 
     tpu_found = False
