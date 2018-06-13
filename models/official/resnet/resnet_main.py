@@ -151,13 +151,16 @@ flags.DEFINE_string(
     'precision', default='bfloat16',
     help=('Precision to use; one of: {bfloat16, float32}'))
 
+flags.DEFINE_float(
+    'base_learning_rate', default=0.1,
+    help=('Base learning rate when train batch size is 256.'))
+
 # Dataset constants
 LABEL_CLASSES = 1000
 NUM_TRAIN_IMAGES = 1281167
 NUM_EVAL_IMAGES = 50000
 
 # Learning hyperparameters
-BASE_LEARNING_RATE = 0.1     # base LR when batch size = 256
 MOMENTUM = 0.9
 WEIGHT_DECAY = 1e-4
 LR_SCHEDULE = [    # (multiplier, epoch to start) tuples
@@ -181,7 +184,7 @@ def learning_rate_schedule(current_epoch):
   Returns:
     A scaled `Tensor` for current learning rate.
   """
-  scaled_lr = BASE_LEARNING_RATE * (FLAGS.train_batch_size / 256.0)
+  scaled_lr = FLAGS.base_learning_rate * (FLAGS.train_batch_size / 256.0)
 
   decay_rate = (scaled_lr * LR_SCHEDULE[0][0] *
                 current_epoch / LR_SCHEDULE[0][1])
