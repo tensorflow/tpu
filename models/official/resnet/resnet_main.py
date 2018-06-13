@@ -155,13 +155,16 @@ flags.DEFINE_float(
     'base_learning_rate', default=0.1,
     help=('Base learning rate when train batch size is 256.'))
 
+flags.DEFINE_float(
+    'momentum', default=0.9,
+    help=('Momentum parameter used in the MomentumOptimizer.'))
+
 # Dataset constants
 LABEL_CLASSES = 1000
 NUM_TRAIN_IMAGES = 1281167
 NUM_EVAL_IMAGES = 50000
 
 # Learning hyperparameters
-MOMENTUM = 0.9
 WEIGHT_DECAY = 1e-4
 LR_SCHEDULE = [    # (multiplier, epoch to start) tuples
     (1.0, 5), (0.1, 30), (0.01, 60), (0.001, 80)
@@ -271,7 +274,7 @@ def resnet_model_fn(features, labels, mode, params):
     learning_rate = learning_rate_schedule(current_epoch)
 
     optimizer = tf.train.MomentumOptimizer(
-        learning_rate=learning_rate, momentum=MOMENTUM, use_nesterov=True)
+        learning_rate=learning_rate, momentum=FLAGS.momentum, use_nesterov=True)
     if FLAGS.use_tpu:
       # When using TPU, wrap the optimizer with CrossShardOptimizer which
       # handles synchronization details between different TPU cores. To the
