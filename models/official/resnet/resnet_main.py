@@ -38,7 +38,7 @@ from tensorflow.python.estimator import estimator
 FLAGS = flags.FLAGS
 
 flags.DEFINE_bool(
-    'use_tpu', True,
+    'use_tpu', default=True,
     help=('Use TPU to execute the model for training and evaluation. If'
           ' --use_tpu=false, will use whatever devices are available to'
           ' TensorFlow by default (e.g. CPU and GPU)'))
@@ -148,7 +148,7 @@ flags.DEFINE_string(
     help=('The directory where the exported SavedModel will be stored.'))
 
 flags.DEFINE_string(
-    'precision', 'bfloat16',
+    'precision', default='bfloat16',
     help=('Precision to use; one of: {bfloat16, float32}'))
 
 # Dataset constants
