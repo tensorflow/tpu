@@ -159,13 +159,16 @@ flags.DEFINE_float(
     'momentum', default=0.9,
     help=('Momentum parameter used in the MomentumOptimizer.'))
 
+flags.DEFINE_float(
+    'weight_decay', default=1e-4,
+    help=('Weight decay coefficiant for l2 regularization.'))
+
 # Dataset constants
 LABEL_CLASSES = 1000
 NUM_TRAIN_IMAGES = 1281167
 NUM_EVAL_IMAGES = 50000
 
 # Learning hyperparameters
-WEIGHT_DECAY = 1e-4
 LR_SCHEDULE = [    # (multiplier, epoch to start) tuples
     (1.0, 5), (0.1, 30), (0.01, 60), (0.001, 80)
 ]
@@ -260,7 +263,7 @@ def resnet_model_fn(features, labels, mode, params):
       logits=logits, onehot_labels=one_hot_labels)
 
   # Add weight decay to the loss for non-batch-normalization variables.
-  loss = cross_entropy + WEIGHT_DECAY * tf.add_n(
+  loss = cross_entropy + FLAGS.weight_decay * tf.add_n(
       [tf.nn.l2_loss(v) for v in tf.trainable_variables()
        if 'batch_normalization' not in v.name])
 
