@@ -21,8 +21,6 @@ import tensorflow as tf
 
 IMAGE_SIZE = 224
 CROP_PADDING = 32
-MEAN_RGB = [0.485, 0.456, 0.406]
-STDDEV_RGB = [0.229, 0.224, 0.225]
 
 
 def distorted_bounding_box_crop(image_bytes,
@@ -72,7 +70,7 @@ def distorted_bounding_box_crop(image_bytes,
     offset_y, offset_x, _ = tf.unstack(bbox_begin)
     target_height, target_width, _ = tf.unstack(bbox_size)
     crop_window = tf.stack([offset_y, offset_x, target_height, target_width])
-    image = tf.image.decode_and_crop_jpeg(image_bytes, crop_window)
+    image = tf.image.decode_and_crop_jpeg(image_bytes, crop_window, channels=3)
     image = tf.image.convert_image_dtype(
         image, dtype=tf.float32)
 
@@ -124,22 +122,12 @@ def _decode_and_center_crop(image_bytes):
   offset_width = ((image_width - padded_center_crop_size) + 1) // 2
   crop_window = tf.stack([offset_height, offset_width,
                           padded_center_crop_size, padded_center_crop_size])
-  image = tf.image.decode_and_crop_jpeg(image_bytes, crop_window)
+  image = tf.image.decode_and_crop_jpeg(image_bytes, crop_window, channels=3)
   image = tf.image.convert_image_dtype(
       image, dtype=tf.float32)
 
   image = tf.image.resize_bicubic([image], [IMAGE_SIZE, IMAGE_SIZE])[0]
 
-  return image
-
-
-def _normalize(image):
-  """Normalize the image to zero mean and unit variance."""
-  offset = tf.constant(MEAN_RGB, shape=[1, 1, 3])
-  image -= offset
-
-  scale = tf.constant(STDDEV_RGB, shape=[1, 1, 3])
-  image /= scale
   return image
 
 
@@ -159,7 +147,6 @@ def preprocess_for_train(image_bytes):
     A preprocessed image `Tensor`.
   """
   image = _decode_and_random_crop(image_bytes)
-  image = _normalize(image)
   image = _flip(image)
   image = tf.reshape(image, [IMAGE_SIZE, IMAGE_SIZE, 3])
   return image
@@ -175,7 +162,6 @@ def preprocess_for_eval(image_bytes):
     A preprocessed image `Tensor`.
   """
   image = _decode_and_center_crop(image_bytes)
-  image = _normalize(image)
   image = tf.reshape(image, [IMAGE_SIZE, IMAGE_SIZE, 3])
   return image
 

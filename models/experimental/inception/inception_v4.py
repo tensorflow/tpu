@@ -31,6 +31,7 @@ import vgg_preprocessing
 
 from tensorflow.contrib import summary
 from tensorflow.contrib.framework.python.ops import arg_scope
+from tensorflow.contrib.tpu.python.tpu import bfloat16
 from tensorflow.contrib.tpu.python.tpu import tpu_config
 from tensorflow.contrib.tpu.python.tpu import tpu_estimator
 from tensorflow.contrib.tpu.python.tpu import tpu_optimizer
@@ -66,6 +67,14 @@ flags.DEFINE_integer(
 flags.DEFINE_integer(
     'iterations', 100,
     'Number of iterations per TPU training loop.')
+
+flags.DEFINE_bool(
+    'skip_host_call', default=True,
+    help=('Skip the host call which is executed every training step. This is'
+          ' generally used for generating training summaries (train loss,'
+          ' learning rate, etc...). When --skip_host_call=false, there could'
+          ' be a performance drop if host_call function is slow and cannot'
+          ' keep up with the computation running on the TPU.'))
 
 flags.DEFINE_integer(
     'train_batch_size', 256,
@@ -219,6 +228,9 @@ flags.DEFINE_integer(
     'This shuffling is done after prefetching is done. '
     'Set to 0 to disable')
 
+flags.DEFINE_string(
+    'precision', 'float32',
+    help=('Precision to use; one of: {bfloat16, float32}'))
 
 FLAGS = flags.FLAGS
 
@@ -242,6 +254,8 @@ MOVING_AVERAGE_DECAY = 0.995
 BATCH_NORM_DECAY = 0.995
 BATCH_NORM_EPSILON = 1e-3
 
+WEIGHT_DECAY = 0.00004
+
 
 class InputPipeline(object):
   """Generates ImageNet input_fn for training or evaluation.
@@ -262,9 +276,10 @@ class InputPipeline(object):
     is_training: `bool` for whether the input is for training
   """
 
-  def __init__(self, is_training, data_dir):
+  def __init__(self, is_training, data_dir, use_bfloat16):
     self.is_training = is_training
     self.data_dir = data_dir
+    self.use_bfloat16 = use_bfloat16
 
   def dataset_parser(self, serialized_proto):
     """Parse an Imagenet record from value."""
@@ -329,6 +344,9 @@ class InputPipeline(object):
 
     label = tf.cast(
         tf.reshape(features['image/class/label'], shape=[]), dtype=tf.int32)
+
+    if self.use_bfloat16:
+      image = tf.cast(image, tf.bfloat16)
 
     return image, label
 
@@ -421,23 +439,35 @@ def inception_model_fn(features, labels, mode, params):
   is_eval = (mode == tf.estimator.ModeKeys.EVAL)
   features = tensor_transform_fn(features, params['model_transpose_dims'])
 
-  if FLAGS.clear_update_collections:
-    with arg_scope(inception.inception_v4_arg_scope(
-        batch_norm_decay=BATCH_NORM_DECAY,
-        batch_norm_epsilon=BATCH_NORM_EPSILON,
-        updates_collections=None)):
+  # This nested function allows us to avoid duplicating the logic which
+  # builds the network, for different values of --precision.
+  def build_network():
+    if FLAGS.precision == 'bfloat16':
+      with bfloat16.bfloat16_scope():
+        logits, end_points = inception.inception_v4(
+            features,
+            num_classes,
+            is_training=is_training)
+      logits = tf.cast(logits, tf.float32)
+    elif FLAGS.precision == 'float32':
       logits, end_points = inception.inception_v4(
           features,
           num_classes,
           is_training=is_training)
+    return logits, end_points
+
+  if FLAGS.clear_update_collections:
+    with arg_scope(inception.inception_v4_arg_scope(
+        weight_decay=0.0,
+        batch_norm_decay=BATCH_NORM_DECAY,
+        batch_norm_epsilon=BATCH_NORM_EPSILON,
+        updates_collections=None)):
+      logits, end_points = build_network()
   else:
     with arg_scope(inception.inception_v4_arg_scope(
         batch_norm_decay=BATCH_NORM_DECAY,
         batch_norm_epsilon=BATCH_NORM_EPSILON)):
-      logits, end_points = inception.inception_v4(
-          features,
-          num_classes,
-          is_training=is_training)
+      logits, end_points = build_network()
 
   predictions = end_points
   predictions.update({
@@ -464,7 +494,7 @@ def inception_model_fn(features, labels, mode, params):
   if 'AuxLogits' in end_points:
     tf.losses.softmax_cross_entropy(
         onehot_labels=one_hot_labels,
-        logits=end_points['AuxLogits'],
+        logits=tf.cast(end_points['AuxLogits'], tf.float32),
         weights=0.4,
         label_smoothing=0.1,
         scope='aux_loss')
@@ -474,7 +504,15 @@ def inception_model_fn(features, labels, mode, params):
       logits=logits,
       weights=1.0,
       label_smoothing=0.1)
-  loss = tf.losses.get_total_loss(add_regularization_losses=True)
+
+  losses = tf.add_n(tf.losses.get_losses())
+  l2_loss = []
+  for v in tf.trainable_variables():
+    tf.logging.info(v.name)
+    if 'BatchNorm' not in v.name and 'weights' in v.name:
+      l2_loss.append(tf.nn.l2_loss(v))
+    tf.logging.info(len(l2_loss))
+  loss = losses + WEIGHT_DECAY * tf.add_n(l2_loss)
 
   initial_learning_rate = FLAGS.learning_rate * FLAGS.train_batch_size / 256
   # Adjust the initial learning rate for warmup
@@ -552,37 +590,38 @@ def inception_model_fn(features, labels, mode, params):
     lr_t = tf.reshape(learning_rate, [1])
     ce_t = tf.reshape(current_epoch, [1])
 
-    def host_call_fn(gs, loss, lr, ce):
-      """Training host call. Creates scalar summaries for training metrics.
+    if not FLAGS.skip_host_call:
+      def host_call_fn(gs, loss, lr, ce):
+        """Training host call. Creates scalar summaries for training metrics.
 
-      This function is executed on the CPU and should not directly reference
-      any Tensors in the rest of the `model_fn`. To pass Tensors from the model
-      to the `metric_fn`, provide as part of the `host_call`. See
-      https://www.tensorflow.org/api_docs/python/tf/contrib/tpu/TPUEstimatorSpec
-      for more information.
+        This function is executed on the CPU and should not directly reference
+        any Tensors in the rest of the `model_fn`. To pass Tensors from the
+        model to the `metric_fn`, provide as part of the `host_call`. See
+        https://www.tensorflow.org/api_docs/python/tf/contrib/tpu/TPUEstimatorSpec
+        for more information.
 
-      Arguments should match the list of `Tensor` objects passed as the second
-      element in the tuple passed to `host_call`.
+        Arguments should match the list of `Tensor` objects passed as the second
+        element in the tuple passed to `host_call`.
 
-      Args:
-        gs: `Tensor with shape `[batch]` for the global_step
-        loss: `Tensor` with shape `[batch]` for the training loss.
-        lr: `Tensor` with shape `[batch]` for the learning_rate.
-        ce: `Tensor` with shape `[batch]` for the current_epoch.
+        Args:
+          gs: `Tensor with shape `[batch]` for the global_step
+          loss: `Tensor` with shape `[batch]` for the training loss.
+          lr: `Tensor` with shape `[batch]` for the learning_rate.
+          ce: `Tensor` with shape `[batch]` for the current_epoch.
 
-      Returns:
-        List of summary ops to run on the CPU host.
-      """
-      gs = gs[0]
-      with summary.create_file_writer(FLAGS.model_dir).as_default():
-        with summary.always_record_summaries():
-          summary.scalar('loss', tf.reduce_mean(loss), step=gs)
-          summary.scalar('learning_rate', tf.reduce_mean(lr), step=gs)
-          summary.scalar('current_epoch', tf.reduce_mean(ce), step=gs)
+        Returns:
+          List of summary ops to run on the CPU host.
+        """
+        gs = gs[0]
+        with summary.create_file_writer(FLAGS.model_dir).as_default():
+          with summary.always_record_summaries():
+            summary.scalar('loss', tf.reduce_mean(loss), step=gs)
+            summary.scalar('learning_rate', tf.reduce_mean(lr), step=gs)
+            summary.scalar('current_epoch', tf.reduce_mean(ce), step=gs)
 
-          return summary.all_summary_ops()
+            return summary.all_summary_ops()
 
-    host_call = (host_call_fn, [gs_t, loss_t, lr_t, ce_t])
+      host_call = (host_call_fn, [gs_t, loss_t, lr_t, ce_t])
 
   eval_metrics = None
   if is_eval:
@@ -651,6 +690,10 @@ def main(unused_argv):
       zone=FLAGS.tpu_zone,
       project=FLAGS.gcp_project)
 
+  assert FLAGS.precision == 'bfloat16' or FLAGS.precision == 'float32', (
+      'Invalid value for --precision flag; must be bfloat16 or float32.')
+  tf.logging.info('Precision: %s', FLAGS.precision)
+
   batch_size_per_shard = FLAGS.train_batch_size // FLAGS.num_shards
   params = {
       'model_transpose_dims': [0, 1, 2, 3],
@@ -713,12 +756,15 @@ def main(unused_argv):
 
   # Input pipelines are slightly different (with regards to shuffling and
   # preprocessing) between training and evaluation.
+  use_bfloat16 = FLAGS.precision == 'bfloat16'
   imagenet_train = InputPipeline(
       is_training=True,
-      data_dir=FLAGS.data_dir)
+      data_dir=FLAGS.data_dir,
+      use_bfloat16=use_bfloat16)
   imagenet_eval = InputPipeline(
       is_training=False,
-      data_dir=FLAGS.data_dir)
+      data_dir=FLAGS.data_dir,
+      use_bfloat16=use_bfloat16)
 
   if FLAGS.moving_average:
     eval_hooks = [LoadEMAHook(FLAGS.model_dir)]
@@ -768,7 +814,7 @@ def main(unused_argv):
   else:
     tf.logging.info('Starting training ...')
     inception_classifier.train(
-        input_fn=imagenet_train.input_fn, steps=FLAGS.train_steps)
+        input_fn=imagenet_train.input_fn, max_steps=FLAGS.train_steps)
 
 
 if __name__ == '__main__':

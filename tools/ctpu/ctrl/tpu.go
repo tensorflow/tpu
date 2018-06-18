@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"context"
 	"github.com/tensorflow/tpu/tools/ctpu/config"
 	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/googleapi"
@@ -110,6 +111,11 @@ func (i *TPUInstance) IsRunning() bool {
 	return i.State == "READY" || (i.State == "CREATING" && len(i.IpAddress) > 0)
 }
 
+// IsPreemptible returns true if the Cloud TPU is a preemptible Cloud TPU, false otherwise.
+func (i *TPUInstance) IsPreemptible() bool {
+	return i.SchedulingConfig.Preemptible
+}
+
 // NodeName returns the flock name (the human-usable name) of the Cloud TPU
 func (i *TPUInstance) NodeName() string {
 	parts := strings.Split(i.Name, "/")
@@ -168,7 +174,7 @@ func (g *TPUCP) ListInstances() ([]*TPUInstance, error) {
 		return nil, err
 	}
 	if nodes.NextPageToken != "" {
-		log.Printf("Warning: not all Cloud TPU's may be listed.")
+		log.Printf("Warning: It's possible that not all Cloud TPUs are listed.")
 	}
 	instances := make([]*TPUInstance, len(nodes.Nodes))
 	for i, node := range nodes.Nodes {
@@ -251,22 +257,27 @@ func (g *TPUCP) selectCidrBlock(routes []*compute.Route) (string, error) {
 }
 
 // CreateInstance creates the Cloud TPU with an API call to the TPU control plane.
-func (g *TPUCP) CreateInstance(version string) (LongRunningOperation, error) {
-	routes, err := g.compute.Routes.List(g.config.Project).Do()
+func (g *TPUCP) CreateInstance(ctx context.Context, version string, preemptible bool, hardwareType string) (LongRunningOperation, error) {
+	routeItems := make([]*compute.Route, 0)
+	err := g.compute.Routes.List(g.config.Project).Pages(ctx, func(routeList *compute.RouteList) error {
+		routeItems = append(routeItems, routeList.Items...)
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	cidrBlock, err := g.selectCidrBlock(routes.Items)
+	cidrBlock, err := g.selectCidrBlock(routeItems)
 	if err != nil {
 		return nil, err
 	}
 
 	node := tpu.Node{
-		AcceleratorType:   "v2-8",
+		AcceleratorType:   hardwareType,
 		CidrBlock:         cidrBlock,
 		Description:       "A Cloud TPU created with the ctpu tool.",
 		TensorflowVersion: version,
+		SchedulingConfig:  &tpu.SchedulingConfig{Preemptible: preemptible},
 	}
 	req := g.nodes.Create(g.parentPath(), &node)
 	op, err := req.NodeId(g.config.FlockName).Do()

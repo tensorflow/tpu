@@ -77,10 +77,10 @@ func TestStatusExecute(t *testing.T) {
 		tpu *tpu.Node
 	}{
 		{nil, nil},
-		{&compute.Instance{Status: "RUNNING"}, &tpu.Node{State: "READY"}},
-		{&compute.Instance{Status: "STOPPING"}, &tpu.Node{State: "DELETING"}},
+		{&compute.Instance{Status: "RUNNING"}, &tpu.Node{State: "READY", SchedulingConfig: &tpu.SchedulingConfig{}}},
+		{&compute.Instance{Status: "STOPPING"}, &tpu.Node{State: "DELETING", SchedulingConfig: &tpu.SchedulingConfig{}}},
 		{&compute.Instance{Status: "STOPPED"}, nil},
-		{nil, &tpu.Node{State: "DELETING"}},
+		{nil, &tpu.Node{State: "DELETING", SchedulingConfig: &tpu.SchedulingConfig{}}},
 	}
 
 	for _, tt := range testCases {

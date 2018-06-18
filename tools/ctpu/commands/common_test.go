@@ -20,6 +20,7 @@ import (
 	"sort"
 	"testing"
 
+	"context"
 	"github.com/google/go-cmp/cmp"
 	"github.com/tensorflow/tpu/tools/ctpu/config"
 	"github.com/tensorflow/tpu/tools/ctpu/ctrl"
@@ -171,7 +172,7 @@ func (cp *testTPUCP) ListLocations() ([]*tpu.Location, error) {
 	return cp.tpuLocations, nil
 }
 
-func (cp *testTPUCP) CreateInstance(version string) (ctrl.LongRunningOperation, error) {
+func (cp *testTPUCP) CreateInstance(ctx context.Context, version string, preemptible bool, hardwareType string) (ctrl.LongRunningOperation, error) {
 	cp.OperationsPerformed = append(cp.OperationsPerformed, fmt.Sprintf("CREATE-%s", version))
 	cp.instance = cp.postCreateInstance
 	cp.postCreateInstance = nil

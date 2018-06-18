@@ -38,7 +38,7 @@ from tensorflow.python.estimator import estimator
 FLAGS = flags.FLAGS
 
 flags.DEFINE_bool(
-    'use_tpu', True,
+    'use_tpu', default=True,
     help=('Use TPU to execute the model for training and evaluation. If'
           ' --use_tpu=false, will use whatever devices are available to'
           ' TensorFlow by default (e.g. CPU and GPU)'))
@@ -148,21 +148,33 @@ flags.DEFINE_string(
     help=('The directory where the exported SavedModel will be stored.'))
 
 flags.DEFINE_string(
-    'precision', 'bfloat16',
+    'precision', default='bfloat16',
     help=('Precision to use; one of: {bfloat16, float32}'))
+
+flags.DEFINE_float(
+    'base_learning_rate', default=0.1,
+    help=('Base learning rate when train batch size is 256.'))
+
+flags.DEFINE_float(
+    'momentum', default=0.9,
+    help=('Momentum parameter used in the MomentumOptimizer.'))
+
+flags.DEFINE_float(
+    'weight_decay', default=1e-4,
+    help=('Weight decay coefficiant for l2 regularization.'))
 
 # Dataset constants
 LABEL_CLASSES = 1000
 NUM_TRAIN_IMAGES = 1281167
 NUM_EVAL_IMAGES = 50000
 
-# Learning hyperparameters
-BASE_LEARNING_RATE = 0.1     # base LR when batch size = 256
-MOMENTUM = 0.9
-WEIGHT_DECAY = 1e-4
+# Learning rate schedule
 LR_SCHEDULE = [    # (multiplier, epoch to start) tuples
     (1.0, 5), (0.1, 30), (0.01, 60), (0.001, 80)
 ]
+
+MEAN_RGB = [0.485, 0.456, 0.406]
+STDDEV_RGB = [0.229, 0.224, 0.225]
 
 
 def learning_rate_schedule(current_epoch):
@@ -181,7 +193,7 @@ def learning_rate_schedule(current_epoch):
   Returns:
     A scaled `Tensor` for current learning rate.
   """
-  scaled_lr = BASE_LEARNING_RATE * (FLAGS.train_batch_size / 256.0)
+  scaled_lr = FLAGS.base_learning_rate * (FLAGS.train_batch_size / 256.0)
 
   decay_rate = (scaled_lr * LR_SCHEDULE[0][0] *
                 current_epoch / LR_SCHEDULE[0][1])
@@ -214,6 +226,10 @@ def resnet_model_fn(features, labels, mode, params):
 
   if FLAGS.transpose_input:
     features = tf.transpose(features, [3, 0, 1, 2])  # HWCN to NHWC
+
+  # Normalize the image to zero mean and unit variance.
+  features -= tf.constant(MEAN_RGB, shape=[1, 1, 3], dtype=features.dtype)
+  features /= tf.constant(STDDEV_RGB, shape=[1, 1, 3], dtype=features.dtype)
 
   # This nested function allows us to avoid duplicating the logic which
   # builds the network, for different values of --precision.
@@ -254,7 +270,7 @@ def resnet_model_fn(features, labels, mode, params):
       logits=logits, onehot_labels=one_hot_labels)
 
   # Add weight decay to the loss for non-batch-normalization variables.
-  loss = cross_entropy + WEIGHT_DECAY * tf.add_n(
+  loss = cross_entropy + FLAGS.weight_decay * tf.add_n(
       [tf.nn.l2_loss(v) for v in tf.trainable_variables()
        if 'batch_normalization' not in v.name])
 
@@ -268,7 +284,7 @@ def resnet_model_fn(features, labels, mode, params):
     learning_rate = learning_rate_schedule(current_epoch)
 
     optimizer = tf.train.MomentumOptimizer(
-        learning_rate=learning_rate, momentum=MOMENTUM, use_nesterov=True)
+        learning_rate=learning_rate, momentum=FLAGS.momentum, use_nesterov=True)
     if FLAGS.use_tpu:
       # When using TPU, wrap the optimizer with CrossShardOptimizer which
       # handles synchronization details between different TPU cores. To the

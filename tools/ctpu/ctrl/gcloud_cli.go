@@ -79,7 +79,7 @@ func (g GCloudCLI) MakeEnviron() []string {
 	return env
 }
 
-// SSHToInstance opens an ssh connection to the GCE VM in the flock.
+// SSHToInstance opens an ssh connection to the Compute Engine VM in the flock.
 //
 // If an error is encountered, an error is returned.
 //

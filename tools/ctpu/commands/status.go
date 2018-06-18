@@ -37,7 +37,7 @@ type StatusTPUCP interface {
 
 // StatusGCECP encapsulates the control plane interfaces required to execute the Status command.
 type StatusGCECP interface {
-	// Instance retrieves the GCE instance (if available).
+	// Instance retrieves the Compute Engine instance (if available).
 	Instance() (*ctrl.GCEInstance, error)
 }
 
@@ -66,12 +66,12 @@ func (statusCmd) Name() string {
 func (s *statusCmd) SetFlags(f *flag.FlagSet) {
 	s.cfg.SetFlags(f) // Allow users to specify cfg flags either before or after the subcommand name.
 	f.BoolVar(&s.details, "details", false,
-		"Prints out more details about the state of the GCE VM and Cloud TPU.")
+		"Prints out more details about the state of the Compute Engine VM and Cloud TPU.")
 	f.BoolVar(&s.noColor, "no-color", false, "Disable color in the output.")
 }
 
 func (statusCmd) Synopsis() string {
-	return "queries the control planes for the current GCE & TPU status."
+	return "queries the control planes for the current Compute Engine & TPU status."
 }
 
 func (statusCmd) Usage() string {
@@ -183,8 +183,8 @@ func (s *statusCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...in
 	}
 
 	fmt.Printf(`%s
-	GCE VM:     %s
-	Cloud TPU:  %s
+	Compute Engine VM:  %s
+	Cloud TPU:          %s
 `, s.flockStatus(vm, tpu), s.vmStatus(vm), s.tpuStatus(tpu))
 
 	vmIP, vmCreated, machineType := "--", "--", "--"
@@ -199,7 +199,7 @@ func (s *statusCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...in
 		machineType = machineTypeParts[len(machineTypeParts)-1]
 	}
 
-	tpuType, tpuIP, tpuVer, tpuSA, tpuCreated, tpuState, tpuHealth := "--", "--", "--", "--", "--", "--", "--"
+	tpuType, tpuIP, tpuVer, tpuSA, tpuCreated, tpuState, tpuHealth, tpuPreemptible := "--", "--", "--", "--", "--", "--", "--", "--"
 	if tpu != nil {
 		tpuType = tpu.AcceleratorType
 		if len(tpu.NetworkEndpoints) > 0 {
@@ -211,21 +211,23 @@ func (s *statusCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...in
 		tpuCreated = tpu.CreateTime
 		tpuState = tpu.State
 		tpuHealth = tpu.Health
+		tpuPreemptible = fmt.Sprintf("%v", tpu.IsPreemptible())
 	}
 
 	if s.details {
 		fmt.Printf(`
-GCE IP Address:        %s
-GCE Created:           %s
-GCE Machine Type:      %s
-TPU Accelerator Type:  %s
-TPU IP Address:        %s
-TPU TF Version:        %s
-TPU Service Acct:      %s
-TPU Created:           %s
-TPU State:             %s
-TPU Health:            %s
-`, vmIP, vmCreated, machineType, tpuType, tpuIP, tpuVer, tpuSA, tpuCreated, tpuState, tpuHealth)
+Compute Engine IP Address:    %s
+Compute Engine Created:       %s
+Compute Engine Machine Type:  %s
+TPU Accelerator Type:         %s
+TPU IP Address:               %s
+TPU TF Version:               %s
+TPU Service Acct:             %s
+TPU Created:                  %s
+TPU State:                    %s
+TPU Health:                   %s
+TPU Preemptible:              %s
+`, vmIP, vmCreated, machineType, tpuType, tpuIP, tpuVer, tpuSA, tpuCreated, tpuState, tpuHealth, tpuPreemptible)
 	}
 	return subcommands.ExitSuccess
 }

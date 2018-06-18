@@ -261,8 +261,7 @@ def build_hparams():
 
 
 def _terminate_eval():
-  tf.logging.info('24 hours elapsed with no new checkpoints...'
-                  ' terminating eval')
+  tf.logging.info('Timeout passed with no new checkpoints ... terminating eval')
   return True
 
 

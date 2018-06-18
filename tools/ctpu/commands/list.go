@@ -34,9 +34,9 @@ type ListTPUInstancesCP interface {
 	ListInstances() ([]*ctrl.TPUInstance, error)
 }
 
-// ListGCEInstancesCP lists the available GCE instances.
+// ListGCEInstancesCP lists the available Compute Engine instances.
 type ListGCEInstancesCP interface {
-	// ListInstances lists the available GCE instances.
+	// ListInstances lists the available Compute Engine instances.
 	ListInstances() ([]*ctrl.GCEInstance, error)
 }
 
@@ -123,7 +123,7 @@ func (c *listCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...inte
 	vms, err := c.gce.ListInstances()
 
 	if err != nil {
-		log.Printf("Error listing GCE VM's: %v", err)
+		log.Printf("Error listing Compute Engine VMs: %v", err)
 		return subcommands.ExitFailure
 	}
 

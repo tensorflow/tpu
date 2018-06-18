@@ -158,6 +158,33 @@ func TestUpNoAvailableTfVersionsSetViaFlag(t *testing.T) {
 	}
 }
 
+func TestUpCreatingVmOnly(t *testing.T) {
+	libs := newTestLibs()
+	libs.tpu.SetTfVersions("1.6")
+	c := upCmd{
+		cfg:              libs.cfg,
+		tpu:              libs.tpu,
+		gce:              libs.gce,
+		rmg:              libs.rmg,
+		cli:              libs.cli,
+		machineType:      "n1-standard-2",
+		diskSizeGb:       250,
+		skipConfirmation: true,
+		vmOnly:           true,
+	}
+
+	exit := c.Execute(context.Background(), nil)
+	if exit != 0 {
+		t.Fatalf("Exit code incorrect: %d", exit)
+	}
+
+	verifySingleOperation(t, libs.gce.OperationsPerformed, "CREATE")
+	verifySingleOperation(t, libs.tpu.OperationsPerformed, "")
+	if libs.rmg.callCount != 0 {
+		t.Errorf("resourceMgmt not called correct number of times: got %d, want 0", libs.rmg.callCount)
+	}
+}
+
 func TestUpImageFamily(t *testing.T) {
 	testcases := []struct {
 		tfVersion string
