@@ -37,7 +37,7 @@ type UpTPUCP interface {
 	// OptionallyRetrieveInstance retrieves the instance, but can optionally not enable the TPU API.
 	OptionallyRetrieveInstance(bool) (*ctrl.TPUInstance, bool, error)
 	// CreateInstance requests the creation of the instance.
-	CreateInstance(version string) (ctrl.LongRunningOperation, error)
+	CreateInstance(ctx context.Context, version string, preemptible bool, hardwareType string) (ctrl.LongRunningOperation, error)
 	// ListVersions retrieves the list of available TensorFlow versions.
 	ListVersions() ([]*tpu.TensorFlowVersion, error)
 }
@@ -64,7 +64,7 @@ type UpResourceManagementCP interface {
 type UpGcloudCLI interface {
 	// IsGcloudInstalled determines if the gcloud command line tool is installed and available on the path.
 	IsGcloudInstalled() bool
-	// SSHToInstance takes over the process and turns it into an ssh connection to the GCE instance of the flock.
+	// SSHToInstance takes over the process and turns it into an ssh connection to the Compute Engine instance of the flock.
 	SSHToInstance(forwardPorts, forwardAgent bool, tpuInstance *ctrl.TPUInstance) error
 	// PrintInstallInstructions prints instructions to the console for how to install gcloud.
 	PrintInstallInstructions()
@@ -77,6 +77,7 @@ type upCmd struct {
 	rmg UpResourceManagementCP
 	cli UpGcloudCLI
 
+	// Common parameters
 	skipConfirmation bool
 	printWelcome     bool
 	dryRun           bool
@@ -84,9 +85,16 @@ type upCmd struct {
 	forwardPorts     bool
 	forwardAgent     bool
 	tfVersion        string
-	gceImage         string
-	diskSizeGb       int64
-	machineType      string
+
+	// VM parameters
+	gceImage      string
+	diskSizeGb    int64
+	machineType   string
+	preemptibleVM bool
+
+	// TPU parameters
+	preemptibleTPU bool
+	tpuHardware    string
 }
 
 // UpCommand creates the up command.
@@ -106,22 +114,27 @@ func (upCmd) Name() string {
 
 func (c *upCmd) SetFlags(f *flag.FlagSet) {
 	c.cfg.SetFlags(f) // Allow users to specify cfg flags either before or after the subcommand name.
+	f.BoolVar(&c.skipConfirmation, "noconf", false, "Skip confirmation when running the up subcommand.")
+	f.BoolVar(&c.printWelcome, "print-welcome", false, "Always print the welcome message.")
 	f.BoolVar(&c.dryRun, "dry-run", false,
 		"Do not make changes; print only what would have happened.")
 	f.BoolVar(&c.vmOnly, "vm-only", false,
 		"Do not allocate a TPU, only allocate a VM (useful if you're not ready to run on a TPU yet).")
 	f.BoolVar(&c.forwardPorts, "forward-ports", true,
-		"Automatically forward useful ports from the GCE VM to your local machine. The ports forwarded are: 6006 (tensorboard), 8888 (jupyter notebooks), 8470 (TPU port), 8466 (TPU profiler port).")
+		"Automatically forward useful ports from the Compute Engine VM to your local machine. The ports forwarded are: 6006 (tensorboard), 8888 (jupyter notebooks), 8470 (TPU port), 8466 (TPU profiler port).")
 	f.BoolVar(&c.forwardAgent, "forward-agent", true,
-		"Enable ssh agent forwarding when sshing into the GCE VM. (SSH Agent Forwarding enables access to shared repositories (e.g. github) without having to place private keys on the GCE VM.)")
+		"Enable ssh agent forwarding when sshing into the Compute Engine VM. (SSH Agent Forwarding enables access to shared repositories (e.g. github) without having to place private keys on the Compute Engine VM.)")
 	f.StringVar(&c.tfVersion, "tf-version", "",
-		"Set the version of TensorFlow to use when creating the GCE VM and the Cloud TPU. (It defaults to auto-selecting the latest stable release.)")
+		"Set the version of TensorFlow to use when creating the Compute Engine VM and the Cloud TPU. (It defaults to auto-selecting the latest stable release.)")
+
 	f.StringVar(&c.gceImage, "gce-image", "",
-		"Override the automatically chosen GCE Image. Use this flag when you're using your own custom images instead of the provided ones with TensorFlow pre-installed.")
-	f.Int64Var(&c.diskSizeGb, "disk-size-gb", 250, "Configures the root volume size of your GCE VM.")
-	f.StringVar(&c.machineType, "machine-type", "n1-standard-2", "Configures the size of your GCE VM.")
-	f.BoolVar(&c.skipConfirmation, "noconf", false, "Skip confirmation when running the up subcommand.")
-	f.BoolVar(&c.printWelcome, "print-welcome", false, "Always print the welcome message.")
+		"Override the automatically chosen Compute Engine Image. Use this flag when you're using your own custom images instead of the provided ones with TensorFlow pre-installed.")
+	f.Int64Var(&c.diskSizeGb, "disk-size-gb", 250, "Configures the root volume size of your Compute Engine VM.")
+	f.StringVar(&c.machineType, "machine-type", "n1-standard-2", "Configures the size of your Compute Engine VM.")
+	f.BoolVar(&c.preemptibleVM, "preemptible-vm", false, "Create a preemptible Compute Engine VM, instead of a normal (non-preemptible) VM. A preemptible VM costs less per hour, but the Compute Engine service can terminate the instance at any time.")
+
+	f.BoolVar(&c.preemptibleTPU, "preemptible", false, "Create a preemptible Cloud TPU, instead of a normal (non-preemptible) Cloud TPU. A preemptible Cloud TPU costs less per hour, but the Cloud TPU service can stop/terminate the node at any time.")
+	f.StringVar(&c.tpuHardware, "tpu-size", "v2-8", "Configure the size and generation of the Cloud TPU.")
 }
 
 func (upCmd) Synopsis() string {
@@ -167,14 +180,14 @@ details, see the documentation at:
 }
 
 func (c *upCmd) upVM() error {
-	// Create the GCE VM
+	// Create the Compute Engine VM
 	vm, err := c.gce.Instance()
 	if err != nil {
 		log.Print(err)
 		return err
 	}
 	if vm == nil {
-		log.Printf("Creating GCE VM %s (this may take a minute)...\n", c.cfg.FlockName)
+		log.Printf("Creating Compute Engine VM %s (this may take a minute)...\n", c.cfg.FlockName)
 		imageFamily, err := c.gceImageFamily()
 		if err != nil && c.gceImage == "" {
 			log.Print(err)
@@ -199,14 +212,14 @@ func (c *upCmd) upVM() error {
 				return err
 			}
 		}
-		log.Printf("Created GCE VM %s!\n", c.cfg.FlockName)
+		log.Printf("Created Compute Engine VM %s!\n", c.cfg.FlockName)
 	} else {
 		if !strings.HasSuffix(vm.Instance.MachineType, c.machineType) {
-			log.Printf("Warning: GCE VM machine type is not %q: actual: %q", c.machineType, vm.Instance.MachineType)
+			log.Printf("Warning: Compute Engine VM machine type is not %q: actual: %q", c.machineType, vm.Instance.MachineType)
 		}
 
 		if !vm.IsRunning() {
-			log.Printf("Starting GCE VM %s...\n", c.cfg.FlockName)
+			log.Printf("Starting Compute Engine VM %s...\n", c.cfg.FlockName)
 			if !c.dryRun {
 				op, err := c.gce.StartInstance()
 				if err != nil {
@@ -219,7 +232,7 @@ func (c *upCmd) upVM() error {
 					return err
 				}
 			}
-			log.Printf("Started GCE VM %s!\n", c.cfg.FlockName)
+			log.Printf("Started Compute Engine VM %s!\n", c.cfg.FlockName)
 		} else {
 			log.Printf("VM already running.")
 		}
@@ -227,7 +240,10 @@ func (c *upCmd) upVM() error {
 	return nil
 }
 
-func (c *upCmd) upTPU() (*ctrl.TPUInstance, error) {
+func (c *upCmd) upTPU(ctx context.Context) (*ctrl.TPUInstance, error) {
+	if c.vmOnly {
+		return nil, nil
+	}
 	tpu, err := c.tpu.Instance()
 	if err != nil {
 		log.Printf("%v", err)
@@ -236,7 +252,7 @@ func (c *upCmd) upTPU() (*ctrl.TPUInstance, error) {
 	if tpu == nil {
 		log.Printf("Creating TPU %s (this may take a few minutes)...\n", c.cfg.FlockName)
 		if !c.dryRun {
-			op, err := c.tpu.CreateInstance(c.tfVersion)
+			op, err := c.tpu.CreateInstance(ctx, c.tfVersion, c.preemptibleTPU, c.tpuHardware)
 			if err != nil {
 				log.Print(err)
 				return nil, err
@@ -310,14 +326,14 @@ func (c *upCmd) launchInstances(ctx context.Context) (*ctrl.TPUInstance, error) 
 	var tpu *ctrl.TPUInstance
 	g, ctx := errgroup.WithContext(ctx)
 
-	// Create the GCE VM
+	// Create the Compute Engine VM
 	g.Go(func() error {
 		return c.upVM()
 	})
 
 	// Create the Cloud TPU
 	g.Go(func() (err error) {
-		tpu, err = c.upTPU()
+		tpu, err = c.upTPU(ctx)
 		return err
 	})
 
@@ -335,12 +351,25 @@ func (c *upCmd) confirmExecution(tpuAPIEnabled bool) (bool, error) {
 	if !tpuAPIEnabled && tfVersion == "" {
 		tfVersion = "<set after TPU API enabled>"
 	}
-	fmt.Printf(`ctpu will use the following configuration values:
-	Name:                 %s
-	Zone:                 %s
-	GCP Project:          %s
-	TensorFlow Version:   %s
-`, c.cfg.FlockName, c.cfg.Zone, c.cfg.Project, tfVersion)
+	fmt.Printf(`ctpu will use the following configuration:
+
+  Name:                 %s
+  Zone:                 %s
+  GCP Project:          %s
+  TensorFlow Version:   %s
+  VM:
+      Machine Type:     %s
+      Disk Size:        %d GB
+      Preemptible:      %v
+`, c.cfg.FlockName, c.cfg.Zone, c.cfg.Project, tfVersion, c.machineType, c.diskSizeGb,
+		c.preemptibleVM)
+	if !c.vmOnly {
+		fmt.Printf(`  Cloud TPU:
+      Size:             %s
+      Preemptible:      %v
+`, c.tpuHardware, c.preemptibleTPU)
+	}
+	fmt.Println()
 	return askForConfirmation("OK to create your Cloud TPU resources with the above configuration?")
 }
 
@@ -379,8 +408,9 @@ func (c *upCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...interf
 		if !confirmed {
 			color.Red("Canceling ctpu; no changes have been made.")
 			fmt.Printf(`
-You can override the inferred configuration using flags on the command line (e.g.
---zone, --project, --name) for a given ctpu execution.
+Note: if there was a configuration issue, you can override the settings using
+flags on the command line (e.g. --zone, --project, --name) for a given ctpu
+execution. For the full list of flags, run: ctpu help up
 `)
 			return subcommands.ExitUsageError
 		}
@@ -412,7 +442,7 @@ You can override the inferred configuration using flags on the command line (e.g
 	}
 
 	if c.forwardPorts {
-		fmt.Println("About to ssh (with port forwarding enabled -- see docs details)...")
+		fmt.Println("About to ssh (with port forwarding enabled -- see docs for details)...")
 	} else {
 		fmt.Println("About to ssh...")
 	}

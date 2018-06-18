@@ -27,7 +27,7 @@ import (
 const loggingRole = "roles/logging.logWriter"
 const storageRole = "roles/storage.admin" // Note storage.objectAdmin does not work in certain cases, and thus we need roles/storage.admin.
 
-// ResourceManagementCP contains an abstract representation of the Cloud Resource Manager, and related ACL's
+// ResourceManagementCP contains an abstract representation of the Cloud Resource Manager, and related ACLs
 //
 // It is intentionally small so that other packages in the ctpu tool can be effectively tested.
 type ResourceManagementCP struct {
@@ -83,7 +83,7 @@ func (r *ResourceManagementCP) addAgentToPolicy(tpuUserAgent string, policy *clo
 	return policy
 }
 
-// AddTPUUserAgent adds the TPU user agent to enable GCS access and send logging
+// AddTPUUserAgent adds the TPU user agent to enable Cloud Storage access and send logging
 //
 // It is a no-op if the tpuUserAgent has already been granted some access.
 func (r *ResourceManagementCP) AddTPUUserAgent(tpuUserAgent string) error {

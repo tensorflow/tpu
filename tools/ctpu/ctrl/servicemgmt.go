@@ -45,16 +45,26 @@ func newServiceManagementCP(config *config.Config, client *http.Client, userAgen
 }
 
 func (s *serviceManagementCP) checkIfEnabled(serviceName string) (bool, error) {
-	response, err := s.services.List().ConsumerId(s.consumerID()).Do()
-	if err != nil {
-		return false, err
-	}
-	for _, managedService := range response.Services {
-		if managedService.ServiceName == serviceName {
-			return true, nil
+	pageToken := ""
+	for {
+		req := s.services.List().ConsumerId(s.consumerID()).PageSize(150)
+		if pageToken != "" {
+			req.PageToken(pageToken)
 		}
+		response, err := req.Do()
+		if err != nil {
+			return false, err
+		}
+		for _, managedService := range response.Services {
+			if managedService.ServiceName == serviceName {
+				return true, nil
+			}
+		}
+		if response.NextPageToken == "" {
+			break
+		}
+		pageToken = response.NextPageToken
 	}
-	// TODO: handle additional pages in the response.
 	return false, nil
 }
 

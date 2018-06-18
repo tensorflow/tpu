@@ -48,20 +48,20 @@ func (o *gceLongRunningOperation) LoopUntilComplete() error {
 			return err
 		}
 		if op.Error != nil {
-			return fmt.Errorf("error retrieving GCE zone operation: %#v", op)
+			return fmt.Errorf("error retrieving Compute Engine zone operation: %#v", op)
 		}
 		if op.Status == "DONE" {
 			return nil
 		}
 		// Every 30 seconds
 		if i%6 == 0 {
-			log.Println("GCE operation still running...")
+			log.Println("Compute Engine operation still running...")
 		}
 	}
-	return fmt.Errorf("GCE operation still pending after 10 minutes: %q", o.op.Name)
+	return fmt.Errorf("Compute Engine operation still pending after 10 minutes: %q", o.op.Name)
 }
 
-// GCECP contains an abstract representation of the GCE control plane.
+// GCECP contains an abstract representation of the Compute Engine control plane.
 //
 // It is intentionally small so that other packages in the ctpu tool can be effectively
 // tested.
@@ -84,30 +84,30 @@ func newGCECP(config *config.Config, client *http.Client, serviceManagementCP *s
 	}, nil
 }
 
-// GCEInstance represents the GCE instance within the flock.
+// GCEInstance represents the Compute Engine instance within the flock.
 type GCEInstance struct {
 	*compute.Instance
 }
 
-// IsRunning returns true if the GCE instance is running, false otherwise.
+// IsRunning returns true if the Compute Engine instance is running, false otherwise.
 func (i *GCEInstance) IsRunning() bool {
 	return i.Status == "RUNNING"
 }
 
-// CanDelete returns true if the GCE intance can be deleted, false otherwise.
+// CanDelete returns true if the Compute Engine intance can be deleted, false otherwise.
 func (i *GCEInstance) CanDelete() bool {
 	return i.IsRunning() || !strings.HasSuffix(i.Status, "ING")
 }
 
-// IsFlockVM returns true if this GCE VM appears to have been created by the ctpu tool.
+// IsFlockVM returns true if this Compute Engine VM appears to have been created by the ctpu tool.
 func (i *GCEInstance) IsFlockVM() bool {
 	_, ok := i.Labels["ctpu"]
 	return ok
 }
 
-// OptionallyRetrieveInstance retrieves the instance from the GCE control plane.
+// OptionallyRetrieveInstance retrieves the instance from the Compute Engine control plane.
 //
-// If enableAPIIfRequired is false and the GCE API has not been enabled, it returns immediately and does not enable the API.
+// If enableAPIIfRequired is false and the Compute Engine API has not been enabled, it returns immediately and does not enable the API.
 func (g *GCECP) OptionallyRetrieveInstance(enableAPIIfRequired bool) (gceInstance *GCEInstance, apiEnabled bool, err error) {
 	instance, err := g.computeService.Instances.Get(g.config.Project, g.config.Zone, g.config.FlockName).Do()
 	googError, ok := err.(*googleapi.Error)
@@ -115,21 +115,21 @@ func (g *GCECP) OptionallyRetrieveInstance(enableAPIIfRequired bool) (gceInstanc
 		return nil, true, nil
 	}
 	if ok && googError != nil && googError.Code == 403 {
-		// Check to see if the GCE API hasn't yet been enabled.
+		// Check to see if the Compute Engine API hasn't yet been enabled.
 		enabled, err := g.serviceMgmt.checkIfEnabled(gceServiceAPIName)
 		if err != nil {
-			return nil, false, fmt.Errorf("error encountered while determining if API has been enabled: %#v, underlying error returned from the GCE API: %#v", err, googError)
+			return nil, false, fmt.Errorf("error encountered while determining if API has been enabled: %#v, underlying error returned from the Compute Engine API: %#v", err, googError)
 		}
 		if !enabled {
 			if !enableAPIIfRequired {
 				return nil, false, nil
 			}
-			log.Printf("Enabling the GCE API (this may take a while)...")
+			log.Printf("Enabling the Compute Engine API (this may take a while)...")
 			err = g.serviceMgmt.enableService(gceServiceAPIName)
 			if err != nil {
 				return nil, false, err
 			}
-			log.Printf("Successfully enabled the GCE API.")
+			log.Printf("Successfully enabled the Compute Engine API.")
 			// Retry getting the instance after enabling the API.
 			return g.OptionallyRetrieveInstance(enableAPIIfRequired)
 		}
@@ -140,20 +140,20 @@ func (g *GCECP) OptionallyRetrieveInstance(enableAPIIfRequired bool) (gceInstanc
 	return &GCEInstance{instance}, true, err
 }
 
-// Instance retrieves the Instance from the GCE control plane.
+// Instance retrieves the instance from the Compute Engine control plane.
 func (g *GCECP) Instance() (*GCEInstance, error) {
 	instance, _, err := g.OptionallyRetrieveInstance(true)
 	return instance, err
 }
 
-// ListInstances lists all GCE instances in a given zone.
+// ListInstances lists all Compute Engine instances in a given zone.
 func (g *GCECP) ListInstances() ([]*GCEInstance, error) {
 	list, err := g.computeService.Instances.List(g.config.Project, g.config.Zone).Do()
 	if err != nil {
 		return []*GCEInstance{}, err
 	}
 	if list.NextPageToken != "" {
-		log.Printf("Warning: not all GCE VM's may be listed.")
+		log.Printf("Warning: It's possible that not all Compute Engine VMs are listed.")
 	}
 
 	instances := make([]*GCEInstance, len(list.Items))
@@ -166,14 +166,14 @@ func (g *GCECP) ListInstances() ([]*GCEInstance, error) {
 
 const gceMaxLoops = 120 // 10 minutes in 5 second increments
 
-// GCECreateRequest captures all the configurable parameters involved in creating the GCE VM.
+// GCECreateRequest captures all the configurable parameters involved in creating the Compute Engine VM.
 type GCECreateRequest struct {
-	// ImageFamily is the name of the ever-green image family that should be used to create the GCE VM. It is resolved to the ImageName during the CreateInstance request.
+	// ImageFamily is the name of the ever-green image family that should be used to create the Compute Engine VM. It is resolved to the ImageName during the CreateInstance request.
 	//
 	// Exactly one of ImageFamily and ImageName should be non-empty.
 	ImageFamily string
 
-	// ImageName is the name of the image that should be used to create the GCE VM.
+	// ImageName is the name of the image that should be used to create the Compute Engine VM.
 	//
 	// Exactly one of ImageFamily and ImageName should be non-empty.
 	ImageName string
@@ -181,16 +181,19 @@ type GCECreateRequest struct {
 	// TensorFlowVersion is the version of TensorFlow that is expected to be used.
 	TensorFlowVersion string
 
-	// MachineType is the GCE Machine type used when creating the instance.
+	// MachineType is the Compute Engine machine type used when creating the instance.
 	MachineType string
 
 	// DiskSizeGb is the size the root volume should be sized to upon instance creation.
 	DiskSizeGb int64
+
+	// Preemptible is whether the Compute Engine VM runs in preemptible or not.
+	Preemptible bool
 }
 
 var conflictRegex = regexp.MustCompile("The resource 'projects/[^/]+/zones/([^/]+)/instances/([^']+)' already exists")
 
-// CreateInstance creates the GCE instance with an API call to the GCE control plane.
+// CreateInstance creates the Compute Engine instance with an API call to the Compute Engine control plane.
 func (g *GCECP) CreateInstance(request *GCECreateRequest) (lro LongRunningOperation, err error) {
 	if request.ImageName == "" && request.ImageFamily != "" {
 		request.ImageName, err = g.resolveImageFamily(request.ImageFamily)
@@ -199,17 +202,17 @@ func (g *GCECP) CreateInstance(request *GCECreateRequest) (lro LongRunningOperat
 		}
 	}
 	if request.ImageName == "" {
-		return nil, fmt.Errorf("could not create GCE Instance without a base image")
+		return nil, fmt.Errorf("could not create Compute Engine instance without a base image")
 	}
 	instance := g.makeCreateInstance(request)
 	op, err := g.computeService.Instances.Insert(g.config.Project, g.config.Zone, instance).Do()
 	if err != nil {
 		googErr, ok := err.(*googleapi.Error)
 		if ok && googErr.Code == 409 {
-			// Conflict, another GCE VM already exists.
+			// Conflict, another Compute Engine VM already exists.
 			submatches := conflictRegex.FindStringSubmatch(googErr.Message)
 			if len(submatches) == 3 && submatches[2] == g.config.FlockName && submatches[1] != g.config.Zone {
-				return nil, fmt.Errorf("while trying to create a GCE VM in zone %q, ctpu discovered another GCE VM of the same name (%q) has already been created in another zone (%q). Either use a new name (using the --name global flag), or use the other zone", g.config.Zone, g.config.FlockName, submatches[1])
+				return nil, fmt.Errorf("while trying to create a Compute Engine VM in zone %q, ctpu discovered another Compute Engine VM of the same name (%q) has already been created in another zone (%q). Either use a new name (using the --name global flag), or use the other zone", g.config.Zone, g.config.FlockName, submatches[1])
 			}
 		}
 		return nil, err
@@ -220,7 +223,7 @@ func (g *GCECP) CreateInstance(request *GCECreateRequest) (lro LongRunningOperat
 	return &gceLongRunningOperation{g, op}, nil
 }
 
-// StartInstance starts a previously stopped GCE instance with an API call to the GCE control plane.
+// StartInstance starts a previously stopped Compute Engine instance with an API call to the Compute Engine control plane.
 func (g *GCECP) StartInstance() (LongRunningOperation, error) {
 	op, err := g.computeService.Instances.Start(g.config.Project, g.config.Zone, g.config.FlockName).Do()
 	if err != nil {
@@ -232,7 +235,7 @@ func (g *GCECP) StartInstance() (LongRunningOperation, error) {
 	return &gceLongRunningOperation{g, op}, nil
 }
 
-// StopInstance stops a previously started GCE instance with an API call to the GCE control plane.
+// StopInstance stops a previously started Compute Engine instance with an API call to the Compute Engine control plane.
 func (g *GCECP) StopInstance() (LongRunningOperation, error) {
 	op, err := g.computeService.Instances.Stop(g.config.Project, g.config.Zone, g.config.FlockName).Do()
 	if err != nil {
@@ -244,7 +247,7 @@ func (g *GCECP) StopInstance() (LongRunningOperation, error) {
 	return &gceLongRunningOperation{g, op}, nil
 }
 
-// DeleteInstance deletes a previously created GCE instance with an API call to the GCE control plane.
+// DeleteInstance deletes a previously created Compute Engine instance with an API call to the Compute Engine control plane.
 func (g *GCECP) DeleteInstance() (LongRunningOperation, error) {
 	op, err := g.computeService.Instances.Delete(g.config.Project, g.config.Zone, g.config.FlockName).Do()
 	if err != nil {
@@ -296,7 +299,7 @@ func (g *GCECP) makeCreateInstance(request *GCECreateRequest) *compute.Instance 
 					"https://www.googleapis.com/auth/devstorage.read_write",
 					"https://www.googleapis.com/auth/logging.write",
 					"https://www.googleapis.com/auth/monitoring.write",
-					"https://www.googleapis.com/auth/cloud-platform", // Ensure GCE has all potentially required permissions.
+					"https://www.googleapis.com/auth/cloud-platform", // Ensure Compute Engine has all potentially required permissions.
 				},
 			},
 		},
@@ -312,6 +315,9 @@ func (g *GCECP) makeCreateInstance(request *GCECreateRequest) *compute.Instance 
 					Value: &flockName,
 				},
 			},
+		},
+		Scheduling: &compute.Scheduling{
+			Preemptible: request.Preemptible,
 		},
 	}
 }

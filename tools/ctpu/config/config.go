@@ -44,7 +44,7 @@ type Config struct {
 	FlockName string
 	// The GCP project we will use to allocate / deallocate TPUs and VMs.
 	Project string
-	// The GCE Zone we will use to allocate / deallocate TPUs and VMs.
+	// The Compute Engine zone we will use to allocate / deallocate TPUs and VMs.
 	Zone string
 
 	// The following fields are maintained for internal use only
@@ -57,12 +57,12 @@ func (c *Config) SetFlags(f *flag.FlagSet) {
 	f.StringVar(&c.Project, "project", c.Project,
 		`Override the GCP project name to use when allocating VMs and TPUs.
        By default, ctpu picks a reasonable value from either your gcloud
-       configuration, or the GCE metadata. If a good value cannot be found, you
+       configuration, or the Compute Engine metadata. If a good value cannot be found, you
        will be required to provide a value on the command line.)`)
 	f.StringVar(&c.Zone, "zone", "",
-		`Override the GCE zone to use when allocating & deallocating resources.
+		`Override the Compute Engine zone to use when allocating & deallocating resources.
         By default, it picks a reasonable value from either your gcloud
-        configuration, or the GCE metadata. If a good value cannot be found, you
+        configuration, or the Compute Engine metadata. If a good value cannot be found, you
         will be required to provide a value on the command line.)`)
 }
 

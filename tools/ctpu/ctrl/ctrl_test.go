@@ -50,7 +50,8 @@ func TestParseResponse(t *testing.T) {
 		if got.AccessToken != testcase.want.AccessToken {
 			t.Errorf("src.parseResponse(%q).AccessToken = %q, want %q", testcase.input, got.AccessToken, testcase.want.AccessToken)
 		}
-		if got.Expiry.Truncate(100*time.Millisecond) != testcase.want.Expiry.Truncate(100*time.Millisecond) {
+		// Add some slop to avoid test flakiness.
+		if got.Expiry.Sub(testcase.want.Expiry) > 200*time.Millisecond {
 			t.Errorf("src.parseResponse(%q).Expiry = %v, want: %v", testcase.input, got.Expiry.Truncate(100*time.Millisecond), testcase.want.Expiry.Truncate(100*time.Millisecond))
 		}
 	}

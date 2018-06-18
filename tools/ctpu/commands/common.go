@@ -43,9 +43,9 @@ func (c *tpuCmd) SetFlags(f *flag.FlagSet) {
 	f.BoolVar(&c.dryRun, "dry_run", false,
 		"Do not make changes; print only what would have happened.")
 	f.BoolVar(&c.tpuOnly, "tpu_only", false,
-		"Do not pause the GCE VM, only pause the TPU (useful if you want to edit code on the VM without paying for the TPU).")
+		"Do not pause the Compute Engine VM, only pause the TPU (useful if you want to edit code on the VM without paying for the TPU).")
 	f.BoolVar(&c.skipWaiting, "nowait", false,
-		"Don't wait for asynchronous operations to complete (e.g. TPU deletion, GCE VM halting)")
+		"Don't wait for asynchronous operations to complete (e.g. TPU deletion, Compute Engine VM halting)")
 	f.BoolVar(&c.skipConfirmation, "noconf", false, "Skip confirmation about deleting resources.")
 }
 
@@ -67,13 +67,13 @@ func cleanUpVM(cfg *config.Config, gceCP gceInstanceFn, vmCommand cpCommand, dry
 		return nil, err
 	}
 	if vm == nil {
-		log.Printf("No GCE VM %q found.\n", cfg.FlockName)
+		log.Printf("No Compute Engine VM %q found.\n", cfg.FlockName)
 		return nil, nil
 	} else if !vm.IsRunning() && requiresRunning {
-		log.Printf("GCE VM %s not running.\n", cfg.FlockName)
+		log.Printf("Compute Engine VM %s not running.\n", cfg.FlockName)
 		return nil, nil
 	} else {
-		log.Printf("%s GCE VM %q...\n", actionName, cfg.FlockName)
+		log.Printf("%s Compute Engine VM %q...\n", actionName, cfg.FlockName)
 		if !dryRun {
 			return vmCommand()
 		}

@@ -44,24 +44,26 @@ type restartTestTPUCP struct {
 	createLRO *restartTestLRO
 	deleteLRO *restartTestLRO
 
-	calledDelete bool
-	calledCreate bool
-	createArg    string
-	createErr    error
-	deleteErr    error
+	calledDelete      bool
+	calledCreate      bool
+	createVersion     string
+	createPreemptible bool
+	createErr         error
+	deleteErr         error
 }
 
 func (r *restartTestTPUCP) Instance() (*ctrl.TPUInstance, error) {
 	return r.instance, r.instanceErr
 }
 
-func (r *restartTestTPUCP) CreateInstance(version string) (ctrl.LongRunningOperation, error) {
+func (r *restartTestTPUCP) CreateInstance(ctx context.Context, version string, preemptible bool, hardwareType string) (ctrl.LongRunningOperation, error) {
 	r.t.Helper()
 	if r.calledCreate {
 		r.t.Errorf("Already called CreateInstance")
 	}
 	r.calledCreate = true
-	r.createArg = version
+	r.createVersion = version
+	r.createPreemptible = preemptible
 	return r.createLRO, r.createErr
 }
 
@@ -90,6 +92,9 @@ func TestRestartTPU(t *testing.T) {
 		node: &tpu.Node{
 			State:             "READY",
 			TensorflowVersion: "1.8",
+			SchedulingConfig: &tpu.SchedulingConfig{
+				Preemptible: false,
+			},
 		},
 		want: subcommands.ExitSuccess,
 	}, {
@@ -101,6 +106,9 @@ func TestRestartTPU(t *testing.T) {
 		node: &tpu.Node{
 			State:             "READY",
 			TensorflowVersion: "1.8",
+			SchedulingConfig: &tpu.SchedulingConfig{
+				Preemptible: false,
+			},
 		},
 		want: subcommands.ExitUsageError,
 	}, {
@@ -122,8 +130,26 @@ func TestRestartTPU(t *testing.T) {
 		node: &tpu.Node{
 			State:             "STOPPED",
 			TensorflowVersion: "1.8",
+			SchedulingConfig: &tpu.SchedulingConfig{
+				Preemptible: false,
+			},
 		},
 		want: subcommands.ExitFailure,
+	}, {
+		name: "normal-preemptible",
+		cfg: &config.Config{
+			FlockName: "test-flock",
+			Zone:      "us-central1-c",
+			Project:   "test-project",
+		},
+		node: &tpu.Node{
+			State:             "READY",
+			TensorflowVersion: "1.8",
+			SchedulingConfig: &tpu.SchedulingConfig{
+				Preemptible: true,
+			},
+		},
+		want: subcommands.ExitSuccess,
 	}}
 
 	for i, tt := range testcases {
@@ -155,8 +181,11 @@ func TestRestartTPU(t *testing.T) {
 		if cp.calledCreate != shouldCallCP {
 			t.Errorf("cmd.Execute(%q).calledCreate = %v, want: %v", tt.name, cp.calledCreate, shouldCallCP)
 		}
-		if shouldCallCP && cp.createArg != tt.node.TensorflowVersion {
-			t.Errorf("cmd.Execute(%q).createArg = %v, want: %v", tt.name, cp.createArg, tt.node.TensorflowVersion)
+		if shouldCallCP && cp.createVersion != tt.node.TensorflowVersion {
+			t.Errorf("cmd.Execute(%q).createVersion = %v, want: %v", tt.name, cp.createVersion, tt.node.TensorflowVersion)
+		}
+		if shouldCallCP && cp.createPreemptible != tt.node.SchedulingConfig.Preemptible {
+			t.Errorf("cmd.Execute(%q).createPreemptible = %v, want: %v", tt.name, cp.createPreemptible, tt.node.SchedulingConfig.Preemptible)
 		}
 		if shouldCallCP && !createLRO.wait {
 			t.Errorf("cmd.Execute(%q).createLRO.wait = %v, want: true", tt.name, createLRO.wait)
