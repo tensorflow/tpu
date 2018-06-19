@@ -209,7 +209,7 @@ def resnet_model_fn(features, labels, mode, params):
   Args:
     features: `Tensor` of batched images.
     labels: `Tensor` of labels for the data samples
-    mode: one of `tf.estimator.ModeKeys.{TRAIN,EVAL}`
+    mode: one of `tf.estimator.ModeKeys.{TRAIN,EVAL,PREDICT}`
     params: `dict` of parameters passed to the model from the TPUEstimator,
         `params['batch_size']` is always provided and should be used as the
         effective batch size.
@@ -224,7 +224,7 @@ def resnet_model_fn(features, labels, mode, params):
     assert not FLAGS.transpose_input    # channels_first only for GPU
     features = tf.transpose(features, [0, 3, 1, 2])
 
-  if FLAGS.transpose_input:
+  if FLAGS.transpose_input and mode != tf.estimator.ModeKeys.PREDICT:
     features = tf.transpose(features, [3, 0, 1, 2])  # HWCN to NHWC
 
   # Normalize the image to zero mean and unit variance.
@@ -404,7 +404,8 @@ def main(unused_argv):
       model_fn=resnet_model_fn,
       config=config,
       train_batch_size=FLAGS.train_batch_size,
-      eval_batch_size=FLAGS.eval_batch_size)
+      eval_batch_size=FLAGS.eval_batch_size,
+      export_to_tpu=False)
 
   assert FLAGS.precision == 'bfloat16' or FLAGS.precision == 'float32', (
       'Invalid value for --precision flag; must be bfloat16 or float32.')
