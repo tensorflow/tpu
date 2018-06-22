@@ -96,6 +96,15 @@ flags.DEFINE_integer(
     'eval_batch_size', default=1024, help='Batch size for evaluation.')
 
 flags.DEFINE_integer(
+    'num_train_images', default=1281167, help='Size of training data set.')
+
+flags.DEFINE_integer(
+    'num_eval_images', default=50000, help='Size of evaluation data set.')
+
+flags.DEFINE_integer(
+    'num_label_classes', default=1000, help='Number of classes, at least 2')
+
+flags.DEFINE_integer(
     'steps_per_eval', default=5000,
     help=('Controls how often evaluation is performed. Since evaluation is'
           ' fairly expensive, it is advised to evaluate as infrequently as'
@@ -162,11 +171,6 @@ flags.DEFINE_float(
 flags.DEFINE_float(
     'weight_decay', default=1e-4,
     help=('Weight decay coefficiant for l2 regularization.'))
-
-# Dataset constants
-LABEL_CLASSES = 1000
-NUM_TRAIN_IMAGES = 1281167
-NUM_EVAL_IMAGES = 50000
 
 # Learning rate schedule
 LR_SCHEDULE = [    # (multiplier, epoch to start) tuples
@@ -236,7 +240,7 @@ def resnet_model_fn(features, labels, mode, params):
   def build_network():
     network = resnet_model.resnet_v1(
         resnet_depth=FLAGS.resnet_depth,
-        num_classes=LABEL_CLASSES,
+        num_classes=FLAGS.num_label_classes,
         data_format=FLAGS.data_format)
     return network(
         inputs=features, is_training=(mode == tf.estimator.ModeKeys.TRAIN))
@@ -265,7 +269,7 @@ def resnet_model_fn(features, labels, mode, params):
   batch_size = params['batch_size']   # pylint: disable=unused-variable
 
   # Calculate loss, which includes softmax cross entropy and L2 regularization.
-  one_hot_labels = tf.one_hot(labels, LABEL_CLASSES)
+  one_hot_labels = tf.one_hot(labels, FLAGS.num_label_classes)
   cross_entropy = tf.losses.softmax_cross_entropy(
       logits=logits, onehot_labels=one_hot_labels)
 
@@ -278,7 +282,7 @@ def resnet_model_fn(features, labels, mode, params):
   if mode == tf.estimator.ModeKeys.TRAIN:
     # Compute the current epoch and associated learning rate from global_step.
     global_step = tf.train.get_global_step()
-    batches_per_epoch = NUM_TRAIN_IMAGES / FLAGS.train_batch_size
+    batches_per_epoch = FLAGS.num_train_images / FLAGS.train_batch_size
     current_epoch = (tf.cast(global_step, tf.float32) /
                      batches_per_epoch)
     learning_rate = learning_rate_schedule(current_epoch)
@@ -421,7 +425,7 @@ def main(unused_argv):
       use_bfloat16=use_bfloat16) for is_training in [True, False]]
 
   if FLAGS.mode == 'eval':
-    eval_steps = NUM_EVAL_IMAGES // FLAGS.eval_batch_size
+    eval_steps = FLAGS.num_eval_images // FLAGS.eval_batch_size
 
     # Run evaluation when there's a new checkpoint
     for ckpt in evaluation.checkpoints_iterator(
@@ -454,7 +458,7 @@ def main(unused_argv):
 
   else:   # FLAGS.mode == 'train' or FLAGS.mode == 'train_and_eval'
     current_step = estimator._load_global_step_from_checkpoint_dir(FLAGS.model_dir)  # pylint: disable=protected-access,line-too-long
-    batches_per_epoch = NUM_TRAIN_IMAGES / FLAGS.train_batch_size
+    batches_per_epoch = FLAGS.num_train_images / FLAGS.train_batch_size
     tf.logging.info('Training for %d steps (%.2f epochs in total). Current'
                     ' step %d.' % (FLAGS.train_steps,
                                    FLAGS.train_steps / batches_per_epoch,
@@ -482,7 +486,7 @@ def main(unused_argv):
         tf.logging.info('Starting to evaluate.')
         eval_results = resnet_classifier.evaluate(
             input_fn=imagenet_eval.input_fn,
-            steps=NUM_EVAL_IMAGES // FLAGS.eval_batch_size)
+            steps=FLAGS.num_eval_images // FLAGS.eval_batch_size)
         tf.logging.info('Eval results: %s' % eval_results)
 
     elapsed_time = int(time.time() - start_timestamp)
