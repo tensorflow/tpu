@@ -121,14 +121,11 @@ class ImageNetInput(object):
     image = self.image_preprocessing_fn(
         image_bytes=image_bytes,
         is_training=self.is_training,
-    )
+        use_bfloat16=self.use_bfloat16)
 
     # Subtract one so that labels are in [0, 1000).
     label = tf.cast(
         tf.reshape(parsed['image/class/label'], shape=[]), dtype=tf.int32) - 1
-
-    if self.use_bfloat16:
-      image = tf.cast(image, tf.bfloat16)
 
     return image, label
 

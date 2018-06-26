@@ -91,13 +91,15 @@ def main(unused_argv):
         image_size=128,
         data_dir=FLAGS.data_dir_small,
         num_parallel_calls=FLAGS.num_parallel_calls,
-        use_transpose=FLAGS.use_transpose)
+        use_transpose=FLAGS.use_transpose,
+        cache=True)
     imagenet_eval_small = imagenet_input.ImageNetInput(
         is_training=False,
         image_size=128,
         data_dir=FLAGS.data_dir_small,
         num_parallel_calls=FLAGS.num_parallel_calls,
-        use_transpose=FLAGS.use_transpose)
+        use_transpose=FLAGS.use_transpose,
+        cache=True)
     imagenet_train_large = imagenet_input.ImageNetInput(
         is_training=True,
         image_size=288,
