@@ -23,7 +23,6 @@ import os
 import tensorflow as tf
 
 import resnet_preprocessing
-from tensorflow.contrib.data.python.ops import batching
 
 
 def image_serving_input_fn():
@@ -74,7 +73,8 @@ class ImageNetInput(object):
                num_cores=8,
                num_parallel_calls=64,
                image_size=224,
-               use_transpose=False):
+               use_transpose=False,
+               cache=False):
     self.image_preprocessing_fn = resnet_preprocessing.preprocess_image
     self.is_training = is_training
     self.data_dir = data_dir
@@ -82,6 +82,7 @@ class ImageNetInput(object):
     self.num_parallel_calls = num_parallel_calls
     self.use_transpose = use_transpose
     self.image_size = image_size
+    self.cache = cache
 
   def dataset_parser(self, value):
     """Parse an ImageNet record from a serialized string Tensor."""
@@ -143,7 +144,7 @@ class ImageNetInput(object):
                                 if self.is_training else 'validation-*')
     dataset = tf.data.Dataset.list_files(file_pattern, shuffle=self.is_training)
 
-    if self.is_training:
+    if self.is_training and not self.cache:
       dataset = dataset.repeat()
 
     def fetch_dataset(filename):
@@ -154,46 +155,31 @@ class ImageNetInput(object):
     dataset = dataset.apply(
         tf.contrib.data.parallel_interleave(
             fetch_dataset, cycle_length=self.num_parallel_calls, sloppy=True))
-    dataset = dataset.shuffle(1024)
+    if self.cache:
+      dataset = dataset.cache().apply(
+          tf.contrib.data.shuffle_and_repeat(1024 * 16))
+    else:
+      dataset = dataset.shuffle(1024)
 
     # Use the fused map-and-batch operation.
+    #
+    # For XLA, we must used fixed shapes. Because we repeat the source training
+    # dataset indefinitely, we can use `drop_remainder=True` to get fixed-size
+    # batches without dropping any training examples.
+    #
+    # When evaluating, `drop_remainder=True` prevents accidentally evaluating
+    # the same image twice by dropping the final batch if it is less than a full
+    # batch size. As long as this validation is done with consistent batch size,
+    # exactly the same images will be used.
     dataset = dataset.apply(
         tf.contrib.data.map_and_batch(
             self.dataset_parser, batch_size=batch_size,
-            num_parallel_batches=self.num_cores))
-
-    # For training, batch as usual. When evaluating, prevent accidentally
-    # evaluating the same image twice by dropping the final batch if it is less
-    # than a full batch size. As long as this validation is done with
-    # consistent batch size, exactly the same images will be used.
-    if not self.is_training:
-      dataset = dataset.apply(batching.filter_irregular_batches(batch_size))
+            num_parallel_batches=self.num_cores, drop_remainder=True))
 
     if self.use_transpose:
       dataset = dataset.map(
           lambda images, labels: (tf.transpose(images, [1, 2, 3, 0]), labels),
           num_parallel_calls=self.num_cores)
-
-    # For XLA, we must used fixed shapes. Because we repeat the source training
-    # dataset indefinitely, this is not a dangerous operation.
-    #
-    # When evaluating, prevent accidentally evaluating the same image twice by
-    # dropping the final batch if it is less than a full batch size. As long as
-    # this validation is done with consistent batch size, exactly the same
-    # images will be used.
-    def set_shapes(images, labels):
-      if self.use_transpose:
-        images.set_shape(images.get_shape().merge_with(
-            tf.TensorShape([None, None, None, batch_size])))
-      else:
-        images.set_shape(images.get_shape().merge_with(
-            tf.TensorShape([batch_size, None, None, None])))
-      labels.set_shape(labels.get_shape().merge_with(
-          tf.TensorShape([batch_size])))
-      return images, labels
-
-    if self.is_training:
-      dataset = dataset.map(set_shapes)
 
     dataset = dataset.prefetch(32)  # Prefetch overlaps in-feed with training
     return dataset  # Must return the dataset and not tensors for high perf!

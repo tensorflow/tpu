@@ -26,7 +26,6 @@ import tensorflow as tf
 import inception_preprocessing
 import model_builder
 from tensorflow.contrib import summary
-from tensorflow.contrib.data.python.ops import batching
 from tensorflow.contrib.tpu.python.tpu import tpu_estimator
 from tensorflow.contrib.tpu.python.tpu import tpu_optimizer
 
@@ -488,38 +487,23 @@ class InputPipeline(object):
     dataset = dataset.shuffle(1024)
 
     # Use the fused map-and-batch operation.
+    #
+    # For XLA, we must used fixed shapes. Because we repeat the source training
+    # dataset indefinitely, we can use `drop_remainder=True` to get fixed-size
+    # batches without dropping any training examples.
+    #
+    # When evaluating, `drop_remainder=True` prevents accidentally evaluating
+    # the same image twice by dropping the final batch if it is less than a full
+    # batch size. As long as this validation is done with consistent batch size,
+    # exactly the same images will be used.
     dataset = dataset.apply(
         tf.contrib.data.map_and_batch(
             self._dataset_parser, batch_size=batch_size,
-            num_parallel_batches=8))
-
-    # For training, batch as usual. When evaluating, prevent accidentally
-    # evaluating the same image twice by dropping the final batch if it is less
-    # than a full batch size. As long as this validation is done with
-    # consistent batch size, exactly the same images will be used.
-    if not self.is_training:
-      dataset = dataset.apply(batching.filter_irregular_batches(batch_size))
+            num_parallel_batches=self.num_cores, drop_remainder=True))
 
     dataset = dataset.map(
         lambda images, labels: (tf.transpose(images, [1, 2, 3, 0]), labels),
         num_parallel_calls=8)
-
-    # For XLA, we must used fixed shapes. Because we repeat the source training
-    # dataset indefinitely, this is not a dangerous operation.
-    #
-    # When evaluating, prevent accidentally evaluating the same image twice by
-    # dropping the final batch if it is less than a full batch size. As long as
-    # this validation is done with consistent batch size, exactly the same
-    # images will be used.
-    def set_shapes(images, labels):
-      images.set_shape(images.get_shape().merge_with(
-          tf.TensorShape([None, None, None, batch_size])))
-      labels.set_shape(labels.get_shape().merge_with(
-          tf.TensorShape([batch_size])))
-      return images, labels
-
-    if self.is_training:
-      dataset = dataset.map(set_shapes)
 
     dataset = dataset.prefetch(32)  # Prefetch overlaps in-feed with training
     return dataset  # Must return the dataset and not tensors for high perf!

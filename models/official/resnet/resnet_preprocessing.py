@@ -71,8 +71,6 @@ def distorted_bounding_box_crop(image_bytes,
     target_height, target_width, _ = tf.unstack(bbox_size)
     crop_window = tf.stack([offset_y, offset_x, target_height, target_width])
     image = tf.image.decode_and_crop_jpeg(image_bytes, crop_window, channels=3)
-    image = tf.image.convert_image_dtype(
-        image, dtype=tf.float32)
 
     return image
 
@@ -123,9 +121,6 @@ def _decode_and_center_crop(image_bytes):
   crop_window = tf.stack([offset_height, offset_width,
                           padded_center_crop_size, padded_center_crop_size])
   image = tf.image.decode_and_crop_jpeg(image_bytes, crop_window, channels=3)
-  image = tf.image.convert_image_dtype(
-      image, dtype=tf.float32)
-
   image = tf.image.resize_bicubic([image], [IMAGE_SIZE, IMAGE_SIZE])[0]
 
   return image
@@ -137,11 +132,12 @@ def _flip(image):
   return image
 
 
-def preprocess_for_train(image_bytes):
+def preprocess_for_train(image_bytes, use_bfloat16):
   """Preprocesses the given image for evaluation.
 
   Args:
     image_bytes: `Tensor` representing an image binary of arbitrary size.
+    use_bfloat16: `bool` for whether to use bfloat16.
 
   Returns:
     A preprocessed image `Tensor`.
@@ -149,34 +145,40 @@ def preprocess_for_train(image_bytes):
   image = _decode_and_random_crop(image_bytes)
   image = _flip(image)
   image = tf.reshape(image, [IMAGE_SIZE, IMAGE_SIZE, 3])
+  image = tf.image.convert_image_dtype(
+      image, dtype=tf.bfloat16 if use_bfloat16 else tf.float32)
   return image
 
 
-def preprocess_for_eval(image_bytes):
+def preprocess_for_eval(image_bytes, use_bfloat16):
   """Preprocesses the given image for evaluation.
 
   Args:
     image_bytes: `Tensor` representing an image binary of arbitrary size.
+    use_bfloat16: `bool` for whether to use bfloat16.
 
   Returns:
     A preprocessed image `Tensor`.
   """
   image = _decode_and_center_crop(image_bytes)
   image = tf.reshape(image, [IMAGE_SIZE, IMAGE_SIZE, 3])
+  image = tf.image.convert_image_dtype(
+      image, dtype=tf.bfloat16 if use_bfloat16 else tf.float32)
   return image
 
 
-def preprocess_image(image_bytes, is_training=False):
+def preprocess_image(image_bytes, is_training=False, use_bfloat16=False):
   """Preprocesses the given image.
 
   Args:
     image_bytes: `Tensor` representing an image binary of arbitrary size.
     is_training: `bool` for whether the preprocessing is for training.
+    use_bfloat16: `bool` for whether to use bfloat16.
 
   Returns:
     A preprocessed image `Tensor`.
   """
   if is_training:
-    return preprocess_for_train(image_bytes)
+    return preprocess_for_train(image_bytes, use_bfloat16)
   else:
-    return preprocess_for_eval(image_bytes)
+    return preprocess_for_eval(image_bytes, use_bfloat16)
