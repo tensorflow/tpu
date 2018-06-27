@@ -499,7 +499,7 @@ class InputPipeline(object):
     dataset = dataset.apply(
         tf.contrib.data.map_and_batch(
             self._dataset_parser, batch_size=batch_size,
-            num_parallel_batches=self.num_cores, drop_remainder=True))
+            num_parallel_batches=8, drop_remainder=True))
 
     dataset = dataset.map(
         lambda images, labels: (tf.transpose(images, [1, 2, 3, 0]), labels),
