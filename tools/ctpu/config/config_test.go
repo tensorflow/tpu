@@ -18,6 +18,8 @@ package config
 import (
 	"os/user"
 	"testing"
+
+	"flag"
 )
 
 func TestFlagConfigAccount(t *testing.T) {
@@ -121,5 +123,35 @@ func TestCleanFlockName(t *testing.T) {
 		if got != test.want {
 			t.Errorf("cleanFlockName(%q) = %q, want: %q", test.name, got, test.want)
 		}
+	}
+}
+
+func TestFlagOverrides(t *testing.T) {
+	configuredZone := "us-central1-f" // non-default zone
+	configuredProject := "my-test-project"
+	configuredName := "my-test-flock-name"
+
+	f := flag.NewFlagSet("testFlagset", flag.ContinueOnError)
+	cfg := &Config{
+		Zone:      configuredZone,
+		FlockName: configuredName,
+		Project:   configuredProject,
+	}
+
+	cfg.SetFlags(f)
+	if err := f.Parse(nil); err != nil {
+		t.Fatalf("f.Parse(nil) = %v, want nil", err)
+	}
+
+	if cfg.Zone != configuredZone {
+		t.Errorf("cfg.Zone = %q, want: %q", cfg.Zone, configuredZone)
+	}
+
+	if cfg.FlockName != configuredName {
+		t.Errorf("cfg.FlockName = %q, want: %q", cfg.FlockName, configuredName)
+	}
+
+	if cfg.Project != configuredProject {
+		t.Errorf("cfg.Project = %q, want: %q", cfg.Project, configuredProject)
 	}
 }

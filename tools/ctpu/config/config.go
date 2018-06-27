@@ -59,7 +59,7 @@ func (c *Config) SetFlags(f *flag.FlagSet) {
        By default, ctpu picks a reasonable value from either your gcloud
        configuration, or the Compute Engine metadata. If a good value cannot be found, you
        will be required to provide a value on the command line.)`)
-	f.StringVar(&c.Zone, "zone", "",
+	f.StringVar(&c.Zone, "zone", c.Zone,
 		`Override the Compute Engine zone to use when allocating & deallocating resources.
         By default, it picks a reasonable value from either your gcloud
         configuration, or the Compute Engine metadata. If a good value cannot be found, you
