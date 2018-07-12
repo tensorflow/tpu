@@ -1,0 +1,70 @@
+# Train RetinaNet with COCO dataset using Cloud TPU and Google Kubernetes
+# Engine.
+#
+# [Training Data]
+#   Download and preprocess the COCO dataset using https://github.com/tensorflow/tpu/blob/r1.9/tools/datasets/download_and_preprocess_coco_k8s.yaml
+#   if you don't already have the data.
+#
+# [Instructions]
+#   1. Follow the instructions on https://cloud.google.com/tpu/docs/kubernetes-engine-setup
+#      to create a Kubernetes Engine cluster.
+#   2. Change the environment variable DATA_BUCKET and MODEL_BUCKET below to the
+#      Google Cloud Storage location where you downloaded the COCO dataset and
+#      where you want to store the output model, respectively.
+#   3. Run `kubectl create -f retinanet_k8s.yaml`.
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: retinanet-tpu
+spec:
+  template:
+    metadata:
+      annotations:
+        # The Cloud TPUs that will be created for this Job must support
+        # TensorFlow 1.9. This version MUST match the TensorFlow version that
+        # your model is built on.
+        tf-version.cloud-tpus.google.com: "1.9"
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: retinanet-tpu
+        # The official TensorFlow 1.9 TPU model image built from https://github.com/tensorflow/tpu/blob/r1.9/tools/docker/Dockerfile.
+        image: gcr.io/tensorflow/tpu-models:r1.9
+        command:
+          - /bin/sh
+          - -c
+          - >
+            DEBIAN_FRONTEND=noninteractive apt-get install -y python-dev python-tk &&
+            pip install Cython matplotlib &&
+            pip install 'git+https://github.com/cocodataset/cocoapi#egg=pycocotools&subdirectory=PythonAPI' &&
+            python /tensorflow_tpu_models/models/official/retinanet/retinanet_main.py
+            --train_batch_size=64
+            --training_file_pattern=${DATA_BUCKET}/train-*
+            --resnet_checkpoint=${RESNET_CHECKPOINT}
+            --model_dir=${MODEL_BUCKET}
+            --hparams=image_size=640
+            --num_examples_per_epoch=6400
+            --num_epochs=1
+        env:
+          # [REQUIRED] Must specify the Google Cloud Storage location where the
+          # training data is stored.
+        - name: DATA_BUCKET
+          value: "gs://<my-data-bucket>"
+          # [REQUIRED] Must specify the Google Cloud Storage location where the
+          # model and the checkpoint will be stored.
+        - name: MODEL_BUCKET
+          value: "gs://<my-model-bucket>/retinanet"
+          # RetinaNet requires a pre-trained image classification model (like
+          # ResNet) as a backbone network. This example uses a pretrained
+          # checkpoint created with the ResNet demonstration model. You can
+          # instead train your own ResNet model if desired, and specify a
+          # checkpoint from your ResNet model directory.
+        - name: RESNET_CHECKPOINT
+          value: "gs://cloud-tpu-artifacts/resnet/resnet-nhwc-2018-02-07/model.ckpt-112603"
+        resources:
+          limits:
+            # Request a single v2-8 Cloud TPU device to train the model.
+            # A single v2-8 Cloud TPU device consists of 4 chips, each of which
+            # has 2 cores, so there are 8 cores in total.
+            cloud-tpus.google.com/v2: 8

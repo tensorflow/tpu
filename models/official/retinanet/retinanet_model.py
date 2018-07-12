@@ -258,9 +258,6 @@ def _detection_loss(cls_outputs, box_outputs, labels, params):
   cls_loss = tf.add_n(cls_losses)
   box_loss = tf.add_n(box_losses)
   total_loss = cls_loss + params['box_loss_weight'] * box_loss
-  total_loss += _WEIGHT_DECAY * tf.add_n(
-      [tf.nn.l2_loss(v) for v in tf.trainable_variables()
-       if 'batch_normalization' not in v.name])
   return total_loss, cls_loss, box_loss
 
 
@@ -336,6 +333,9 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
   # cls_loss and box_loss are for logging. only total_loss is optimized.
   total_loss, cls_loss, box_loss = _detection_loss(cls_outputs, box_outputs,
                                                    labels, params)
+  total_loss += _WEIGHT_DECAY * tf.add_n(
+      [tf.nn.l2_loss(v) for v in tf.trainable_variables()
+       if 'batch_normalization' not in v.name])
 
   if mode == tf.estimator.ModeKeys.TRAIN:
     optimizer = tf.train.MomentumOptimizer(
