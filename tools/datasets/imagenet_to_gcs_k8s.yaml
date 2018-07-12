@@ -1,0 +1,66 @@
+# Download and preprocess the ImageNet dataset.
+#
+# Instructions:
+#   1. Follow the instructions on https://cloud.google.com/tpu/docs/kubernetes-engine-setup
+#      to create a Kubernetes Engine cluster. The Job must be running at least
+#      on a n1-standard-4 machine.
+#   2. Change the environment variable
+#      - PROJECT_NAME to your project name.
+#      - DATA_BUCKET to the path of the Google Cloud Storage bucket where you
+#        want to store the training data.
+#      - IMAGENET_USERNAME and IMAGENET_PASSWORD to the username and password of
+#        your ImageNet account.
+#   3. Run `kubectl create -f imagenet_to_gcs_k8s.yaml`.
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: imagenet-to-gcs
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: imagenet-to-gcs
+        # The official TensorFlow 1.9 TPU model image built from https://github.com/tensorflow/tpu/blob/r1.9/tools/docker/Dockerfile.
+        image: gcr.io/tensorflow/tpu-models:r1.9
+        command:
+          - python
+          - /tensorflow_tpu_models/tools/datasets/imagenet_to_gcs.py
+          - --project=$(PROJECT_NAME)
+          - --gcs_output_path=$(DATA_BUCKET)
+          - --local_scratch_dir=/scratch-dir
+          - --imagenet_username=$(IMAGENET_USERNAME)
+          - --imagenet_access_key=$(IMAGENET_PASSWORD)
+        volumeMounts:
+        - mountPath: /scratch-dir
+          name: scratch-volume
+        env:
+          # [REQUIRED] Must specify your project name.
+        - name: PROJECT_NAME
+          value: ""
+          # [REQUIRED] Must specify the Google Cloud Storage location where the
+          # ImageNet dataset will be stored.
+        - name: DATA_BUCKET
+          value: "gs://<my-data-bucket>/data/imagenet"
+          # [REQUIRED] Must specify the username of your ImageNet account.
+        - name: IMAGENET_USERNAME
+          value: ""
+          # [REQUIRED] Must specify the password of your ImageNet account.
+        - name: IMAGENET_PASSWORD
+          value: ""
+      volumes:
+      - name: scratch-volume
+        persistentVolumeClaim:
+          claimName: scratch-disk-imagenet
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: scratch-disk-imagenet
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 300Gi

@@ -79,7 +79,7 @@ class InputReader(object):
         image = tf.image.convert_image_dtype(image, dtype=tf.float32)
         image = _normalize_image(image)
 
-        if params['input_rand_hflip']:
+        if self._is_training and params['input_rand_hflip']:
           image, boxes = preprocessor.random_horizontal_flip(image, boxes=boxes)
         image_original_shape = tf.shape(image)
         image, _ = preprocessor.resize_to_range(

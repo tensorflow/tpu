@@ -113,7 +113,10 @@ func (i *TPUInstance) IsRunning() bool {
 
 // IsPreemptible returns true if the Cloud TPU is a preemptible Cloud TPU, false otherwise.
 func (i *TPUInstance) IsPreemptible() bool {
-	return i.SchedulingConfig.Preemptible
+	if i.SchedulingConfig != nil {
+		return i.SchedulingConfig.Preemptible
+	}
+	return false
 }
 
 // NodeName returns the flock name (the human-usable name) of the Cloud TPU
