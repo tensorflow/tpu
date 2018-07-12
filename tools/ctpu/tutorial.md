@@ -216,9 +216,6 @@ and open port `8080`.
 The [ResNet](https://github.com/tensorflow/tpu/tree/master/models/official/resnet)
 model is pre-loaded on your Compute Engine VM.
 
-If TensorBoard has taken over your Cloud Shell tab, open another tab and run
-`ctpu up` in the new shell to connect to your Compute Engine VM:
-
 To start training ResNet-50, execute:
 
 ```bash
