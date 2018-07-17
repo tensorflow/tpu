@@ -27,6 +27,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import itertools
 import math
 from absl import flags
 import absl.logging as _logging  # pylint: disable=unused-import
@@ -34,9 +35,6 @@ import tensorflow as tf
 
 import amoeba_net_model as model_lib
 import model_specs
-from tensorflow.contrib.tpu.python.tpu import tpu_config
-from tensorflow.contrib.tpu.python.tpu import tpu_estimator
-from tensorflow.contrib.training.python.training import evaluation
 
 # Cloud TPU Cluster Resolvers
 flags.DEFINE_string(
@@ -182,15 +180,15 @@ def build_run_config():
   iterations_per_loop = (eval_steps if FLAGS.mode == 'eval'
                          else FLAGS.iterations_per_loop)
   save_checkpoints_steps = FLAGS.save_checkpoints_steps or iterations_per_loop
-  run_config = tpu_config.RunConfig(
+  run_config = tf.contrib.tpu.RunConfig(
       cluster=tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
       save_checkpoints_steps=save_checkpoints_steps,
       keep_checkpoint_max=None,
-      tpu_config=tpu_config.TPUConfig(
+      tpu_config=tf.contrib.tpu.TPUConfig(
           iterations_per_loop=iterations_per_loop,
           num_shards=FLAGS.num_shards,
-          per_host_input_for_training=tpu_config.InputPipelineConfig.PER_HOST_V2
+          per_host_input_for_training=tf.contrib.tpu.InputPipelineConfig.PER_HOST_V2
       ))
   return run_config
 
@@ -266,7 +264,7 @@ def _terminate_eval():
 
 
 def _get_next_checkpoint():
-  return evaluation.checkpoints_iterator(
+  return tf.contrib.training.checkpoints_iterator(
       FLAGS.model_dir,
       timeout=FLAGS.eval_timeout,
       timeout_fn=_terminate_eval)
@@ -302,12 +300,11 @@ def main(_):
   eval_batch_size = (None if mode == 'train' else
                      hparams.eval_batch_size)
 
-  run_config = build_run_config()
-
   model = model_lib.AmoebaNetEstimatorModel(hparams, model_dir)
 
   if hparams.use_tpu:
-    image_classifier = tpu_estimator.TPUEstimator(
+    run_config = build_run_config()
+    image_classifier = tf.contrib.tpu.TPUEstimator(
         model_fn=model.model_fn,
         use_tpu=True,
         config=run_config,
@@ -315,6 +312,11 @@ def main(_):
         train_batch_size=hparams.train_batch_size,
         eval_batch_size=eval_batch_size)
   else:
+    save_checkpoints_steps = (FLAGS.save_checkpoints_steps or
+                              FLAGS.iterations_per_loop)
+    run_config = tf.estimator.RunConfig(
+        model_dir=FLAGS.model_dir,
+        save_checkpoints_steps=save_checkpoints_steps)
     image_classifier = tf.estimator.Estimator(
         model_fn=model.model_fn,
         config=run_config,
@@ -363,7 +365,18 @@ def main(_):
       eval_results = image_classifier.evaluate(
           input_fn=imagenet_eval.input_fn, steps=eval_steps, hooks=eval_hooks)
       tf.logging.info('Evaluation results: %s' % eval_results)
-  else:
+  elif mode == 'predict':
+    tf.logging.info('Starting prediction ...')
+    time_hook = model_lib.SessionTimingHook()
+    eval_hooks.append(time_hook)
+    result_iter = image_classifier.predict(
+        input_fn=imagenet_eval.input_fn,
+        hooks=eval_hooks,
+        yield_single_examples=False)
+    results = list(itertools.islice(result_iter, eval_steps))
+    tf.logging.info('Inference speed = {} images per second.'.format(
+        time_hook.compute_speed(len(results) * eval_batch_size)))
+  else:  # default to train mode.
     current_step = _load_global_step_from_checkpoint_dir(model_dir)
     total_step = hparams.num_epochs * train_steps_per_epoch
     if current_step < total_step:

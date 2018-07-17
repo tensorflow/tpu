@@ -136,8 +136,11 @@ to download and preprocess the
 [images](http://yann.lecun.com/exdb/mnist/index.html):
 
 ```bash
-python /usr/share/tensorflow/tensorflow/examples/how_tos/reading_data/convert_to_records.py --directory=./data && \
-  gunzip ./data/*.gz
+python /usr/share/tensorflow/tensorflow/examples/how_tos/reading_data/convert_to_records.py --directory=./data
+```
+
+```bash
+gunzip ./data/*.gz
 ```
 
 Upload the preprocessed records to your Cloud Storage bucket (the environment
@@ -153,10 +156,7 @@ gsutil cp -r ./data gs://$GCS_BUCKET_NAME/mnist/data
 Now that you have your data prepared, you're ready to train. Execute:
 
 ```bash
-python /usr/share/models/official/mnist/mnist_tpu.py \
-  --data_dir=gs://$GCS_BUCKET_NAME/mnist/data/ \
-  --model_dir=gs://$GCS_BUCKET_NAME/mnist/model \
-  --tpu=$TPU_NAME
+python /usr/share/models/official/mnist/mnist_tpu.py --data_dir=gs://$GCS_BUCKET_NAME/mnist/data/ --model_dir=gs://$GCS_BUCKET_NAME/mnist/model --tpu=$TPU_NAME
 ```
 
 ### What's happening? ###

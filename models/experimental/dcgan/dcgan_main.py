@@ -30,9 +30,6 @@ import cifar_input
 import cifar_model
 import mnist_input
 import mnist_model
-from tensorflow.contrib.tpu.python.tpu import tpu_config
-from tensorflow.contrib.tpu.python.tpu import tpu_estimator
-from tensorflow.contrib.tpu.python.tpu import tpu_optimizer
 from tensorflow.python.estimator import estimator
 
 FLAGS = flags.FLAGS
@@ -92,7 +89,7 @@ def model_fn(features, labels, mode, params):
         'generated_images': model.generator(random_noise, is_training=False)
     }
 
-    return tpu_estimator.TPUEstimatorSpec(mode=mode, predictions=predictions)
+    return tf.contrib.tpu.TPUEstimatorSpec(mode=mode, predictions=predictions)
 
   # Use params['batch_size'] for the batch size inside model_fn
   batch_size = params['batch_size']   # pylint: disable=unused-variable
@@ -134,8 +131,8 @@ def model_fn(features, labels, mode, params):
         learning_rate=FLAGS.learning_rate, beta1=0.5)
 
     if FLAGS.use_tpu:
-      d_optimizer = tpu_optimizer.CrossShardOptimizer(d_optimizer)
-      g_optimizer = tpu_optimizer.CrossShardOptimizer(g_optimizer)
+      d_optimizer = tf.contrib.tpu.CrossShardOptimizer(d_optimizer)
+      g_optimizer = tf.contrib.tpu.CrossShardOptimizer(g_optimizer)
 
     with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
       d_step = d_optimizer.minimize(
@@ -150,7 +147,7 @@ def model_fn(features, labels, mode, params):
       increment_step = tf.assign_add(tf.train.get_or_create_global_step(), 1)
       joint_op = tf.group([d_step, g_step, increment_step])
 
-      return tpu_estimator.TPUEstimatorSpec(
+      return tf.contrib.tpu.TPUEstimatorSpec(
           mode=mode,
           loss=g_loss,
           train_op=joint_op)
@@ -166,7 +163,7 @@ def model_fn(features, labels, mode, params):
           'discriminator_loss': tf.metrics.mean(d_loss),
           'generator_loss': tf.metrics.mean(g_loss)}
 
-    return tpu_estimator.TPUEstimatorSpec(
+    return tf.contrib.tpu.TPUEstimatorSpec(
         mode=mode,
         loss=tf.reduce_mean(g_loss),
         eval_metrics=(_eval_metric_fn, [d_loss, g_loss]))
@@ -207,10 +204,10 @@ def main(argv):
       zone=FLAGS.tpu_zone,
       project=FLAGS.gcp_project)
 
-  config = tpu_config.RunConfig(
+  config = tf.contrib.tpu.RunConfig(
       cluster=tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
-      tpu_config=tpu_config.TPUConfig(
+      tpu_config=tf.contrib.tpu.TPUConfig(
           num_shards=FLAGS.num_shards,
           iterations_per_loop=FLAGS.iterations_per_loop))
 
@@ -227,7 +224,7 @@ def main(argv):
     raise ValueError('Invalid dataset: %s' % FLAGS.dataset)
 
   # TPU-based estimator used for TRAIN and EVAL
-  est = tpu_estimator.TPUEstimator(
+  est = tf.contrib.tpu.TPUEstimator(
       model_fn=model_fn,
       use_tpu=FLAGS.use_tpu,
       config=config,
@@ -235,7 +232,7 @@ def main(argv):
       eval_batch_size=FLAGS.batch_size)
 
   # CPU-based estimator used for PREDICT (generating images)
-  cpu_est = tpu_estimator.TPUEstimator(
+  cpu_est = tf.contrib.tpu.TPUEstimator(
       model_fn=model_fn,
       use_tpu=False,
       config=config,

@@ -27,8 +27,6 @@ import tensorflow as tf
 
 import data_pipeline
 import squeezenet_model
-from tensorflow.contrib.tpu.python.tpu import tpu_config
-from tensorflow.contrib.tpu.python.tpu import tpu_estimator
 
 
 # Cloud TPU Cluster Resolvers
@@ -87,19 +85,19 @@ def main(argv):
       "num_epochs": FLAGS.num_epochs,
   }
 
-  run_config = tpu_config.RunConfig(
+  run_config = tf.contrib.tpu.RunConfig(
       cluster=tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
       save_checkpoints_secs=FLAGS.save_checkpoints_secs,
       session_config=tf.ConfigProto(
           allow_soft_placement=True, log_device_placement=False),
-      tpu_config=tpu_config.TPUConfig(
+      tpu_config=tf.contrib.tpu.TPUConfig(
           iterations_per_loop=100,
           num_shards=FLAGS.num_shards,
       ),
   )
 
-  estimator = tpu_estimator.TPUEstimator(
+  estimator = tf.contrib.tpu.TPUEstimator(
       model_fn=squeezenet_model.model_fn,
       use_tpu=FLAGS.use_tpu,
       config=run_config,

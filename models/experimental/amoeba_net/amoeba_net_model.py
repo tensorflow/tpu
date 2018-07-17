@@ -18,6 +18,7 @@ from __future__ import division
 from __future__ import print_function
 
 import copy
+import time
 import os
 
 import numpy as np
@@ -25,9 +26,6 @@ import tensorflow as tf
 
 import inception_preprocessing
 import model_builder
-from tensorflow.contrib import summary
-from tensorflow.contrib.tpu.python.tpu import tpu_estimator
-from tensorflow.contrib.tpu.python.tpu import tpu_optimizer
 
 # Dataset constants
 NUM_TRAIN_IMAGES = 1281167
@@ -236,6 +234,7 @@ class AmoebaNetEstimatorModel(object):
         features, LABEL_CLASSES, is_training, hparams)
 
     if not is_predict:
+      labels = tf.one_hot(labels, LABEL_CLASSES)
       loss = model_builder.build_softmax_loss(
           logits,
           end_points,
@@ -278,7 +277,7 @@ class AmoebaNetEstimatorModel(object):
       tf.logging.fatal('Unknown optimizer:', self.hparams.optimizer)
 
     if self.hparams.use_tpu:
-      optimizer = tpu_optimizer.CrossShardOptimizer(optimizer)
+      optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
     return optimizer
 
   def _build_train_op(self, optimizer, loss, global_step):
@@ -310,13 +309,16 @@ class AmoebaNetEstimatorModel(object):
     eval_active = (mode == tf.estimator.ModeKeys.EVAL)
     is_predict = (mode == tf.estimator.ModeKeys.PREDICT)
     features = tf.transpose(features, [3, 0, 1, 2])  # HWCN to NHWC
-    labels = tf.one_hot(labels, LABEL_CLASSES)
     loss, logits = self._build_network(features, labels, mode)
 
     if is_predict:
       predictions = {'logits': logits}
-      return tpu_estimator.TPUEstimatorSpec(mode=mode, predictions=predictions)
-
+      if self.hparams.use_tpu:
+        return  tf.contrib.tpu.TPUEstimatorSpec(mode=mode,
+                                                predictions=predictions)
+      else:
+        return tf.estimator.EstimatorSpec(mode=mode,
+                                          predictions=predictions)
     host_call = None
     train_op = None
 
@@ -349,10 +351,12 @@ class AmoebaNetEstimatorModel(object):
         def host_call_fn(gs, lr):
           # Outfeed supports int32 but global_step is expected to be int64.
           gs = tf.cast(tf.reduce_mean(gs), tf.int64)
-          with summary.create_file_writer(self.model_dir).as_default():
-            with summary.always_record_summaries():
-              summary.scalar('learning_rate', tf.reduce_mean(lr), step=gs)
-              return summary.all_summary_ops()
+          with tf.contrib.summary.create_file_writer(
+              self.model_dir).as_default():
+            with tf.contrib.summary.always_record_summaries():
+              tf.contrib.summary.scalar('learning_rate', tf.reduce_mean(lr),
+                                        step=gs)
+              return tf.contrib.summary.all_summary_ops()
         host_call = (host_call_fn, [gs_t, lr_t])
 
     eval_metrics = None
@@ -377,7 +381,7 @@ class AmoebaNetEstimatorModel(object):
       eval_metric_ops = metric_fn(labels, logits)
 
     if self.hparams.use_tpu:
-      return tpu_estimator.TPUEstimatorSpec(
+      return tf.contrib.tpu.TPUEstimatorSpec(
           mode=mode, loss=loss, train_op=train_op,
           host_call=host_call, eval_metrics=eval_metrics)
     return tf.estimator.EstimatorSpec(
@@ -526,3 +530,40 @@ class LoadEMAHook(tf.train.SessionRunHook):
   def after_create_session(self, sess, coord):
     tf.logging.info('Reloading EMA...')
     self._load_ema(sess)
+
+
+class SessionTimingHook(tf.train.SessionRunHook):
+  """Hook that computes speed based on session run time."""
+
+  def __init__(self):
+    # Lists of walltime.
+    self._before_runs = []
+    self._after_runs = []
+
+  def before_run(self, run_context):
+    self._before_runs.append(time.time())
+
+  def after_run(self, run_context, results):
+    self._after_runs.append(time.time())
+
+  def compute_speed(self, num_samples):
+    """Returns speed, in number of samples per second."""
+    num_runs = len(self._before_runs)
+    if num_runs == 0:
+      raise ValueError('Session run time never recorded')
+    if len(self._after_runs) != num_runs:
+      raise ValueError(
+          'Number of before_run events (%d) does not match '
+          'number of after_run events (%d)' %
+          (len(self._before_runs), len(self._after_runs)))
+    total_eval_time = sum(self._after_runs[i] - self._before_runs[i]
+                          for i in range(num_runs))
+    if num_runs <= 1:
+      tf.logging.warn(
+          'Speed will be inaccurate with only one session run')
+    else:
+      # Exclude the first run, which tends to take much longer than other runs.
+      total_eval_time -= (self._after_runs[0] - self._before_runs[0])
+      # We assume num_samples are evenly distributed across runs.
+      num_samples *= (float(num_runs - 1) / num_runs)
+    return num_samples / max(total_eval_time, 1e-6)

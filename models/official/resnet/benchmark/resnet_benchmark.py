@@ -31,8 +31,6 @@ sys.path.append(os.path.dirname(os.path.abspath(sys.path[0])))
 
 import imagenet_input    # pylint: disable=g-import-not-at-top
 import resnet_main
-from tensorflow.contrib.tpu.python.tpu import tpu_config
-from tensorflow.contrib.tpu.python.tpu import tpu_estimator
 from tensorflow.python.estimator import estimator
 
 
@@ -47,17 +45,17 @@ def main(unused_argv):
       zone=FLAGS.tpu_zone,
       project=FLAGS.gcp_project)
 
-  config = tpu_config.RunConfig(
+  config = tf.contrib.tpu.RunConfig(
       cluster=tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
       save_checkpoints_steps=FLAGS.iterations_per_loop,
       keep_checkpoint_max=None,
-      tpu_config=tpu_config.TPUConfig(
+      tpu_config=tf.contrib.tpu.TPUConfig(
           iterations_per_loop=FLAGS.iterations_per_loop,
           num_shards=FLAGS.num_cores,
           per_host_input_for_training=tpu_config.InputPipelineConfig.PER_HOST_V2))  # pylint: disable=line-too-long
 
-  resnet_classifier = tpu_estimator.TPUEstimator(
+  resnet_classifier = tf.contrib.tpu.TPUEstimator(
       use_tpu=FLAGS.use_tpu,
       model_fn=resnet_main.resnet_model_fn,
       config=config,

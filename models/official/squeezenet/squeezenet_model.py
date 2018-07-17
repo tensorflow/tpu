@@ -26,8 +26,6 @@ from __future__ import print_function
 
 import tensorflow as tf
 
-from tensorflow.contrib.tpu.python.tpu import tpu_estimator
-from tensorflow.contrib.tpu.python.tpu import tpu_optimizer
 
 
 def conv2d(inputs,
@@ -131,11 +129,11 @@ def model_fn(features, labels, mode, params):
         use_nesterov=True)
 
   if params["use_tpu"]:
-    optimizer = tpu_optimizer.CrossShardOptimizer(optimizer)
+    optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
 
   train_op = optimizer.minimize(loss, tf.train.get_global_step())
 
-  return tpu_estimator.TPUEstimatorSpec(
+  return tf.contrib.tpu.TPUEstimatorSpec(
       mode=mode,
       loss=loss,
       train_op=train_op,

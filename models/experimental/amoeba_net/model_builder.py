@@ -347,12 +347,10 @@ def _build_network_base(images,
   # Run the cells
   filter_scaling = 1.0
   # true_cell_num accounts for the stem cells
-  true_cell_num = 2
+  true_cell_num = len(cell_outputs)
   for cell_num in range(hparams.num_cells):
     tf.logging.info('Current cell num: {}'.format(true_cell_num))
-    stride = 1
 
-    prev_layer = cell_outputs[-2]
     if cell_num in reduction_indices:
       filter_scaling *= filter_scaling_rate
       net = reduction_cell(
@@ -362,25 +360,26 @@ def _build_network_base(images,
           stride=2,
           prev_layer=cell_outputs[-2],
           cell_num=true_cell_num)
-      true_cell_num += 1
       cell_outputs.append(net)
-
-    prev_layer = cell_outputs[-2]
+      tf.logging.info('Reduction cell shape at layer {}: {}'.format(
+          true_cell_num, net.shape))
+      true_cell_num += 1
     net = normal_cell(
         net,
         scope='cell_{}'.format(cell_num),
         filter_scaling=filter_scaling,
-        stride=stride,
-        prev_layer=prev_layer,
+        stride=1,
+        prev_layer=cell_outputs[-2],
         cell_num=true_cell_num)
-    true_cell_num += 1
     if (hparams.use_aux_head and cell_num in aux_head_cell_idxes and
         num_classes and is_training):
       aux_net = tf.nn.relu(net)
       _build_aux_head(aux_net, end_points, num_classes, hparams,
                       scope='aux_{}'.format(cell_num))
     cell_outputs.append(net)
-    tf.logging.info('net shape at layer {}: {}'.format(cell_num, net.shape))
+    tf.logging.info('Normal net shape at layer {}: {}'.format(
+        true_cell_num, net.shape))
+    true_cell_num += 1
 
   # Final softmax layer
   with tf.variable_scope('final_layer',
