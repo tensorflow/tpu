@@ -31,10 +31,6 @@ import vgg_preprocessing
 from tensorflow.contrib import summary
 from tensorflow.contrib.framework.python.ops import arg_scope
 from tensorflow.contrib.slim.nets import inception
-from tensorflow.contrib.tpu.python.tpu import bfloat16
-from tensorflow.contrib.tpu.python.tpu import tpu_config
-from tensorflow.contrib.tpu.python.tpu import tpu_estimator
-from tensorflow.contrib.tpu.python.tpu import tpu_optimizer
 from tensorflow.contrib.training.python.training import evaluation
 
 
@@ -588,7 +584,7 @@ def inception_model_fn(features, labels, mode, params):
       tf.logging.fatal('Unknown optimizer:', FLAGS.optimizer)
 
     if FLAGS.use_tpu:
-      optimizer = tpu_optimizer.CrossShardOptimizer(optimizer)
+      optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
 
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
     with tf.control_dependencies(update_ops):
@@ -677,7 +673,7 @@ def inception_model_fn(features, labels, mode, params):
 
     eval_metrics = (metric_fn, [labels, logits])
 
-  return tpu_estimator.TPUEstimatorSpec(
+  return tf.contrib.tpu.TPUEstimatorSpec(
       mode=mode,
       loss=loss,
       train_op=train_op,
@@ -741,7 +737,7 @@ def main(unused_argv):
   per_host_input_for_training = (
       FLAGS.num_shards <= 8 if FLAGS.mode == 'train' else True)
 
-  run_config = tpu_config.RunConfig(
+  run_config = tf.contrib.tpu.RunConfig(
       cluster=tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
       save_checkpoints_secs=FLAGS.save_checkpoints_secs,
@@ -749,12 +745,12 @@ def main(unused_argv):
       session_config=tf.ConfigProto(
           allow_soft_placement=True,
           log_device_placement=FLAGS.log_device_placement),
-      tpu_config=tpu_config.TPUConfig(
+      tpu_config=tf.contrib.tpu.TPUConfig(
           iterations_per_loop=iterations,
           num_shards=FLAGS.num_shards,
           per_host_input_for_training=per_host_input_for_training))
 
-  inception_classifier = tpu_estimator.TPUEstimator(
+  inception_classifier = tf.contrib.tpu.TPUEstimator(
       model_fn=inception_model_fn,
       use_tpu=FLAGS.use_tpu,
       config=run_config,

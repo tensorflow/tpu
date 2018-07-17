@@ -30,7 +30,6 @@ from absl import flags
 import numpy as np
 import tensorflow as tf
 
-from tensorflow.contrib.tpu.python.tpu import keras_support
 
 flags.DEFINE_bool('use_tpu', False, 'Use TPU model instead of CPU. ')
 flags.DEFINE_string('tpu', None, 'Name of the TPU to use')
@@ -89,8 +88,8 @@ def main(unused_dev):
   model.add(tf.keras.layers.Dense(num_classes, activation='softmax'))
 
   if use_tpu:
-    strategy = keras_support.TPUDistributionStrategy(num_cores_per_host=8)
-    model = keras_support.tpu_model(model,
+    strategy = tf.contrib.tpu.TPUDistributionStrategy(num_cores_per_host=8)
+    model = tf.contrib.tpu.tpu_model(model,
                                     strategy=strategy,
                                     tpu_name_or_address=flags.FLAGS.tpu)
 

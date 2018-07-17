@@ -31,9 +31,6 @@ import tensorflow as tf
 import anchors
 import coco_metric
 import retinanet_architecture
-from tensorflow.contrib.tpu.python.tpu import bfloat16
-from tensorflow.contrib.tpu.python.tpu import tpu_estimator
-from tensorflow.contrib.tpu.python.tpu import tpu_optimizer
 
 _WEIGHT_DECAY = 1e-4
 
@@ -291,7 +288,7 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
         is_training_bn=params['is_training_bn'])
 
   if params['use_bfloat16']:
-    with bfloat16.bfloat16_scope():
+    with tf.contrib.tpu.bfloat16_scope():
       cls_outputs, box_outputs = _model_outputs()
       levels = cls_outputs.keys()
       for level in levels:
@@ -341,7 +338,7 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
     optimizer = tf.train.MomentumOptimizer(
         learning_rate, momentum=params['momentum'])
     if params['use_tpu']:
-      optimizer = tpu_optimizer.CrossShardOptimizer(optimizer)
+      optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
 
     # Batch norm requires update_ops to be added as a train_op dependency.
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
@@ -408,7 +405,7 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
       metric_fn_inputs['box_outputs_%d' % level] = box_outputs[level]
     eval_metrics = (metric_fn, metric_fn_inputs)
 
-  return tpu_estimator.TPUEstimatorSpec(
+  return tf.contrib.tpu.TPUEstimatorSpec(
       mode=mode,
       loss=total_loss,
       train_op=train_op,

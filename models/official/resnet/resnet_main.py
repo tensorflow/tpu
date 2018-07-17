@@ -28,10 +28,6 @@ import tensorflow as tf
 import imagenet_input
 import resnet_model
 from tensorflow.contrib import summary
-from tensorflow.contrib.tpu.python.tpu import bfloat16
-from tensorflow.contrib.tpu.python.tpu import tpu_config
-from tensorflow.contrib.tpu.python.tpu import tpu_estimator
-from tensorflow.contrib.tpu.python.tpu import tpu_optimizer
 from tensorflow.contrib.training.python.training import evaluation
 from tensorflow.python.estimator import estimator
 
@@ -246,7 +242,7 @@ def resnet_model_fn(features, labels, mode, params):
         inputs=features, is_training=(mode == tf.estimator.ModeKeys.TRAIN))
 
   if FLAGS.precision == 'bfloat16':
-    with bfloat16.bfloat16_scope():
+    with tf.contrib.tpu.bfloat16_scope():
       logits = build_network()
     logits = tf.cast(logits, tf.float32)
   elif FLAGS.precision == 'float32':
@@ -293,7 +289,7 @@ def resnet_model_fn(features, labels, mode, params):
       # When using TPU, wrap the optimizer with CrossShardOptimizer which
       # handles synchronization details between different TPU cores. To the
       # user, this should look like regular synchronous training.
-      optimizer = tpu_optimizer.CrossShardOptimizer(optimizer)
+      optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
 
     # Batch normalization requires UPDATE_OPS to be added as a dependency to
     # the train operation.
@@ -380,7 +376,7 @@ def resnet_model_fn(features, labels, mode, params):
 
     eval_metrics = (metric_fn, [labels, logits])
 
-  return tpu_estimator.TPUEstimatorSpec(
+  return tf.contrib.tpu.TPUEstimatorSpec(
       mode=mode,
       loss=loss,
       train_op=train_op,
@@ -394,16 +390,16 @@ def main(unused_argv):
       zone=FLAGS.tpu_zone,
       project=FLAGS.gcp_project)
 
-  config = tpu_config.RunConfig(
+  config = tf.contrib.tpu.RunConfig(
       cluster=tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
       save_checkpoints_steps=max(600, FLAGS.iterations_per_loop),
-      tpu_config=tpu_config.TPUConfig(
+      tpu_config=tf.contrib.tpu.TPUConfig(
           iterations_per_loop=FLAGS.iterations_per_loop,
           num_shards=FLAGS.num_cores,
-          per_host_input_for_training=tpu_config.InputPipelineConfig.PER_HOST_V2))  # pylint: disable=line-too-long
+          per_host_input_for_training=tf.contrib.tpu.InputPipelineConfig.PER_HOST_V2))  # pylint: disable=line-too-long
 
-  resnet_classifier = tpu_estimator.TPUEstimator(
+  resnet_classifier = tf.contrib.tpu.TPUEstimator(
       use_tpu=FLAGS.use_tpu,
       model_fn=resnet_model_fn,
       config=config,

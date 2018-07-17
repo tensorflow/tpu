@@ -26,9 +26,6 @@ import tensorflow as tf
 
 import dataloader
 import retinanet_model
-from tensorflow.contrib.tpu.python.tpu import tpu_config
-from tensorflow.contrib.tpu.python.tpu import tpu_estimator
-from tensorflow.contrib.training.python.training import evaluation
 
 
 # Cloud TPU Cluster Resolvers
@@ -135,18 +132,18 @@ def main(argv):
     config_proto.graph_options.optimizer_options.global_jit_level = (
         tf.OptimizerOptions.ON_1)
 
-  run_config = tpu_config.RunConfig(
+  run_config = tf.contrib.tpu.RunConfig(
       cluster=tpu_cluster_resolver,
       evaluation_master=FLAGS.eval_master,
       model_dir=FLAGS.model_dir,
       log_step_count_steps=FLAGS.iterations_per_loop,
       session_config=config_proto,
-      tpu_config=tpu_config.TPUConfig(FLAGS.iterations_per_loop,
+      tpu_config=tf.contrib.tpu.TPUConfig(FLAGS.iterations_per_loop,
                                       FLAGS.num_shards))
 
   # TPU Estimator
   if FLAGS.mode == 'train':
-    train_estimator = tpu_estimator.TPUEstimator(
+    train_estimator = tf.contrib.tpu.TPUEstimator(
         model_fn=retinanet_model.retinanet_model_fn,
         use_tpu=FLAGS.use_tpu,
         train_batch_size=FLAGS.train_batch_size,
@@ -169,7 +166,7 @@ def main(argv):
           is_training_bn=False,
           use_bfloat16=False,
       )
-      eval_estimator = tpu_estimator.TPUEstimator(
+      eval_estimator = tf.contrib.tpu.TPUEstimator(
           model_fn=retinanet_model.retinanet_model_fn,
           use_tpu=False,
           train_batch_size=FLAGS.train_batch_size,
@@ -197,7 +194,7 @@ def main(argv):
         use_bfloat16=False,
     )
 
-    eval_estimator = tpu_estimator.TPUEstimator(
+    eval_estimator = tf.contrib.tpu.TPUEstimator(
         model_fn=retinanet_model.retinanet_model_fn,
         use_tpu=False,
         eval_batch_size=1,
@@ -211,7 +208,7 @@ def main(argv):
       return True
 
     # Run evaluation when there's a new checkpoint
-    for ckpt in evaluation.checkpoints_iterator(
+    for ckpt in tf.contrib.training.checkpoints_iterator(
         FLAGS.model_dir,
         min_interval_secs=FLAGS.min_eval_interval,
         timeout=FLAGS.eval_timeout,

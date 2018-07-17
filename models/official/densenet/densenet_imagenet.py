@@ -28,9 +28,6 @@ import tensorflow as tf
 
 import densenet_model
 import vgg_preprocessing
-from tensorflow.contrib.tpu.python.tpu import tpu_config
-from tensorflow.contrib.tpu.python.tpu import tpu_estimator
-from tensorflow.contrib.tpu.python.tpu import tpu_optimizer
 from tensorflow.contrib.training.python.training import evaluation
 
 FLAGS = flags.FLAGS
@@ -279,7 +276,7 @@ def model_fn(features, labels, mode, params):
   if mode == tf.estimator.ModeKeys.TRAIN:
     optimizer = tf.train.MomentumOptimizer(
         learning_rate=learning_rate, momentum=_MOMENTUM)
-    optimizer = tpu_optimizer.CrossShardOptimizer(optimizer)
+    optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
 
     # Batch norm requires update_ops to be added as a train_op dependency.
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
@@ -301,7 +298,7 @@ def model_fn(features, labels, mode, params):
 
     eval_metrics = (metric_fn, [labels, logits, lr_repeat, ce_repeat])
 
-  return tpu_estimator.TPUEstimatorSpec(
+  return tf.contrib.tpu.TPUEstimatorSpec(
       mode=mode, loss=loss, train_op=train_op, eval_metrics=eval_metrics)
 
 
@@ -323,15 +320,15 @@ def main(unused_argv):
       "batches_per_epoch": batches_per_epoch,
   }
 
-  config = tpu_config.RunConfig(
+  config = tf.contrib.tpu.RunConfig(
       cluster=tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
       save_checkpoints_steps=steps_per_checkpoint,
       log_step_count_steps=iterations_per_loop,
-      tpu_config=tpu_config.TPUConfig(
+      tpu_config=tf.contrib.tpu.TPUConfig(
           iterations_per_loop=iterations_per_loop, num_shards=FLAGS.num_shards))
 
-  densenet_estimator = tpu_estimator.TPUEstimator(
+  densenet_estimator = tf.contrib.tpu.TPUEstimator(
       model_fn=model_fn,
       config=config,
       train_batch_size=FLAGS.train_batch_size,
