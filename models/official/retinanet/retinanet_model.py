@@ -140,7 +140,7 @@ def _learning_rate_schedule(base_learning_rate, lr_warmup_init, lr_warmup_step,
 def focal_loss(logits, targets, alpha, gamma, normalizer):
   """Compute the focal loss between `logits` and the golden `target` values.
 
-  Focal loss = -(1-alpha)^gamma * log(pt)
+  Focal loss = -(1-pt)^gamma * log(pt)
   where pt is the probability of being classified to the true class.
 
   Args:
