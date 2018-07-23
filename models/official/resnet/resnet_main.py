@@ -320,7 +320,12 @@ def resnet_model_fn(features, labels, mode, params):
           List of summary ops to run on the CPU host.
         """
         gs = gs[0]
-        with summary.create_file_writer(FLAGS.model_dir).as_default():
+        # Host call fns are executed FLAGS.iterations_per_loop times after one
+        # TPU loop is finished, setting max_queue value to the same as number of
+        # iterations will make the summary writer only flush the data to storage
+        # once per loop.
+        with summary.create_file_writer(
+            FLAGS.model_dir, max_queue=FLAGS.iterations_per_loop).as_default():
           with summary.always_record_summaries():
             summary.scalar('loss', loss[0], step=gs)
             summary.scalar('learning_rate', lr[0], step=gs)

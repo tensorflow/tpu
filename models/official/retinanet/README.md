@@ -259,7 +259,7 @@ though: we can go ahead and kick off our full training run now.
 ## Running the trainer (again)
 
 Back on our original VM, we're now ready to run our model on our preprocessed
-COCO data.  Complete training takes approximately 6 hours.
+COCO data.  Complete training takes less than 4 hours.
 
 ```
 python tpu/models/official/retinanet/retinanet_main.py \
@@ -290,12 +290,47 @@ to your VM to access the server.
 
 ## Where to go from here
 
+### Training with Different Image Sizes
+
 The instructions in this tutorial assume we want to train on a 640x640 pixel
 image.  You can try changing the `image_size` hparam to train on a smaller
 image, resulting in a faster but less precise model.
 
+In addition, you can explore using a larger backbone network (e.g., ResNet-101
+instead of ResNet-50). A larger input image and a more powerful backbone will
+yield a slower but more precise model. You can specify the `image_size`
+hparam to be 768, 896, or 1024; also, the `resnet_depth` parameter can be one of
+50 or 101 (see sections below). When training the model with larger image size,
+the model may run OOM on the TPU device; one way to address the issue is to use
+_bfloat16_ by setting the `use_bfloat16=True`
+hparam. With `image_size=896,resnet_depth=101`, the model is able to reach 37.7
+AP.
+
+
+### Different Basis
+
 Alternatively, you can explore pre-training a Resnet model on your own dataset
 and using it as a basis for your RetinaNet model.  With some more work, you can
 also swap in an alternate _backbone_ network in place of ResNet.  Finally, if
-you are interested in implementing your own object detection models, this 
+you are interested in implementing your own object detection models, this
 network may be a good basis for further experimentation.
+
+
+### Larger Batch size on TPUv2-32
+
+By using a TPU pod, you can reduce the training time by using a larger batch 
+size. To train on a TPUv2-32, you need to change the batch size accordingly
+(e.g., 64 on TPUv2-8, 256 on TPUv2-32). The model will linearly scale the
+learning rate given the batch size, see `retinanet_model.py` for more details.
+
+```
+python tpu/models/official/retinanet/retinanet_main.py \
+ --tpu=${TPU_NAME} \
+ --train_batch_size=256 \
+ --num_shards=32 \
+ --training_file_pattern=${GCS_BUCKET}/coco/train-* \
+ --resnet_checkpoint=${RESNET_CHECKPOINT} \
+ --model_dir=${GCS_BUCKET}/retinanet-model/ \
+ --hparams=image_size=640 \
+ --num_epochs=15
+```

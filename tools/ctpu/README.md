@@ -82,32 +82,49 @@ information.
  2. **Configure `ctpu` credentials**: `ctpu` uses the "application default"
     credentials set up by the Google SDK. In order to allocate your application
     default credentials, run: `gcloud auth application-default login`.
- 3. **Configure project & zone** (optional): In order to avoid having to specify
-    the GCP project and zone every time you run `ctpu`, you can set default
-    values by running `gcloud config set project $PROJECT` and
-    `gcloud config set compute/zone $ZONE`, substituting `$PROJECT` and `$ZONE`
-    with your desired project and zone. If you are using multiple projects, you
-    can group your default values using `gcloud config configurations`.
 
 ## Usage Details ##
 
-### Global Flags ###
+### Common Global Flags ###
 
-There are a few flags common to all subcommands. These "global" flags are placed
-before the subcommand. For example: `ctpu -name=saeta-2 config` (where
-`-name=saeta2` is the global flag, and `config` is the subcommand). The most
-common global flag is the `-name` flag. Use the `-name` flag when you'd like to
-have multiple independent workspaces in the same GCP project, or if `ctpu`
-doesn't guess a useful name. (`ctpu` defaults to naming your VM + TPU pair
-(also referred to as a Cloud TPU flock) after your username.)
+There are a few flags common to all subcommands. These "global" flags can
+be placed before or after the subcommand.
+For example: `ctpu -name=saeta-2 print-config` or
+`ctpu print-config -name=saeta-2`(where
+`-name=saeta2` is the global flag and `print-config` is the subcommand). The most
+commonly used global flags are the `-name` flag and the `-zone` flag.
 
 > Note: All flags can also be "double-dash" prefixed. (e.g. `--name=foo`)
 
-#### Common Compute Engine Configuration ####
+* `-name` - Specifies the name of your Cloud TPU. Use the `-name` flag when
+  you'd like to have multiple independent workspaces in the same GCP project, or
+  if `ctpu` doesn't automatically assign a useful name. Note: `ctpu` defaults to
+  naming your VM + TPU pair after your username. (The VM + TPU pair is also
+  called a Cloud TPU flock.)
+* `-zone` - Specifies the Compute Engine zone. The default zone for `ctpu` is
+  `us-central1-b`.
 
-While it's possible to use global flags to define the GCP project and
-Compute Engine zone you'd like to allocate your Cloud TPU and VMs in, it's often
-easier to use `gcloud`'s built-in configuration system. If you didn't set a
+> Note: The effect of a global flag is scoped to the current invocation of the
+  `ctpu` command. You must specify the global flag each time you run the command.
+  For example, assume you want to create your Cloud TPU in zone `us-central1-c`
+  and you therefore run `ctpu up -zone=us-central1-c`. The next time you
+  run a `ctpu` command, you must specify the zone again, otherwise `ctpu` will
+  reset its configuration to the default zone. So, for example, if you run
+  `ctpu status`, the configuration zone for `ctpu` will revert to the default
+  `us-central1-b`. If you want to create another Cloud TPU in `us-central1-c`,
+  you must run `ctpu up -zone=us-central1-c` again. If you're enrolled in the
+  [TFRC program](https://www.tensorflow.org/tfrc/) you must run your TPUs
+  in zone **us-central1-f**.
+
+As an alternative to global flags for project and zone, consider the built-in
+configuration system for `gcloud`, described below.
+
+#### Using the gcloud Configuration System ####
+
+While it's possible to use global flags on the `ctpu` command to define
+the GCP project and Compute Engine zone you'd like to allocate your
+Cloud TPU and VMs in, it's often easier to use `gcloud`'s built-in
+configuration system. If you didn't set a
 default configuration when you installed gcloud, you can set (or reset) one
 using the following commands:
 

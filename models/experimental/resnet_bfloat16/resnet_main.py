@@ -295,7 +295,12 @@ def resnet_model_fn(features, labels, mode, params):
       """
       # Outfeed supports int32 but global_step is expected to be int64.
       gs = tf.cast(tf.reduce_mean(gs), tf.int64)
-      with summary.create_file_writer(FLAGS.model_dir).as_default():
+      # Host call fns are executed FLAGS.iterations_per_loop times after one
+      # TPU loop is finished, setting max_queue value to the same as number of
+      # iterations will make the summary writer only flush the data to storage
+      # once per loop.
+      with summary.create_file_writer(
+            FLAGS.model_dir, max_queue=FLAGS.iterations_per_loop).as_default():
         with summary.always_record_summaries():
           summary.scalar('loss', tf.reduce_mean(loss), step=gs)
           summary.scalar('learning_rate', tf.reduce_mean(lr), step=gs)
