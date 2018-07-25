@@ -80,8 +80,8 @@ flags.DEFINE_string(
     help='One of {"train_and_eval", "train", "eval"}.')
 
 flags.DEFINE_integer(
-    'train_steps', default=112603,
-    help=('The number of steps to use for training. Default is 112603 steps'
+    'train_steps', default=112590,
+    help=('The number of steps to use for training. Default is 112590 steps'
           ' which is approximately 90 epochs at batch size 1024. This flag'
           ' should be adjusted according to the --train_batch_size flag.'))
 
@@ -101,7 +101,7 @@ flags.DEFINE_integer(
     'num_label_classes', default=1000, help='Number of classes, at least 2')
 
 flags.DEFINE_integer(
-    'steps_per_eval', default=5000,
+    'steps_per_eval', default=1251,
     help=('Controls how often evaluation is performed. Since evaluation is'
           ' fairly expensive, it is advised to evaluate as infrequently as'
           ' possible (i.e. up to --train_steps, which evaluates the model only'
@@ -122,12 +122,16 @@ flags.DEFINE_bool(
           ' keep up with the TPU-side computation.'))
 
 flags.DEFINE_integer(
-    'iterations_per_loop', default=100,
+    'iterations_per_loop', default=1251,
     help=('Number of steps to run on TPU before outfeeding metrics to the CPU.'
           ' If the number of iterations in the loop would exceed the number of'
           ' train steps, the loop will exit before reaching'
           ' --iterations_per_loop. The larger this value is, the higher the'
           ' utilization on the TPU.'))
+
+flags.DEFINE_integer(
+    'num_parallel_calls', default=64,
+    help=('Number of parallel threads in CPU for the input pipeline'))
 
 flags.DEFINE_integer(
     'num_cores', default=8,
@@ -220,6 +224,10 @@ def resnet_model_fn(features, labels, mode, params):
   if isinstance(features, dict):
     features = features['feature']
 
+  # In most cases, the default data format NCHW instead of NHWC should be
+  # used for a significant performance boost on GPU/TPU. NHWC should be used
+  # only if the network needs to be run on CPU since the pooling operations
+  # are only supported on NHWC.
   if FLAGS.data_format == 'channels_first':
     assert not FLAGS.transpose_input    # channels_first only for GPU
     features = tf.transpose(features, [0, 3, 1, 2])
@@ -278,9 +286,9 @@ def resnet_model_fn(features, labels, mode, params):
   if mode == tf.estimator.ModeKeys.TRAIN:
     # Compute the current epoch and associated learning rate from global_step.
     global_step = tf.train.get_global_step()
-    batches_per_epoch = FLAGS.num_train_images / FLAGS.train_batch_size
+    steps_per_epoch = FLAGS.num_train_images / FLAGS.train_batch_size
     current_epoch = (tf.cast(global_step, tf.float32) /
-                     batches_per_epoch)
+                     steps_per_epoch)
     learning_rate = learning_rate_schedule(current_epoch)
 
     optimizer = tf.train.MomentumOptimizer(
@@ -423,10 +431,13 @@ def main(unused_argv):
       is_training=is_training,
       data_dir=FLAGS.data_dir,
       transpose_input=FLAGS.transpose_input,
+      num_parallel_calls=FLAGS.num_parallel_calls,
       use_bfloat16=use_bfloat16) for is_training in [True, False]]
 
+  steps_per_epoch = FLAGS.num_train_images // FLAGS.train_batch_size
+  eval_steps = FLAGS.num_eval_images // FLAGS.eval_batch_size
+
   if FLAGS.mode == 'eval':
-    eval_steps = FLAGS.num_eval_images // FLAGS.eval_batch_size
 
     # Run evaluation when there's a new checkpoint
     for ckpt in evaluation.checkpoints_iterator(
@@ -459,13 +470,15 @@ def main(unused_argv):
 
   else:   # FLAGS.mode == 'train' or FLAGS.mode == 'train_and_eval'
     current_step = estimator._load_global_step_from_checkpoint_dir(FLAGS.model_dir)  # pylint: disable=protected-access,line-too-long
-    batches_per_epoch = FLAGS.num_train_images / FLAGS.train_batch_size
+    steps_per_epoch = FLAGS.num_train_images // FLAGS.train_batch_size
+
     tf.logging.info('Training for %d steps (%.2f epochs in total). Current'
                     ' step %d.' % (FLAGS.train_steps,
-                                   FLAGS.train_steps / batches_per_epoch,
+                                   FLAGS.train_steps / steps_per_epoch,
                                    current_step))
 
     start_timestamp = time.time()  # This time will include compilation time
+
     if FLAGS.mode == 'train':
       resnet_classifier.train(
           input_fn=imagenet_train.input_fn, max_steps=FLAGS.train_steps)
@@ -481,17 +494,21 @@ def main(unused_argv):
             input_fn=imagenet_train.input_fn, max_steps=next_checkpoint)
         current_step = next_checkpoint
 
+        tf.logging.info('Finished training up to step %d. Elapsed seconds %d.' %
+                        (next_checkpoint, int(time.time() - start_timestamp)))
+
         # Evaluate the model on the most recent model in --model_dir.
         # Since evaluation happens in batches of --eval_batch_size, some images
-        # may be consistently excluded modulo the batch size.
+        # may be excluded modulo the batch size. As long as the batch size is
+        # consistent, the evaluated images are also consistent.
         tf.logging.info('Starting to evaluate.')
         eval_results = resnet_classifier.evaluate(
             input_fn=imagenet_eval.input_fn,
             steps=FLAGS.num_eval_images // FLAGS.eval_batch_size)
         tf.logging.info('Eval results: %s' % eval_results)
 
-    elapsed_time = int(time.time() - start_timestamp)
-    tf.logging.info('Finished training up to step %d. Elapsed seconds %d.' %
+        elapsed_time = int(time.time() - start_timestamp)
+        tf.logging.info('Finished training up to step %d. Elapsed seconds %d.' %
                     (FLAGS.train_steps, elapsed_time))
 
     if FLAGS.export_dir is not None:
@@ -501,6 +518,7 @@ def main(unused_argv):
       resnet_classifier.export_savedmodel(
           export_dir_base=FLAGS.export_dir,
           serving_input_receiver_fn=imagenet_input.image_serving_input_fn)
+
 
 if __name__ == '__main__':
   tf.logging.set_verbosity(tf.logging.INFO)

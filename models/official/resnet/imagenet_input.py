@@ -44,6 +44,7 @@ def image_serving_input_fn():
   return tf.estimator.export.ServingInputReceiver(
       images, {'image_bytes': image_bytes_list})
 
+
 class ImageNetInput(object):
   """Generates ImageNet input_fn for training or evaluation.
 
@@ -66,16 +67,28 @@ class ImageNetInput(object):
         pipeline, consisting of empty images.
     use_bfloat16: If True, use bfloat16 precision; else use float32.
     transpose_input: 'bool' for whether to use the double transpose trick
+    num_cores: `int` for the number of TPU cores
   """
 
-  def __init__(self, is_training, data_dir, use_bfloat16, transpose_input=True):
+  def __init__(self, is_training,
+               use_bfloat16,
+               data_dir,
+               num_cores=8,
+               num_parallel_calls=64,
+               image_size=224,
+               transpose_input=False,
+               cache=False):
     self.image_preprocessing_fn = resnet_preprocessing.preprocess_image
     self.is_training = is_training
     self.use_bfloat16 = use_bfloat16
     self.data_dir = data_dir
+    self.num_cores = num_cores
+    self.num_parallel_calls = num_parallel_calls
     if self.data_dir == 'null' or self.data_dir == '':
       self.data_dir = None
     self.transpose_input = transpose_input
+    self.image_size = image_size
+    self.cache = cache
 
   def set_shapes(self, batch_size, images, labels):
     """Statically set the batch_size dimension."""
@@ -95,24 +108,15 @@ class ImageNetInput(object):
   def dataset_parser(self, value):
     """Parse an ImageNet record from a serialized string Tensor."""
     keys_to_features = {
-        'image/encoded':
-            tf.FixedLenFeature((), tf.string, ''),
-        'image/format':
-            tf.FixedLenFeature((), tf.string, 'jpeg'),
-        'image/class/label':
-            tf.FixedLenFeature([], tf.int64, -1),
-        'image/class/text':
-            tf.FixedLenFeature([], tf.string, ''),
-        'image/object/bbox/xmin':
-            tf.VarLenFeature(dtype=tf.float32),
-        'image/object/bbox/ymin':
-            tf.VarLenFeature(dtype=tf.float32),
-        'image/object/bbox/xmax':
-            tf.VarLenFeature(dtype=tf.float32),
-        'image/object/bbox/ymax':
-            tf.VarLenFeature(dtype=tf.float32),
-        'image/object/class/label':
-            tf.VarLenFeature(dtype=tf.int64),
+        'image/encoded': tf.FixedLenFeature((), tf.string, ''),
+        'image/format': tf.FixedLenFeature((), tf.string, 'jpeg'),
+        'image/class/label': tf.FixedLenFeature([], tf.int64, -1),
+        'image/class/text': tf.FixedLenFeature([], tf.string, ''),
+        'image/object/bbox/xmin': tf.VarLenFeature(dtype=tf.float32),
+        'image/object/bbox/ymin': tf.VarLenFeature(dtype=tf.float32),
+        'image/object/bbox/xmax': tf.VarLenFeature(dtype=tf.float32),
+        'image/object/bbox/ymax': tf.VarLenFeature(dtype=tf.float32),
+        'image/object/class/label': tf.VarLenFeature(dtype=tf.int64),
     }
 
     parsed = tf.parse_single_example(value, keys_to_features)
@@ -121,6 +125,7 @@ class ImageNetInput(object):
     image = self.image_preprocessing_fn(
         image_bytes=image_bytes,
         is_training=self.is_training,
+        image_size=self.image_size,
         use_bfloat16=self.use_bfloat16)
 
     # Subtract one so that labels are in [0, 1000).
@@ -140,7 +145,7 @@ class ImageNetInput(object):
     Returns:
       A `tf.data.Dataset` object.
     """
-    if self.data_dir == None:
+    if self.data_dir is None:
       tf.logging.info('Using fake input.')
       return self.input_fn_null(params)
 
@@ -154,32 +159,44 @@ class ImageNetInput(object):
         self.data_dir, 'train-*' if self.is_training else 'validation-*')
     dataset = tf.data.Dataset.list_files(file_pattern, shuffle=self.is_training)
 
-    if self.is_training:
+    if self.is_training and not self.cache:
       dataset = dataset.repeat()
 
     def fetch_dataset(filename):
-      buffer_size = 8 * 1024 * 1024     # 8 MiB per file
+      buffer_size = 8 * 1024 * 1024  # 8 MiB per file
       dataset = tf.data.TFRecordDataset(filename, buffer_size=buffer_size)
       return dataset
 
     # Read the data from disk in parallel
     dataset = dataset.apply(
         tf.contrib.data.parallel_interleave(
-            fetch_dataset, cycle_length=64, sloppy=True))
-    dataset = dataset.shuffle(1024)
+            fetch_dataset, cycle_length=self.num_parallel_calls, sloppy=True))
+    if self.cache:
+      dataset = dataset.cache().apply(
+          tf.contrib.data.shuffle_and_repeat(1024 * 16))
+    else:
+      dataset = dataset.shuffle(1024)
 
-    # Parse, preprocess, and batch the data in parallel
+    # Use the fused map-and-batch operation.
+    #
+    # For XLA, we must used fixed shapes. Because we repeat the source training
+    # dataset indefinitely, we can use `drop_remainder=True` to get fixed-size
+    # batches without dropping any training examples.
+    #
+    # When evaluating, `drop_remainder=True` prevents accidentally evaluating
+    # the same image twice by dropping the final batch if it is less than a full
+    # batch size. As long as this validation is done with consistent batch size,
+    # exactly the same images will be used.
     dataset = dataset.apply(
         tf.contrib.data.map_and_batch(
             self.dataset_parser, batch_size=batch_size,
-            num_parallel_batches=8,    # 8 == num_cores per host
-            drop_remainder=True))
+            num_parallel_batches=self.num_cores, drop_remainder=True))
 
     # Transpose for performance on TPU
     if self.transpose_input:
       dataset = dataset.map(
           lambda images, labels: (tf.transpose(images, [1, 2, 3, 0]), labels),
-          num_parallel_calls=8)
+          num_parallel_calls=self.num_cores)
 
     # Assign static batch size dimension
     dataset = dataset.map(functools.partial(self.set_shapes, batch_size))
