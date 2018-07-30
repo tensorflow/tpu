@@ -228,6 +228,10 @@ func (t *testResourceManagementCP) AddTPUUserAgent(tpuUserAgent string) error {
 	return nil
 }
 
+func (t *testResourceManagementCP) IsProjectInGoogleOrg() (bool, error) {
+	return false, nil
+}
+
 // verifySingleOperation is a helper used to test the operations the commands perform.
 //
 // It is often used in conjunction with the OperationsPerformed arrays of testTPUCP and testGCECP.

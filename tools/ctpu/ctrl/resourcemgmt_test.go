@@ -152,6 +152,39 @@ func TestPartialBinding(t *testing.T) {
 	}
 }
 
+func TestBindingPresentServiceRoleOnly(t *testing.T) {
+	policy := &cloudresourcemanager.Policy{
+		Etag:    sampleEtag,
+		Version: sampleVersion,
+		Bindings: []*cloudresourcemanager.Binding{{
+			Role:    "roles/owner",
+			Members: []string{"user:saeta@google.com"},
+		}, {
+			Role:    "roles/tpu.serviceAgent",
+			Members: []string{"serviceAccount:" + sampleTPUServiceAccount},
+		}},
+	}
+	cp := &ResourceManagementCP{}
+	modifiedPolicy := cp.addAgentToPolicy(sampleTPUServiceAccount, policy)
+
+	b := findBindingForRole(modifiedPolicy, "roles/storage.admin")
+	if b == nil {
+		t.Errorf("No roles/storage.admin found in modified policy: %#v", modifiedPolicy)
+	} else {
+		if b.Members == nil || len(b.Members) != 1 || b.Members[0] != "serviceAccount:"+sampleTPUServiceAccount {
+			t.Errorf("Members for roles/storage.admin incorrect, got: %#v, want: [serviceAccount:compute-123987@compute.gserviceaccounts.com]", b.Members)
+		}
+	}
+	b = findBindingForRole(modifiedPolicy, "roles/logging.logWriter")
+	if b == nil {
+		t.Errorf("No roles/logging.logWriter found in modified policy: %#v", modifiedPolicy)
+	} else {
+		if b.Members == nil || len(b.Members) != 1 || b.Members[0] != "serviceAccount:"+sampleTPUServiceAccount {
+			t.Errorf("Members for roles/logging.logWriter incorrect, got: %#v, want: [serviceAccount:compute-123987@compute.gserviceaccount.com]", b.Members)
+		}
+	}
+}
+
 func findBindingForRole(policy *cloudresourcemanager.Policy, role string) *cloudresourcemanager.Binding {
 	for _, binding := range policy.Bindings {
 		if binding.Role == role {

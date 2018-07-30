@@ -58,6 +58,11 @@ type UpGCECP interface {
 type UpResourceManagementCP interface {
 	// AddTPUUserAgent authorizes the TPU user agent, if required.
 	AddTPUUserAgent(tpuUserAgent string) error
+
+	// IsProjectInGoogleOrg determines if the project is part of the Google organziation.
+	//
+	// This is used to provide more helpful error messages
+	IsProjectInGoogleOrg() (bool, error)
 }
 
 // UpGcloudCLI abstracts the interaction with the gcloud command line tools for the up command.
@@ -439,6 +444,10 @@ execution. For the full list of flags, run: ctpu help up
 	if err != nil {
 		fmt.Printf("%v\n", err)
 		return subcommands.ExitFailure
+	}
+
+	if inOrg, err := c.rmg.IsProjectInGoogleOrg(); err == nil && inOrg && c.cfg.Environment == "devshell" {
+		color.Red("WARNING: Attempting to ssh from DevShell in Google org; this might not work!")
 	}
 
 	if c.forwardPorts {

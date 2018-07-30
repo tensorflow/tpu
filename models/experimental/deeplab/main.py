@@ -114,10 +114,9 @@ flags.DEFINE_integer(
           ' utilization on the TPU.'))
 
 # TPU settings.
-flags.DEFINE_integer('num_shards', 8,
-                     'Number of shards (TPU chips).')
-flags.DEFINE_bool('use_tpu', True,
-                  'Use TPUs rather than plain CPUs')
+flags.DEFINE_integer('num_shards', 8, 'Number of shards (TPU chips).')
+flags.DEFINE_bool('use_tpu', True, 'Use TPUs rather than plain CPUs')
+flags.DEFINE_bool('use_bfloat16', False, 'Use bfloat16 for training')
 
 # Cloud TPU Cluster Resolvers
 flags.DEFINE_string(
@@ -193,10 +192,11 @@ def get_params(ignore_label, num_classes, num_batches_per_epoch):
   params = {k: FLAGS[k].value for k in FLAGS}
 
   outputs_to_num_classes = {common.OUTPUT_TYPE: num_classes}
-  model_options = common.ModelOptions(outputs_to_num_classes,
-                                      FLAGS.crop_size,
-                                      FLAGS.atrous_rates,
-                                      FLAGS.output_stride)
+  model_options = common.ModelOptions(
+      outputs_to_num_classes, FLAGS.crop_size, FLAGS.atrous_rates,
+      FLAGS.output_stride,
+      preprocessed_images_dtype=(
+          tf.bfloat16 if params['use_bfloat16'] else tf.float32))
   params.update({'ignore_label': ignore_label,
                  'model_options': model_options,
                  'num_batches_per_epoch': num_batches_per_epoch,

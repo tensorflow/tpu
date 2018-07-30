@@ -447,7 +447,7 @@ def inception_model_fn(features, labels, mode, params):
   # builds the network, for different values of --precision.
   def build_network():
     if FLAGS.precision == 'bfloat16':
-      with bfloat16.bfloat16_scope():
+      with tf.contrib.tpu.bfloat16_scope():
         logits, end_points = inception.inception_v3(
             features,
             num_classes,
