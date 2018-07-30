@@ -16,6 +16,7 @@
 
 import tensorflow as tf
 
+from tensorflow.contrib.tpu.python.tpu import bfloat16
 from deeplab import common
 from deeplab.model import multi_scale_logits
 from deeplab.utils.train_utils import add_softmax_cross_entropy_loss_for_each_scale
@@ -27,17 +28,40 @@ slim = tf.contrib.slim
 _MERGED_LOGITS_SCOPE = 'merged_logits'
 
 
+def _build_network(features, mode, params):
+  """Builds the network for different values of params['use_bfloat16']."""
+  if params['use_bfloat16']:
+    with bfloat16.bfloat16_scope():
+      outputs_to_scales_to_logits = multi_scale_logits(
+          features,
+          params['model_options'],
+          params['image_pyramid'],
+          weight_decay=0.0,
+          is_training=mode == tf.estimator.ModeKeys.TRAIN,
+          fine_tune_batch_norm=(
+              params['fine_tune_batch_norm']
+              if mode == tf.estimator.ModeKeys.TRAIN else False)
+      )
+    for level, output in outputs_to_scales_to_logits.iteritems():
+      for scale, logits in output.iteritems():
+        outputs_to_scales_to_logits[level][scale] = tf.cast(logits, tf.float32)
+  else:
+    outputs_to_scales_to_logits = multi_scale_logits(
+        features,
+        params['model_options'],
+        params['image_pyramid'],
+        weight_decay=params['weight_decay'],
+        is_training=mode == tf.estimator.ModeKeys.TRAIN,
+        fine_tune_batch_norm=(
+            params['fine_tune_batch_norm']
+            if mode == tf.estimator.ModeKeys.TRAIN else False)
+    )
+  return outputs_to_scales_to_logits
+
+
 def loss_fn(features, labels, mode, params):
   """Computes label predictions and cross entropy loss against labels."""
-
-  outputs_to_scales_to_logits = multi_scale_logits(
-      features,
-      params['model_options'],
-      params['image_pyramid'],
-      weight_decay=params['weight_decay'],
-      is_training=mode == tf.estimator.ModeKeys.TRAIN,
-      fine_tune_batch_norm=params['fine_tune_batch_norm']
-  )
+  outputs_to_scales_to_logits = _build_network(features, mode, params)
 
   for output, num_classes in params['outputs_to_num_classes'].items():
     add_softmax_cross_entropy_loss_for_each_scale(
@@ -49,17 +73,19 @@ def loss_fn(features, labels, mode, params):
         upsample_logits=params['upsample_logits'],
         scope=output)
 
-  return tf.losses.get_total_loss()
+  losses = tf.add_n(tf.losses.get_losses())
+  l2_loss = []
+  for v in tf.trainable_variables():
+    if 'BatchNorm' not in v.name and 'weights' in v.name:
+      l2_loss.append(tf.nn.l2_loss(v))
+  loss = losses + params['weight_decay'] * tf.add_n(l2_loss)
+  return loss
 
 
 def _create_eval_metric(features, labels, params):
   """Creates eval_metric for model_fn."""
-  outputs_to_scales_to_logits = multi_scale_logits(
-      features,
-      params['model_options'],
-      image_pyramid=params['image_pyramid'],
-      is_training=False,
-      fine_tune_batch_norm=False)
+  outputs_to_scales_to_logits = _build_network(
+      features, tf.estimator.ModeKeys.EVAL, params)
 
   semantic_merged_logits = (
       outputs_to_scales_to_logits[common.OUTPUT_TYPE][_MERGED_LOGITS_SCOPE])
@@ -214,19 +240,12 @@ def model_fn(features, labels, mode, params):
   if params['init_checkpoint'] and mode == tf.estimator.ModeKeys.TRAIN:
     def scaffold_fn():
       """Create Scaffold for initialization, etc."""
-      exclude_list = ['global_step']
-      variables_to_restore = slim.get_variables_to_restore(exclude=exclude_list)
-      slim_init_fn = slim.assign_from_checkpoint_fn(
-          params['init_checkpoint'],
-          variables_to_restore,
-          ignore_missing_vars=True)
-      def init_fn(scaffold, session):
-        del scaffold
-        return slim_init_fn(session)
-      return tf.train.Scaffold(init_fn=init_fn)
+      tf.train.init_from_checkpoint(params['init_checkpoint'], {
+          'resnet_v1_101/': 'resnet_v1_101/',
+      })
+      return tf.train.Scaffold()
   else:
     scaffold_fn = None
-
   return tf.contrib.tpu.TPUEstimatorSpec(
       mode=mode,
       loss=loss,

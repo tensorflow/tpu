@@ -26,6 +26,7 @@ import (
 
 const loggingRole = "roles/logging.logWriter"
 const storageRole = "roles/storage.admin" // Note storage.objectAdmin does not work in certain cases, and thus we need roles/storage.admin.
+const tpuServiceAgent = "roles/tpu.serviceAgent"
 
 // ResourceManagementCP contains an abstract representation of the Cloud Resource Manager, and related ACLs
 //
@@ -60,10 +61,14 @@ func (r *ResourceManagementCP) addAgentToPolicy(tpuUserAgent string, policy *clo
 		if binding.Role == storageRole {
 			storageBinding = binding
 		}
-		for _, member := range binding.Members {
-			if member == tpuMemberStr {
-				// The TPU service account has already been enabled. Make no modifications.
-				return nil
+		// Skip checking bindings if this is the tpuServiceAgent role.
+		if binding.Role != tpuServiceAgent {
+			// Check if the tpuMemberStr is already in a binding.
+			for _, member := range binding.Members {
+				if member == tpuMemberStr {
+					// The TPU service account has already been enabled. Make no modifications.
+					return nil
+				}
 			}
 		}
 	}
@@ -101,4 +106,15 @@ func (r *ResourceManagementCP) AddTPUUserAgent(tpuUserAgent string) error {
 		}
 	}
 	return nil
+}
+
+// IsProjectInGoogleOrg determines if the project is part of the Google organization.
+//
+// Note: this will need to be updated in the presence of folders.
+func (r *ResourceManagementCP) IsProjectInGoogleOrg() (bool, error) {
+	resp, err := r.service.Projects.Get(r.config.Project).Do()
+	if err != nil {
+		return false, err
+	}
+	return resp.Parent.Type == "organization" && resp.Parent.Id == "433637338589", nil
 }
