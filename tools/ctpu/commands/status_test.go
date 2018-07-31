@@ -17,6 +17,7 @@ package commands
 
 import (
 	"testing"
+	"time"
 
 	"context"
 	"github.com/fatih/color"
@@ -99,6 +100,65 @@ func TestStatusExecute(t *testing.T) {
 			if got != 0 {
 				t.Errorf("statusCmd{details: %t}.Execute(nil, nil, %v) = %d, want: 0", details, tt, got)
 			}
+		}
+	}
+}
+
+func TestTimeFormatTest(t *testing.T) {
+	testCases := []struct {
+		createTime     time.Time
+		expectedFormat string
+	}{{
+		createTime:     time.Now(),
+		expectedFormat: "< 1 minute",
+	}, {
+		createTime:     time.Now().Add(time.Minute * -3),
+		expectedFormat: "3m",
+	}, {
+		createTime:     time.Now().Add(time.Hour * -27).Add(time.Minute * -14),
+		expectedFormat: "27h 14m",
+	}, {
+		createTime:     time.Now().Add(time.Minute * 3),
+		expectedFormat: "--",
+	}, {
+		createTime:     time.Now().Add(time.Hour * -103).Add(time.Minute * -26),
+		expectedFormat: "4d 7h",
+	}}
+
+	s := statusCmd{}
+	for _, tt := range testCases {
+		result := s.timeDelta(tt.createTime)
+		if result != tt.expectedFormat {
+			t.Errorf("s.timeDelta(%s) = %s; want: %s", tt.createTime, result, tt.expectedFormat)
+		}
+	}
+}
+
+func TestTimeParseFormat(t *testing.T) {
+	utcMinus7 := time.FixedZone("PDT", -7*60*60) // -7:00
+
+	testCases := []struct {
+		input  string
+		format string
+		want   time.Time
+	}{{
+		input:  "2018-06-12T10:54:21.812-07:00",
+		format: time.RFC3339,
+		want:   time.Date(2018, 06, 12, 10, 54, 21, 812000000, utcMinus7),
+	}, {
+		input:  "2018-06-12T17:54:21.767342Z",
+		format: time.RFC3339,
+		want:   time.Date(2018, 06, 12, 17, 54, 21, 767342000, time.UTC),
+	}}
+
+	for _, tt := range testCases {
+		got, err := time.Parse(tt.format, tt.input)
+		if err != nil {
+			t.Errorf("time.Parse(%q, %q) had an error; got: %v", tt.format, tt.input, err)
+			continue
+		}
+		if !got.Equal(tt.want) {
+			t.Errorf("time.Parse(%q, %q) = %v; want: %v", tt.format, tt.input, got, tt.want)
 		}
 	}
 }

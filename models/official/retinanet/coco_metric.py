@@ -46,14 +46,31 @@ class EvaluationMetric(object):
     as the groundtruths and runs COCO evaluation.
 
     Args:
-      filename: ground truth JSON file name.
+      filename: Ground truth JSON file name. If filename is None, use
+        groundtruth data passed from the dataloader for evaluation.
     """
-    self.coco_gt = COCO(filename)
+    if filename:
+      self.coco_gt = COCO(filename)
+    self.filename = filename
     self.metric_names = ['AP', 'AP50', 'AP75', 'APs', 'APm', 'APl', 'ARmax1',
                          'ARmax10', 'ARmax100', 'ARs', 'ARm', 'ARl']
-    self.detections = []
+    self._reset()
 
-  def estimator_metric_fn(self, detections, image_scale):
+  def _reset(self):
+    """Reset COCO API object."""
+    if self.filename is None:
+      self.coco_gt = COCO()
+    self.detections = []
+    self.dataset = {
+        'images': [],
+        'annotations': [],
+        'categories': []
+    }
+    self.image_id = 1
+    self.annotation_id = 1
+    self.category_ids = []
+
+  def estimator_metric_fn(self, detections, groundtruth_data):
     """Constructs the metric function for tf.TPUEstimator.
 
     For each metric, we return the evaluation op and an update op; the update op
@@ -62,11 +79,10 @@ class EvaluationMetric(object):
     been seen and computes the aggregate COCO metrics. Please find details API
     in: https://www.tensorflow.org/api_docs/python/tf/contrib/learn/MetricSpec
     Args:
-      detections: detection results in a tensor with each row representing
+      detections: Detection results in a tensor with each row representing
         [image_id, x, y, width, height, score, class]
-      image_scale: a float tensor representing the scale between original image
-        and input image for the detector. It is used to rescale detections for
-        evaluating with the original groundtruth annotations.
+      groundtruth_data: Groundtruth annotations in a tensor with each row
+        representing [y1, x1, y2, x2, is_crowd, area, class].
     Returns:
       metrics_dict: A dictionary mapping from evaluation name to a tuple of
         operations (`metric_op`, `update_op`). `update_op` appends the
@@ -80,6 +96,10 @@ class EvaluationMetric(object):
         coco_metric: float numpy array with shape [12] representing the
           coco-style evaluation metrics.
       """
+      if self.filename is None:
+        self.coco_gt.dataset = self.dataset
+        self.coco_gt.createIndex()
+
       detections = np.array(self.detections)
       image_ids = list(set(detections[:, 0]))
       coco_dt = self.coco_gt.loadRes(detections)
@@ -92,24 +112,65 @@ class EvaluationMetric(object):
       # clean self.detections after evaluation is done.
       # this makes sure the next evaluation will start with an empty list of
       # self.detections.
-      self.detections = []
+      self._reset()
       return np.array(coco_metrics, dtype=np.float32)
 
-    def _update_op(detections, image_scale):
-      """Extends self.detections with the detection results in one image.
+    def _update_op(detections, groundtruth_data):
+      """Update detection results and groundtruth data.
+
+      Append detection results to self.detections to aggregate results from
+      all validation set. The groundtruth_data is parsed and added into a
+      dictinoary with the same format as COCO dataset, which can be used for
+      evaluation.
 
       Args:
-       detections: detection results in a tensor with each row representing
-         [image_id, x, y, width, height, score, class]
-       image_scale: a float tensor representing the scale between original image
-         and input image for the detector. It is used to rescale detections for
-         evaluating with the original groundtruth annotations.
+       detections: Detection results in a tensor with each row representing
+         [image_id, x, y, width, height, score, class].
+       groundtruth_data: Groundtruth annotations in a tensor with each row
+         representing [y1, x1, y2, x2, is_crowd, area, class].
       """
-      detections[:, 1:5] *= image_scale
-      self.detections.extend(detections)
+      for i in range(len(detections)):
+        if detections[i].shape[0] == 0:
+          continue
+        self.detections.extend(detections[i])
+        # Append groundtruth annotaitons to create COCO dataset object.
+        # Add images.
+        image_id = detections[i][0, 0]
+        if image_id == -1:
+          image_id = self.image_id
+        self.dataset['images'].append({
+            'id': int(image_id),
+        })
+        detections[i][:, 0] = image_id
+        # Add annotations.
+        indices = np.where(groundtruth_data[i, :, -1] > -1)[0]
+        for data in groundtruth_data[i, indices]:
+          box = data[0:4]
+          is_crowd = data[4]
+          area = data[5]
+          category_id = data[6]
+          if category_id < 0:
+            break
+          if area == -1:
+            area = (box[3] - box[1]) * (box[2] - box[0])
+          self.dataset['annotations'].append({
+              'id': int(self.annotation_id),
+              'image_id': int(image_id),
+              'category_id': int(category_id),
+              'bbox': [box[1], box[0], box[3] - box[1], box[2] - box[0]],
+              'area': area,
+              'iscrowd': int(is_crowd)
+          })
+          self.annotation_id += 1
+          self.category_ids.append(category_id)
+        self.image_id += 1
+      self.category_ids = list(set(self.category_ids))
+      self.dataset['categories'] = [
+          {'id': int(category_id)} for category_id in self.category_ids
+      ]
 
     with tf.name_scope('coco_metric'):
-      update_op = tf.py_func(_update_op, [detections, image_scale], [])
+      update_op = tf.py_func(_update_op, [detections, groundtruth_data], [])
       metrics = tf.py_func(_evaluate, [], tf.float32)
       metrics_dict = {}
       for i, name in enumerate(self.metric_names):

@@ -321,7 +321,7 @@ def block_group(inputs,
 def resnet_v1_generator(block_fn, layers, data_format='channels_last'):
   """Generator of ResNet v1 model with classification layers removed.
 
-    Our actual ResNet network.  We return the output of c3, c4, c5
+    Our actual ResNet network.  We return the output of c2, c3,c4,c5
     N.B. batch norm is always run with trained parameters, as we use very small
     batches when training the object layers.
 
@@ -429,11 +429,29 @@ def nearest_upsampling(data, scale):
   """
   with tf.name_scope('nearest_upsampling'):
     bs, h, w, c = data.get_shape().as_list()
+    bs = -1 if bs is None else bs
     # Use reshape to quickly upsample the input.  The nearest pixel is selected
     # implicitly via broadcasting.
     data = tf.reshape(data, [bs, h, 1, w, 1, c]) * tf.ones(
         [1, 1, scale, 1, scale, 1], dtype=data.dtype)
     return tf.reshape(data, [bs, h * scale, w * scale, c])
+
+
+# TODO(b/111271774): Removes this wrapper once b/111271774 is resolved.
+def resize_bilinear(images, size, output_type):
+  """Returns resized images as output_type.
+
+  Args:
+    images: A tensor of size [batch, height_in, width_in, channels].
+    size: A 1-D int32 Tensor of 2 elements: new_height, new_width. The new size
+      for the images.
+    output_type: The destination type.
+  Returns:
+    A tensor of size [batch, height_out, width_out, channels] as a dtype of
+      output_type.
+  """
+  images = tf.image.resize_bilinear(images, size, align_corners=True)
+  return tf.cast(images, output_type)
 
 
 ## RetinaNet specific layers
@@ -501,7 +519,8 @@ def resnet_fpn(features,
                min_level=3,
                max_level=7,
                resnet_depth=50,
-               is_training_bn=False):
+               is_training_bn=False,
+               use_nearest_upsampling=True):
   """ResNet feature pyramid networks."""
   # upward layers
   with tf.variable_scope('resnet%s' % resnet_depth):
@@ -529,14 +548,18 @@ def resnet_fpn(features,
     # add top-down path
     feats = {_RESNET_MAX_LEVEL: feats_lateral[_RESNET_MAX_LEVEL]}
     for level in range(_RESNET_MAX_LEVEL - 1, min_level - 1, -1):
-      feats[level] = (
-          nearest_upsampling(feats[level + 1], 2) + feats_lateral[level]
-      )
+      if use_nearest_upsampling:
+        feats[level] = nearest_upsampling(feats[level + 1],
+                                          2) + feats_lateral[level]
+      else:
+        feats[level] = resize_bilinear(
+            feats[level + 1], tf.shape(feats_lateral[level])[1:3],
+            feats[level + 1].dtype) + feats_lateral[level]
 
     # add post-hoc 3x3 convolution kernel
-    for level, features in feats.items():
+    for level in range(min_level, _RESNET_MAX_LEVEL + 1):
       feats[level] = tf.layers.conv2d(
-          features,
+          feats[level],
           filters=256,
           strides=(1, 1),
           kernel_size=(3, 3),
@@ -576,11 +599,12 @@ def retinanet(features,
               num_classes=90,
               num_anchors=6,
               resnet_depth=50,
+              use_nearest_upsampling=True,
               is_training_bn=False):
   """RetinaNet classification and regression model."""
   # create feature pyramid networks
   feats = resnet_fpn(features, min_level, max_level, resnet_depth,
-                     is_training_bn)
+                     is_training_bn, use_nearest_upsampling)
   # add class net and box net in RetinaNet. The class net and the box net are
   # shared among all the levels.
   with tf.variable_scope('retinanet'):
@@ -618,3 +642,98 @@ def remove_variables(variables, resnet_depth=50):
   var_list = [v for v in variables
               if v.name.find('resnet%s/conv2d/' % resnet_depth) == -1]
   return var_list
+
+
+def segmentation_class_net(images,
+                           level,
+                           num_channels=256,
+                           is_training_bn=False):
+  """Segmentation Feature Extraction Module.
+
+  Args:
+    images: A tensor of size [batch, height_in, width_in, channels_in].
+    level: The level of features at FPN output_size /= 2^level.
+    num_channels: The number of channels in convolution layers
+    is_training_bn: Whether batch_norm layers are in training mode.
+  Returns:
+    images: A feature tensor of size [batch, output_size, output_size,
+      channel_number]
+  """
+
+  for i in range(3):
+    images = tf.layers.conv2d(
+        images,
+        num_channels,
+        kernel_size=(3, 3),
+        bias_initializer=tf.zeros_initializer(),
+        kernel_initializer=tf.random_normal_initializer(stddev=0.01),
+        activation=None,
+        padding='same',
+        name='class-%d' % i)
+    images = batch_norm_relu(images, is_training_bn, relu=True, init_zero=False,
+                             name='class-%d-bn-%d' % (i, level))
+  images = tf.layers.conv2d(
+      images,
+      num_channels,
+      kernel_size=(3, 3),
+      bias_initializer=tf.zeros_initializer(),
+      kernel_initializer=tf.random_normal_initializer(stddev=0.01),
+      activation=None,
+      padding='same',
+      name='class-final')
+  return images
+
+
+def retinanet_segmentation(features,
+                           min_level=3,
+                           max_level=5,
+                           num_classes=21,
+                           resnet_depth=50,
+                           use_nearest_upsampling=False,
+                           is_training_bn=False):
+  """RetinaNet extension for semantic segmentation.
+
+  Args:
+    features: A tensor of size [batch, height_in, width_in, channels].
+    min_level: The minimum output feature pyramid level. This input defines the
+      smallest nominal feature stride = 2^min_level.
+    max_level: The maximum output feature pyramid level. This input defines the
+      largest nominal feature stride = 2^max_level.
+    num_classes: Number of object classes.
+    resnet_depth: The depth of ResNet backbone model.
+    use_nearest_upsampling: Whether use nearest upsampling for FPN network.
+      Alternatively, use bilinear upsampling.
+    is_training_bn: Whether batch_norm layers are in training mode.
+  Returns:
+    A tensor of size [batch, height_l, width_l, num_classes]
+      representing pixel-wise predictions before Softmax function.
+  """
+  feats = resnet_fpn(features, min_level, max_level, resnet_depth,
+                     is_training_bn, use_nearest_upsampling)
+
+  with tf.variable_scope('class_net', reuse=tf.AUTO_REUSE):
+    for level in range(min_level, max_level + 1):
+      feats[level] = segmentation_class_net(
+          feats[level], level, is_training_bn=is_training_bn)
+      if level == min_level:
+        fused_feature = feats[level]
+      else:
+        if use_nearest_upsampling:
+          scale = level / min_level
+          feats[level] = nearest_upsampling(feats[level], scale)
+        else:
+          feats[level] = resize_bilinear(
+              feats[level], tf.shape(feats[min_level])[1:3], feats[level].dtype)
+        fused_feature += feats[level]
+  fused_feature = batch_norm_relu(
+      fused_feature, is_training_bn, relu=True, init_zero=False)
+  classes = tf.layers.conv2d(
+      fused_feature,
+      num_classes,
+      kernel_size=(3, 3),
+      bias_initializer=tf.zeros_initializer(),
+      kernel_initializer=tf.random_normal_initializer(stddev=0.01),
+      padding='same',
+      name='class-predict')
+
+  return classes
