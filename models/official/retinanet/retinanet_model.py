@@ -32,15 +32,16 @@ import anchors
 import coco_metric
 import retinanet_architecture
 
+_DEFAULT_BATCH_SIZE = 64
 _WEIGHT_DECAY = 1e-4
 
 
-def _update_learning_rate_schedule_parameters(params):
+def update_learning_rate_schedule_parameters(params):
   """Updates params that are related to the learning rate schedule.
 
   This function adjusts the learning schedule based on the given batch size and
   other LR-schedule-related parameters. The default values specified in the
-  default_hparams() are for training with a batch size of 64.
+  default_hparams() are for training with a batch size of 64 and COCO dataset.
 
   For other batch sizes that train with the same schedule w.r.t. the number of
   epochs, this function handles the learning rate schedule.
@@ -95,7 +96,6 @@ def _update_learning_rate_schedule_parameters(params):
       lr_warmup_init, lr_warmup_epoch, first_lr_drop_epoch,
       and second_lr_drop_epoch.
   """
-  _DEFAULT_BATCH_SIZE = 64  # pylint: disable=invalid-name
   # params['batch_size'] is per-shard within model_fn if use_tpu=true.
   batch_size = (params['batch_size'] * params['num_shards'] if params['use_tpu']
                 else params['batch_size'])
@@ -103,10 +103,10 @@ def _update_learning_rate_schedule_parameters(params):
   params['learning_rate'] = (params['learning_rate'] * batch_size /
                              _DEFAULT_BATCH_SIZE)
   # Initial LR scale is reversely proportional to the batch size
-  reverse_batch_ratio = float(_DEFAULT_BATCH_SIZE / batch_size)
+  reverse_batch_ratio = _DEFAULT_BATCH_SIZE / batch_size
   params['lr_warmup_init'] = int(params['lr_warmup_init'] *
                                  reverse_batch_ratio)
-  steps_per_epoch = params['num_examples_per_epoch'] / float(batch_size)
+  steps_per_epoch = params['num_examples_per_epoch'] / batch_size
   params['lr_warmup_step'] = int(params['lr_warmup_epoch'] * steps_per_epoch)
   params['first_lr_drop_step'] = int(params['first_lr_drop_epoch'] *
                                      steps_per_epoch)
@@ -114,19 +114,15 @@ def _update_learning_rate_schedule_parameters(params):
                                       steps_per_epoch)
 
 
-# A collection of Learning Rate schecules:
-# third_party/tensorflow_models/object_detection/utils/learning_schedules.py
-def _learning_rate_schedule(base_learning_rate, lr_warmup_init, lr_warmup_step,
-                            first_lr_drop_step, second_lr_drop_step,
-                            global_step):
+def learning_rate_schedule(base_learning_rate, lr_warmup_init, lr_warmup_step,
+                           first_lr_drop_step, second_lr_drop_step,
+                           global_step):
   """Handles linear scaling rule, gradual warmup, and LR decay."""
   # lr_warmup_init is the starting learning rate; the learning rate is linearly
   # scaled up to the full learning rate after `lr_warmup_steps` before decaying.
-  lr_warmup_remainder = 1.0 - lr_warmup_init
-  linear_warmup = [
-      (lr_warmup_init + lr_warmup_remainder * (float(step) / lr_warmup_step),
-       step) for step in range(0, lr_warmup_step, max(1, lr_warmup_step // 100))
-  ]
+  linear_warmup = [(lr_warmup_init + float(step) / lr_warmup_step *
+                    (1 - lr_warmup_init), step)
+                   for step in range(lr_warmup_step)]
   lr_schedule = linear_warmup + [[1.0, lr_warmup_step],
                                  [0.1, first_lr_drop_step],
                                  [0.01, second_lr_drop_step]]
@@ -200,14 +196,13 @@ def _box_loss(box_outputs, box_targets, num_positives, delta=0.1):
   return box_loss
 
 
-def _detection_loss(cls_outputs, box_outputs, labels, params):
+def detection_loss(cls_outputs, box_outputs, labels, params):
   """Computes total detection loss.
 
   Computes total detection loss including box and class loss from all levels.
   Args:
     cls_outputs: an OrderDict with keys representing levels and values
-      representing logits in
-      [batch_size, height, width, num_anchors * num_classes].
+      representing logits in [batch_size, height, width, num_anchors].
     box_outputs: an OrderDict with keys representing levels and values
       representing box regression targets in
       [batch_size, height, width, num_anchors * 4].
@@ -321,15 +316,15 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
     scaffold_fn = None
 
   # Set up training loss and learning rate.
-  _update_learning_rate_schedule_parameters(params)
+  update_learning_rate_schedule_parameters(params)
   global_step = tf.train.get_global_step()
-  learning_rate = _learning_rate_schedule(
+  learning_rate = learning_rate_schedule(
       params['learning_rate'], params['lr_warmup_init'],
       params['lr_warmup_step'], params['first_lr_drop_step'],
       params['second_lr_drop_step'], global_step)
   # cls_loss and box_loss are for logging. only total_loss is optimized.
-  total_loss, cls_loss, box_loss = _detection_loss(cls_outputs, box_outputs,
-                                                   labels, params)
+  total_loss, cls_loss, box_loss = detection_loss(cls_outputs, box_outputs,
+                                                  labels, params)
   total_loss += _WEIGHT_DECAY * tf.add_n(
       [tf.nn.l2_loss(v) for v in tf.trainable_variables()
        if 'batch_normalization' not in v.name])
@@ -345,14 +340,17 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
     var_list = variable_filter_fn(
         tf.trainable_variables(),
         params['resnet_depth']) if variable_filter_fn else None
+
     with tf.control_dependencies(update_ops):
-      train_op = optimizer.minimize(total_loss, global_step, var_list=var_list)
+      train_op = optimizer.minimize(total_loss, global_step,
+                                    var_list=var_list)
   else:
     train_op = None
 
   # Evaluation only works on GPU/CPU host and batch_size=1
   eval_metrics = None
   if mode == tf.estimator.ModeKeys.EVAL:
+    batch_size = params['batch_size']
 
     def metric_fn(**kwargs):
       """Evaluation metric fn. Performed on CPU, do not reference TPU ops."""
@@ -369,14 +367,24 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
       # add metrics to output
       cls_outputs = {}
       box_outputs = {}
-      for level in range(params['min_level'], params['max_level'] + 1):
-        cls_outputs[level] = kwargs['cls_outputs_%d' % level]
-        box_outputs[level] = kwargs['box_outputs_%d' % level]
-      detections = anchor_labeler.generate_detections(
-          cls_outputs, box_outputs, kwargs['source_ids'])
+      detections_bs = []
+      for index in range(batch_size):
+        for level in range(params['min_level'], params['max_level'] + 1):
+          _, w, h, c = kwargs['cls_outputs_%d' % level].get_shape().as_list()
+          cls_outputs[level] = tf.slice(
+              kwargs['cls_outputs_%d' % level], [index, 0, 0, 0], [1, w, h, c])
+          _, w, h, c = kwargs['box_outputs_%d' % level].get_shape().as_list()
+          box_outputs[level] = tf.slice(
+              kwargs['box_outputs_%d' % level], [index, 0, 0, 0], [1, w, h, c])
+        detections = anchor_labeler.generate_detections(
+            cls_outputs, box_outputs,
+            tf.slice(kwargs['source_ids'], [index], [1]),
+            tf.slice(kwargs['image_scales'], [index], [1]))
+        detections_bs.append(detections)
       eval_metric = coco_metric.EvaluationMetric(params['val_json_file'])
-      coco_metrics = eval_metric.estimator_metric_fn(detections,
-                                                     kwargs['image_scales'])
+      coco_metrics = eval_metric.estimator_metric_fn(detections_bs,
+                                                     kwargs['groundtruth_data'])
+
       # Add metrics to output.
       output_metrics = {
           'cls_loss': cls_loss,
@@ -385,7 +393,6 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
       output_metrics.update(coco_metrics)
       return output_metrics
 
-    batch_size = params['batch_size']
     cls_loss_repeat = tf.reshape(
         tf.tile(tf.expand_dims(cls_loss, 0), [
             batch_size,
@@ -398,6 +405,7 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
         'cls_loss_repeat': cls_loss_repeat,
         'box_loss_repeat': box_loss_repeat,
         'source_ids': labels['source_ids'],
+        'groundtruth_data': labels['groundtruth_data'],
         'image_scales': labels['image_scales'],
     }
     for level in range(params['min_level'], params['max_level'] + 1):
@@ -426,11 +434,14 @@ def retinanet_model_fn(features, labels, mode, params):
 
 def default_hparams():
   return tf.contrib.training.HParams(
+      # input preprocessing parameters
       image_size=640,
       input_rand_hflip=True,
+      train_scale_min=1.0,
+      train_scale_max=1.0,
       # dataset specific parameters
       num_classes=90,
-      skip_crowd=True,
+      skip_crowd_during_training=True,
       # model architecture
       min_level=3,
       max_level=7,
@@ -453,10 +464,6 @@ def default_hparams():
       # localization loss
       delta=0.1,
       box_loss_weight=50.0,
-      # resnet checkpoint
-      resnet_checkpoint=None,
-      # output detection
-      box_max_detected=100,
-      box_iou_threshold=0.5,
-      use_bfloat16=False,
+      # enable bfloat
+      use_bfloat16=True,
   )

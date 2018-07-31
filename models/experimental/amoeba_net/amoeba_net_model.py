@@ -366,7 +366,7 @@ class AmoebaNetEstimatorModel(object):
         """Evaluation metric fn. Performed on CPU, do not reference TPU ops."""
         # Outfeed supports int32 but global_step is expected to be int64.
         predictions = tf.argmax(logits, axis=1)
-        categorical_labels = tf.argmax(labels, axis=1)
+        categorical_labels = labels
         top_1_accuracy = tf.metrics.accuracy(categorical_labels, predictions)
         in_top_5 = tf.cast(tf.nn.in_top_k(logits, categorical_labels, 5),
                            tf.float32)

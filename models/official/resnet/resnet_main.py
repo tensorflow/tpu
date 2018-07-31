@@ -33,6 +33,8 @@ from tensorflow.python.estimator import estimator
 
 FLAGS = flags.FLAGS
 
+FAKE_DATA_DIR = 'gs://cloud-tpu-test-datasets/fake_imagenet'
+
 flags.DEFINE_bool(
     'use_tpu', default=True,
     help=('Use TPU to execute the model for training and evaluation. If'
@@ -57,7 +59,7 @@ flags.DEFINE_string(
 
 # Model specific flags
 flags.DEFINE_string(
-    'data_dir', default=None,
+    'data_dir', default=FAKE_DATA_DIR,
     help=('The directory where the ImageNet input data is stored. Please see'
           ' the README.md for the expected data format.'))
 
@@ -425,6 +427,10 @@ def main(unused_argv):
   tf.logging.info('Precision: %s', FLAGS.precision)
   use_bfloat16 = FLAGS.precision == 'bfloat16'
 
+  if FLAGS.data_dir == FAKE_DATA_DIR:
+    tf.logging.info('Using fake dataset.')
+  else:
+    tf.logging.info('Using dataset: %s' % FLAGS.data_dir)
   # Input pipelines are slightly different (with regards to shuffling and
   # preprocessing) between training and evaluation.
   imagenet_train, imagenet_eval = [imagenet_input.ImageNetInput(

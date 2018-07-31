@@ -133,7 +133,8 @@ class TfExampleDecoder(object):
     serialized_example = tf.reshape(tf_example_string_tensor, shape=[])
     decoder = slim_example_decoder.TFExampleDecoder(self.keys_to_features,
                                                     self.items_to_handlers)
-    keys = decoder.list_items()
+    keys = sorted(decoder.list_items())
+
     tensors = decoder.decode(serialized_example, items=keys)
     tensor_dict = dict(zip(keys, tensors))
     is_crowd = 'groundtruth_is_crowd'
@@ -151,4 +152,59 @@ class TfExampleDecoder(object):
                 tensor_dict['groundtruth_weights'])[0],
             0), lambda: tensor_dict['groundtruth_weights'],
         default_groundtruth_weights)
+    return tensor_dict
+
+
+class TfExampleSegmentationDecoder(object):
+  """Tensorflow Example proto decoder."""
+
+  def __init__(self):
+    """Constructor sets keys_to_features and items_to_handlers."""
+    self.keys_to_features = {
+        'image/encoded':
+            tf.FixedLenFeature((), tf.string, default_value=''),
+        'image/filename':
+            tf.FixedLenFeature((), tf.string, default_value=''),
+        'image/format':
+            tf.FixedLenFeature((), tf.string, default_value='jpeg'),
+        'image/height':
+            tf.FixedLenFeature((), tf.int64, default_value=0),
+        'image/width':
+            tf.FixedLenFeature((), tf.int64, default_value=0),
+        'image/segmentation/class/encoded':
+            tf.FixedLenFeature((), tf.string, default_value=''),
+        'image/segmentation/class/format':
+            tf.FixedLenFeature((), tf.string, default_value='png'),
+    }
+    self.items_to_handlers = {
+        'image': slim_example_decoder.Image(
+            image_key='image/encoded', format_key='image/format', channels=3),
+        'labels_class': slim_example_decoder.Image(
+            image_key='image/segmentation/class/encoded',
+            format_key='image/segmentation/class/format',
+            channels=1)
+    }
+
+  def decode(self, tf_example_string_tensor):
+    """Decodes serialized tensorflow example and returns a tensor dictionary.
+
+    Args:
+      tf_example_string_tensor: a string tensor holding a serialized tensorflow
+        example proto.
+
+    Returns:
+      A dictionary of the following tensors.
+      image - 3D uint8 tensor of shape [None, None, 3] containing image.
+      labels_class - 2D unit8 tensor of shape [None, None] containing
+        pixel-wise class labels.
+    """
+    serialized_example = tf.reshape(tf_example_string_tensor, shape=[])
+    decoder = slim_example_decoder.TFExampleDecoder(self.keys_to_features,
+                                                    self.items_to_handlers)
+    keys = sorted(decoder.list_items())
+    keys = ['image', 'labels_class']
+
+    tensors = decoder.decode(serialized_example, items=keys)
+    tensor_dict = dict(zip(keys, tensors))
+    tensor_dict['image'].set_shape([None, None, 3])
     return tensor_dict

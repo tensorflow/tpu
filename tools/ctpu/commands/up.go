@@ -447,7 +447,7 @@ execution. For the full list of flags, run: ctpu help up
 	}
 
 	if inOrg, err := c.rmg.IsProjectInGoogleOrg(); err == nil && inOrg && c.cfg.Environment == "devshell" {
-		color.Red("WARNING: Attempting to ssh from DevShell in Google org; this might not work!")
+		color.Red("WARNING: Attempting to ssh from Cloud Shell in Google org; this might not work!")
 	}
 
 	if c.forwardPorts {

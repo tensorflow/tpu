@@ -20,6 +20,7 @@ import (
 	"log"
 	"strings"
 	"sync"
+	"time"
 
 	"context"
 	"flag"
@@ -114,6 +115,27 @@ func (s *statusCmd) vmStatus(vm *ctrl.GCEInstance) string {
 	return s.runnableStatus(exists, isRunning, status)
 }
 
+func (s *statusCmd) timeDelta(t time.Time) string {
+	delta := time.Since(t).Round(time.Minute)
+	if delta < 0 {
+		return "--"
+	}
+	if delta.Minutes() < 1 {
+		return "< 1 minute"
+	}
+	minutes := (delta / time.Minute) % 60
+	hours := delta / time.Hour
+	days := delta / (time.Hour * 24)
+
+	if days > 3 {
+		return fmt.Sprintf("%dd %dh", days, hours%24)
+	}
+	if hours == 0 {
+		return fmt.Sprintf("%dm", minutes)
+	}
+	return fmt.Sprintf("%dh %dm", hours, minutes)
+}
+
 func (s *statusCmd) flockStatus(vm *ctrl.GCEInstance, tpu *ctrl.TPUInstance) string {
 	if vm == nil && tpu == nil {
 		return color.BlueString("No instances currently exist.")
@@ -187,19 +209,21 @@ func (s *statusCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...in
 	Cloud TPU:          %s
 `, s.flockStatus(vm, tpu), s.vmStatus(vm), s.tpuStatus(tpu))
 
-	vmIP, vmCreated, machineType := "--", "--", "--"
+	vmIP, vmCreated, vmCreateDelta, machineType := "--", "--", "--", "--"
 	if vm != nil {
 		if len(vm.NetworkInterfaces) > 0 {
 			vmIP = vm.NetworkInterfaces[0].NetworkIP
 		}
-		// TODO(saeta): Print delta between now and creation time.
 		vmCreated = vm.CreationTimestamp
+		if createTime, err := time.Parse(time.RFC3339, vmCreated); err == nil {
+			vmCreateDelta = s.timeDelta(createTime)
+		}
 
 		machineTypeParts := strings.Split(vm.MachineType, "/")
 		machineType = machineTypeParts[len(machineTypeParts)-1]
 	}
 
-	tpuType, tpuIP, tpuVer, tpuSA, tpuCreated, tpuState, tpuHealth, tpuPreemptible := "--", "--", "--", "--", "--", "--", "--", "--"
+	tpuType, tpuIP, tpuVer, tpuSA, tpuCreated, tpuCreateDelta, tpuState, tpuHealth, tpuPreemptible := "--", "--", "--", "--", "--", "--", "--", "--", "--"
 	if tpu != nil {
 		tpuType = tpu.AcceleratorType
 		if len(tpu.NetworkEndpoints) > 0 {
@@ -207,8 +231,10 @@ func (s *statusCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...in
 		}
 		tpuVer = tpu.TensorflowVersion
 		tpuSA = tpu.ServiceAccount
-		// TODO(saeta): Print delta between now and creation time.
 		tpuCreated = tpu.CreateTime
+		if createTime, err := time.Parse(time.RFC3339Nano, tpuCreated); err == nil {
+			tpuCreateDelta = s.timeDelta(createTime)
+		}
 		tpuState = tpu.State
 		tpuHealth = tpu.Health
 		tpuPreemptible = fmt.Sprintf("%v", tpu.IsPreemptible())
@@ -217,17 +243,17 @@ func (s *statusCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...in
 	if s.details {
 		fmt.Printf(`
 Compute Engine IP Address:    %s
-Compute Engine Created:       %s
+Compute Engine Created:       %s ago (@: %s)
 Compute Engine Machine Type:  %s
 TPU Accelerator Type:         %s
 TPU IP Address:               %s
 TPU TF Version:               %s
 TPU Service Acct:             %s
-TPU Created:                  %s
+TPU Created:                  %s ago (@: %s)
 TPU State:                    %s
 TPU Health:                   %s
 TPU Preemptible:              %s
-`, vmIP, vmCreated, machineType, tpuType, tpuIP, tpuVer, tpuSA, tpuCreated, tpuState, tpuHealth, tpuPreemptible)
+`, vmIP, vmCreateDelta, vmCreated, machineType, tpuType, tpuIP, tpuVer, tpuSA, tpuCreateDelta, tpuCreated, tpuState, tpuHealth, tpuPreemptible)
 	}
 	return subcommands.ExitSuccess
 }

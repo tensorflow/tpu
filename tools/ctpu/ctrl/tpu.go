@@ -219,7 +219,7 @@ func (g *TPUCP) parentPath() string {
 
 var legacyNetwork = net.IPv4(10, 240, 0, 0)
 
-func (g *TPUCP) selectCidrBlock(routes []*compute.Route) (string, error) {
+func (g *TPUCP) selectCidrBlock(routes []*compute.Route, cidrBlockSize uint) (string, error) {
 	cidrBlocks := make([]*net.IPNet, 0, len(routes))
 	for _, i := range routes {
 		_, ipNet, err := net.ParseCIDR(i.DestRange)
@@ -239,17 +239,22 @@ func (g *TPUCP) selectCidrBlock(routes []*compute.Route) (string, error) {
 		cidrBlocks = append(cidrBlocks, ipNet)
 	}
 
+	fourthOctetIncrement := 1 << (32 - cidrBlockSize)
+
 	// Select a random IP address.
 	for thirdOctet := byte(1); thirdOctet < 255; thirdOctet++ {
 	nextCandidate:
-		for fourthOctet := byte(1); fourthOctet < 255; fourthOctet += 8 {
-			candidateIPAddress := net.IPv4(10, 240, thirdOctet, fourthOctet)
-			for _, block := range cidrBlocks {
-				if block.Contains(candidateIPAddress) {
-					continue nextCandidate
+		for fourthOctetBase := 1; fourthOctetBase < 255; fourthOctetBase += fourthOctetIncrement {
+			for candidateFourthOctet := fourthOctetBase; candidateFourthOctet < fourthOctetBase+fourthOctetIncrement; candidateFourthOctet += 2 {
+				candidateIPAddress := net.IPv4(10, 240, thirdOctet, byte(candidateFourthOctet))
+				for _, block := range cidrBlocks {
+					if block.Contains(candidateIPAddress) {
+						continue nextCandidate
+					}
 				}
 			}
-			_, newCidr, err := net.ParseCIDR(fmt.Sprintf("%s/29", candidateIPAddress.String()))
+			candidateIPAddress := net.IPv4(10, 240, thirdOctet, byte(fourthOctetBase))
+			_, newCidr, err := net.ParseCIDR(fmt.Sprintf("%s/%d", candidateIPAddress.String(), cidrBlockSize))
 			if err != nil {
 				return "", fmt.Errorf("error parsing constructed CIDR: %v", err)
 			}
@@ -257,6 +262,32 @@ func (g *TPUCP) selectCidrBlock(routes []*compute.Route) (string, error) {
 		}
 	}
 	return "", errors.New("no available CIDR blocks found")
+}
+
+// TODO: handle cidr block sizes larger than 24 bits.
+var tpuDeviceNetworkSizes = map[string]uint{
+	"v2-8":    29,
+	"v2-32":   29,
+	"v2-128":  27,
+	"v2-256":  26,
+	"v2-512":  25,
+	"v3-8":    29,
+	"v3-32":   29,
+	"v3-64":   28,
+	"v3-128":  27,
+	"v3-256":  26,
+	"v3-512":  25,
+	"v3-1024": 24,
+	// "v3-2048": 24,  // TODO(saeta): Support full-size pods.
+}
+
+// cidrBlockSize returns the number of ones in the CIDR range, or an error.
+func (g *TPUCP) cidrBlockSize(hardwareType string) (ones uint, err error) {
+	cidrBits, present := tpuDeviceNetworkSizes[hardwareType]
+	if !present {
+		return 0, fmt.Errorf("unknown TPU device size %q", hardwareType)
+	}
+	return cidrBits, nil
 }
 
 // CreateInstance creates the Cloud TPU with an API call to the TPU control plane.
@@ -270,7 +301,11 @@ func (g *TPUCP) CreateInstance(ctx context.Context, version string, preemptible 
 		return nil, err
 	}
 
-	cidrBlock, err := g.selectCidrBlock(routeItems)
+	cidrBlockSize, err := g.cidrBlockSize(hardwareType)
+	if err != nil {
+		return nil, err
+	}
+	cidrBlock, err := g.selectCidrBlock(routeItems, cidrBlockSize)
 	if err != nil {
 		return nil, err
 	}
