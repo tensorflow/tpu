@@ -34,13 +34,14 @@ type ConfigGcloudCLI interface {
 }
 
 type configCmd struct {
-	cfg *config.Config
-	cli ConfigGcloudCLI
+	cfg  *config.Config
+	cli  ConfigGcloudCLI
+	full bool
 }
 
 // ConfigCommand creates the config subcommand.
 func ConfigCommand(cfg *config.Config, cli ConfigGcloudCLI) subcommands.Command {
-	return &configCmd{cfg, cli}
+	return &configCmd{cfg, cli, false}
 }
 
 func (configCmd) Name() string {
@@ -49,6 +50,7 @@ func (configCmd) Name() string {
 
 func (c *configCmd) SetFlags(f *flag.FlagSet) {
 	c.cfg.SetFlags(f) // Allow users to specify cfg flags either before or after the subcommand name.
+	f.BoolVar(&c.full, "full", false, "Print the full configuration.")
 }
 
 func (configCmd) Synopsis() string {
@@ -80,6 +82,9 @@ func (c *configCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...in
 
 	fmt.Printf("ctpu configuration:\n\tname: %s\n\tproject: %s\n\tzone: %s\n",
 		c.cfg.FlockName, c.cfg.Project, c.cfg.Zone)
+	if c.full {
+		fmt.Printf("\tenvironment: %s\n\tactive gcloud sdk configuration: %s\n", c.cfg.Environment, c.cfg.ActiveConfiguration)
+	}
 	fmt.Printf("If you would like to change the configuration for a single command invocation, please use the command line flags.\n")
 	if c.cfg.Environment == "gcloud" {
 		fmt.Printf("If you would like to change the configuration generally, see `gcloud config configurations`.\n")

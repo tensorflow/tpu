@@ -28,7 +28,7 @@ import data_pipeline
 import model
 from tensorflow.python.estimator import estimator
 from deeplab import common
-from deeplab.datasets import segmentation_dataset
+from deeplab.deprecated import segmentation_dataset
 
 # Dataset settings.
 flags.DEFINE_string('dataset_name', 'pascal_voc_seg',

@@ -39,15 +39,15 @@ func gcloudConfig() (*Config, error) {
 	if len(user.HomeDir) == 0 {
 		return nil, errors.New("could not find your home directory")
 	}
-	return buildGcloudEnvConfig(path.Join(user.HomeDir, ".config", "gcloud"))
+	return buildGcloudEnvConfig(path.Join(user.HomeDir, ".config", "gcloud"), true)
 }
 
-func buildGcloudEnvConfig(configDir string) (*Config, error) {
+func buildGcloudEnvConfig(configDir string, checkAppCredentials bool) (*Config, error) {
 	if stat, err := os.Stat(configDir); os.IsNotExist(err) || !stat.IsDir() {
 		return nil, fmt.Errorf("expected gcloud config directory at '%s'", configDir)
 	}
 
-	if err := checkAppDefaultFile(configDir); err != nil {
+	if err := checkAppDefaultFile(configDir); err != nil && checkAppCredentials {
 		return nil, err
 	}
 

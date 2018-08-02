@@ -70,7 +70,7 @@ func (deleteCmd) Synopsis() string {
 }
 
 func (deleteCmd) Usage() string {
-	return `ctpu delete [--dry-run] [--tpu-only] [--wait-for-async-ops]
+	return `ctpu delete [--dry-run] [--tpu-only] [--nowait] [--noconf]
 `
 }
 
@@ -115,7 +115,9 @@ func (c *deleteCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...in
 		wg.Done()
 	}()
 	go func() {
-		gceOp, gceErr = cleanUpVM(c.cfg, c.gce.Instance, c.gce.DeleteInstance, c.dryRun, "Deleting", false)
+		if !c.tpuOnly {
+			gceOp, gceErr = cleanUpVM(c.cfg, c.gce.Instance, c.gce.DeleteInstance, c.dryRun, "Deleting", false)
+		}
 		wg.Done()
 	}()
 	wg.Wait()

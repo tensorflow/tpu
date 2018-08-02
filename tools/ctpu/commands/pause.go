@@ -65,7 +65,7 @@ func (pauseCmd) Synopsis() string {
 }
 
 func (pauseCmd) Usage() string {
-	return `ctpu pause [--dry-run] [--tpu-only] [--wait-for-async-ops]
+	return `ctpu pause [--dry-run] [--tpu-only] [--nowait] [--noconf]
 `
 }
 
@@ -115,7 +115,9 @@ func (c *pauseCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...int
 		wg.Done()
 	}()
 	go func() {
-		gceOp, gceErr = cleanUpVM(c.cfg, c.gce.Instance, c.gce.StopInstance, c.dryRun, "Stopping", true)
+		if !c.tpuOnly {
+			gceOp, gceErr = cleanUpVM(c.cfg, c.gce.Instance, c.gce.StopInstance, c.dryRun, "Stopping", true)
+		}
 		wg.Done()
 	}()
 	wg.Wait()

@@ -36,10 +36,35 @@ func devshellEnvParseError(e string) error {
 	return fmt.Errorf("devshell: unexpected environment variable value: %q", e)
 }
 
-func devshellConfig() (*Config, error) {
-	cfg := Config{
-		Environment: "devshell",
+func devshellFilesystemConfig(env []string) *Config {
+	for _, e := range env {
+		pair := strings.Split(e, "=")
+		switch pair[0] {
+		case "CLOUDSDK_CONFIG":
+			if len(pair) != 2 {
+				log.Printf("Unable to parse CLOUDSDK_CONFIG environment variable.")
+				return nil
+			}
+			cfg, err := buildGcloudEnvConfig(pair[1], false)
+			if err != nil {
+				log.Printf("Error parsing CLOUDSDK_CONFIG at %q: %v.", pair[1], err)
+				return nil
+			}
+			cfg.Environment = "devshell"
+			return cfg
+		}
 	}
+	return nil
+}
+
+func devshellConfig() (*Config, error) {
+	cfg := devshellFilesystemConfig(os.Environ())
+	if cfg == nil {
+		cfg = &Config{}
+	}
+	cfg.Environment = "devshell"
+
+	// Add environment overrides.
 	for _, e := range os.Environ() {
 		pair := strings.Split(e, "=")
 		switch pair[0] {
@@ -58,9 +83,8 @@ func devshellConfig() (*Config, error) {
 		}
 	}
 
-	// TODO(saeta): Investigate falling back to the GCLOUDSDK_CONFIG env var.
 	if cfg.Project == "" {
 		log.Printf("WARNING: devshell: could not find DEVSHELL_PROJECT_ID")
 	}
-	return &cfg, nil
+	return cfg, nil
 }

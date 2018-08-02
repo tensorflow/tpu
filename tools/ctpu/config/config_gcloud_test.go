@@ -27,7 +27,7 @@ func testGcloudConfigDir(testName string) string {
 
 func TestGcloudClean(t *testing.T) {
 	cfgDir := testGcloudConfigDir("clean")
-	cfg, err := buildGcloudEnvConfig(cfgDir)
+	cfg, err := buildGcloudEnvConfig(cfgDir, true)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -48,7 +48,7 @@ func TestGcloudClean(t *testing.T) {
 
 func TestGcloudCorruptedMissingConfig(t *testing.T) {
 	cfgDir := testGcloudConfigDir("corrupted")
-	_, err := buildGcloudEnvConfig(cfgDir)
+	_, err := buildGcloudEnvConfig(cfgDir, true)
 
 	if err == nil {
 		t.Fatal("Corrupted did not encounter an error.")
@@ -60,7 +60,7 @@ func TestGcloudCorruptedMissingConfig(t *testing.T) {
 
 func TestGcloudCorruptedNoConfigurationsDirectory(t *testing.T) {
 	cfgDir := testGcloudConfigDir("corrupted2")
-	cfg, err := buildGcloudEnvConfig(cfgDir)
+	cfg, err := buildGcloudEnvConfig(cfgDir, true)
 
 	if err != nil {
 		t.Fatal(err)
@@ -81,7 +81,7 @@ func TestGcloudCorruptedNoConfigurationsDirectory(t *testing.T) {
 
 func TestGcloudIncomplete(t *testing.T) {
 	cfgDir := testGcloudConfigDir("incomplete")
-	cfg, err := buildGcloudEnvConfig(cfgDir)
+	cfg, err := buildGcloudEnvConfig(cfgDir, true)
 
 	if err != nil {
 		t.Fatal(err)
@@ -106,7 +106,7 @@ func TestGcloudIncomplete(t *testing.T) {
 
 func TestGcloudNoConfig(t *testing.T) {
 	cfgDir := testGcloudConfigDir("no_config")
-	_, err := buildGcloudEnvConfig(cfgDir)
+	_, err := buildGcloudEnvConfig(cfgDir, true)
 
 	if err == nil {
 		t.Fatal(err)
@@ -116,9 +116,18 @@ func TestGcloudNoConfig(t *testing.T) {
 	}
 }
 
+func TestGcloudNoConfigSkipCheck(t *testing.T) {
+	cfgDir := testGcloudConfigDir("no_config")
+	_, err := buildGcloudEnvConfig(cfgDir, false)
+
+	if err != nil {
+		t.Errorf("No error expected; got: %v", err)
+	}
+}
+
 func TestGcloudNoDir(t *testing.T) {
 	cfgDir := testGcloudConfigDir("not_there")
-	_, err := buildGcloudEnvConfig(cfgDir)
+	_, err := buildGcloudEnvConfig(cfgDir, true)
 	if err == nil {
 		t.Fatal(err)
 	}
