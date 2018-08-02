@@ -40,10 +40,10 @@ type tpuCmd struct {
 }
 
 func (c *tpuCmd) SetFlags(f *flag.FlagSet) {
-	f.BoolVar(&c.dryRun, "dry_run", false,
+	f.BoolVar(&c.dryRun, "dry-run", false,
 		"Do not make changes; print only what would have happened.")
-	f.BoolVar(&c.tpuOnly, "tpu_only", false,
-		"Do not pause the Compute Engine VM, only pause the TPU (useful if you want to edit code on the VM without paying for the TPU).")
+	f.BoolVar(&c.tpuOnly, "tpu-only", false,
+		"Do not modify the Compute Engine VM, only modify the TPU (useful if you want to edit code on the VM without paying for the TPU).")
 	f.BoolVar(&c.skipWaiting, "nowait", false,
 		"Don't wait for asynchronous operations to complete (e.g. TPU deletion, Compute Engine VM halting)")
 	f.BoolVar(&c.skipConfirmation, "noconf", false, "Skip confirmation about deleting resources.")
@@ -100,11 +100,9 @@ func cleanUpTPU(cfg *config.Config, tpuCP tpuInstanceFn, tpuCommand cpCommand, d
 
 func waitForLongRunningOperations(operation string, skipWaiting bool, gceOp, tpuOp ctrl.LongRunningOperation) error {
 	if skipWaiting {
-		if gceOp != nil || tpuOp != nil {
-			fmt.Printf(`All %s operations have been initiated successfully.
+		fmt.Printf(`All %s operations have been initiated successfully.
 	Exiting early due to the --nowait flag.
 `, operation)
-		}
 		return nil
 	}
 

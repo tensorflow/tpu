@@ -386,6 +386,7 @@ def _build_network_base(images,
                          custom_getter=network_utils.bp16_getter):
     net = tf.nn.relu(net)
     net = network_utils.global_avg_pool(net)
+    end_points['global_pool'] = net
     net = slim.dropout(net, hparams.dense_dropout_keep_prob, scope='dropout')
     logits = slim.fully_connected(net, num_classes)
   logits = tf.cast(logits, tf.float32)

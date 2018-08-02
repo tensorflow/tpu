@@ -68,6 +68,9 @@ class ImageNetInput(object):
     use_bfloat16: If True, use bfloat16 precision; else use float32.
     transpose_input: 'bool' for whether to use the double transpose trick
     num_cores: `int` for the number of TPU cores
+    num_replicas: `int` for the number of model replicas this dataset should be
+        sharded onto, `None` if this dataset should not be sharded.
+    replica: `int` for the replica that input_fn should produce data for
   """
 
   def __init__(self, is_training,
@@ -77,7 +80,9 @@ class ImageNetInput(object):
                num_parallel_calls=64,
                image_size=224,
                transpose_input=False,
-               cache=False):
+               cache=False,
+               num_replicas=None,
+               replica=0):
     self.image_preprocessing_fn = resnet_preprocessing.preprocess_image
     self.is_training = is_training
     self.use_bfloat16 = use_bfloat16
@@ -89,6 +94,8 @@ class ImageNetInput(object):
     self.transpose_input = transpose_input
     self.image_size = image_size
     self.cache = cache
+    self.num_replicas = num_replicas
+    self.replica = replica
 
   def set_shapes(self, batch_size, images, labels):
     """Statically set the batch_size dimension."""
@@ -159,6 +166,10 @@ class ImageNetInput(object):
         self.data_dir, 'train-*' if self.is_training else 'validation-*')
     dataset = tf.data.Dataset.list_files(file_pattern, shuffle=self.is_training)
 
+    # Shard the data into `num_replicas` parts, get the part for `replica`
+    if self.num_replicas:
+      dataset = dataset.shard(self.num_replicas, self.replica)
+
     if self.is_training and not self.cache:
       dataset = dataset.repeat()
 
@@ -171,6 +182,7 @@ class ImageNetInput(object):
     dataset = dataset.apply(
         tf.contrib.data.parallel_interleave(
             fetch_dataset, cycle_length=self.num_parallel_calls, sloppy=True))
+
     if self.cache:
       dataset = dataset.cache().apply(
           tf.contrib.data.shuffle_and_repeat(1024 * 16))

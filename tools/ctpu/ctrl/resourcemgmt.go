@@ -116,5 +116,5 @@ func (r *ResourceManagementCP) IsProjectInGoogleOrg() (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return resp.Parent.Type == "organization" && resp.Parent.Id == "433637338589", nil
+	return resp.Parent != nil && resp.Parent.Type == "organization" && resp.Parent.Id == "433637338589", nil
 }

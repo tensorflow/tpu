@@ -60,12 +60,11 @@ flags.DEFINE_string('resnet_checkpoint', '',
 flags.DEFINE_string('hparams', '',
                     'Comma separated k=v pairs of hyperparameters.')
 flags.DEFINE_integer(
-    'num_shards', default=8, help='Number of shards (TPU cores) for '
-    'training.')
+    'num_cores', default=8, help='Number of TPU cores for training.')
 flags.DEFINE_integer('train_batch_size', 64, 'training batch size')
 flags.DEFINE_integer('eval_batch_size', 1, 'evaluation batch size')
 flags.DEFINE_integer('eval_samples', 5000, 'The number of samples for '
-                        'evaluation.')
+                     'evaluation.')
 flags.DEFINE_integer(
     'iterations_per_loop', 100, 'Number of iterations per TPU training loop')
 flags.DEFINE_string(
@@ -126,7 +125,7 @@ def main(argv):
 
   params = dict(
       hparams.values(),
-      num_shards=FLAGS.num_shards,
+      num_shards=FLAGS.num_cores,
       num_examples_per_epoch=FLAGS.num_examples_per_epoch,
       use_tpu=FLAGS.use_tpu,
       resnet_checkpoint=FLAGS.resnet_checkpoint,
@@ -141,7 +140,7 @@ def main(argv):
 
   tpu_config = tf.contrib.tpu.TPUConfig(
       FLAGS.iterations_per_loop,
-      FLAGS.num_shards,
+      num_shards=FLAGS.num_cores,
       per_host_input_for_training=tf.contrib.tpu.InputPipelineConfig.PER_HOST_V2
   )
 

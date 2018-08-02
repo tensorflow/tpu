@@ -24,7 +24,6 @@ import time
 from absl import flags
 import absl.logging as _logging  # pylint: disable=unused-import
 import tensorflow as tf
-
 import imagenet_input
 import resnet_model
 from tensorflow.contrib import summary
@@ -421,7 +420,6 @@ def main(unused_argv):
       train_batch_size=FLAGS.train_batch_size,
       eval_batch_size=FLAGS.eval_batch_size,
       export_to_tpu=False)
-
   assert FLAGS.precision == 'bfloat16' or FLAGS.precision == 'float32', (
       'Invalid value for --precision flag; must be bfloat16 or float32.')
   tf.logging.info('Precision: %s', FLAGS.precision)
