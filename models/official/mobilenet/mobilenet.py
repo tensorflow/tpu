@@ -218,6 +218,11 @@ flags.DEFINE_integer(
     'This shuffling is done after prefetching is done. '
     'Set to 0 to disable')
 
+flags.DEFINE_bool(
+    'quantize', False, 'Quantize training')
+
+flags.DEFINE_integer(
+    'quant_delay', 250000, 'when to start quantization')
 
 FLAGS = flags.FLAGS
 
@@ -466,6 +471,12 @@ def model_fn(features, labels, mode, params):
       weights=1.0,
       label_smoothing=0.1)
   loss = tf.losses.get_total_loss(add_regularization_losses=True)
+
+  if FLAGS.quantize:
+    if mode == tf.estimator.ModeKeys.EVAL:
+      tf.contrib.quantize.create_eval_graph()
+    else:
+      tf.contrib.quantize.create_training_graph(quant_delay=FLAGS.quant_delay)
 
   initial_learning_rate = FLAGS.learning_rate * FLAGS.train_batch_size / 256
   final_learning_rate = 0.0001 * initial_learning_rate

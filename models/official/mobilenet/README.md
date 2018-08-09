@@ -24,3 +24,20 @@ python mobilenet.py\
 
 Note that the mobilenet network requires a large number of epochs to converge
 completely.
+
+### train with quantization
+To run quantization training, try the following command:
+
+```
+python mobilenet.py \
+  --alsologtostderr \
+  --master=$TPU_WORKER \
+  --data_dir=gs://my-cloud-bucket/data/imagenet \
+  --model_dir=gs://my-cloud-bucket/models/mobilenet/quant \
+  --train_batch_size=192 \
+  --eval_batch_size=192 \
+  --quantize=True
+```
+
+Note that quantization need much more memory, so much smaller
+`train_batch_size` should be used.
