@@ -35,15 +35,22 @@ fi
 sudo apt install -y protobuf-compiler python-pil python-lxml\
   python-pip python-dev git unzip
 
-pip install Cython
-pip install git+https://github.com/cocodataset/cocoapi#subdirectory=PythonAPI
+pip install Cython --user
+pip install git+https://github.com/cocodataset/cocoapi#subdirectory=PythonAPI --user
 
 echo "Cloning Tensorflow models directory (for conversion utilities)"
 if [ ! -e tf-models ]; then
   git clone http://github.com/tensorflow/models tf-models
 fi
 
-(cd tf-models/research && protoc object_detection/protos/*.proto --python_out=.)
+mkdir protoc_3.3
+cd protoc_3.3
+wget https://github.com/google/protobuf/releases/download/v3.3.0/protoc-3.3.0-linux-x86_64.zip
+chmod 775 protoc-3.3.0-linux-x86_64.zip
+unzip protoc-3.3.0-linux-x86_64.zip
+cd ..
+
+(cd tf-models/research && ../../protoc_3.3/bin/protoc object_detection/protos/*.proto --python_out=.)
 
 UNZIP="unzip -nq"
 
