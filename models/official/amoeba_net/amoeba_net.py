@@ -18,7 +18,7 @@ r"""TensorFlow AmoebaNet Example.
 GCP Run Example
 python amoeba_net.py --data_dir=gs://cloud-tpu-datasets/imagenet-data --model_dir=gs://cloud-tpu-ckpts/models/ameoba_net_x/ \
 --drop_connect_keep_prob=1.0 --cell_name=evol_net_x --num_cells=12 --reduction_size=256 --image_size=299 --num_epochs=48 \
---train_batch_size=256 --num_epochs_per_eval=4 --lr_decay_value=0.89 --lr_num_epochs_per_decay=1 --alsologtostderr \
+--train_batch_size=256 --num_epochs_per_eval=4.0 --lr_decay_value=0.89 --lr_num_epochs_per_decay=1 --alsologtostderr \
 --tpu=huangyp-tpu-0
 """
 # pylint: enable=line-too-long
@@ -85,8 +85,8 @@ flags.DEFINE_float(
     'num_epochs', 48.,
     'Number of steps use for training.')
 
-flags.DEFINE_integer(
-    'num_epochs_per_eval', 1,
+flags.DEFINE_float(
+    'num_epochs_per_eval', 1.,
     'Number of training epochs to run between evaluations.')
 
 flags.DEFINE_string(

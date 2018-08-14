@@ -53,6 +53,10 @@ flags.DEFINE_bool(
           'used in conjunction with the resnet_benchmark.py script.'))
 
 
+# Number of training and evaluation images in the standard ImageNet dataset
+NUM_TRAIN_IMAGES = 1281167
+NUM_EVAL_IMAGES = 50000
+
 def main(unused_argv):
   tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
       FLAGS.tpu,
@@ -126,7 +130,7 @@ def main(unused_argv):
 
   if FLAGS.mode == 'train':
     current_step = estimator._load_global_step_from_checkpoint_dir(FLAGS.model_dir)  # pylint: disable=protected-access,line-too-long
-    batches_per_epoch = resnet_main.NUM_TRAIN_IMAGES / FLAGS.train_batch_size
+    batches_per_epoch = NUM_TRAIN_IMAGES / FLAGS.train_batch_size
     tf.logging.info('Training for %d steps (%.2f epochs in total). Current'
                     ' step %d.' % (FLAGS.train_steps,
                                    FLAGS.train_steps / batches_per_epoch,
@@ -159,7 +163,7 @@ def main(unused_argv):
     start_timestamp = tf.gfile.Stat(
         os.path.join(FLAGS.model_dir, 'START')).mtime_nsec
     results = []
-    eval_steps = resnet_main.NUM_EVAL_IMAGES // FLAGS.eval_batch_size
+    eval_steps = NUM_EVAL_IMAGES // FLAGS.eval_batch_size
 
     ckpt_steps = set()
     all_files = tf.gfile.ListDirectory(FLAGS.model_dir)
@@ -173,7 +177,7 @@ def main(unused_argv):
     for step in ckpt_steps:
       ckpt = os.path.join(FLAGS.model_dir, 'model.ckpt-%d' % step)
 
-      batches_per_epoch = resnet_main.NUM_TRAIN_IMAGES // FLAGS.train_batch_size
+      batches_per_epoch = NUM_TRAIN_IMAGES // FLAGS.train_batch_size
       current_epoch = step // batches_per_epoch
 
       if FLAGS.use_fast_lr:

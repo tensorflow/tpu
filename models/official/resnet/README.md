@@ -4,13 +4,18 @@
 
 ### Setup a Google Cloud project
 
-Follow the instructions at the [Quickstart Guide](https://cloud.google.com/tpu/docs/quickstart)
-to get a GCE VM with access to Cloud TPU.
+Follow the instructions at the [Quickstart Guide][quickstart-guide] to get a GCE
+VM with access to a Cloud TPU.  It is also recommended that you try the [Cloud
+TPU ResNet tutorial][resnet-tutorial], which covers both the quickstart and
+training of the ResNet algorithm.
+
+[quickstart-guide]: https://cloud.google.com/tpu/docs/quickstart
+[resnet-tutorial]: https://cloud.google.com/tpu/docs/tutorials/resnet
 
 To run this model, you will need:
 
 * A GCE VM instance with an associated Cloud TPU resource
-* A GCS bucket to store your training checkpoints
+* A GCS bucket to store your training checkpoints (the "model directory")
 * (Optional): The ImageNet training and validation data preprocessed into
   TFRecord format, and stored in GCS.
 
@@ -36,6 +41,72 @@ python resnet_main.py \
   --data_dir=$DATA_DIR \
   --model_dir=$MODEL_DIR
 ```
+
+`$TPU_NAME` is the name of the TPU node, the same name that appears when you
+run `gcloud compute tpus list`, or `ctpu ls`.  (When using the shell
+created by `ctpu up`, this argument may not be necessary.)
+
+`$MODEL_DIR` is a GCS location (a URL starting with `gs://` where both the GCE
+VM and the associated Cloud TPU have write access, something like `gs://userid-
+dev-imagenet-output/model`.  (TensorFlow can't create the bucket; you have to
+create it with `gsutil mb <bucket>`.)  This bucket is used to save checkpoints
+and the training result, so that the training steps are cumulative when you
+reuse the model directory.  If you do 1000 steps, for example, and you reuse the
+model directory, on a subsequent run, it will skip the first 1000 steps, because
+it picks up where it left off.
+
+`$DATA_DIR` is a GCS location to which both the GCE VM and associated Cloud TPU
+have read access, something like `gs://cloud-tpu-test-datasets/fake_imagenet`.
+This location is expected to contain files with the prefixes `train-*` and
+`validation-*`.  The former pattern is used to match files used for the training
+phase, the latter for the evaluation phase.
+
+Each file is a series of `TFExample` records.  In the case of ResNet-50,
+the `TFExample` records have a specific format, as follows:
+
+```python
+keys_to_features = {
+    'image/encoded': tf.FixedLenFeature((), tf.string, ''),
+    'image/format': tf.FixedLenFeature((), tf.string, 'jpeg'),
+    'image/class/label': tf.FixedLenFeature([], tf.int64, -1),
+    'image/class/text': tf.FixedLenFeature([], tf.string, ''),
+    'image/object/bbox/xmin': tf.VarLenFeature(dtype=tf.float32),
+    'image/object/bbox/ymin': tf.VarLenFeature(dtype=tf.float32),
+    'image/object/bbox/xmax': tf.VarLenFeature(dtype=tf.float32),
+    'image/object/bbox/ymax': tf.VarLenFeature(dtype=tf.float32),
+    'image/object/class/label': tf.VarLenFeature(dtype=tf.int64),
+}
+```
+
+The training and validation data can also be sourced from Cloud Bigtable:
+
+```
+python resnet_main.py \
+  --tpu=$TPU_NAME \
+  --model_dir=$MODEL_DIR \
+  --bigtable_project=$PROJECT \
+  --bigtable_instance=$INSTANCE \
+  --bigtable_table=$TABLE
+```
+
+In this case, the `TFExample` records are stored one per row in a Bigtable.
+Categories of data are arranged by row prefix, and the rows within that prefix
+arranged by zero-filled indexes, e.g. `train_0000003892`.)
+
+You can also specify the following arguments when sourcing data from Bigtable,
+though they already have the right defaults for ResNet-50:
+
+```
+  --bigtable_train_prefix=train_ \        # row prefix for training rows
+  --bigtable_eval_prefix=validation_ \    # row prefix for evaluation rows
+  --bigtable_column_family=tfexample \
+  --bigtable_column_qualifier=example
+```
+
+Note that even when sourcing input data from Bigtable, `$MODEL_DIR` must
+still be a GCS location.
+
+### Project and Zone
 
 If you are not running this script on a GCE VM in the same project and zone as
 your Cloud TPU, you will need to add the `--project` and `--zone` flags
