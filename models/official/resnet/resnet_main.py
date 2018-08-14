@@ -111,8 +111,7 @@ flags.DEFINE_integer(
 flags.DEFINE_integer(
     'eval_timeout',
     default=None,
-    help=(
-        'Maximum seconds between checkpoints before evaluation terminates.'))
+    help='Maximum seconds between checkpoints before evaluation terminates.')
 
 flags.DEFINE_bool(
     'skip_host_call', default=False,
@@ -138,6 +137,28 @@ flags.DEFINE_integer(
     'num_cores', default=8,
     help=('Number of TPU cores. For a single TPU device, this is 8 because each'
           ' TPU has 4 chips each with 2 cores.'))
+
+flags.DEFINE_string(
+    'bigtable_project', None,
+    'The Cloud Bigtable project.  If None, --gcp_project will be used.')
+flags.DEFINE_string(
+    'bigtable_instance', None,
+    'The Cloud Bigtable instance to load data from.')
+flags.DEFINE_string(
+    'bigtable_table', 'imagenet',
+    'The Cloud Bigtable table to load data from.')
+flags.DEFINE_string(
+    'bigtable_train_prefix', 'train_',
+    'The prefix identifying training rows.')
+flags.DEFINE_string(
+    'bigtable_eval_prefix', 'validation_',
+    'The prefix identifying evaluation rows.')
+flags.DEFINE_string(
+    'bigtable_column_family', 'tfexample',
+    'The column family storing TFExamples.')
+flags.DEFINE_string(
+    'bigtable_column_qualifier', 'example',
+    'The column name storing TFExamples.')
 
 flags.DEFINE_string(
     'data_format', default='channels_last',
@@ -400,6 +421,59 @@ def resnet_model_fn(features, labels, mode, params):
       eval_metrics=eval_metrics)
 
 
+def _verify_non_empty_string(value, field_name):
+  """Ensures that a given proposed field value is a non-empty string.
+
+  Args:
+    value:  proposed value for the field.
+    field_name:  string name of the field, e.g. `project`.
+
+  Returns:
+    The given value, provided that it passed the checks.
+
+  Raises:
+    ValueError:  the value is not a string, or is a blank string.
+  """
+  if not isinstance(value, str):
+    raise ValueError(
+        'Bigtable parameter "%s" must be a string.' % field_name)
+  if not value:
+    raise ValueError(
+        'Bigtable parameter "%s" must be non-empty.' % field_name)
+  return value
+
+
+def _select_tables_from_flags():
+  """Construct training and evaluation Bigtable selections from flags.
+
+  Returns:
+    [training_selection, evaluation_selection]
+  """
+  project = _verify_non_empty_string(
+      FLAGS.bigtable_project or FLAGS.gcp_project,
+      'project')
+  instance = _verify_non_empty_string(FLAGS.bigtable_instance, 'instance')
+  table = _verify_non_empty_string(FLAGS.bigtable_table, 'table')
+  train_prefix = _verify_non_empty_string(FLAGS.bigtable_train_prefix,
+                                          'train_prefix')
+  eval_prefix = _verify_non_empty_string(FLAGS.bigtable_eval_prefix,
+                                         'eval_prefix')
+  column_family = _verify_non_empty_string(FLAGS.bigtable_column_family,
+                                           'column_family')
+  column_qualifier = _verify_non_empty_string(FLAGS.bigtable_column_qualifier,
+                                              'column_qualifier')
+  return [
+      imagenet_input.BigtableSelection(
+          project=project,
+          instance=instance,
+          table=table,
+          prefix=p,
+          column_family=column_family,
+          column_qualifier=column_qualifier)
+      for p in (train_prefix, eval_prefix)
+  ]
+
+
 def main(unused_argv):
   tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
       FLAGS.tpu,
@@ -427,18 +501,29 @@ def main(unused_argv):
   tf.logging.info('Precision: %s', FLAGS.precision)
   use_bfloat16 = FLAGS.precision == 'bfloat16'
 
-  if FLAGS.data_dir == FAKE_DATA_DIR:
-    tf.logging.info('Using fake dataset.')
-  else:
-    tf.logging.info('Using dataset: %s' % FLAGS.data_dir)
   # Input pipelines are slightly different (with regards to shuffling and
   # preprocessing) between training and evaluation.
-  imagenet_train, imagenet_eval = [imagenet_input.ImageNetInput(
-      is_training=is_training,
-      data_dir=FLAGS.data_dir,
-      transpose_input=FLAGS.transpose_input,
-      num_parallel_calls=FLAGS.num_parallel_calls,
-      use_bfloat16=use_bfloat16) for is_training in [True, False]]
+  if FLAGS.bigtable_instance:
+    tf.logging.info('Using Bigtable dataset, table %s', FLAGS.bigtable_table)
+    select_train, select_eval = _select_tables_from_flags()
+    imagenet_train, imagenet_eval = [imagenet_input.ImageNetBigtableInput(
+        is_training=is_training,
+        use_bfloat16=use_bfloat16,
+        transpose_input=FLAGS.transpose_input,
+        selection=selection) for (is_training, selection) in
+                                     [(True, select_train),
+                                      (False, select_eval)]]
+  else:
+    if FLAGS.data_dir == FAKE_DATA_DIR:
+      tf.logging.info('Using fake dataset.')
+    else:
+      tf.logging.info('Using dataset: %s', FLAGS.data_dir)
+    imagenet_train, imagenet_eval = [imagenet_input.ImageNetInput(
+        is_training=is_training,
+        data_dir=FLAGS.data_dir,
+        transpose_input=FLAGS.transpose_input,
+        num_parallel_calls=FLAGS.num_parallel_calls,
+        use_bfloat16=use_bfloat16) for is_training in [True, False]]
 
   steps_per_epoch = FLAGS.num_train_images // FLAGS.train_batch_size
   eval_steps = FLAGS.num_eval_images // FLAGS.eval_batch_size
@@ -456,14 +541,14 @@ def main(unused_argv):
             steps=eval_steps,
             checkpoint_path=ckpt)
         elapsed_time = int(time.time() - start_timestamp)
-        tf.logging.info('Eval results: %s. Elapsed seconds: %d' %
-                        (eval_results, elapsed_time))
+        tf.logging.info('Eval results: %s. Elapsed seconds: %d',
+                        eval_results, elapsed_time)
 
         # Terminate eval job when final checkpoint is reached
         current_step = int(os.path.basename(ckpt).split('-')[1])
         if current_step >= FLAGS.train_steps:
           tf.logging.info(
-              'Evaluation finished after training step %d' % current_step)
+              'Evaluation finished after training step %d', current_step)
           break
 
       except tf.errors.NotFoundError:
@@ -472,16 +557,17 @@ def main(unused_argv):
         # the CPU job tells it to start evaluating. In this case, the checkpoint
         # file could have been deleted already.
         tf.logging.info(
-            'Checkpoint %s no longer exists, skipping checkpoint' % ckpt)
+            'Checkpoint %s no longer exists, skipping checkpoint', ckpt)
 
   else:   # FLAGS.mode == 'train' or FLAGS.mode == 'train_and_eval'
     current_step = estimator._load_global_step_from_checkpoint_dir(FLAGS.model_dir)  # pylint: disable=protected-access,line-too-long
     steps_per_epoch = FLAGS.num_train_images // FLAGS.train_batch_size
 
     tf.logging.info('Training for %d steps (%.2f epochs in total). Current'
-                    ' step %d.' % (FLAGS.train_steps,
-                                   FLAGS.train_steps / steps_per_epoch,
-                                   current_step))
+                    ' step %d.',
+                    FLAGS.train_steps,
+                    FLAGS.train_steps / steps_per_epoch,
+                    current_step)
 
     start_timestamp = time.time()  # This time will include compilation time
 
@@ -500,8 +586,8 @@ def main(unused_argv):
             input_fn=imagenet_train.input_fn, max_steps=next_checkpoint)
         current_step = next_checkpoint
 
-        tf.logging.info('Finished training up to step %d. Elapsed seconds %d.' %
-                        (next_checkpoint, int(time.time() - start_timestamp)))
+        tf.logging.info('Finished training up to step %d. Elapsed seconds %d.',
+                        next_checkpoint, int(time.time() - start_timestamp))
 
         # Evaluate the model on the most recent model in --model_dir.
         # Since evaluation happens in batches of --eval_batch_size, some images
@@ -511,11 +597,11 @@ def main(unused_argv):
         eval_results = resnet_classifier.evaluate(
             input_fn=imagenet_eval.input_fn,
             steps=FLAGS.num_eval_images // FLAGS.eval_batch_size)
-        tf.logging.info('Eval results: %s' % eval_results)
+        tf.logging.info('Eval results: %s', eval_results)
 
         elapsed_time = int(time.time() - start_timestamp)
-        tf.logging.info('Finished training up to step %d. Elapsed seconds %d.' %
-                    (FLAGS.train_steps, elapsed_time))
+        tf.logging.info('Finished training up to step %d. Elapsed seconds %d.',
+                        FLAGS.train_steps, elapsed_time)
 
     if FLAGS.export_dir is not None:
       # The guide to serve a exported TensorFlow model is at:
