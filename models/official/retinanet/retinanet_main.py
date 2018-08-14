@@ -60,7 +60,7 @@ flags.DEFINE_string('resnet_checkpoint', '',
 flags.DEFINE_string('hparams', '',
                     'Comma separated k=v pairs of hyperparameters.')
 flags.DEFINE_integer(
-    'num_cores', default=8, help='Number of TPU cores for training.')
+    'num_cores', default=8, help='Number of TPU cores for training')
 flags.DEFINE_integer('train_batch_size', 64, 'training batch size')
 flags.DEFINE_integer('eval_batch_size', 1, 'evaluation batch size')
 flags.DEFINE_integer('eval_samples', 5000, 'The number of samples for '
@@ -178,6 +178,7 @@ def main(argv):
           input_rand_hflip=False,
           resnet_checkpoint=None,
           is_training_bn=False,
+          use_bfloat16=False,
       )
       eval_estimator = tf.contrib.tpu.TPUEstimator(
           model_fn=retinanet_model.retinanet_model_fn,
@@ -193,16 +194,18 @@ def main(argv):
       tf.logging.info('Eval results: %s' % eval_results)
 
   elif FLAGS.mode == 'eval':
-    # eval only runs on CPU or GPU host with batch_size = 1
+    # Eval only runs on CPU or GPU host with batch_size = 1.
 
     # Override the default options: disable randomization in the input pipeline
     # and don't run on the TPU.
+    # Also, disable use_bfloat16 for eval on CPU/GPU.
     eval_params = dict(
         params,
         use_tpu=False,
         input_rand_hflip=False,
         resnet_checkpoint=None,
         is_training_bn=False,
+        use_bfloat16=False,
     )
 
     eval_estimator = tf.contrib.tpu.TPUEstimator(

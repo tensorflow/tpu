@@ -180,7 +180,7 @@ def preprocess_image(image_bytes, is_training=False, use_bfloat16=False,
     image_size: image size.
 
   Returns:
-    A preprocessed image `Tensor`.
+    A preprocessed image `Tensor` with value range of [0, 255].
   """
   if is_training:
     return preprocess_for_train(image_bytes, use_bfloat16, image_size)
