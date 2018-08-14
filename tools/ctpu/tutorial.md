@@ -219,10 +219,7 @@ model is pre-loaded on your Compute Engine VM.
 To start training ResNet-50, execute:
 
 ```bash
-python /usr/share/tpu/models/official/resnet/resnet_main.py \
-  --data_dir=gs://cloud-tpu-test-datasets/fake_imagenet \
-  --model_dir=gs://$GCS_BUCKET_NAME/resnet \
-  --tpu=$TPU_NAME
+python /usr/share/tpu/models/official/resnet/resnet_main.py --data_dir=gs://cloud-tpu-test-datasets/fake_imagenet --model_dir=gs://$GCS_BUCKET_NAME/resnet --tpu=$TPU_NAME
 ```
 
 `resnet_main.py` will connect to your Cloud TPU, initialize the device, and

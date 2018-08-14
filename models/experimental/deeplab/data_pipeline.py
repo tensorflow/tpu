@@ -18,7 +18,6 @@ Based on third_party/tensorflow_models/deeplab/utils/input_generator.py.
 """
 
 import tensorflow as tf
-# TODO(shizhiw): remove internal dependency.
 from deeplab import input_preprocess
 
 slim = tf.contrib.slim

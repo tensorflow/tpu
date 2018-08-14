@@ -221,8 +221,10 @@ def pad_to_fixed_size(data, pad_value, output_shape):
   dimension = output_shape[1]
   data = tf.reshape(data, [-1, dimension])
   num_instances = tf.shape(data)[0]
-  tf.Assert(tf.less_equal(num_instances, max_num_instances), [num_instances])
-  pad_length = max_num_instances - num_instances
+  assert_length = tf.Assert(
+      tf.less_equal(num_instances, max_num_instances), [num_instances])
+  with tf.control_dependencies([assert_length]):
+    pad_length = max_num_instances - num_instances
   paddings = pad_value * tf.ones([pad_length, dimension])
   padded_data = tf.concat([data, paddings], axis=0)
   padded_data = tf.reshape(padded_data, output_shape)

@@ -250,7 +250,7 @@ def input_fn(params):
     data_dir = FLAGS.data_dir
     filenames = [
         os.path.join(data_dir, 'train-%05d-of-01024' % i)
-        for i in xrange(0, 984)
+        for i in range(0, 984)
     ]
     dataset = tf.data.TFRecordDataset(filenames)
     dataset = dataset.repeat().map(parser).batch(batch_size)

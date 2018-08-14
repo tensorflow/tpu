@@ -158,7 +158,12 @@ class ImageNetInput(object):
 
   def __init__(self, is_training, data_dir=None):
     self.is_training = is_training
-    self.data_dir = data_dir if data_dir else FLAGS.data_dir
+    if data_dir:
+      self.data_dir = data_dir
+    elif FLAGS.data_dir:
+      self.data_dir = FLAGS.data_dir
+    else:
+      self.data_dir = None
 
   def dataset_parser(self, value):
     """Parse an Imagenet record from value."""
@@ -194,6 +199,10 @@ class ImageNetInput(object):
 
   def __call__(self, params):
     """Input function which provides a single batch for train or eval."""
+    if self.data_dir is None:
+      tf.logging.info('Using fake input.')
+      return self._input_fn_null(params)
+
     # Retrieves the batch size for the current shard. The # of shards is
     # computed according to the input pipeline deployment. See
     # `tf.contrib.tpu.RunConfig` for details.
@@ -224,6 +233,17 @@ class ImageNetInput(object):
     dataset = dataset.apply(
         tf.contrib.data.batch_and_drop_remainder(batch_size))
     dataset = dataset.prefetch(2)  # Prefetch overlaps in-feed with training
+    return dataset
+
+  def _input_fn_null(self, params):
+    """Input function which provides null (black) images."""
+    batch_size = params["batch_size"]
+    null_image = tf.zeros([224, 224, 3], tf.float32)
+    null_label = tf.one_hot(tf.constant(0, tf.int32), _LABEL_CLASSES)
+    dataset = tf.data.Dataset.from_tensors((null_image, null_label))
+    dataset = dataset.repeat(batch_size).batch(batch_size, drop_remainder=True)
+    dataset = dataset.take(1).cache().repeat()
+    tf.logging.info("Input dataset: %s", str(dataset))
     return dataset
 
 

@@ -79,7 +79,7 @@ def imagenet_hparams():
       # Summed across all TPU cores training a model.
       train_batch_size=32,
 
-      num_epochs=100,
+      num_epochs=100.,
 
       # Auxiliary head.
       use_aux_head=True,

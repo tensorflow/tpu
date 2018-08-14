@@ -157,7 +157,7 @@ def densenet_imagenet_model(image, k, depths, num_classes, is_training=True):
   v = tf.layers.max_pooling2d(v, pool_size=3, strides=2, padding="same")
   for i, depth in enumerate(depths):
     with tf.variable_scope("block-%d" % i):
-      for j in xrange(depth):
+      for j in range(depth):
         with tf.variable_scope("denseblock-%d-%d" % (i, j)):
           output = dense_block(v, k, is_training)
           v = tf.concat([v, output], axis=3)

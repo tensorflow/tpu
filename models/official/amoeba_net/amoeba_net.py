@@ -81,8 +81,8 @@ flags.DEFINE_integer(
     'eval_batch_size', 256,
     'Global (not per-shard) batch size for evaluation')
 
-flags.DEFINE_integer(
-    'num_epochs', 48,
+flags.DEFINE_float(
+    'num_epochs', 48.,
     'Number of steps use for training.')
 
 flags.DEFINE_integer(
@@ -351,7 +351,8 @@ def main(_):
   elif mode == 'train_and_eval':
     current_step = _load_global_step_from_checkpoint_dir(model_dir)
     tf.logging.info('Starting training at step=%d.' % current_step)
-    train_steps_per_eval = hparams.num_epochs_per_eval * train_steps_per_epoch
+    train_steps_per_eval = int(
+        hparams.num_epochs_per_eval * train_steps_per_epoch)
     # Final Evaluation if training is finished.
     if current_step >= hparams.num_epochs * train_steps_per_epoch:
       eval_results = image_classifier.evaluate(
@@ -378,7 +379,7 @@ def main(_):
         time_hook.compute_speed(len(results) * eval_batch_size)))
   else:  # default to train mode.
     current_step = _load_global_step_from_checkpoint_dir(model_dir)
-    total_step = hparams.num_epochs * train_steps_per_epoch
+    total_step = int(hparams.num_epochs * train_steps_per_epoch)
     if current_step < total_step:
       tf.logging.info('Starting training ...')
       image_classifier.train(

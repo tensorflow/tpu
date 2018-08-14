@@ -327,7 +327,7 @@ learning rate given the batch size, see `retinanet_model.py` for more details.
 python tpu/models/official/retinanet/retinanet_main.py \
  --tpu=${TPU_NAME} \
  --train_batch_size=256 \
- --num_shards=32 \
+ --num_cores=32 \
  --training_file_pattern=${GCS_BUCKET}/coco/train-* \
  --resnet_checkpoint=${RESNET_CHECKPOINT} \
  --model_dir=${GCS_BUCKET}/retinanet-model/ \

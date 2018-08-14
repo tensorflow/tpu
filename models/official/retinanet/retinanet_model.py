@@ -253,6 +253,92 @@ def detection_loss(cls_outputs, box_outputs, labels, params):
   return total_loss, cls_loss, box_loss
 
 
+def add_metric_fn_inputs(params, cls_outputs, box_outputs, metric_fn_inputs):
+  """Selects top-k predictions and adds the selected to metric_fn_inputs.
+
+  Args:
+    params: a parameter dictionary that includes `min_level`, `max_level`,
+      `batch_size`, and `num_classes`.
+    cls_outputs: an OrderDict with keys representing levels and values
+      representing logits in [batch_size, height, width, num_anchors].
+    box_outputs: an OrderDict with keys representing levels and values
+      representing box regression targets in
+      [batch_size, height, width, num_anchors * 4].
+    metric_fn_inputs: a dictionary that will hold the top-k selections.
+  """
+  cls_outputs_all = []
+  box_outputs_all = []
+  # Concatenates class and box of all levels into one tensor.
+  for level in range(params['min_level'], params['max_level'] + 1):
+    cls_outputs_all.append(tf.reshape(
+        cls_outputs[level],
+        [params['batch_size'], -1, params['num_classes']]))
+    box_outputs_all.append(tf.reshape(
+        box_outputs[level], [params['batch_size'], -1, 4]))
+  cls_outputs_all = tf.concat(cls_outputs_all, 1)
+  box_outputs_all = tf.concat(box_outputs_all, 1)
+
+  # cls_outputs_all has a shape of [batch_size, N, num_classes] and
+  # box_outputs_all has a shape of [batch_size, N, 4]. The batch_size here
+  # is per-shard batch size. Recently, top-k on TPU supports batch
+  # dimension (b/67110441), but the following function performs top-k on
+  # each sample.
+  cls_outputs_all_after_topk = []
+  box_outputs_all_after_topk = []
+  indices_all = []
+  classes_all = []
+  for index in range(params['batch_size']):
+    cls_outputs_per_sample = cls_outputs_all[index]
+    box_outputs_per_sample = box_outputs_all[index]
+    cls_outputs_per_sample_reshape = tf.reshape(cls_outputs_per_sample,
+                                                [-1])
+    _, cls_topk_indices = tf.nn.top_k(
+        cls_outputs_per_sample_reshape, k=anchors.MAX_DETECTION_POINTS)
+    # Gets top-k class and box scores.
+    indices = tf.div(cls_topk_indices, params['num_classes'])
+    classes = tf.mod(cls_topk_indices, params['num_classes'])
+    cls_indices = tf.stack([indices, classes], axis=1)
+    cls_outputs_after_topk = tf.gather_nd(cls_outputs_per_sample,
+                                          cls_indices)
+    cls_outputs_all_after_topk.append(cls_outputs_after_topk)
+    box_outputs_after_topk = tf.gather_nd(
+        box_outputs_per_sample, tf.expand_dims(indices, 1))
+    box_outputs_all_after_topk.append(box_outputs_after_topk)
+
+    indices_all.append(indices)
+    classes_all.append(classes)
+  # Concatenates via the batch dimension.
+  cls_outputs_all_after_topk = tf.stack(cls_outputs_all_after_topk, axis=0)
+  box_outputs_all_after_topk = tf.stack(box_outputs_all_after_topk, axis=0)
+  indices_all = tf.stack(indices_all, axis=0)
+  classes_all = tf.stack(classes_all, axis=0)
+  metric_fn_inputs['cls_outputs_all'] = cls_outputs_all_after_topk
+  metric_fn_inputs['box_outputs_all'] = box_outputs_all_after_topk
+  metric_fn_inputs['indices_all'] = indices_all
+  metric_fn_inputs['classes_all'] = classes_all
+
+
+def coco_metric_fn(batch_size, anchor_labeler, filename=None, **kwargs):
+  """Evaluation metric fn. Performed on CPU, do not reference TPU ops."""
+  # add metrics to output
+  detections_bs = []
+  for index in range(batch_size):
+    cls_outputs_per_sample = kwargs['cls_outputs_all'][index]
+    box_outputs_per_sample = kwargs['box_outputs_all'][index]
+    indices_per_sample = kwargs['indices_all'][index]
+    classes_per_sample = kwargs['classes_all'][index]
+    detections = anchor_labeler.generate_detections(
+        cls_outputs_per_sample, box_outputs_per_sample, indices_per_sample,
+        classes_per_sample, tf.slice(kwargs['source_ids'], [index], [1]),
+        tf.slice(kwargs['image_scales'], [index], [1])
+    )
+    detections_bs.append(detections)
+  eval_metric = coco_metric.EvaluationMetric(filename=filename)
+  coco_metrics = eval_metric.estimator_metric_fn(detections_bs,
+                                                 kwargs['groundtruth_data'])
+  return coco_metrics
+
+
 def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
   """Model defination for the RetinaNet model based on ResNet.
 
@@ -340,20 +426,17 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
     var_list = variable_filter_fn(
         tf.trainable_variables(),
         params['resnet_depth']) if variable_filter_fn else None
-
     with tf.control_dependencies(update_ops):
       train_op = optimizer.minimize(total_loss, global_step,
                                     var_list=var_list)
   else:
     train_op = None
 
-  # Evaluation only works on GPU/CPU host and batch_size=1
   eval_metrics = None
   if mode == tf.estimator.ModeKeys.EVAL:
-    batch_size = params['batch_size']
-
     def metric_fn(**kwargs):
-      """Evaluation metric fn. Performed on CPU, do not reference TPU ops."""
+      """Returns a dictionary that has the evaluation metrics."""
+      batch_size = params['batch_size']
       eval_anchors = anchors.Anchors(params['min_level'],
                                      params['max_level'],
                                      params['num_scales'],
@@ -364,26 +447,8 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
                                              params['num_classes'])
       cls_loss = tf.metrics.mean(kwargs['cls_loss_repeat'])
       box_loss = tf.metrics.mean(kwargs['box_loss_repeat'])
-      # add metrics to output
-      cls_outputs = {}
-      box_outputs = {}
-      detections_bs = []
-      for index in range(batch_size):
-        for level in range(params['min_level'], params['max_level'] + 1):
-          _, w, h, c = kwargs['cls_outputs_%d' % level].get_shape().as_list()
-          cls_outputs[level] = tf.slice(
-              kwargs['cls_outputs_%d' % level], [index, 0, 0, 0], [1, w, h, c])
-          _, w, h, c = kwargs['box_outputs_%d' % level].get_shape().as_list()
-          box_outputs[level] = tf.slice(
-              kwargs['box_outputs_%d' % level], [index, 0, 0, 0], [1, w, h, c])
-        detections = anchor_labeler.generate_detections(
-            cls_outputs, box_outputs,
-            tf.slice(kwargs['source_ids'], [index], [1]),
-            tf.slice(kwargs['image_scales'], [index], [1]))
-        detections_bs.append(detections)
-      eval_metric = coco_metric.EvaluationMetric(params['val_json_file'])
-      coco_metrics = eval_metric.estimator_metric_fn(detections_bs,
-                                                     kwargs['groundtruth_data'])
+      coco_metrics = coco_metric_fn(batch_size, anchor_labeler,
+                                    params['val_json_file'], **kwargs)
 
       # Add metrics to output.
       output_metrics = {
@@ -394,13 +459,11 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
       return output_metrics
 
     cls_loss_repeat = tf.reshape(
-        tf.tile(tf.expand_dims(cls_loss, 0), [
-            batch_size,
-        ]), [batch_size, 1])
+        tf.tile(tf.expand_dims(cls_loss, 0), [params['batch_size'],]),
+        [params['batch_size'], 1])
     box_loss_repeat = tf.reshape(
-        tf.tile(tf.expand_dims(box_loss, 0), [
-            batch_size,
-        ]), [batch_size, 1])
+        tf.tile(tf.expand_dims(box_loss, 0), [params['batch_size'],]),
+        [params['batch_size'], 1])
     metric_fn_inputs = {
         'cls_loss_repeat': cls_loss_repeat,
         'box_loss_repeat': box_loss_repeat,
@@ -408,9 +471,7 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
         'groundtruth_data': labels['groundtruth_data'],
         'image_scales': labels['image_scales'],
     }
-    for level in range(params['min_level'], params['max_level'] + 1):
-      metric_fn_inputs['cls_outputs_%d' % level] = cls_outputs[level]
-      metric_fn_inputs['box_outputs_%d' % level] = box_outputs[level]
+    add_metric_fn_inputs(params, cls_outputs, box_outputs, metric_fn_inputs)
     eval_metrics = (metric_fn, metric_fn_inputs)
 
   return tf.contrib.tpu.TPUEstimatorSpec(
