@@ -22,6 +22,11 @@ import copy
 import math
 import pprint
 
+try:
+  unicode        # Python 2
+except NameError:
+  unicode = str  # Python 3
+
 
 # TODO(ddohan): FrozenConfig type
 class Config(dict):
