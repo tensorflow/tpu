@@ -30,7 +30,7 @@ import tensorflow as tf
 import numpy as np
 
 from tensorflow.contrib.tpu.python.tpu import keras_support
-import imagenet_input/
+import imagenet_input
 
 flags.DEFINE_string('tpu', None, 'Name of the TPU to use; if None, use CPU.')
 flags.DEFINE_string('data', None, 'Path to training and testing data.')
