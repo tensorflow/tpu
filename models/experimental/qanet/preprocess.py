@@ -32,6 +32,12 @@ import tensorflow as tf
 
 import data
 
+try:
+  unicode        # Python 2
+except NameError:
+  unicode = str  # Python 3
+
+
 flags.DEFINE_string('input_path', '', 'Comma separated path to JSON files.')
 flags.DEFINE_integer('max_shard_size', 11000, 'Number of examples per shard.')
 flags.DEFINE_string('output_path', '/tmp', 'TFRecord path/name prefix. ')
