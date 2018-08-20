@@ -25,6 +25,7 @@ from absl import flags
 import absl.logging as _logging  # pylint: disable=unused-import
 import tensorflow as tf
 import imagenet_input
+import lars_optimizer
 import resnet_model
 from tensorflow.contrib import summary
 from tensorflow.contrib.training.python.training import evaluation
@@ -170,8 +171,21 @@ flags.DEFINE_float(
     help=('Momentum parameter used in the MomentumOptimizer.'))
 
 flags.DEFINE_float(
-    'weight_decay', default=1e-4,
+    'weight_decay', default=2e-4,
     help=('Weight decay coefficiant for l2 regularization.'))
+
+flags.DEFINE_integer(
+    'poly_end_step',
+    default=0,
+    help=('Final step where polynomial decay is stopped'))
+
+flags.DEFINE_float('poly_rate', default=0.0, help=('LARS/Poly learning rate.'))
+
+flags.DEFINE_float(
+    'poly_final_rate', default=0.0001, help=('LARS/Poly learning rate.'))
+
+flags.DEFINE_integer(
+    'poly_warmup_epochs', default=0, help=('LARS/Poly warmup epochs.'))
 
 # Learning rate schedule
 LR_SCHEDULE = [    # (multiplier, epoch to start) tuples
@@ -205,6 +219,47 @@ def learning_rate_schedule(current_epoch):
   for mult, start_epoch in LR_SCHEDULE:
     decay_rate = tf.where(current_epoch < start_epoch,
                           decay_rate, scaled_lr * mult)
+  return decay_rate
+
+
+def poly_rate_schedule(current_epoch):
+  if FLAGS.train_batch_size <= 16384:
+    plr = 25.0
+    w_epochs = 5
+  elif FLAGS.train_batch_size == 32768:
+    plr = 32.0
+    w_epochs = 12
+  else:
+    plr = 41.0
+    w_epochs = 16
+
+  # Override default poly learning rate and warmup epochs
+  if FLAGS.poly_rate > 0.0:
+    plr = FLAGS.poly_rate
+  if FLAGS.poly_warmup_epochs > 0:
+    w_epochs = FLAGS.poly_warmup_epochs
+
+  poly_end_step = FLAGS.train_steps
+  if FLAGS.poly_end_step > 0:
+    poly_end_step = FLAGS.poly_end_step
+
+  wrate = (plr * current_epoch / w_epochs)
+  w_steps = (w_epochs * FLAGS.num_train_images // FLAGS.train_batch_size)
+  min_step = tf.constant(1, dtype=tf.int64)
+  global_step = tf.train.get_or_create_global_step()
+  decay_steps = tf.maximum(min_step, tf.subtract(global_step, w_steps))
+  #decay_steps = global_step
+  poly_rate = tf.train.polynomial_decay(
+      plr,
+      decay_steps,
+      poly_end_step - w_steps + 1,
+      end_learning_rate=FLAGS.poly_final_rate,
+      power=2.0)
+  decay_rate = tf.where(
+      current_epoch <= w_epochs, wrate,
+      tf.where(
+          tf.greater(global_step, poly_end_step), FLAGS.poly_final_rate / 10.0,
+          poly_rate))
   return decay_rate
 
 
@@ -276,7 +331,7 @@ def resnet_model_fn(features, labels, mode, params):
   # Calculate loss, which includes softmax cross entropy and L2 regularization.
   one_hot_labels = tf.one_hot(labels, FLAGS.num_label_classes)
   cross_entropy = tf.losses.softmax_cross_entropy(
-      logits=logits, onehot_labels=one_hot_labels)
+      logits=logits, onehot_labels=one_hot_labels, weights=1.0, label_smoothing=0.1)
 
   # Add weight decay to the loss for non-batch-normalization variables.
   loss = cross_entropy + FLAGS.weight_decay * tf.add_n(
@@ -290,10 +345,21 @@ def resnet_model_fn(features, labels, mode, params):
     steps_per_epoch = FLAGS.num_train_images / FLAGS.train_batch_size
     current_epoch = (tf.cast(global_step, tf.float32) /
                      steps_per_epoch)
-    learning_rate = learning_rate_schedule(current_epoch)
+    # Switch to polynomial decay for LARS
+    if FLAGS.train_batch_size >= 16384:
+      learning_rate = poly_rate_schedule(current_epoch)
+    else:
+      learning_rate = learning_rate_schedule(current_epoch)
 
     optimizer = tf.train.MomentumOptimizer(
         learning_rate=learning_rate, momentum=FLAGS.momentum, use_nesterov=True)
+    # Enable LARS at batch size 16K or higher
+    if FLAGS.train_batch_size >= 16384:
+      optimizer = lars_optimizer.LARSOptimizer(
+          learning_rate,
+          momentum=FLAGS.momentum,
+          weight_decay=FLAGS.weight_decay)
+
     if FLAGS.use_tpu:
       # When using TPU, wrap the optimizer with CrossShardOptimizer which
       # handles synchronization details between different TPU cores. To the
