@@ -28,7 +28,7 @@ from __future__ import print_function
 # Standard Imports
 from absl import flags
 import numpy as np
-import tensorflow.google as tf
+import tensorflow as tf
 
 flags.DEFINE_bool('use_tpu', False, 'Use TPU model instead of CPU. ')
 flags.DEFINE_string('tpu', None, 'Name of the TPU to use')
