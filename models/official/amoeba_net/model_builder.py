@@ -220,7 +220,9 @@ def network_arg_scope(weight_decay=5e-5,
                       batch_norm_decay=0.9997,
                       batch_norm_epsilon=1e-3,
                       is_training=True,
-                      data_format='NHWC'):
+                      data_format='NHWC',
+                      num_shards=None,
+                      distributed_group_size=1):
   """Defines the default arg scope for the AmoebaNet ImageNet model.
 
   Args:
@@ -231,6 +233,8 @@ def network_arg_scope(weight_decay=5e-5,
     is_training: whether is training or not.
       Useful for fine-tuning a model with different num_classes.
     data_format: Input data format.
+    num_shards: Number of shards in the job
+    distributed_group_size: Size of the group to average for batch norm.
   Returns:
     An `arg_scope` to use for the AmoebaNet Model.
   """
@@ -243,6 +247,8 @@ def network_arg_scope(weight_decay=5e-5,
       'moving_vars': 'moving_vars',
       'is_training': is_training,
       'data_format': data_format,
+      'num_shards': num_shards,
+      'distributed_group_size': distributed_group_size,
   }
   weights_regularizer = tf.contrib.layers.l2_regularizer(weight_decay)
   weights_initializer = tf.contrib.layers.variance_scaling_initializer(
@@ -306,11 +312,16 @@ def build_network(inputs,
       hparams.drop_connect_keep_prob,
       hparams.num_cells + 4,
       hparams.num_total_steps)
+  num_shards = hparams.num_shards
+  distributed_group_size = hparams.distributed_group_size
+  assert distributed_group_size == 1 or hparams.use_tpu
   sc = network_arg_scope(weight_decay=hparams.weight_decay,
                          batch_norm_decay=hparams.batch_norm_decay,
                          batch_norm_epsilon=hparams.batch_norm_epsilon,
                          is_training=is_training,
-                         data_format=hparams.data_format)
+                         data_format=hparams.data_format,
+                         num_shards=num_shards,
+                         distributed_group_size=distributed_group_size)
   with arg_scope(sc):
     return _build_network_base(inputs,
                                normal_cell=normal_cell,

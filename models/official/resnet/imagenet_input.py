@@ -27,7 +27,7 @@ import resnet_preprocessing
 
 
 def image_serving_input_fn():
-  """Serves input fn for raw images."""
+  """Serving input fn for raw images."""
 
   def _preprocess_image(image_bytes):
     """Preprocess a single raw image."""

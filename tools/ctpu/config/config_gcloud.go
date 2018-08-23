@@ -32,14 +32,22 @@ import (
 const appDefaultFile = "application_default_credentials.json"
 
 func gcloudConfig() (*Config, error) {
+	homedir := ""
 	user, err := user.Current()
 	if err != nil {
-		return nil, err
+		// Fallback to looking up in the environment as a final attempt.
+		var ok bool
+		homedir, ok = os.LookupEnv("HOME")
+		if !ok {
+			return nil, err
+		}
+	} else {
+		homedir = user.HomeDir
 	}
-	if len(user.HomeDir) == 0 {
+	if len(homedir) == 0 {
 		return nil, errors.New("could not find your home directory")
 	}
-	return buildGcloudEnvConfig(path.Join(user.HomeDir, ".config", "gcloud"), true)
+	return buildGcloudEnvConfig(path.Join(homedir, ".config", "gcloud"), true)
 }
 
 func buildGcloudEnvConfig(configDir string, checkAppCredentials bool) (*Config, error) {

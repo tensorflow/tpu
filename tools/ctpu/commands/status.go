@@ -32,14 +32,14 @@ import (
 
 // StatusTPUCP encapsulates the control plane interfaces required to execute the Status command.
 type StatusTPUCP interface {
-	// Instance retrieves the TPU instance (if available).
-	Instance() (*ctrl.TPUInstance, error)
+	// OptionallyRetrieveInstance retrieves the instance, but can optionally not enable the TPU API.
+	OptionallyRetrieveInstance(bool) (*ctrl.TPUInstance, bool, error)
 }
 
 // StatusGCECP encapsulates the control plane interfaces required to execute the Status command.
 type StatusGCECP interface {
-	// Instance retrieves the Compute Engine instance (if available).
-	Instance() (*ctrl.GCEInstance, error)
+	// OptionallyRetrieveInstance retrieves the instance, but can optionally not enable the TPU API.
+	OptionallyRetrieveInstance(bool) (*ctrl.GCEInstance, bool, error)
 }
 
 type statusCmd struct {
@@ -172,13 +172,14 @@ func (s *statusCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...in
 
 	var vm *ctrl.GCEInstance
 	var tpu *ctrl.TPUInstance
+	var gceEnabled, tpuEnabled bool
 	var exitTPU, exitVM subcommands.ExitStatus
 	var wg sync.WaitGroup
 	wg.Add(2)
 
 	go func() {
 		var err error
-		vm, err = s.gce.Instance()
+		vm, gceEnabled, err = s.gce.OptionallyRetrieveInstance(false)
 		if err != nil {
 			log.Print(err)
 			exitVM = subcommands.ExitFailure
@@ -188,7 +189,7 @@ func (s *statusCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...in
 
 	go func() {
 		var err error
-		tpu, err = s.tpu.Instance()
+		tpu, tpuEnabled, err = s.tpu.OptionallyRetrieveInstance(false)
 		if err != nil {
 			log.Print(err)
 			exitTPU = subcommands.ExitFailure
@@ -202,6 +203,17 @@ func (s *statusCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...in
 	}
 	if exitVM != subcommands.ExitSuccess {
 		return exitVM
+	}
+
+	if !gceEnabled || !tpuEnabled {
+		if !gceEnabled && !tpuEnabled {
+			fmt.Println("Neither the Compute Engine nor the Cloud TPU services have been enabled.")
+		} else if !gceEnabled {
+			fmt.Println("The Compute Engine service has not been enabled.")
+		} else {
+			fmt.Println("The Cloud TPU service has not been enabled.")
+		}
+		return subcommands.ExitFailure
 	}
 
 	fmt.Printf(`%s

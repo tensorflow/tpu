@@ -18,8 +18,8 @@ spec:
       restartPolicy: Never
       containers:
       - name: download-and-preprocess-coco
-        # The official TensorFlow 1.9 TPU model image built from https://github.com/tensorflow/tpu/blob/r1.9/tools/docker/Dockerfile.
-        image: gcr.io/tensorflow/tpu-models:r1.9
+        # The official TensorFlow 1.10 TPU model image built from https://github.com/tensorflow/tpu/blob/r1.10/tools/docker/Dockerfile.
+        image: gcr.io/tensorflow/tpu-models:r1.10
         command:
           - /bin/bash
           - -c

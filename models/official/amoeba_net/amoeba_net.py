@@ -57,6 +57,14 @@ flags.DEFINE_integer(
     'num_shards', 8,
     'Number of shards (TPU cores).')
 
+flags.DEFINE_integer(
+    'distributed_group_size', 1,
+    help='Size of the distributed batch norm. group.'
+    'Default is normalization over local examples only.'
+    'When set to a value greater than 1, it will enable'
+    'a distribtued batch norm. To enable a global batch norm.'
+    'set distributed_group_size to FLAGS.num_shards')
+
 flags.DEFINE_bool(
     'use_tpu', True,
     'Use TPUs rather than CPU or GPU.')
@@ -222,6 +230,8 @@ def override_with_flags(hparams):
       'use_tpu',
       'lr_warmup_epochs',
       'weight_decay',
+      'num_shards',
+      'distributed_group_size',
   ]
   for flag_name in override_flag_names:
     flag_value = getattr(FLAGS, flag_name, 'INVALID')

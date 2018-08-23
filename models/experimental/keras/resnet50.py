@@ -29,8 +29,7 @@ from absl import logging
 import tensorflow as tf
 import numpy as np
 
-from tensorflow.contrib.tpu.python.tpu import keras_support
-import imagenet_input/
+import imagenet_input
 
 flags.DEFINE_string('tpu', None, 'Name of the TPU to use; if None, use CPU.')
 flags.DEFINE_string('data', None, 'Path to training and testing data.')
@@ -52,16 +51,17 @@ def main(argv):
       pooling=None,
       classes=NUM_CLASSES)
 
-  per_core_batch_size = 128
+  # TODO(xiejw): Revert the per_core_batch_size to 128 once the model can run.
+  per_core_batch_size = 64
   num_cores = 8
   batch_size = per_core_batch_size * num_cores
 
   if FLAGS.tpu is not None:
     logging.info('Converting from CPU to TPU model.')
-    strategy = keras_support.TPUDistributionStrategy(
-        num_cores_per_host=num_cores)
-    model = keras_support.tpu_model(model, strategy=strategy,
-                                    tpu_name_or_address=FLAGS.tpu)
+    strategy = tf.contrib.tpu.TPUDistributionStrategy(
+        tf.contrib.cluster_resolver.TPUClusterResolver(tpu=FLAGS.tpu),
+    )
+    model = tf.contrib.tpu.keras_to_tpu_model(model, strategy=strategy)
 
   logging.info('Compiling model.')
   model.compile(
@@ -98,4 +98,5 @@ def main(argv):
 
 
 if __name__ == '__main__':
+  tf.logging.set_verbosity(tf.logging.INFO)
   tf.app.run()

@@ -32,6 +32,7 @@ from __future__ import print_function
 
 import tensorflow as tf
 
+from tensorflow.contrib.tpu.python.ops import tpu_ops
 from tensorflow.python.training import moving_averages
 
 arg_scope = tf.contrib.framework.arg_scope
@@ -40,6 +41,15 @@ slim = tf.contrib.slim
 DATA_FORMAT_NCHW = 'NCHW'
 DATA_FORMAT_NHWC = 'NHWC'
 INVALID = 'null'
+
+
+def cross_replica_average(inputs, num_shards, distributed_group_size):
+  """Calculates the average value of inputs tensor across TPU replicas."""
+  group_assignment = None
+  if num_shards is not None and distributed_group_size != num_shards:
+    group_assignment = [i // distributed_group_size for i in range(num_shards)]
+  return tpu_ops.cross_replica_sum(inputs, group_assignment) / tf.cast(
+      distributed_group_size, inputs.dtype)
 
 
 def bp16_getter(getter, *args, **kwargs):
@@ -547,6 +557,8 @@ def batch_norm(inputs,
                is_training=True,
                data_format='NHWC',
                reuse=None,
+               num_shards=None,
+               distributed_group_size=1,
                scope=None):
   """Adds a Batch Normalization layer from http://arxiv.org/abs/1502.03167.
 
@@ -596,6 +608,11 @@ def batch_norm(inputs,
     data_format: input data format. NHWC or NCHW
     reuse: Whether or not the layer and its variables should be reused. To be
       able to reuse the layer scope must be given.
+    num_shards: Number of shards that participate in the global
+      reduction. Default is set to None, that will skip the cross replica sum in
+      and normalize across local examples only.
+    distributed_group_size: Number of replicas to normalize across in the
+      distributed batch normalization.
     scope: Optional scope for `variable_scope`.
 
   Returns:
@@ -678,9 +695,34 @@ def batch_norm(inputs,
     # Restore scope's partitioner setting.
     scope.set_partitioner(partitioner)
 
+    # Add cross replica sum to do subset mean and variance calculation
+    # First compute mean and variance
     if is_training:
-      outputs, mean, variance = tf.nn.fused_batch_norm(
-          inputs, gamma, beta, epsilon=epsilon, data_format=data_format)
+      if distributed_group_size > 1:
+        # Execute a distributed batch normalization
+        if data_format == 'NCHW':
+          axis = 1
+        else:
+          axis = 3
+        input_shape = inputs.get_shape()
+        inputs_dtype = inputs.dtype
+        inputs = tf.cast(inputs, tf.float32)
+        ndims = len(input_shape)
+        reduction_axes = [i for i in range(ndims) if i != axis]
+        counts, mean_ss, variance_ss, _ = tf.nn.sufficient_statistics(
+            inputs, reduction_axes, keep_dims=False)
+        mean_ss = cross_replica_average(mean_ss, num_shards,
+                                        distributed_group_size)
+        variance_ss = cross_replica_average(variance_ss, num_shards,
+                                            distributed_group_size)
+        mean, variance = tf.nn.normalize_moments(
+            counts, mean_ss, variance_ss, shift=None)
+        outputs = tf.nn.batch_normalization(inputs, mean, variance, beta, gamma,
+                                            epsilon)
+        outputs = tf.cast(outputs, inputs_dtype)
+      else:
+        outputs, mean, variance = tf.nn.fused_batch_norm(
+            inputs, gamma, beta, epsilon=epsilon, data_format=data_format)
     else:
       outputs, mean, variance = tf.nn.fused_batch_norm(
           inputs,
@@ -694,9 +736,15 @@ def batch_norm(inputs,
 
     if is_training:
       update_moving_mean = moving_averages.assign_moving_average(
-          moving_mean, mean, decay, zero_debias=False)
+          moving_mean,
+          tf.cast(mean, moving_mean.dtype),
+          decay,
+          zero_debias=False)
       update_moving_variance = moving_averages.assign_moving_average(
-          moving_variance, variance, decay, zero_debias=False)
+          moving_variance,
+          tf.cast(variance, moving_variance.dtype),
+          decay,
+          zero_debias=False)
       tf.add_to_collection('update_ops', update_moving_mean)
       tf.add_to_collection('update_ops', update_moving_variance)
 

@@ -28,19 +28,19 @@ from __future__ import print_function
 # Standard Imports
 from absl import flags
 import numpy as np
-import tensorflow as tf
+import tensorflow.google as tf
 
 flags.DEFINE_bool('use_tpu', False, 'Use TPU model instead of CPU. ')
 flags.DEFINE_string('tpu', None, 'Name of the TPU to use')
 
 flags.DEFINE_bool('fake_data', False, 'Use fake data to test functionality.')
 
-batch_size = 128
-num_classes = 10
-epochs = 12
+BATCH_SIZE = 128
+NUM_CLASSES = 10
+EPOCHS = 12
 
 # input image dimensions
-img_rows, img_cols = 28, 28
+IMG_ROWS, IMG_COLS = 28, 28
 
 
 def main(unused_dev):
@@ -50,7 +50,7 @@ def main(unused_dev):
 
   if flags.FLAGS.fake_data:
     print('Using fake data')
-    x_train = np.random.random((128, img_rows, img_cols))
+    x_train = np.random.random((128, IMG_ROWS, IMG_COLS))
     y_train = np.zeros([128, 1], dtype=np.int32)
     x_test, y_test = x_train, y_train
   else:
@@ -58,9 +58,9 @@ def main(unused_dev):
     print('Using real data')
     (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
 
-  x_train = x_train.reshape(x_train.shape[0], img_rows, img_cols, 1)
-  x_test = x_test.reshape(x_test.shape[0], img_rows, img_cols, 1)
-  input_shape = (img_rows, img_cols, 1)
+  x_train = x_train.reshape(x_train.shape[0], IMG_ROWS, IMG_COLS, 1)
+  x_test = x_test.reshape(x_test.shape[0], IMG_ROWS, IMG_COLS, 1)
+  input_shape = (IMG_ROWS, IMG_COLS, 1)
 
   x_train = x_train.astype('float32')
   x_test = x_test.astype('float32')
@@ -71,8 +71,8 @@ def main(unused_dev):
   print(x_test.shape[0], 'test samples')
 
   # convert class vectors to binary class matrices
-  y_train = tf.keras.utils.to_categorical(y_train, num_classes)
-  y_test = tf.keras.utils.to_categorical(y_test, num_classes)
+  y_train = tf.keras.utils.to_categorical(y_train, NUM_CLASSES)
+  y_test = tf.keras.utils.to_categorical(y_test, NUM_CLASSES)
 
   model = tf.keras.models.Sequential()
   model.add(
@@ -84,13 +84,13 @@ def main(unused_dev):
   model.add(tf.keras.layers.Flatten())
   model.add(tf.keras.layers.Dense(128, activation='relu'))
   model.add(tf.keras.layers.Dropout(0.5))
-  model.add(tf.keras.layers.Dense(num_classes, activation='softmax'))
+  model.add(tf.keras.layers.Dense(NUM_CLASSES, activation='softmax'))
 
   if use_tpu:
     strategy = tf.contrib.tpu.TPUDistributionStrategy(
-        num_cores_per_host=8)
-    model = tf.contrib.tpu.keras_to_tpu_model(
-        model, strategy=strategy, tpu_name_or_address=flags.FLAGS.tpu)
+        tf.contrib.cluster_resolver.TPUClusterResolver(tpu=flags.FLAGS.tpu)
+    )
+    model = tf.contrib.tpu.keras_to_tpu_model(model, strategy=strategy)
 
   model.compile(
       loss=tf.keras.losses.categorical_crossentropy,
@@ -100,13 +100,13 @@ def main(unused_dev):
   model.fit(
       x_train,
       y_train,
-      batch_size=batch_size,
-      epochs=epochs,
+      batch_size=BATCH_SIZE,
+      epochs=EPOCHS,
       verbose=1,
       validation_data=(x_test, y_test))
   score = model.evaluate(x_test, y_test, verbose=0)
-  print('Test loss:', score[0])
-  print('Test accuracy:', score[1])
+  print('Loss for final step:', score[0])
+  print('Accuracy ', score[1])
 
 
 if __name__ == '__main__':

@@ -25,6 +25,7 @@ from absl import flags
 import absl.logging as _logging  # pylint: disable=unused-import
 import tensorflow as tf
 import imagenet_input
+import lars_util
 import resnet_model
 from tensorflow.contrib import summary
 from tensorflow.contrib.training.python.training import evaluation
@@ -194,6 +195,16 @@ flags.DEFINE_float(
     'weight_decay', default=1e-4,
     help=('Weight decay coefficiant for l2 regularization.'))
 
+flags.DEFINE_integer('log_step_count_steps', 64, 'The number of steps at '
+                     'which the global step information is logged.')
+
+flags.DEFINE_bool('enable_lars',
+                  default=False,
+                  help=('Enable LARS optimizer for large batch training.'))
+
+flags.DEFINE_float('poly_rate', default=0.0,
+                   help=('Set LARS/Poly learning rate.'))
+
 # Learning rate schedule
 LR_SCHEDULE = [    # (multiplier, epoch to start) tuples
     (1.0, 5), (0.1, 30), (0.01, 60), (0.001, 80)
@@ -299,7 +310,9 @@ def resnet_model_fn(features, labels, mode, params):
   # Calculate loss, which includes softmax cross entropy and L2 regularization.
   one_hot_labels = tf.one_hot(labels, FLAGS.num_label_classes)
   cross_entropy = tf.losses.softmax_cross_entropy(
-      logits=logits, onehot_labels=one_hot_labels)
+      logits=logits,
+      onehot_labels=one_hot_labels,
+      label_smoothing=0.1)
 
   # Add weight decay to the loss for non-batch-normalization variables.
   loss = cross_entropy + FLAGS.weight_decay * tf.add_n(
@@ -313,10 +326,16 @@ def resnet_model_fn(features, labels, mode, params):
     steps_per_epoch = FLAGS.num_train_images / FLAGS.train_batch_size
     current_epoch = (tf.cast(global_step, tf.float32) /
                      steps_per_epoch)
-    learning_rate = learning_rate_schedule(current_epoch)
-
-    optimizer = tf.train.MomentumOptimizer(
-        learning_rate=learning_rate, momentum=FLAGS.momentum, use_nesterov=True)
+    # LARS is a large batch optimizer. LARS enables higher accuracy at batch 16K
+    # and larger batch sizes.
+    if FLAGS.train_batch_size >= 16384 and FLAGS.enable_lars:
+      optimizer = lars_util.init_lars_optimizer(current_epoch)
+    else:
+      learning_rate = learning_rate_schedule(current_epoch)
+      optimizer = tf.train.MomentumOptimizer(
+          learning_rate=learning_rate,
+          momentum=FLAGS.momentum,
+          use_nesterov=True)
     if FLAGS.use_tpu:
       # When using TPU, wrap the optimizer with CrossShardOptimizer which
       # handles synchronization details between different TPU cores. To the
@@ -484,6 +503,7 @@ def main(unused_argv):
       cluster=tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
       save_checkpoints_steps=max(600, FLAGS.iterations_per_loop),
+      log_step_count_steps=FLAGS.log_step_count_steps,
       tpu_config=tf.contrib.tpu.TPUConfig(
           iterations_per_loop=FLAGS.iterations_per_loop,
           num_shards=FLAGS.num_cores,
@@ -597,11 +617,12 @@ def main(unused_argv):
         eval_results = resnet_classifier.evaluate(
             input_fn=imagenet_eval.input_fn,
             steps=FLAGS.num_eval_images // FLAGS.eval_batch_size)
-        tf.logging.info('Eval results: %s', eval_results)
+        tf.logging.info('Eval results at step %d: %s',
+                        next_checkpoint, eval_results)
 
-        elapsed_time = int(time.time() - start_timestamp)
-        tf.logging.info('Finished training up to step %d. Elapsed seconds %d.',
-                        FLAGS.train_steps, elapsed_time)
+      elapsed_time = int(time.time() - start_timestamp)
+      tf.logging.info('Finished training up to step %d. Elapsed seconds %d.',
+                      FLAGS.train_steps, elapsed_time)
 
     if FLAGS.export_dir is not None:
       # The guide to serve a exported TensorFlow model is at:

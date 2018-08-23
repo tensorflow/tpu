@@ -89,12 +89,12 @@ python resnet_main.py \
   --bigtable_table=$TABLE
 ```
 
-In this case, the `TFExample` records are stored one per row in a Bigtable.
-Categories of data are arranged by row prefix, and the rows within that prefix
-arranged by zero-filled indexes, e.g. `train_0000003892`.)
+In this case, the `TFExample` records are stored one per row in a Cloud Bigtable
+table. Categories of data are arranged by row prefix, and the rows within that
+prefix arranged by zero-filled indexes, e.g. `train_0000003892`.)
 
-You can also specify the following arguments when sourcing data from Bigtable,
-though they already have the right defaults for ResNet-50:
+You can also specify the following arguments when sourcing data from Cloud
+Bigtable, though they already have the right defaults for ResNet-50:
 
 ```
   --bigtable_train_prefix=train_ \        # row prefix for training rows
@@ -103,7 +103,7 @@ though they already have the right defaults for ResNet-50:
   --bigtable_column_qualifier=example
 ```
 
-Note that even when sourcing input data from Bigtable, `$MODEL_DIR` must
+Note that even when sourcing input data from Cloud Bigtable, `$MODEL_DIR` must
 still be a GCS location.
 
 ### Project and Zone
