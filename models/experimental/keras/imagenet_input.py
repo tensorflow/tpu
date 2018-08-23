@@ -22,7 +22,7 @@ import os
 
 import tensorflow as tf
 
-import resnet_preprocessing/
+import resnet_preprocessing
 
 
 def image_serving_input_fn():

@@ -61,15 +61,15 @@ instructions below to install and configure `ctpu` locally.
 Download `ctpu` with one of following commands:
 
  * **Linux**: `wget https://dl.google.com/cloud_tpu/ctpu/latest/linux/ctpu && chmod a+x ctpu`
- * **Mac**: `wget https://dl.google.com/cloud_tpu/ctpu/latest/darwin/ctpu && chmod a+x ctpu`
+ * **Mac**: `curl -O https://dl.google.com/cloud_tpu/ctpu/latest/darwin/ctpu && chmod a+x ctpu`
  * **Windows**: _Coming soon!_
 
 #### Install ####
 
 While you can use `ctpu` in your local directory (by prefixing all commands with
-`./`; ex: `./ctpu print-config`), we recommend installing it somewhere on your
-`$PATH`. (e.g. `cp ctpu ~/bin` to install for just yourself,
-`sudo cp ctpu /usr/bin` for all users of your machine.)
+`./`; example: `./ctpu print-config`), we recommend installing it somewhere on
+your `$PATH`. (example: `cp ctpu ~/bin/` to install for just yourself, or
+`sudo cp ctpu /usr/bin/` for all users of your machine.)
 
 #### Configuration ####
 
@@ -77,7 +77,7 @@ In order to use `ctpu` you need to provide it with a bit of additional
 information.
 
  1. **Configure `gcloud` credentials**: If you have never used `gcloud` before,
-    you will need to configure it. Run `gcloud auth login` to allocated
+    you will need to configure it. Run `gcloud auth login` to allocate
     credentials for `gcloud` to use when operating on your behalf.
  2. **Configure `ctpu` credentials**: `ctpu` uses the "application default"
     credentials set up by the Google SDK. In order to allocate your application

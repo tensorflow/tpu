@@ -18,11 +18,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add - && \
     apt-get update && \
     apt-get install -y google-cloud-sdk && \
-    pip install tensorflow==1.9 && \
+    pip install tensorflow==1.10 && \
     pip install google-cloud-storage
 
 # Checkout tensorflow/models at the appropriate branch
-RUN git clone -b r1.9.0 --depth 1 https://github.com/tensorflow/models.git /tensorflow_models
+RUN git clone -b r1.10.0 --depth 1 https://github.com/tensorflow/models.git /tensorflow_models
 
 # Checkout tensorflow/tpu at the appropriate branch
-RUN git clone -b r1.9 --depth 1 https://github.com/tensorflow/tpu.git /tensorflow_tpu_models
+RUN git clone -b r1.10 --depth 1 https://github.com/tensorflow/tpu.git /tensorflow_tpu_models

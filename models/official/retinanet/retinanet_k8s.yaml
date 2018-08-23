@@ -2,7 +2,7 @@
 # Engine.
 #
 # [Training Data]
-#   Download and preprocess the COCO dataset using https://github.com/tensorflow/tpu/blob/r1.9/tools/datasets/download_and_preprocess_coco_k8s.yaml
+#   Download and preprocess the COCO dataset using https://github.com/tensorflow/tpu/blob/r1.10/tools/datasets/download_and_preprocess_coco_k8s.yaml
 #   if you don't already have the data.
 #
 # [Instructions]
@@ -22,15 +22,15 @@ spec:
     metadata:
       annotations:
         # The Cloud TPUs that will be created for this Job must support
-        # TensorFlow 1.9. This version MUST match the TensorFlow version that
+        # TensorFlow 1.10. This version MUST match the TensorFlow version that
         # your model is built on.
-        tf-version.cloud-tpus.google.com: "1.9"
+        tf-version.cloud-tpus.google.com: "1.10"
     spec:
       restartPolicy: Never
       containers:
       - name: retinanet-tpu
-        # The official TensorFlow 1.9 TPU model image built from https://github.com/tensorflow/tpu/blob/r1.9/tools/docker/Dockerfile.
-        image: gcr.io/tensorflow/tpu-models:r1.9
+        # The official TensorFlow 1.10 TPU model image built from https://github.com/tensorflow/tpu/blob/r1.10/tools/docker/Dockerfile.
+        image: gcr.io/tensorflow/tpu-models:r1.10
         command:
           - /bin/sh
           - -c
