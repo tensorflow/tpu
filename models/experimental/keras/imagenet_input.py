@@ -153,6 +153,14 @@ class ImageNetInput(object):
     dataset = dataset.prefetch(tf.contrib.data.AUTOTUNE)
     return dataset
 
+  # TODO(xiejw): Remove this generator once evaluation with dataset is ready.
+  def evaluation_generator(self, master):
+    """Creates a generator for evaluation."""
+    next_batch = self.input_fn().make_one_shot_iterator().get_next()
+    with tf.Session(master) as sess:
+      while True:
+        yield sess.run(next_batch)
+
   def input_fn_null(self):
     """Input function which provides null (black) images."""
     dataset = tf.data.Dataset.range(1).repeat().map(self._get_null_input)

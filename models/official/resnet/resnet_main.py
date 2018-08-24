@@ -495,7 +495,7 @@ def _select_tables_from_flags():
 
 def main(unused_argv):
   tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
-      FLAGS.tpu,
+      FLAGS.tpu if (FLAGS.tpu or FLAGS.use_tpu) else '',
       zone=FLAGS.tpu_zone,
       project=FLAGS.gcp_project)
 

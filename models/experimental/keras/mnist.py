@@ -43,6 +43,22 @@ EPOCHS = 12
 IMG_ROWS, IMG_COLS = 28, 28
 
 
+def mnist_model(input_shape):
+  """Creates a MNIST model."""
+  model = tf.keras.models.Sequential()
+  model.add(
+      tf.keras.layers.Conv2D(
+          32, kernel_size=(3, 3), activation='relu', input_shape=input_shape))
+  model.add(tf.keras.layers.Conv2D(64, (3, 3), activation='relu'))
+  model.add(tf.keras.layers.MaxPooling2D(pool_size=(2, 2)))
+  model.add(tf.keras.layers.Dropout(0.25))
+  model.add(tf.keras.layers.Flatten())
+  model.add(tf.keras.layers.Dense(128, activation='relu'))
+  model.add(tf.keras.layers.Dropout(0.5))
+  model.add(tf.keras.layers.Dense(NUM_CLASSES, activation='softmax'))
+  return model
+
+
 def main(unused_dev):
   use_tpu = flags.FLAGS.use_tpu
 
@@ -74,17 +90,7 @@ def main(unused_dev):
   y_train = tf.keras.utils.to_categorical(y_train, NUM_CLASSES)
   y_test = tf.keras.utils.to_categorical(y_test, NUM_CLASSES)
 
-  model = tf.keras.models.Sequential()
-  model.add(
-      tf.keras.layers.Conv2D(
-          32, kernel_size=(3, 3), activation='relu', input_shape=input_shape))
-  model.add(tf.keras.layers.Conv2D(64, (3, 3), activation='relu'))
-  model.add(tf.keras.layers.MaxPooling2D(pool_size=(2, 2)))
-  model.add(tf.keras.layers.Dropout(0.25))
-  model.add(tf.keras.layers.Flatten())
-  model.add(tf.keras.layers.Dense(128, activation='relu'))
-  model.add(tf.keras.layers.Dropout(0.5))
-  model.add(tf.keras.layers.Dense(NUM_CLASSES, activation='softmax'))
+  model = mnist_model(input_shape)
 
   if use_tpu:
     strategy = tf.contrib.tpu.TPUDistributionStrategy(
