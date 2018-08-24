@@ -18,8 +18,8 @@ from __future__ import division
 from __future__ import print_function
 
 import copy
-import time
 import os
+import time
 
 import numpy as np
 import tensorflow as tf
@@ -67,7 +67,8 @@ def imagenet_hparams():
       num_reduction_layers=2,
 
       # Stem.
-      imagenet_stem_mult=1.0,
+      stem_type='imagenet',  # 'imagenet' or others
+      num_stem_cells=2,  # 2 if stem_type == 'imagenet' else 0
 
       # Implementation details.
       data_format='NCHW',  # 'NHWC' or 'NCHW'.

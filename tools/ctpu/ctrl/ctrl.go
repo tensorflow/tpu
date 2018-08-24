@@ -128,7 +128,7 @@ func New(ctx context.Context, config *config.Config, ctpuVersion string, logRequ
 		return nil, err
 	}
 
-	resourceMgmt, err := newResourceManagementCP(config, client, userAgent)
+	resourceMgmt, err := newResourceManagementCP(ctx, config, client, userAgent)
 	if err != nil {
 		return nil, err
 	}

@@ -39,6 +39,7 @@ FLAGS = flags.FLAGS
 NUM_CLASSES = 1000
 IMAGE_SIZE = 224
 APPROX_IMAGENET_TRAINING_IMAGES = 1280000  # Approximate number of images.
+APPROX_IMAGENET_TEST_IMAGES = 48000  # Approximate number of images.
 
 
 def main(argv):
@@ -58,10 +59,12 @@ def main(argv):
 
   if FLAGS.tpu is not None:
     logging.info('Converting from CPU to TPU model.')
-    strategy = tf.contrib.tpu.TPUDistributionStrategy(
-        tf.contrib.cluster_resolver.TPUClusterResolver(tpu=FLAGS.tpu),
-    )
+    resolver = tf.contrib.cluster_resolver.TPUClusterResolver(tpu=FLAGS.tpu)
+    strategy = tf.contrib.tpu.TPUDistributionStrategy(resolver)
     model = tf.contrib.tpu.keras_to_tpu_model(model, strategy=strategy)
+    session_master = resolver.master()
+  else:
+    session_master = ''
 
   logging.info('Compiling model.')
   model.compile(
@@ -82,19 +85,33 @@ def main(argv):
     model.evaluate(training_images, training_labels, verbose=0)
   else:
 
-    imagenet_train, imagenet_eval = [imagenet_input.ImageNetInput(
-        is_training=is_training,
+    imagenet_train = imagenet_input.ImageNetInput(
+        is_training=True,
         data_dir=FLAGS.data,
         per_core_batch_size=per_core_batch_size)
-                                     for is_training in [True, False]]
     logging.info('Training model using real data in directory "%s".',
                  FLAGS.data)
     num_epochs = 90  # Standard imagenet training regime.
     model.fit(imagenet_train.input_fn,
               epochs=num_epochs,
               steps_per_epoch=int(APPROX_IMAGENET_TRAINING_IMAGES / batch_size))
+
     logging.info('Evaluating the model on the validation dataset.')
-    model.evaluate(imagenet_eval.input_fn)
+    # Direct evaluation with datasets is coming in TF 1.11.  For now,
+    # we can perform evaluation using a standard Python generator.
+    imagenet_eval = imagenet_input.ImageNetInput(
+        is_training=False,
+        data_dir=FLAGS.data,
+        # In normal execution, our dataset would generate data for each TPU
+        # core.  In this case, because we are feeding in from a Keras generator,
+        # we want to build a single batch for all of the cores, which will then
+        # be split for us.
+        per_core_batch_size=batch_size)
+    score = model.evaluate_generator(
+        imagenet_eval.evaluation_generator(session_master),
+        steps=int(APPROX_IMAGENET_TEST_IMAGES // batch_size),
+        verbose=1)
+    logging.info('Evaluation score %s', score)
 
 
 if __name__ == '__main__':

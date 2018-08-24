@@ -67,6 +67,7 @@ func main() {
 	subcommands.Register(commands.StatusCommand(cfg, ctrls.TPU, ctrls.GCE), "")
 	subcommands.Register(commands.RestartCommand(cfg, ctrls.TPU), "")
 
+	subcommands.Register(commands.AuthCommand(cfg, ctrls.ResourceManagement), "configuration")
 	subcommands.Register(commands.ConfigCommand(cfg, ctrls.CLI), "configuration")
 	subcommands.Register(commands.VersionCommand(version), "configuration")
 	subcommands.Register(commands.ListCommand(cfg, ctrls.TPU, ctrls.GCE), "configuration")

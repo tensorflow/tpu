@@ -188,7 +188,6 @@ def _build_aux_head(net, end_points, num_classes, hparams, scope):
 
 def _imagenet_stem(inputs, hparams, stem_cell, filter_scaling_rate):
   """Stem used for models trained on ImageNet."""
-  num_stem_cells = 2
 
   # 149 x 149 x 32
   num_stem_filters = hparams.stem_reduction_size
@@ -200,8 +199,8 @@ def _imagenet_stem(inputs, hparams, stem_cell, filter_scaling_rate):
     tf.logging.info('imagenet_stem shape: {}'.format(net.shape))
   # Run the reduction cells
   cell_outputs = [None, net]
-  filter_scaling = 1.0 / (filter_scaling_rate**num_stem_cells)
-  for cell_num in range(num_stem_cells):
+  filter_scaling = 1.0 / (filter_scaling_rate**hparams.num_stem_cells)
+  for cell_num in range(hparams.num_stem_cells):
     net = stem_cell(
         net,
         scope='cell_stem_{}'.format(cell_num),
@@ -213,7 +212,19 @@ def _imagenet_stem(inputs, hparams, stem_cell, filter_scaling_rate):
     filter_scaling *= filter_scaling_rate
     tf.logging.info('imagenet_stem net shape at reduction layer {}: {}'.format(
         cell_num, net.shape))
+  # Only include cells in the cell_outputs.
   return net, cell_outputs
+
+
+def _basic_stem(inputs, hparams):
+  num_stem_filters = hparams.stem_reduction_size
+  with tf.variable_scope('stem', custom_getter=network_utils.bp16_getter):
+    net = slim.conv2d(
+        inputs, num_stem_filters, [3, 3], stride=1, scope='conv0',
+        padding='VALID')
+    net = network_utils.batch_norm(net, scope='conv0_bn')
+    tf.logging.info('basic_stem shape: {}'.format(net.shape))
+  return net, [None, net]
 
 
 def network_arg_scope(weight_decay=5e-5,
@@ -296,13 +307,16 @@ def build_network(inputs,
   Raises:
     ValueError: upon invalid hparams.
   """
+  total_num_cells = (hparams.num_cells +
+                     hparams.num_reduction_layers +
+                     hparams.num_stem_cells)
   normal_cell = network_utils.BaseCell(
       hparams.reduction_size,
       hparams.normal_cell_operations,
       hparams.normal_cell_used_hiddenstates,
       hparams.normal_cell_hiddenstate_indices,
       hparams.drop_connect_keep_prob,
-      hparams.num_cells + 4,
+      total_num_cells,
       hparams.num_total_steps)
   reduction_cell = network_utils.BaseCell(
       hparams.reduction_size,
@@ -310,7 +324,7 @@ def build_network(inputs,
       hparams.reduction_cell_used_hiddenstates,
       hparams.reduction_cell_hiddenstate_indices,
       hparams.drop_connect_keep_prob,
-      hparams.num_cells + 4,
+      total_num_cells,
       hparams.num_total_steps)
   num_shards = hparams.num_shards
   distributed_group_size = hparams.distributed_group_size
@@ -347,8 +361,11 @@ def _build_network_base(images,
       hparams.num_cells, hparams.num_reduction_layers)
   stem_cell = reduction_cell
 
-  net, cell_outputs = _imagenet_stem(images, hparams, stem_cell,
-                                     filter_scaling_rate)
+  if hparams.stem_type == 'imagenet':
+    net, cell_outputs = _imagenet_stem(images, hparams, stem_cell,
+                                       filter_scaling_rate)
+  else:
+    net, cell_outputs = _basic_stem(images, hparams)
 
   # Setup for building in the auxiliary head.
   aux_head_cell_idxes = []
@@ -358,7 +375,7 @@ def _build_network_base(images,
   # Run the cells
   filter_scaling = 1.0
   # true_cell_num accounts for the stem cells
-  true_cell_num = len(cell_outputs)
+  true_cell_num = hparams.num_stem_cells
   for cell_num in range(hparams.num_cells):
     tf.logging.info('Current cell num: {}'.format(true_cell_num))
 

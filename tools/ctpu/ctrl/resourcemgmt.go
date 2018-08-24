@@ -20,8 +20,11 @@ import (
 	"log"
 	"net/http"
 
+	"cloud.google.com/go/storage"
+	"context"
 	"github.com/tensorflow/tpu/tools/ctpu/config"
 	"google.golang.org/api/cloudresourcemanager/v1beta1"
+	"google.golang.org/api/option"
 )
 
 const loggingRole = "roles/logging.logWriter"
@@ -34,17 +37,24 @@ const tpuServiceAgent = "roles/tpu.serviceAgent"
 type ResourceManagementCP struct {
 	config  *config.Config
 	service *cloudresourcemanager.Service
+	storage *storage.Client
 }
 
-func newResourceManagementCP(config *config.Config, client *http.Client, userAgent string) (*ResourceManagementCP, error) {
+func newResourceManagementCP(ctx context.Context, config *config.Config, client *http.Client, userAgent string) (*ResourceManagementCP, error) {
 	service, err := cloudresourcemanager.New(client)
 	if err != nil {
 		return nil, err
 	}
 	service.UserAgent = userAgent
+	gcsClient, err := storage.NewClient(ctx, option.WithUserAgent(userAgent), option.WithHTTPClient(client))
+	if err != nil {
+		return nil, err
+	}
+
 	return &ResourceManagementCP{
 		config:  config,
 		service: service,
+		storage: gcsClient,
 	}, nil
 }
 
@@ -92,27 +102,57 @@ func (r *ResourceManagementCP) addAgentToPolicy(tpuUserAgent string, policy *clo
 //
 // It is a no-op if the tpuUserAgent has already been granted some access.
 func (r *ResourceManagementCP) AddTPUUserAgent(tpuUserAgent string) error {
-	req := cloudresourcemanager.GetIamPolicyRequest{}
-	policy, err := r.service.Projects.GetIamPolicy(r.config.Project, &req).Do()
+	policy, err := r.GetProjectPolicy()
 	if err != nil {
 		return err
 	}
 	policy = r.addAgentToPolicy(tpuUserAgent, policy)
 	if policy != nil {
 		log.Printf("Updating the project's IAM policy to add the TPU service account ('%s') to roles: %s and %s.", tpuUserAgent, loggingRole, storageRole)
-		req := cloudresourcemanager.SetIamPolicyRequest{Policy: policy}
-		if _, err := r.service.Projects.SetIamPolicy(r.config.Project, &req).Do(); err != nil {
+		if err := r.SetProjectPolicy(policy); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
+// GetProjectPolicy retrieves the IAM policy for the project.
+func (r *ResourceManagementCP) GetProjectPolicy() (*cloudresourcemanager.Policy, error) {
+	req := cloudresourcemanager.GetIamPolicyRequest{}
+	return r.service.Projects.GetIamPolicy(r.config.Project, &req).Do()
+}
+
+// SetProjectPolicy sets the IAM policy for project.
+func (r *ResourceManagementCP) SetProjectPolicy(policy *cloudresourcemanager.Policy) error {
+	req := cloudresourcemanager.SetIamPolicyRequest{Policy: policy}
+	_, err := r.service.Projects.SetIamPolicy(r.config.Project, &req).Do()
+	return err
+}
+
+// GetProject retrieves the project metadata.
+func (r *ResourceManagementCP) GetProject() (*cloudresourcemanager.Project, error) {
+	return r.service.Projects.Get(r.config.Project).Do()
+}
+
+// GetBucketACL retrieves the ACL list for a Cloud Storage bucket.
+func (r *ResourceManagementCP) GetBucketACL(ctx context.Context, bucket string) ([]storage.ACLRule, error) {
+	bh := r.storage.Bucket(bucket)
+	acl := bh.ACL()
+	return acl.List(ctx)
+}
+
+// SetBucketACL adds the entity to the ACL list at the specified role on the provided bucket.
+func (r *ResourceManagementCP) SetBucketACL(ctx context.Context, bucket string, entity storage.ACLEntity, role storage.ACLRole) error {
+	bh := r.storage.Bucket(bucket)
+	acl := bh.ACL()
+	return acl.Set(ctx, entity, role)
+}
+
 // IsProjectInGoogleOrg determines if the project is part of the Google organization.
 //
 // Note: this will need to be updated in the presence of folders.
 func (r *ResourceManagementCP) IsProjectInGoogleOrg() (bool, error) {
-	resp, err := r.service.Projects.Get(r.config.Project).Do()
+	resp, err := r.GetProject()
 	if err != nil {
 		return false, err
 	}
