@@ -36,6 +36,8 @@ flags.DEFINE_string('data', None, 'Path to training and testing data.')
 
 FLAGS = flags.FLAGS
 
+# TODO(xiejw): Revert the PER_CORE_BATCH_SIZE to 128 once the model can run.
+PER_CORE_BATCH_SIZE = 64
 NUM_CLASSES = 1000
 IMAGE_SIZE = 224
 APPROX_IMAGENET_TRAINING_IMAGES = 1280000  # Approximate number of images.
@@ -52,10 +54,8 @@ def main(argv):
       pooling=None,
       classes=NUM_CLASSES)
 
-  # TODO(xiejw): Revert the per_core_batch_size to 128 once the model can run.
-  per_core_batch_size = 64
   num_cores = 8
-  batch_size = per_core_batch_size * num_cores
+  batch_size = PER_CORE_BATCH_SIZE * num_cores
 
   if FLAGS.tpu is not None:
     logging.info('Converting from CPU to TPU model.')
@@ -88,7 +88,7 @@ def main(argv):
     imagenet_train = imagenet_input.ImageNetInput(
         is_training=True,
         data_dir=FLAGS.data,
-        per_core_batch_size=per_core_batch_size)
+        per_core_batch_size=PER_CORE_BATCH_SIZE)
     logging.info('Training model using real data in directory "%s".',
                  FLAGS.data)
     num_epochs = 90  # Standard imagenet training regime.

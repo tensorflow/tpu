@@ -24,6 +24,7 @@ import (
 	"regexp"
 	"strings"
 
+	"cloud.google.com/go/compute/metadata"
 	"flag"
 )
 
@@ -86,6 +87,8 @@ func (c *Config) Validate() error {
 func FromEnv() (cfg *Config, err error) {
 	if isDevshell() {
 		cfg, err = devshellConfig()
+	} else if metadata.OnGCE() {
+		cfg, err = gceConfig()
 	} else {
 		cfg, err = gcloudConfig()
 	}
