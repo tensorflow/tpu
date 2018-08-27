@@ -159,7 +159,10 @@ class ImageNetInput(object):
     next_batch = self.input_fn().make_one_shot_iterator().get_next()
     with tf.Session(master) as sess:
       while True:
-        yield sess.run(next_batch)
+        try:
+          yield sess.run(next_batch)
+        except tf.errors.OutOfRangeError:
+          return
 
   def input_fn_null(self):
     """Input function which provides null (black) images."""

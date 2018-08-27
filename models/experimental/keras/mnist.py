@@ -30,8 +30,8 @@ from absl import flags
 import numpy as np
 import tensorflow as tf
 
-flags.DEFINE_bool('use_tpu', False, 'Use TPU model instead of CPU. ')
-flags.DEFINE_string('tpu', None, 'Name of the TPU to use')
+flags.DEFINE_bool('use_tpu', True, 'Use TPU model instead of CPU.')
+flags.DEFINE_string('tpu', None, 'Name of the TPU to use.')
 
 flags.DEFINE_bool('fake_data', False, 'Use fake data to test functionality.')
 
@@ -41,6 +41,8 @@ EPOCHS = 12
 
 # input image dimensions
 IMG_ROWS, IMG_COLS = 28, 28
+
+FLAGS = flags.FLAGS
 
 
 def mnist_model(input_shape):
@@ -60,11 +62,11 @@ def mnist_model(input_shape):
 
 
 def main(unused_dev):
-  use_tpu = flags.FLAGS.use_tpu
+  use_tpu = FLAGS.use_tpu
 
   print('Mode:', 'TPU' if use_tpu else 'CPU')
 
-  if flags.FLAGS.fake_data:
+  if FLAGS.fake_data:
     print('Using fake data')
     x_train = np.random.random((128, IMG_ROWS, IMG_COLS))
     y_train = np.zeros([128, 1], dtype=np.int32)
@@ -94,7 +96,7 @@ def main(unused_dev):
 
   if use_tpu:
     strategy = tf.contrib.tpu.TPUDistributionStrategy(
-        tf.contrib.cluster_resolver.TPUClusterResolver(tpu=flags.FLAGS.tpu)
+        tf.contrib.cluster_resolver.TPUClusterResolver(tpu=FLAGS.tpu)
     )
     model = tf.contrib.tpu.keras_to_tpu_model(model, strategy=strategy)
 

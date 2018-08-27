@@ -31,7 +31,17 @@ import numpy as np
 
 import imagenet_input
 
-flags.DEFINE_string('tpu', None, 'Name of the TPU to use; if None, use CPU.')
+try:
+  import h5py as _  # pylint: disable=g-import-not-at-top
+  HAS_H5PY = True
+except ImportError:
+  logging.warning('`h5py` is not installed. Please consider installing it '
+                  'to save weights for long-running training.')
+  HAS_H5PY = False
+
+
+flags.DEFINE_bool('use_tpu', True, 'Use TPU model instead of CPU.')
+flags.DEFINE_string('tpu', None, 'Name of the TPU to use.')
 flags.DEFINE_string('data', None, 'Path to training and testing data.')
 
 FLAGS = flags.FLAGS
@@ -42,6 +52,8 @@ NUM_CLASSES = 1000
 IMAGE_SIZE = 224
 APPROX_IMAGENET_TRAINING_IMAGES = 1280000  # Approximate number of images.
 APPROX_IMAGENET_TEST_IMAGES = 48000  # Approximate number of images.
+
+WEIGHTS_TXT = '/tmp/resnet50_weights.h5'
 
 
 def main(argv):
@@ -57,7 +69,7 @@ def main(argv):
   num_cores = 8
   batch_size = PER_CORE_BATCH_SIZE * num_cores
 
-  if FLAGS.tpu is not None:
+  if FLAGS.use_tpu:
     logging.info('Converting from CPU to TPU model.')
     resolver = tf.contrib.cluster_resolver.TPUClusterResolver(tpu=FLAGS.tpu)
     strategy = tf.contrib.tpu.TPUDistributionStrategy(resolver)
@@ -84,7 +96,6 @@ def main(argv):
     logging.info('Evaluating the model on synthetic data.')
     model.evaluate(training_images, training_labels, verbose=0)
   else:
-
     imagenet_train = imagenet_input.ImageNetInput(
         is_training=True,
         data_dir=FLAGS.data,
@@ -96,9 +107,15 @@ def main(argv):
               epochs=num_epochs,
               steps_per_epoch=int(APPROX_IMAGENET_TRAINING_IMAGES / batch_size))
 
+    if HAS_H5PY:
+      logging.info('Save weights into %s', WEIGHTS_TXT)
+      model.save_weights(WEIGHTS_TXT, overwrite=True)
+
     logging.info('Evaluating the model on the validation dataset.')
     # Direct evaluation with datasets is coming in TF 1.11.  For now,
-    # we can perform evaluation using a standard Python generator.
+    # we can perform evaluation using a standard Python generator with a smaller
+    # batch size.
+    batch_size = 32 * num_cores
     imagenet_eval = imagenet_input.ImageNetInput(
         is_training=False,
         data_dir=FLAGS.data,
@@ -111,7 +128,7 @@ def main(argv):
         imagenet_eval.evaluation_generator(session_master),
         steps=int(APPROX_IMAGENET_TEST_IMAGES // batch_size),
         verbose=1)
-    logging.info('Evaluation score %s', score)
+    print('Evaluation score', score)
 
 
 if __name__ == '__main__':
