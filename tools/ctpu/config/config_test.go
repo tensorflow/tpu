@@ -155,3 +155,13 @@ func TestFlagOverrides(t *testing.T) {
 		t.Errorf("cfg.Project = %q, want: %q", cfg.Project, configuredProject)
 	}
 }
+
+func TestComputeFlockName(t *testing.T) {
+	cfg := &Config{
+		FlockName: "sleepy",
+	}
+	cfg.computeFlockName()
+	if cfg.FlockName != "sleepy" {
+		t.Errorf("cfg.FlockName = %q, want: %q", cfg.FlockName, "sleepy")
+	}
+}

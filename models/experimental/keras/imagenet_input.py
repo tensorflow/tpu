@@ -139,14 +139,14 @@ class ImageNetInput(object):
     # Read the data from disk in parallel
     dataset = dataset.apply(
         tf.contrib.data.parallel_interleave(
-            fetch_dataset, cycle_length=64, sloppy=True))
+            fetch_dataset, cycle_length=16, sloppy=True))
     dataset = dataset.shuffle(1024)
 
     # Parse, pre-process, and batch the data in parallel
     dataset = dataset.apply(
         tf.contrib.data.map_and_batch(
             self.dataset_parser, batch_size=self.per_core_batch_size,
-            num_parallel_batches=8,    # 8 == num_cores per host
+            num_parallel_batches=2,
             drop_remainder=True))
 
     # Prefetch overlaps in-feed with training

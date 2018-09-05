@@ -48,25 +48,21 @@ def update_learning_rate_schedule_parameters(params):
 
     For batch size=64, the default values are listed below:
       learning_rate=0.08,
-      lr_warmup_init=0.1,
       lr_warmup_epoch=1.0,
       first_lr_drop_epoch=8.0,
       second_lr_drop_epoch=11.0;
     The values are converted to a LR schedule listed below:
-      learning_rate=0.08,
-      lr_warmup_init=0.1,
+      adjusted_learning_rate=0.08,
       lr_warmup_step=1875,
       first_lr_drop_step=15000,
       second_lr_drop_step=20625;
     For batch size=8, the default values will have the following LR shedule:
-      learning_rate=0.01,
-      lr_warmup_init=0.8,
+      adjusted_learning_rate=0.01,
       lr_warmup_step=15000,
       first_lr_drop_step=120000,
       second_lr_drop_step=165000;
     For batch size=256 the default values will have the following LR shedule:
-      learning_rate=0.32,
-      lr_warmup_init=0.025,
+      adjusted_learning_rate=0.32,
       lr_warmup_step=468,
       first_lr_drop_step=3750,
       second_lr_drop_step=5157.
@@ -77,7 +73,6 @@ def update_learning_rate_schedule_parameters(params):
 
     For batch size=64, 1x schedule (default values),
       learning_rate=0.08,
-      lr_warmup_init=0.1,
       lr_warmup_step=1875,
       first_lr_drop_step=15000,
       second_lr_drop_step=20625;
@@ -85,27 +80,21 @@ def update_learning_rate_schedule_parameters(params):
       first_lr_drop_epoch=16.0,
       second_lr_drop_epoch=22.0;
     The values are converted to a LR schedule listed below:
-      learning_rate=0.08,
-      lr_warmup_init=0.1,
+      adjusted_learning_rate=0.08,
       lr_warmup_step=1875,
       first_lr_drop_step=30000,
       second_lr_drop_step=41250.
 
   Args:
     params: a parameter dictionary that includes learning_rate,
-      lr_warmup_init, lr_warmup_epoch, first_lr_drop_epoch,
-      and second_lr_drop_epoch.
+      lr_warmup_epoch, first_lr_drop_epoch, and second_lr_drop_epoch.
   """
   # params['batch_size'] is per-shard within model_fn if use_tpu=true.
   batch_size = (params['batch_size'] * params['num_shards'] if params['use_tpu']
                 else params['batch_size'])
   # Learning rate is proportional to the batch size
-  params['learning_rate'] = (params['learning_rate'] * batch_size /
-                             _DEFAULT_BATCH_SIZE)
-  # Initial LR scale is reversely proportional to the batch size
-  reverse_batch_ratio = _DEFAULT_BATCH_SIZE / batch_size
-  params['lr_warmup_init'] = int(params['lr_warmup_init'] *
-                                 reverse_batch_ratio)
+  params['adjusted_learning_rate'] = (params['learning_rate'] * batch_size /
+                                      _DEFAULT_BATCH_SIZE)
   steps_per_epoch = params['num_examples_per_epoch'] / batch_size
   params['lr_warmup_step'] = int(params['lr_warmup_epoch'] * steps_per_epoch)
   params['first_lr_drop_step'] = int(params['first_lr_drop_epoch'] *
@@ -114,22 +103,23 @@ def update_learning_rate_schedule_parameters(params):
                                       steps_per_epoch)
 
 
-def learning_rate_schedule(base_learning_rate, lr_warmup_init, lr_warmup_step,
-                           first_lr_drop_step, second_lr_drop_step,
-                           global_step):
+def learning_rate_schedule(adjusted_learning_rate, lr_warmup_init,
+                           lr_warmup_step, first_lr_drop_step,
+                           second_lr_drop_step, global_step):
   """Handles linear scaling rule, gradual warmup, and LR decay."""
   # lr_warmup_init is the starting learning rate; the learning rate is linearly
   # scaled up to the full learning rate after `lr_warmup_steps` before decaying.
-  linear_warmup = [(lr_warmup_init + float(step) / lr_warmup_step *
-                    (1 - lr_warmup_init), step)
-                   for step in range(lr_warmup_step)]
-  lr_schedule = linear_warmup + [[1.0, lr_warmup_step],
-                                 [0.1, first_lr_drop_step],
-                                 [0.01, second_lr_drop_step]]
-  learning_rate = base_learning_rate
+  linear_warmup = (lr_warmup_init +
+                   (tf.cast(global_step, dtype=tf.float32) / lr_warmup_step *
+                    (adjusted_learning_rate - lr_warmup_init)))
+  learning_rate = tf.where(global_step < lr_warmup_step,
+                           linear_warmup, adjusted_learning_rate)
+  lr_schedule = [[1.0, lr_warmup_step],
+                 [0.1, first_lr_drop_step],
+                 [0.01, second_lr_drop_step]]
   for mult, start_global_step in lr_schedule:
     learning_rate = tf.where(global_step < start_global_step, learning_rate,
-                             base_learning_rate * mult)
+                             adjusted_learning_rate * mult)
   return learning_rate
 
 
@@ -405,7 +395,7 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
   update_learning_rate_schedule_parameters(params)
   global_step = tf.train.get_global_step()
   learning_rate = learning_rate_schedule(
-      params['learning_rate'], params['lr_warmup_init'],
+      params['adjusted_learning_rate'], params['lr_warmup_init'],
       params['lr_warmup_step'], params['first_lr_drop_step'],
       params['second_lr_drop_step'], global_step)
   # cls_loss and box_loss are for logging. only total_loss is optimized.
@@ -426,9 +416,10 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
     var_list = variable_filter_fn(
         tf.trainable_variables(),
         params['resnet_depth']) if variable_filter_fn else None
+
     with tf.control_dependencies(update_ops):
-      train_op = optimizer.minimize(total_loss, global_step,
-                                    var_list=var_list)
+      train_op = optimizer.minimize(total_loss, global_step, var_list=var_list)
+
   else:
     train_op = None
 
@@ -515,7 +506,7 @@ def default_hparams():
       # optimization
       momentum=0.9,
       learning_rate=0.08,
-      lr_warmup_init=0.1,
+      lr_warmup_init=0.008,
       lr_warmup_epoch=1.0,
       first_lr_drop_epoch=8.0,
       second_lr_drop_epoch=11.0,

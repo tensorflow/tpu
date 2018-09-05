@@ -125,7 +125,7 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
   retinanet_model.update_learning_rate_schedule_parameters(params)
   global_step = tf.train.get_global_step()
   learning_rate = retinanet_model.learning_rate_schedule(
-      params['learning_rate'], params['lr_warmup_init'],
+      params['adjusted_learning_rate'], params['lr_warmup_init'],
       params['lr_warmup_step'], params['first_lr_drop_step'],
       params['second_lr_drop_step'], global_step)
 
@@ -240,7 +240,7 @@ def default_hparams():
       # optimization
       momentum=0.9,
       learning_rate=0.02,
-      lr_warmup_init=0.1,
+      lr_warmup_init=0.002,
       lr_warmup_epoch=1.0,
       first_lr_drop_epoch=25.,
       second_lr_drop_epoch=35.,
