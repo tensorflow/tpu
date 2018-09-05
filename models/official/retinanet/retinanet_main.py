@@ -22,6 +22,7 @@ from __future__ import print_function
 import os
 
 from absl import flags
+import numpy as np
 import tensorflow as tf
 
 import dataloader
@@ -61,6 +62,13 @@ flags.DEFINE_string('hparams', '',
                     'Comma separated k=v pairs of hyperparameters.')
 flags.DEFINE_integer(
     'num_cores', default=8, help='Number of TPU cores for training')
+flags.DEFINE_bool('use_spatial_partition', False, 'Use spatial partition.')
+flags.DEFINE_integer(
+    'num_cores_per_replica', default=8, help='Number of TPU cores per'
+    'replica when using spatial partition.')
+flags.DEFINE_multi_integer(
+    'input_partition_dims', [1, 4, 2, 1],
+    'A list that describes the partition dims for all the tensors.')
 flags.DEFINE_integer('train_batch_size', 64, 'training batch size')
 flags.DEFINE_integer('eval_batch_size', 1, 'evaluation batch size')
 flags.DEFINE_integer('eval_samples', 5000, 'The number of samples for '
@@ -123,9 +131,64 @@ def main(argv):
   hparams = retinanet_model.default_hparams()
   hparams.parse(FLAGS.hparams)
 
+  # The following is for spatial partitioning. `features` has one tensor while
+  # `labels` had 4 + (`max_level` - `min_level` + 1) * 2 tensors. The input
+  # partition is performed on `features` and all partitionable tensors of
+  # `labels`, see the partition logic below.
+  # In the TPUEstimator context, the meaning of `shard` and `replica` is the
+  # same; follwing the API, here has mixed use of both.
+  if FLAGS.use_spatial_partition:
+    # Checks input_partition_dims agrees with num_cores_per_replica.
+    if FLAGS.num_cores_per_replica != np.prod(FLAGS.input_partition_dims):
+      raise RuntimeError('--num_cores_per_replica must be a product of array'
+                         'elements in --input_partition_dims.')
+
+    labels_partition_dims = {
+        'mean_num_positives': None,
+        'source_ids': None,
+        'groundtruth_data': None,
+        'image_scales': None,
+    }
+    # The Input Partition Logic: We partition only the partition-able tensors.
+    # Spatial partition requires that the to-be-partitioned tensors must have a
+    # dimension that is a multiple of `partition_dims`. Depending on the
+    # `partition_dims` and the `image_size` and the `max_level` in hparams, some
+    # high-level anchor labels (i.e., `cls_targets` and `box_targets`) cannot
+    # be partitioned. For example, when `partition_dims` is [1, 4, 2, 1], image
+    # size is 1536, `max_level` is 9, `cls_targets_8` has a shape of
+    # [batch_size, 6, 6, 9], which cannot be partitioned (6 % 4 != 0). In this
+    # case, the level-8 and level-9 target tensors are not partition-able, and
+    # the highest partition-able level is 7.
+    image_size = hparams.get('image_size')
+    for level in range(hparams.get('min_level'), hparams.get('max_level') + 1):
+
+      def _can_partition(spatial_dim):
+        partitionable_index = np.where(
+            spatial_dim % np.array(FLAGS.input_partition_dims) == 0)
+        return len(partitionable_index[0]) == len(FLAGS.input_partition_dims)
+
+      spatial_dim = image_size // (2 ** level)
+      if _can_partition(spatial_dim):
+        labels_partition_dims[
+            'box_targets_%d' % level] = FLAGS.input_partition_dims
+        labels_partition_dims[
+            'cls_targets_%d' % level] = FLAGS.input_partition_dims
+      else:
+        labels_partition_dims['box_targets_%d' % level] = None
+        labels_partition_dims['cls_targets_%d' % level] = None
+
+    num_cores_per_replica = FLAGS.num_cores_per_replica
+    input_partition_dims = [
+        FLAGS.input_partition_dims, labels_partition_dims]
+    num_shards = FLAGS.num_cores // num_cores_per_replica
+  else:
+    num_cores_per_replica = None
+    input_partition_dims = None
+    num_shards = FLAGS.num_cores
+
   params = dict(
       hparams.values(),
-      num_shards=FLAGS.num_cores,
+      num_shards=num_shards,
       num_examples_per_epoch=FLAGS.num_examples_per_epoch,
       use_tpu=FLAGS.use_tpu,
       resnet_checkpoint=FLAGS.resnet_checkpoint,
@@ -140,7 +203,10 @@ def main(argv):
 
   tpu_config = tf.contrib.tpu.TPUConfig(
       FLAGS.iterations_per_loop,
-      num_shards=FLAGS.num_cores,
+
+      num_shards=num_shards,
+      num_cores_per_replica=num_cores_per_replica,
+      input_partition_dims=input_partition_dims,
       per_host_input_for_training=tf.contrib.tpu.InputPipelineConfig.PER_HOST_V2
   )
 
@@ -153,13 +219,11 @@ def main(argv):
       tpu_config=tpu_config,
   )
 
-  model_fn = retinanet_model.retinanet_model_fn
-
   # TPU Estimator
   if FLAGS.mode == 'train':
     tf.logging.info(params)
     train_estimator = tf.contrib.tpu.TPUEstimator(
-        model_fn=model_fn,
+        model_fn=retinanet_model.retinanet_model_fn,
         use_tpu=FLAGS.use_tpu,
         train_batch_size=FLAGS.train_batch_size,
         config=run_config,
@@ -195,7 +259,6 @@ def main(argv):
 
   elif FLAGS.mode == 'eval':
     # Eval only runs on CPU or GPU host with batch_size = 1.
-
     # Override the default options: disable randomization in the input pipeline
     # and don't run on the TPU.
     # Also, disable use_bfloat16 for eval on CPU/GPU.

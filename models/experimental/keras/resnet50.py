@@ -46,8 +46,7 @@ flags.DEFINE_string('data', None, 'Path to training and testing data.')
 
 FLAGS = flags.FLAGS
 
-# TODO(xiejw): Revert the PER_CORE_BATCH_SIZE to 128 once the model can run.
-PER_CORE_BATCH_SIZE = 64
+PER_CORE_BATCH_SIZE = 128
 NUM_CLASSES = 1000
 IMAGE_SIZE = 224
 APPROX_IMAGENET_TRAINING_IMAGES = 1280000  # Approximate number of images.
@@ -96,10 +95,11 @@ def main(argv):
     logging.info('Evaluating the model on synthetic data.')
     model.evaluate(training_images, training_labels, verbose=0)
   else:
-    imagenet_train = imagenet_input.ImageNetInput(
-        is_training=True,
+    imagenet_train, imagenet_eval = [imagenet_input.ImageNetInput(
+        is_training=is_training,
         data_dir=FLAGS.data,
         per_core_batch_size=PER_CORE_BATCH_SIZE)
+                                     for is_training in [True, False]]
     logging.info('Training model using real data in directory "%s".',
                  FLAGS.data)
     num_epochs = 90  # Standard imagenet training regime.
@@ -112,20 +112,8 @@ def main(argv):
       model.save_weights(WEIGHTS_TXT, overwrite=True)
 
     logging.info('Evaluating the model on the validation dataset.')
-    # Direct evaluation with datasets is coming in TF 1.11.  For now,
-    # we can perform evaluation using a standard Python generator with a smaller
-    # batch size.
-    batch_size = 32 * num_cores
-    imagenet_eval = imagenet_input.ImageNetInput(
-        is_training=False,
-        data_dir=FLAGS.data,
-        # In normal execution, our dataset would generate data for each TPU
-        # core.  In this case, because we are feeding in from a Keras generator,
-        # we want to build a single batch for all of the cores, which will then
-        # be split for us.
-        per_core_batch_size=batch_size)
-    score = model.evaluate_generator(
-        imagenet_eval.evaluation_generator(session_master),
+    score = model.evaluate(
+        imagenet_eval.input_fn,
         steps=int(APPROX_IMAGENET_TEST_IMAGES // batch_size),
         verbose=1)
     print('Evaluation score', score)

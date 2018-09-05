@@ -203,6 +203,7 @@ class ImageNetInput(ImageNetTFExampleInput):
                use_bfloat16,
                transpose_input,
                data_dir,
+               image_size=224,
                num_parallel_calls=64,
                cache=False,
                num_replicas=None,
@@ -225,6 +226,7 @@ class ImageNetInput(ImageNetTFExampleInput):
     """
     super(ImageNetInput, self).__init__(
         is_training=is_training,
+        image_size=image_size,
         use_bfloat16=use_bfloat16,
         transpose_input=transpose_input)
     self.data_dir = data_dir
@@ -247,7 +249,7 @@ class ImageNetInput(ImageNetTFExampleInput):
       a tensor representing a null image.
     """
     del data  # Unused since output is constant regardless of input
-    return tf.zeros([224, 224, 3], tf.bfloat16
+    return tf.zeros([self.image_size, self.image_size, 3], tf.bfloat16
                     if self.use_bfloat16 else tf.float32)
 
   def dataset_parser(self, value):

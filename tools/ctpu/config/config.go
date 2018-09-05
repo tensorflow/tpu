@@ -107,6 +107,9 @@ func cleanFlockName(flockName string) string {
 }
 
 func (c *Config) computeFlockName() {
+	if c.FlockName != "" {
+		return
+	}
 	if len(c.account) < 2 {
 		username := ""
 		curUser, err := user.Current()

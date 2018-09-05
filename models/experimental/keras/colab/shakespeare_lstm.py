@@ -131,7 +131,6 @@ def main(unused_dev):
   )
   training_model.save_weights(WEIGHTS_TXT, overwrite=True)
 
-  # TODO(xiejw): Add TPU support for stateful model.
   print('Running inference on the CPU.')
   batch_size = 5
   predict_len = 500
@@ -148,6 +147,11 @@ def main(unused_dev):
   # character at a time and predicting the next character.
   prediction_model = lstm_model(seq_len=1, batch_size=batch_size, stateful=True)
   prediction_model.load_weights(WEIGHTS_TXT)
+  if FLAGS.use_tpu:
+    strategy = tf.contrib.tpu.TPUDistributionStrategy(
+        tf.contrib.cluster_resolver.TPUClusterResolver(tpu=flags.FLAGS.tpu))
+    prediction_model = tf.contrib.tpu.keras_to_tpu_model(
+        prediction_model, strategy=strategy)
 
   # First, run the seed forward to prime the state of the model.
   prediction_model.reset_states()
