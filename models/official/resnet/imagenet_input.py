@@ -25,7 +25,6 @@ import os
 import tensorflow as tf
 import resnet_preprocessing
 
-
 def image_serving_input_fn():
   """Serving input fn for raw images."""
 
@@ -145,6 +144,7 @@ class ImageNetTFExampleInput(object):
     Returns:
       A `tf.data.Dataset` object.
     """
+
     # Retrieves the batch size for the current shard. The # of shards is
     # computed according to the input pipeline deployment. See
     # tf.contrib.tpu.RunConfig for details.
