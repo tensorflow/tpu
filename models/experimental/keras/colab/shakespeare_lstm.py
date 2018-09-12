@@ -15,7 +15,7 @@
 r"""Colab Example for Shakespeare LSTM example.
 
 To test on TPU:
-    python shapespear_lstm.py --use_tpu=True [--tpu=$TPU_NAME]
+    python shakespeare_lstm.py --use_tpu=True [--tpu=$TPU_NAME]
 """
 
 from __future__ import absolute_import
