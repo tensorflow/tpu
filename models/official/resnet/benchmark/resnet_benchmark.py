@@ -57,6 +57,7 @@ flags.DEFINE_bool(
 NUM_TRAIN_IMAGES = 1281167
 NUM_EVAL_IMAGES = 50000
 
+
 def main(unused_argv):
   tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
       FLAGS.tpu,
@@ -146,13 +147,18 @@ def main(unused_argv):
         f.write(str(start_timestamp))
 
     if FLAGS.use_fast_lr:
+      small_steps = 18 * NUM_TRAIN_IMAGES / FLAGS.train_batch_size
+      normal_steps = 41 * NUM_TRAIN_IMAGES / FLAGS.train_batch_size
+      large_steps = min(50 * NUM_TRAIN_IMAGES / FLAGS.train_batch_size,
+                        FLAGS.train_steps)
+
       resnet_classifier.train(
-          input_fn=imagenet_train_small.input_fn, max_steps=18 * 1251)
+          input_fn=imagenet_train_small.input_fn, max_steps=small_steps)
       resnet_classifier.train(
-          input_fn=imagenet_train.input_fn, max_steps=41 * 1251)
+          input_fn=imagenet_train.input_fn, max_steps=normal_steps)
       resnet_classifier.train(
           input_fn=imagenet_train_large.input_fn,
-          max_steps=min(50 * 1251, FLAGS.train_steps))
+          max_steps=large_steps)
     else:
       resnet_classifier.train(
           input_fn=imagenet_train.input_fn, max_steps=FLAGS.train_steps)
