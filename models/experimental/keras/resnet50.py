@@ -49,6 +49,7 @@ FLAGS = flags.FLAGS
 PER_CORE_BATCH_SIZE = 128
 NUM_CLASSES = 1000
 IMAGE_SIZE = 224
+EPOCHS = 90  # Standard imagenet training regime.
 APPROX_IMAGENET_TRAINING_IMAGES = 1280000  # Approximate number of images.
 APPROX_IMAGENET_TEST_IMAGES = 48000  # Approximate number of images.
 
@@ -89,8 +90,7 @@ def main(argv):
     training_labels = np.random.randint(NUM_CLASSES, size=batch_size,
                                         dtype=np.int32)
     logging.info('Training model using synthetica data.')
-    num_epochs = 100  # TPUs are very fast when running a single step per epoch!
-    model.fit(training_images, training_labels, epochs=num_epochs,
+    model.fit(training_images, training_labels, epochs=EPOCHS,
               batch_size=batch_size)
     logging.info('Evaluating the model on synthetic data.')
     model.evaluate(training_images, training_labels, verbose=0)
@@ -102,9 +102,8 @@ def main(argv):
                                      for is_training in [True, False]]
     logging.info('Training model using real data in directory "%s".',
                  FLAGS.data)
-    num_epochs = 90  # Standard imagenet training regime.
     model.fit(imagenet_train.input_fn,
-              epochs=num_epochs,
+              epochs=EPOCHS,
               steps_per_epoch=int(APPROX_IMAGENET_TRAINING_IMAGES / batch_size))
 
     if HAS_H5PY:

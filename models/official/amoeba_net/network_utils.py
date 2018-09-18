@@ -47,7 +47,12 @@ def cross_replica_average(inputs, num_shards, distributed_group_size):
   """Calculates the average value of inputs tensor across TPU replicas."""
   group_assignment = None
   if num_shards is not None and distributed_group_size != num_shards:
-    group_assignment = [i // distributed_group_size for i in range(num_shards)]
+    group_size = distributed_group_size
+    group_assignment = []
+    for g in range(num_shards // group_size):
+      replica_ids = [g * group_size + i for i in range(group_size)]
+      group_assignment.append(replica_ids)
+
   return tpu_ops.cross_replica_sum(inputs, group_assignment) / tf.cast(
       distributed_group_size, inputs.dtype)
 
