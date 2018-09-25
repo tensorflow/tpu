@@ -31,8 +31,8 @@ import tensorflow as tf
 # For Cloud environment, add parent directory for imports
 sys.path.append(os.path.dirname(os.path.abspath(sys.path[0])))
 
-import imagenet_input    # pylint: disable=g-import-not-at-top
-import resnet_main
+from official.resnet import imagenet_input    # pylint: disable=g-import-not-at-top
+from official.resnet import resnet_main
 from tensorflow.python.estimator import estimator
 
 
@@ -147,10 +147,10 @@ def main(unused_argv):
         f.write(str(start_timestamp))
 
     if FLAGS.use_fast_lr:
-      small_steps = 18 * NUM_TRAIN_IMAGES / FLAGS.train_batch_size
-      normal_steps = 41 * NUM_TRAIN_IMAGES / FLAGS.train_batch_size
-      large_steps = min(50 * NUM_TRAIN_IMAGES / FLAGS.train_batch_size,
-                        FLAGS.train_steps)
+      small_steps = int(18 * NUM_TRAIN_IMAGES / FLAGS.train_batch_size)
+      normal_steps = int(41 * NUM_TRAIN_IMAGES / FLAGS.train_batch_size)
+      large_steps = int(min(50 * NUM_TRAIN_IMAGES / FLAGS.train_batch_size,
+                            FLAGS.train_steps))
 
       resnet_classifier.train(
           input_fn=imagenet_train_small.input_fn, max_steps=small_steps)

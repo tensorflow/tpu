@@ -40,6 +40,14 @@ tf.flags.DEFINE_string('model_dir', '',
                        'Directory containing model data and checkpoints')
 tf.flags.DEFINE_integer('train_batch_size', 128, 'Per core batch size')
 tf.flags.DEFINE_integer('eval_batch_size', 125, 'Per core batch size')
+tf.flags.DEFINE_string('precision', 'bfloat16',
+                       'Precision to use; one of: {bfloat16, float32}')
+tf.flags.DEFINE_bool('use_keras_model', False,
+                     'Whether to use Keras implementation of ResNet model')
+tf.flags.DEFINE_bool('transpose_input', True,
+                     'Whether to transpose input for better performance')
+tf.flags.DEFINE_string('optimizer', 'momentum',
+                       'Optimizer to use; one of: {momentum, sgd}')
 
 
 FLAGS = tf.flags.FLAGS
@@ -78,18 +86,37 @@ def model_fn(features, labels, mode):
   """Definition for ResNet model."""
   is_training = mode == tf.estimator.ModeKeys.TRAIN
 
-  features = tf.transpose(features, [3, 0, 1, 2])  # Double-transpose trick
+  if FLAGS.transpose_input:
+    features = tf.transpose(features, [3, 0, 1, 2])  # Double-transpose trick
 
   # Normalize the image to zero mean and unit variance.
   features -= tf.constant(MEAN_RGB, shape=[1, 1, 3], dtype=features.dtype)
   features /= tf.constant(STDDEV_RGB, shape=[1, 1, 3], dtype=features.dtype)
 
-  with tf.contrib.tpu.bfloat16_scope():
-    network = resnet_model.resnet_v1(
-        resnet_depth=_RESNET_DEPTH,
-        num_classes=_NUM_CLASSES,
-        data_format='channels_last')
-    logits = network(inputs=features, is_training=is_training)
+  def create_model():
+    """Create the model and compute the logits."""
+    if FLAGS.use_keras_model:
+      model = tf.keras.applications.resnet50.ResNet50(
+          include_top=True,
+          weights=None,
+          input_tensor=None,
+          input_shape=None,
+          pooling=None,
+          classes=_NUM_CLASSES)
+      return model(features, training=is_training)
+    else:
+      model = resnet_model.resnet_v1(
+          resnet_depth=_RESNET_DEPTH,
+          num_classes=_NUM_CLASSES,
+          data_format='channels_last')
+      return model(inputs=features, is_training=is_training)
+
+  if FLAGS.precision == 'bfloat16':
+    with tf.contrib.tpu.bfloat16_scope():
+      logits = create_model()
+  else:
+    logits = create_model()
+
   logits = tf.cast(logits, tf.float32)
 
   if mode == tf.estimator.ModeKeys.PREDICT:
@@ -127,10 +154,13 @@ def model_fn(features, labels, mode):
   current_epoch = (tf.cast(global_step, tf.float32) / batches_per_epoch)
   learning_rate = learning_rate_schedule(current_epoch)
 
-  optimizer = tf.train.MomentumOptimizer(
-      learning_rate=learning_rate,
-      momentum=_MOMENTUM,
-      use_nesterov=True)
+  if FLAGS.optimizer == 'sgd':
+    optimizer = tf.train.GradientDescentOptimizer(learning_rate=learning_rate)
+  else:
+    optimizer = tf.train.MomentumOptimizer(
+        learning_rate=learning_rate,
+        momentum=_MOMENTUM,
+        use_nesterov=True)
 
   update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
   with tf.control_dependencies(update_ops):
@@ -151,9 +181,6 @@ def main(unused_argv):
       'session_master': tpu_cluster_resolver.get_master(),
       'eval_session_master': tpu_cluster_resolver.get_master()
   }
-  if tpu_cluster_resolver.cluster_spec():
-    tf_config_env['cluster'] = tpu_cluster_resolver.cluster_spec().as_dict()
-    tf_config_env['task'] = {'type': 'worker', 'index': 0}
   os.environ['TF_CONFIG'] = json.dumps(tf_config_env)
 
   steps_per_run_train = _NUM_TRAIN_IMAGES // (
@@ -177,11 +204,14 @@ def main(unused_argv):
   resnet_estimator = tf.estimator.Estimator(
       model_fn=model_fn, config=config)
 
-  train_input, eval_input = [imagenet_input.ImageNetInput(
-      is_training=is_training,
-      data_dir=FLAGS.data_dir,
-      transpose_input=True,
-      use_bfloat16=True) for is_training in [True, False]]
+  train_input, eval_input = [
+      imagenet_input.ImageNetInput(
+          is_training=is_training,
+          data_dir=FLAGS.data_dir,
+          transpose_input=FLAGS.transpose_input,
+          use_bfloat16=(FLAGS.precision == 'bfloat16'))
+      for is_training in [True, False]
+  ]
 
   try:
     current_step = resnet_estimator.get_variable_value(tf.GraphKeys.GLOBAL_STEP)

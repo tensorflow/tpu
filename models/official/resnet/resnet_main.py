@@ -24,9 +24,9 @@ import time
 from absl import flags
 import absl.logging as _logging  # pylint: disable=unused-import
 import tensorflow as tf
-import imagenet_input
-import lars_util
-import resnet_model
+from official.resnet import imagenet_input
+from official.resnet import lars_util
+from official.resnet import resnet_model
 from tensorflow.contrib import summary
 from tensorflow.contrib.training.python.training import evaluation
 from tensorflow.python.estimator import estimator
@@ -195,6 +195,10 @@ flags.DEFINE_float(
     'weight_decay', default=1e-4,
     help=('Weight decay coefficiant for l2 regularization.'))
 
+flags.DEFINE_float(
+    'label_smoothing', default=0.0,
+    help=('Label smoothing parameter used in the softmax_cross_entropy'))
+
 flags.DEFINE_integer('log_step_count_steps', 64, 'The number of steps at '
                      'which the global step information is logged.')
 
@@ -312,7 +316,7 @@ def resnet_model_fn(features, labels, mode, params):
   cross_entropy = tf.losses.softmax_cross_entropy(
       logits=logits,
       onehot_labels=one_hot_labels,
-      label_smoothing=0.1)
+      label_smoothing=FLAGS.label_smoothing)
 
   # Add weight decay to the loss for non-batch-normalization variables.
   loss = cross_entropy + FLAGS.weight_decay * tf.add_n(

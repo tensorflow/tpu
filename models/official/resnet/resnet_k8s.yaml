@@ -46,6 +46,9 @@ spec:
           # output model will be stored.
         - name: MODEL_BUCKET
           value: "gs://<my-model-bucket>/resnet"
+          # Point PYTHONPATH to the top level models folder
+        - name: PYTHONPATH
+          value: "/tensorflow_tpu_models/models"
         resources:
           limits:
             # Request a single v2-8 Cloud TPU device to train the model.

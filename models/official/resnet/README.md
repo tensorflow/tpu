@@ -2,6 +2,10 @@
 
 ## Prerequisites
 
+If you want to train the model on Cloud TPU through the managed service
+[Cloud Machine Learning Engine](cmle), skip to the [Train on Cloud Machine Learning Engine](#train-on-cloud-machine-learning-engine)
+section.
+
 ### Setup a Google Cloud project
 
 Follow the instructions at the [Quickstart Guide][quickstart-guide] to get a GCE
@@ -11,6 +15,7 @@ training of the ResNet algorithm.
 
 [quickstart-guide]: https://cloud.google.com/tpu/docs/quickstart
 [resnet-tutorial]: https://cloud.google.com/tpu/docs/tutorials/resnet
+[cmle]: https://cloud.google.com/ml-engine/
 
 To run this model, you will need:
 
@@ -32,7 +37,13 @@ fake dataset to test the model. It is located at
 
 ## Training the model
 
-Train the model by executing the following command (substituting the appropriate
+1. Add the top-level `/models` folder to the Python path with the command
+
+```
+export PYTHONPATH="$PYTHONPATH:/path/to/models"
+```
+
+1. Train the model by executing the following command (substituting the appropriate
 values):
 
 ```
@@ -130,6 +141,44 @@ curves and other metadata regarding your training run.
 
 [ssh-port-fwd]: https://cloud.google.com/solutions/connecting-securely#port-forwarding-over-ssh
 [socks-proxy]: https://cloud.google.com/solutions/connecting-securely#socks-proxy-over-ssh
+
+
+## Train on Cloud Machine Learning Engine
+
+To train this model on Machine Learning Engine, you will need:
+
+* A GCP project with Cloud Machine Learning Engine enabled
+* A GCS bucket to store your training checkpoints (the "model directory") and for staging the training package
+* (Optional): The ImageNet training and validation data preprocessed into
+  TFRecord format, and stored in GCS.
+
+Run the following command **from the top level `models` folder**:
+
+```
+GCS_BUCKET="gs://your-gcs-bucket"
+JOB_NAME="tpu_resnet_sample"
+REGION=us-central1
+DATA_DIR=gs://cloud-tpu-test-datasets/fake_imagenet
+
+BUCKET=$GCS_BUCKET
+JOB_DIR=$BUCKET"/"$JOB_NAME
+STAGING_BUCKET=$BUCKET
+OUTPUT_PATH=$JOB_DIR
+
+gcloud ml-engine jobs submit training $JOB_NAME \
+    --staging-bucket $STAGING_BUCKET \
+    --runtime-version 1.9 \
+    --scale-tier BASIC_TPU \
+    --module-name official.resnet.resnet_main \
+    --package-path official \
+    --region $REGION \
+    -- \
+    --data_dir=$DATA_DIR \
+    --model_dir=$OUTPUT_PATH \
+    --resnet_depth=50 \
+    --train_steps=1024
+```
+
 
 ## Understanding the code
 
