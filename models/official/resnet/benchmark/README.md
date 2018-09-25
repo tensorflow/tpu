@@ -9,7 +9,13 @@ generate checkpoints at every epoch and evaluate in a separate job.
 
 ## Instructions for training on single Cloud TPU
 
-Train the model (roughly 90 epochs, 1 checkpoint per epoch):
+1. Add the top-level `/models` folder to the Python path with the command
+
+```
+export PYTHONPATH="$PYTHONPATH:/path/to/models"
+```
+
+1. Train the model (roughly 90 epochs, 1 checkpoint per epoch):
 ```
 python resnet_benchmark.py \
   --tpu=[TPU NAME] \
@@ -21,7 +27,7 @@ python resnet_benchmark.py \
   --iterations_per_loop=1251
 ```
 
-Evaluate the model (run after train completes):
+1. Evaluate the model (run after train completes):
 ```
 python resnet_benchmark.py \
   --tpu=[TPU NAME] \

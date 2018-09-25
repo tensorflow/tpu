@@ -53,6 +53,8 @@ EPOCHS = 90  # Standard imagenet training regime.
 APPROX_IMAGENET_TRAINING_IMAGES = 1280000  # Approximate number of images.
 APPROX_IMAGENET_TEST_IMAGES = 48000  # Approximate number of images.
 
+BASE_LEARNING_RATE = 0.4
+
 WEIGHTS_TXT = '/tmp/resnet50_weights.h5'
 
 
@@ -80,7 +82,9 @@ def main(argv):
 
   logging.info('Compiling model.')
   model.compile(
-      optimizer=tf.train.GradientDescentOptimizer(learning_rate=1.0),
+      optimizer=tf.keras.optimizers.SGD(lr=BASE_LEARNING_RATE,
+                                        momentum=0.9,
+                                        nesterov=True),
       loss='sparse_categorical_crossentropy',
       metrics=['sparse_categorical_accuracy'])
 

@@ -106,13 +106,12 @@ def main(argv):
     logging.info('Save weights into %s', weights_path)
     model.save_weights(weights_path, overwrite=True)
 
-  # TODO(sourabhbajaj): Enable this once eval is supported
-  # logging.info('Evaluating the model on the validation dataset.')
-  # score = model.evaluate(
-  #     imagenet_eval.input_fn(),
-  #     steps=int(APPROX_IMAGENET_TEST_IMAGES // batch_size),
-  #     verbose=1)
-  # print('Evaluation score', score)
+  logging.info('Evaluating the model on the validation dataset.')
+  score = model.evaluate(
+      imagenet_eval.input_fn(),
+      steps=int(APPROX_IMAGENET_TEST_IMAGES // batch_size),
+      verbose=1)
+  logging.info('Evaluation score: %s', score)
 
 
 if __name__ == '__main__':

@@ -69,6 +69,8 @@ flags.DEFINE_string(
     'imagenet_username', None, 'Username for Imagenet.org account')
 flags.DEFINE_string(
     'imagenet_access_key', None, 'Access Key for Imagenet.org account')
+flags.DEFINE_boolean(
+    'gcs_upload', True, 'Set to false to not upload to gcs.')
 
 FLAGS = flags.FLAGS
 
@@ -444,12 +446,12 @@ def upload_to_gcs(training_records, validation_records):
 def main(argv):  # pylint: disable=unused-argument
   tf.logging.set_verbosity(tf.logging.INFO)
 
-  if FLAGS.project is None:
+  if FLAGS.gcs_upload and FLAGS.project is None:
     raise ValueError('GCS Project must be provided.')
 
-  if FLAGS.gcs_output_path is None:
+  if FLAGS.gcs_upload and FLAGS.gcs_output_path is None:
     raise ValueError('GCS output path must be provided.')
-  elif not FLAGS.gcs_output_path.startswith('gs://'):
+  elif FLAGS.gcs_upload and not FLAGS.gcs_output_path.startswith('gs://'):
     raise ValueError('GCS output path must start with gs://')
 
   if FLAGS.local_scratch_dir is None:
@@ -466,7 +468,8 @@ def main(argv):  # pylint: disable=unused-argument
   training_records, validation_records = convert_to_tf_records(raw_data_dir)
 
   # Upload to GCS
-  upload_to_gcs(training_records, validation_records)
+  if FLAGS.gcs_upload:
+    upload_to_gcs(training_records, validation_records)
 
 
 if __name__ == '__main__':

@@ -41,6 +41,9 @@ flags.DEFINE_integer(
     default=None,
     help='If set stops counting inclusive of end_step, else to the end.')
 
+flags.DEFINE_boolean(
+    'tpu', default=False, help='Read TPU event file.')
+
 
 def main(unused_argv):
   if not FLAGS.model_dir:
@@ -53,7 +56,11 @@ def main(unused_argv):
   current_step = 0
   start_time = 0
   max_wall_time = 0.0
-  event_file = tf.gfile.Glob(FLAGS.model_dir + 'events.out.tfevents.*')[0]
+
+  if FLAGS.tpu:
+    event_file = tf.gfile.Glob(FLAGS.model_dir + 'events.out.tfevents.*.n-*')[0]
+  else:
+    event_file = tf.gfile.Glob(FLAGS.model_dir + 'events.out.tfevents.*')[0]
 
   for e in tf.train.summary_iterator(event_file):
     current_step = e.step
