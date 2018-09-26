@@ -120,13 +120,17 @@ class ImageNetTFExampleInput(object):
     return image, label
 
   @abc.abstractmethod
-  def make_source_dataset(self):
+  def make_source_dataset(self, index, num_hosts):
     """Makes dataset of serialized TFExamples.
 
     The returned dataset will contain `tf.string` tensors, but these strings are
     serialized `TFExample` records that will be parsed by `dataset_parser`.
 
     If self.is_training, the dataset should be infinite.
+
+    Args:
+      index: current host index.
+      num_hosts: total number of hosts.
 
     Returns:
       A `tf.data.Dataset` object.
@@ -150,7 +154,10 @@ class ImageNetTFExampleInput(object):
     # tf.contrib.tpu.RunConfig for details.
     batch_size = params['batch_size']
 
-    dataset = self.make_source_dataset()
+    # TODO(dehao): Replace the following with params['context'].current_host
+    current_host = params["context"].current_input_fn_deployment()[1]
+    dataset = self.make_source_dataset(current_host,
+                                       params['context'].num_hosts)
 
     # Use the fused map-and-batch operation.
     #
@@ -205,9 +212,7 @@ class ImageNetInput(ImageNetTFExampleInput):
                data_dir,
                image_size=224,
                num_parallel_calls=64,
-               cache=False,
-               num_replicas=None,
-               replica=0):
+               cache=False):
     """Create an input from TFRecord files.
 
     Args:
@@ -220,9 +225,6 @@ class ImageNetInput(ImageNetTFExampleInput):
           and blank labels.
       num_parallel_calls: concurrency level to use when reading data from disk.
       cache: if true, fill the dataset by repeating from its cache
-      num_replicas: `int` for the number of model replicas this dataset should
-          be sharded onto, or `None` if this dataset should not be sharded.
-      replica: `int` for the replica that input_fn should produce data for
     """
     super(ImageNetInput, self).__init__(
         is_training=is_training,
@@ -235,8 +237,6 @@ class ImageNetInput(ImageNetTFExampleInput):
       self.data_dir = None
     self.num_parallel_calls = num_parallel_calls
     self.cache = cache
-    self.num_replicas = num_replicas
-    self.replica = replica
 
   def _get_null_input(self, data):
     """Returns a null image (all black pixels).
@@ -258,7 +258,7 @@ class ImageNetInput(ImageNetTFExampleInput):
       return value, tf.constant(0, tf.int32)
     return super(ImageNetInput, self).dataset_parser(value)
 
-  def make_source_dataset(self):
+  def make_source_dataset(self, index, num_hosts):
     """See base class."""
     if not self.data_dir:
       tf.logging.info('Undefined data_dir implies null input')
@@ -267,11 +267,12 @@ class ImageNetInput(ImageNetTFExampleInput):
     # Shuffle the filenames to ensure better randomization.
     file_pattern = os.path.join(
         self.data_dir, 'train-*' if self.is_training else 'validation-*')
-    dataset = tf.data.Dataset.list_files(file_pattern, shuffle=self.is_training)
 
-    # Shard the data into `num_replicas` parts, get the part for `replica`
-    if self.num_replicas:
-      dataset = dataset.shard(self.num_replicas, self.replica)
+    # For multi-host training, we want each hosts to always process the same
+    # subset of files.  Each host only sees a subset of the entire dataset,
+    # allowing us to cache larger datasets in memory.
+    dataset = tf.data.Dataset.list_files(file_pattern, shuffle=False)
+    dataset = dataset.shard(num_hosts, index)
 
     if self.is_training and not self.cache:
       dataset = dataset.repeat()
@@ -323,7 +324,7 @@ class ImageNetBigtableInput(ImageNetTFExampleInput):
         transpose_input=transpose_input)
     self.selection = selection
 
-  def make_source_dataset(self):
+  def make_source_dataset(self, index, num_hosts):
     """See base class."""
     data = self.selection
     client = tf.contrib.cloud.BigtableClient(data.project, data.instance)

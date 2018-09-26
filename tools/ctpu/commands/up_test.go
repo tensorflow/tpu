@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"context"
+	"github.com/tensorflow/tpu/tools/ctpu/config"
 	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/tpu/v1alpha1"
 )
@@ -219,5 +220,49 @@ func TestUpImageFamily(t *testing.T) {
 		if testcase.want != got {
 			t.Errorf("upCmd{tfVersion: %q}.gceImageFamily() = %q, want %q", testcase.tfVersion, got, testcase.want)
 		}
+	}
+}
+
+func TestCanoncalizeGCEImage(t *testing.T) {
+	projectName := "test-project-name"
+
+	testcases := []struct {
+		input string
+		want  string
+	}{{
+		input: "my-image",
+		want:  "https://www.googleapis.com/compute/v1/projects/test-project-name/global/images/my-image",
+	}, {
+		input: "other-project/my-image",
+		want:  "https://www.googleapis.com/compute/v1/projects/other-project/global/images/my-image",
+	}, {
+		input: "https://www.googleapis.com/compute/v1/projects/test-project-name/global/images/my-other-image",
+		want:  "https://www.googleapis.com/compute/v1/projects/test-project-name/global/images/my-other-image",
+	}, {
+		input: "https://www.googleapis.com/compute/v1/projects/other-project-name/global/images/my-perfect-image",
+		want:  "https://www.googleapis.com/compute/v1/projects/other-project-name/global/images/my-perfect-image",
+	}, {
+		input: "foo/bar/baz",
+		want:  "",
+	}}
+
+	for _, tt := range testcases {
+		t.Run(tt.input, func(t *testing.T) {
+			cfg := &config.Config{Project: projectName}
+			c := upCmd{cfg: cfg, gceImage: tt.input}
+			err := c.canonicalizeGCEImage()
+			if tt.want == "" {
+				if err == nil {
+					t.Errorf("Wanted non-nil error; got nil error.")
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("c.canonicalizeGCEImage() = %#v, want: <nil>", err)
+				}
+				if tt.want != c.gceImage {
+					t.Errorf("c.gceImage = %q, want: %q", c.gceImage, tt.want)
+				}
+			}
+		})
 	}
 }
