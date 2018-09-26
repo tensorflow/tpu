@@ -209,6 +209,9 @@ flags.DEFINE_bool('enable_lars',
 flags.DEFINE_float('poly_rate', default=0.0,
                    help=('Set LARS/Poly learning rate.'))
 
+flags.DEFINE_bool(
+    'use_cache', default=True, help=('Enable cache for training input.'))
+
 # Learning rate schedule
 LR_SCHEDULE = [    # (multiplier, epoch to start) tuples
     (1.0, 5), (0.1, 30), (0.01, 60), (0.001, 80)
@@ -497,7 +500,6 @@ def _select_tables_from_flags():
       for p in (train_prefix, eval_prefix)
   ]
 
-
 def main(unused_argv):
   tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
       FLAGS.tpu if (FLAGS.tpu or FLAGS.use_tpu) else '',
@@ -543,12 +545,15 @@ def main(unused_argv):
       tf.logging.info('Using fake dataset.')
     else:
       tf.logging.info('Using dataset: %s', FLAGS.data_dir)
-    imagenet_train, imagenet_eval = [imagenet_input.ImageNetInput(
-        is_training=is_training,
-        data_dir=FLAGS.data_dir,
-        transpose_input=FLAGS.transpose_input,
-        num_parallel_calls=FLAGS.num_parallel_calls,
-        use_bfloat16=use_bfloat16) for is_training in [True, False]]
+    imagenet_train, imagenet_eval = [
+        imagenet_input.ImageNetInput(
+            is_training=is_training,
+            data_dir=FLAGS.data_dir,
+            transpose_input=FLAGS.transpose_input,
+            cache=FLAGS.use_cache and is_training,
+            num_parallel_calls=FLAGS.num_parallel_calls,
+            use_bfloat16=use_bfloat16) for is_training in [True, False]
+    ]
 
   steps_per_epoch = FLAGS.num_train_images // FLAGS.train_batch_size
   eval_steps = FLAGS.num_eval_images // FLAGS.eval_batch_size

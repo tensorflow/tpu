@@ -18,6 +18,7 @@ package commands
 import (
 	"fmt"
 	"log"
+	"regexp"
 	"strings"
 
 	"context"
@@ -182,6 +183,36 @@ details, see the documentation at:
       https://github.com/tensorflow/tpu/tools/ctpu
 
 `)
+}
+
+var fullGCEImageRegex = regexp.MustCompile("https://www.googleapis.com/compute/v1/projects/[^/]+/global/images/[^/]+")
+
+func (c *upCmd) canonicalizeGCEImage() error {
+	if c.gceImage == "" {
+		return nil
+	}
+
+	if fullGCEImageRegex.MatchString(c.gceImage) {
+		return nil
+	}
+
+	splits := strings.Split(c.gceImage, "/")
+	if len(splits) > 2 {
+		return fmt.Errorf("invalid GCE Image specified (%q); must be either (1) a fully specified URL, (2) \"image_name\", or (3) \"project_Name/image_name\"", c.gceImage)
+	}
+
+	var imageName, projectName string
+	if len(splits) == 1 {
+		imageName = splits[0]
+		projectName = c.cfg.Project
+	}
+	if len(splits) == 2 {
+		imageName = splits[1]
+		projectName = splits[0]
+	}
+	c.gceImage = fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/global/images/%s", projectName, imageName)
+
+	return nil
 }
 
 func (c *upCmd) upVM() error {
