@@ -91,9 +91,11 @@ type upCmd struct {
 	forwardPorts     bool
 	forwardAgent     bool
 	tfVersion        string
+	requirePerms     bool
 
 	// VM parameters
 	gceImage      string
+	dlImage       bool // Use the Deep Learning VM images instead of the TPU specific ones.
 	diskSizeGb    int64
 	machineType   string
 	preemptibleVM bool
@@ -132,9 +134,12 @@ func (c *upCmd) SetFlags(f *flag.FlagSet) {
 		"Enable ssh agent forwarding when sshing into the Compute Engine VM. (SSH Agent Forwarding enables access to shared repositories (e.g. github) without having to place private keys on the Compute Engine VM.)")
 	f.StringVar(&c.tfVersion, "tf-version", "",
 		"Set the version of TensorFlow to use when creating the Compute Engine VM and the Cloud TPU. (It defaults to auto-selecting the latest stable release.)")
+	// Note: because some users won't be OWNERS of their projects, and because bucket-level permissions can be used, default is set to not require permissions.
+	f.BoolVar(&c.requirePerms, "require-permissions", false, "Stop the TPU setup if modification of Cloud IAM permissions fails. By default, ctpu prints a warning message then continues with the setup.")
 
 	f.StringVar(&c.gceImage, "gce-image", "",
 		"Override the automatically chosen Compute Engine Image. Use this flag when you're using your own custom images instead of the provided ones with TensorFlow pre-installed.")
+	f.BoolVar(&c.dlImage, "use-dl-images", false, "Use Deep Learning VM Images (see docs: https://cloud.google.com/deep-learning-vm/) instead of TPU-specific machine images. Defaults to TPU-specific images.")
 	f.Int64Var(&c.diskSizeGb, "disk-size-gb", 250, "Configures the root volume size of your Compute Engine VM.")
 	f.StringVar(&c.machineType, "machine-type", "n1-standard-2", "Configures the size of your Compute Engine VM.")
 	f.BoolVar(&c.preemptibleVM, "preemptible-vm", false, "Create a preemptible Compute Engine VM, instead of a normal (non-preemptible) VM. A preemptible VM costs less per hour, but the Compute Engine service can terminate the instance at any time.")
@@ -165,6 +170,9 @@ func (c *upCmd) gceImageFamily() (string, error) {
 	}
 	if parsed.Modifier != "" {
 		return "", fmt.Errorf("invalid tensorflow version %q (non-empty modifier); please set the --gce-image flag", c.tfVersion)
+	}
+	if c.dlImage {
+		return fmt.Sprintf("tf-%d-%d-gpu", parsed.Major, parsed.Minor), nil
 	}
 	return fmt.Sprintf("tf-%d-%d", parsed.Major, parsed.Minor), nil
 }
@@ -314,8 +322,12 @@ func (c *upCmd) upTPU(ctx context.Context) (*ctrl.TPUInstance, error) {
 		}
 		err = c.rmg.AddTPUUserAgent(tpu.ServiceAccount)
 		if err != nil {
-			log.Printf("error adding the TPU's service account to the project's access control lists: %#v", err)
-			return nil, err
+			if c.requirePerms {
+				// Error out.
+				log.Printf("Error adding the TPU's service account to the project's access control lists: %#v", err)
+				return nil, err
+			}
+			log.Print("Warning: ctpu encountered an error when adding the TPU's service account to your project's access control lists. Some integrations (for example: Cloud Storage) may fail until you (or your GCP project's owner) adds appropriate permissions (see: https://cloud.google.com/tpu/docs/storage-buckets#storage_access). Pass --require-permissions to turn this warning into an error and get a more detailed error message.")
 		}
 	} else if !tpu.IsRunning() {
 		err := fmt.Errorf("the TPU exists, but is not running... aborting")
