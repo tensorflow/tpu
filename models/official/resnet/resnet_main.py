@@ -24,12 +24,14 @@ import time
 from absl import flags
 import absl.logging as _logging  # pylint: disable=unused-import
 import tensorflow as tf
-from official.resnet import imagenet_input
-from official.resnet import lars_util
-from official.resnet import resnet_model
+import imagenet_input
+import lars_util
+import resnet_model
 from tensorflow.contrib import summary
+from tensorflow.contrib.tpu.python.tpu import async_checkpoint
 from tensorflow.contrib.training.python.training import evaluation
 from tensorflow.python.estimator import estimator
+
 
 FLAGS = flags.FLAGS
 
@@ -211,6 +213,9 @@ flags.DEFINE_float('poly_rate', default=0.0,
 
 flags.DEFINE_bool(
     'use_cache', default=True, help=('Enable cache for training input.'))
+
+flags.DEFINE_bool(
+    'use_async_checkpointing', default=False, help=('Enable async checkpoint'))
 
 # Learning rate schedule
 LR_SCHEDULE = [    # (multiplier, epoch to start) tuples
@@ -500,21 +505,27 @@ def _select_tables_from_flags():
       for p in (train_prefix, eval_prefix)
   ]
 
+
 def main(unused_argv):
   tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
       FLAGS.tpu if (FLAGS.tpu or FLAGS.use_tpu) else '',
       zone=FLAGS.tpu_zone,
       project=FLAGS.gcp_project)
 
+  if FLAGS.use_async_checkpointing:
+    save_checkpoints_steps = None
+  else:
+    save_checkpoints_steps = max(100, FLAGS.iterations_per_loop)
   config = tf.contrib.tpu.RunConfig(
       cluster=tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
-      save_checkpoints_steps=max(600, FLAGS.iterations_per_loop),
+      save_checkpoints_steps=save_checkpoints_steps,
       log_step_count_steps=FLAGS.log_step_count_steps,
       tpu_config=tf.contrib.tpu.TPUConfig(
           iterations_per_loop=FLAGS.iterations_per_loop,
           num_shards=FLAGS.num_cores,
-          per_host_input_for_training=tf.contrib.tpu.InputPipelineConfig.PER_HOST_V2))  # pylint: disable=line-too-long
+          per_host_input_for_training=tf.contrib.tpu.InputPipelineConfig
+          .PER_HOST_V2))  # pylint: disable=line-too-long
 
   resnet_classifier = tf.contrib.tpu.TPUEstimator(
       use_tpu=FLAGS.use_tpu,
@@ -602,8 +613,16 @@ def main(unused_argv):
     start_timestamp = time.time()  # This time will include compilation time
 
     if FLAGS.mode == 'train':
+      hooks = []
+      if FLAGS.use_async_checkpointing:
+        hooks.append(
+            async_checkpoint.AsyncCheckpointSaverHook(
+                checkpoint_dir=FLAGS.model_dir,
+                save_steps=max(100, FLAGS.iterations_per_loop)))
       resnet_classifier.train(
-          input_fn=imagenet_train.input_fn, max_steps=FLAGS.train_steps)
+          input_fn=imagenet_train.input_fn,
+          max_steps=FLAGS.train_steps,
+          hooks=hooks)
 
     else:
       assert FLAGS.mode == 'train_and_eval'

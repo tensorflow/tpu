@@ -32,6 +32,10 @@ import tensorflow as tf
 
 flags.DEFINE_bool('use_tpu', True, 'Use TPU model instead of CPU.')
 flags.DEFINE_string('tpu', None, 'Name of the TPU to use.')
+flags.DEFINE_string(
+    'model_dir', None,
+    ('The directory where the model and training/evaluation summaries '
+     'are stored. If unset, no summaries will be stored.'))
 
 flags.DEFINE_bool('fake_data', False, 'Use fake data to test functionality.')
 
@@ -105,10 +109,15 @@ def main(unused_dev):
       optimizer=tf.train.GradientDescentOptimizer(learning_rate=0.05),
       metrics=['accuracy'])
 
+  callbacks = []
+  if FLAGS.model_dir:
+    callbacks = [tf.keras.callbacks.TensorBoard(log_dir=FLAGS.model_dir)]
+
   model.fit(
       x_train,
       y_train,
       batch_size=BATCH_SIZE,
+      callbacks=callbacks,
       epochs=EPOCHS,
       verbose=1,
       validation_data=(x_test, y_test))
