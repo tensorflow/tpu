@@ -244,6 +244,7 @@ func (c *upCmd) upVM() error {
 				ImageName:         c.gceImage,
 				MachineType:       c.machineType,
 				DiskSizeGb:        c.diskSizeGb,
+				Preemptible:       c.preemptibleVM,
 			}
 			op, err := c.gce.CreateInstance(req)
 			if err != nil {
