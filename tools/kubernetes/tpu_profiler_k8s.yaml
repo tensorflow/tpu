@@ -1,0 +1,42 @@
+# Run TPU Profiler on Google Kubernetes Engine to generate TPU tracing data.
+#
+# https://cloud.google.com/tpu/docs/kubernetes-engine-setup
+#
+# [Instructions]
+#   1. Change the environment variable TPU_NAME below to the name of the Cloud
+#      TPU you want to profile.
+#   2. Change the environment variable MODEL_BUCKET below to the Google Cloud
+#      Storage location where the output model and the TensorFlow events exist.
+#   3. Run `kubectl create -f tpu_profiler_k8s.yaml`.
+#   4. See the results on TensorBoard.
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: tpu-profiler-
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: tpu-profiler
+        # The official TensorFlow 1.9 TPU utility image built from https://github.com/tensorflow/tpu/blob/r1.9/tools/docker/Dockerfile.util.
+        image: gcr.io/tensorflow/tpu-util:r1.9
+        command:
+        - capture_tpu_profile
+        - --tpu=$(TPU_NAME)
+        - --logdir=$(MODEL_BUCKET)
+        - --duration_ms=$(TRACING_DURATION_IN_MS)
+        env:
+          # [REQUIRED] Must specify the name of the Cloud TPU.
+          # See https://cloud.google.com/tpu/docs/kubernetes-engine-setup to
+          # get the name of the Cloud TPU used by your pod.
+        - name: TPU_NAME
+          value: my-tpu
+          # [REQUIRED] Must specify the Google Cloud Storage location where
+          # your output model and TensorFlow events are stored.
+        - name: MODEL_BUCKET
+          value: gs://my-project/my-model
+          # How long the profiling should last (in millisecond).
+        - name: TRACING_DURATION_IN_MS
+          value: "2000"
