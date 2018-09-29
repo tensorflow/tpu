@@ -23,7 +23,7 @@ from collections import namedtuple
 import functools
 import os
 import tensorflow as tf
-import resnet_preprocessing
+from official.resnet import resnet_preprocessing
 
 def image_serving_input_fn():
   """Serving input fn for raw images."""

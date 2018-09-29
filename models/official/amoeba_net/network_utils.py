@@ -289,14 +289,14 @@ class BaseCell(object):
 
   def __init__(self, num_conv_filters, operations, used_hiddenstates,
                hiddenstate_indices, drop_path_keep_prob, total_num_cells,
-               total_training_steps):
+               drop_path_burn_in_steps):
     self._num_conv_filters = num_conv_filters
     self._operations = operations
     self._used_hiddenstates = used_hiddenstates
     self._hiddenstate_indices = hiddenstate_indices
     self._drop_path_keep_prob = drop_path_keep_prob
     self._total_num_cells = total_num_cells
-    self._total_training_steps = total_training_steps
+    self._drop_path_burn_in_steps = drop_path_burn_in_steps
 
   def _reduce_prev_layer(self, prev_layer, curr_layer):
     """Matches dimension of prev_layer to the curr_layer."""
@@ -518,11 +518,11 @@ class BaseCell(object):
     Args:
       net: the Tensor that gets drop_path regularization applied.
       current_step: a float32 Tensor with the current global_step value,
-        to be divided by hparams.total_training_steps. Usually None, which
+        to be divided by hparams.drop_path_burn_in_steps. Usually None, which
         defaults to tf.train.get_or_create_global_step() properly casted.
       drop_connect_version: one of 'v1', 'v2', 'v3', controlling whether
-        the dropout rate is scaled by current_step (v1), layer (v2), or
-        both (v1, the default).
+        the dropout rate is scaled by current_step (v1, the default),
+        layer (v2), or both (v3).
 
     Returns:
       The dropped-out value of `net`.
@@ -538,14 +538,14 @@ class BaseCell(object):
         layer_ratio = (self._cell_num + 1)/float(num_cells)
         drop_path_keep_prob = 1 - layer_ratio * (1 - drop_path_keep_prob)
       if drop_connect_version in ['v1', 'v3']:
-        # Decrease the keep probability over time
-        if not current_step:
-          current_step = tf.cast(tf.train.get_or_create_global_step(),
-                                 tf.float32)
-        drop_path_burn_in_steps = self._total_training_steps
-        current_ratio = current_step / drop_path_burn_in_steps
-        current_ratio = tf.minimum(1.0, current_ratio)
-        drop_path_keep_prob = (1 - current_ratio * (1 - drop_path_keep_prob))
+        if self._drop_path_burn_in_steps:
+          # Decrease the keep probability over time
+          current_step = (
+              current_step or
+              tf.cast(tf.train.get_or_create_global_step(), tf.float32))
+          current_ratio = current_step / self._drop_path_burn_in_steps
+          current_ratio = tf.minimum(1.0, current_ratio)
+          drop_path_keep_prob = (1 - current_ratio * (1 - drop_path_keep_prob))
       net = drop_path(net, drop_path_keep_prob)
     return net
 

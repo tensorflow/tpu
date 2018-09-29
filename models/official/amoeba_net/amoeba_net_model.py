@@ -217,10 +217,10 @@ class AmoebaNetEstimatorModel(object):
     is_predict = (mode == tf.estimator.ModeKeys.PREDICT)
     steps_per_epoch = float(NUM_TRAIN_IMAGES) / self.hparams.train_batch_size
     num_total_steps = int(steps_per_epoch * self.hparams.num_epochs)
-    if getattr(self.hparams, 'num_total_steps', None) is None:
-      self.hparams.add_hparam('num_total_steps', num_total_steps)
+    if getattr(self.hparams, 'drop_path_burn_in_steps', None) is None:
+      self.hparams.add_hparam('drop_path_burn_in_steps', num_total_steps)
     else:
-      self.hparams.set_hparam('num_total_steps', num_total_steps)
+      self.hparams.set_hparam('drop_path_burn_in_steps', num_total_steps)
 
     hparams = copy.deepcopy(self.hparams)
     if not is_training:
@@ -409,11 +409,12 @@ class InputPipeline(object):
     is_training: `bool` for whether the input is for training
   """
 
-  def __init__(self, is_training, data_dir, hparams):
+  def __init__(self, is_training, data_dir, hparams, eval_from_hub=False):
     self.is_training = is_training
     self.data_dir = data_dir
     self.hparams = hparams
     self.num_classes = 1001
+    self.eval_from_hub = eval_from_hub
 
   def _dataset_parser(self, serialized_proto):
     """Parse an Imagenet record from value."""
@@ -451,6 +452,8 @@ class InputPipeline(object):
         output_height=self.hparams.image_size,
         output_width=self.hparams.image_size,
         is_training=self.is_training,
+        # If eval_from_hub, do not scale the images during preprocessing.
+        scaled_images=not self.eval_from_hub,
         bbox=bbox)
 
     label = tf.cast(

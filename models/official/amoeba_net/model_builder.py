@@ -296,7 +296,8 @@ def build_network(inputs,
 
   Args:
     inputs: a tensor of size [batch_size, height, width, channels].
-    num_classes: number of classes needed to be predicted by the model.
+    num_classes: number of classes needed to be predicted by the model. If None,
+                 only returns the feature vector endpoints after global_pool.
     is_training: whether is training or not.
       Useful for fine-tuning a model with different num_classes.
     hparams: hparams used to construct the imagenet model.
@@ -311,21 +312,16 @@ def build_network(inputs,
                      hparams.num_reduction_layers +
                      hparams.num_stem_cells)
   normal_cell = network_utils.BaseCell(
-      hparams.reduction_size,
-      hparams.normal_cell_operations,
+      hparams.reduction_size, hparams.normal_cell_operations,
       hparams.normal_cell_used_hiddenstates,
-      hparams.normal_cell_hiddenstate_indices,
-      hparams.drop_connect_keep_prob,
-      total_num_cells,
-      hparams.num_total_steps)
+      hparams.normal_cell_hiddenstate_indices, hparams.drop_connect_keep_prob,
+      total_num_cells, hparams.drop_path_burn_in_steps)
   reduction_cell = network_utils.BaseCell(
-      hparams.reduction_size,
-      hparams.reduction_cell_operations,
+      hparams.reduction_size, hparams.reduction_cell_operations,
       hparams.reduction_cell_used_hiddenstates,
       hparams.reduction_cell_hiddenstate_indices,
-      hparams.drop_connect_keep_prob,
-      total_num_cells,
-      hparams.num_total_steps)
+      hparams.drop_connect_keep_prob, total_num_cells,
+      hparams.drop_path_burn_in_steps)
   num_shards = hparams.num_shards
   distributed_group_size = hparams.distributed_group_size
   assert distributed_group_size == 1 or hparams.use_tpu
@@ -415,6 +411,8 @@ def _build_network_base(images,
     net = tf.nn.relu(net)
     net = network_utils.global_avg_pool(net)
     end_points['global_pool'] = net
+    if not num_classes:
+      return net, end_points
     net = slim.dropout(net, hparams.dense_dropout_keep_prob, scope='dropout')
     logits = slim.fully_connected(net, num_classes)
   logits = tf.cast(logits, tf.float32)

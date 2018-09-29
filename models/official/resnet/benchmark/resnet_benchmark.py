@@ -31,8 +31,8 @@ import tensorflow as tf
 # For Cloud environment, add parent directory for imports
 sys.path.append(os.path.dirname(os.path.abspath(sys.path[0])))
 
-import imagenet_input    # pylint: disable=g-import-not-at-top
-import resnet_main
+from official.resnet import imagenet_input    # pylint: disable=g-import-not-at-top
+from official.resnet import resnet_main
 from tensorflow.python.estimator import estimator
 
 
