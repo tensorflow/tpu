@@ -285,8 +285,6 @@ def preprocess_for_train(image, height, width, bbox,
     if add_image_summaries:
       tf.summary.image('final_distorted_image',
                        tf.expand_dims(distorted_image, 0))
-    distorted_image = tf.subtract(distorted_image, 0.5)
-    distorted_image = tf.multiply(distorted_image, 2.0)
     return distorted_image
 
 
@@ -326,14 +324,15 @@ def preprocess_for_eval(image, height, width,
       image = tf.image.resize_bilinear(image, [height, width],
                                        align_corners=False)
       image = tf.squeeze(image, [0])
-    image = tf.subtract(image, 0.5)
-    image = tf.multiply(image, 2.0)
     image.set_shape([height, width, 3])
     return image
 
 
-def preprocess_image(image, output_height, output_width,
+def preprocess_image(image,
+                     output_height,
+                     output_width,
                      is_training=False,
+                     scaled_images=True,
                      bbox=None,
                      fast_mode=True,
                      add_image_summaries=False):
@@ -349,6 +348,8 @@ def preprocess_image(image, output_height, output_width,
     output_width: integer, image expected width.
     is_training: Boolean. If true it would transform an image for train,
       otherwise it would transform it for evaluation.
+    scaled_images: Whether to scale pixel values to the range [-1, 1].
+      If set to false, pixel values are in the range [0, 1].
     bbox: 3-D float Tensor of bounding boxes arranged [1, num_boxes, coords]
       where each coordinate is [0, 1) and the coordinates are arranged as
       [ymin, xmin, ymax, xmax].
@@ -362,8 +363,16 @@ def preprocess_image(image, output_height, output_width,
     ValueError: if user does not provide bounding box
   """
   if is_training:
-    return preprocess_for_train(image, output_height, output_width, bbox,
-                                fast_mode,
-                                add_image_summaries=add_image_summaries)
+    image = preprocess_for_train(
+        image,
+        output_height,
+        output_width,
+        bbox,
+        fast_mode,
+        add_image_summaries=add_image_summaries)
   else:
-    return preprocess_for_eval(image, output_height, output_width)
+    image = preprocess_for_eval(image, output_height, output_width)
+  if scaled_images:
+    image = tf.subtract(image, 0.5)
+    image = tf.multiply(image, 2.0)
+  return image

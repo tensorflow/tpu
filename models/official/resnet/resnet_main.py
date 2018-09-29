@@ -24,9 +24,9 @@ import time
 from absl import flags
 import absl.logging as _logging  # pylint: disable=unused-import
 import tensorflow as tf
-import imagenet_input
-import lars_util
-import resnet_model
+from official.resnet import imagenet_input
+from official.resnet import lars_util
+from official.resnet import resnet_model
 from tensorflow.contrib import summary
 from tensorflow.contrib.tpu.python.tpu import async_checkpoint
 from tensorflow.contrib.training.python.training import evaluation
