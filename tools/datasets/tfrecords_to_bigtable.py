@@ -23,7 +23,7 @@ Sample usage:
 
 ```
 python tfrecords_to_bigtable.py --source_glob=gs://my_bucket/path/to/files/* \
-   --bigtable_instance=my_bigtable_instance --bigtable=my_table_name         \
+   --bigtable_instance=my_bigtable_instance --bigtable_table=my_table_name   \
    [ --project=my_project_id_or_number ] [ --num_records=50000 ]  # Optional.
 ```
 
@@ -89,8 +89,8 @@ import tensorflow as tf
 flags.DEFINE_string('source_glob', None, 'The source TFRecord files to read '
                     'from and push into Cloud Bigtable.')
 flags.DEFINE_string('bigtable_instance', None, 'The Cloud Bigtable instance.')
-flags.DEFINE_string('bigtable', None, 'The table within the instance to write '
-                    'to.')
+flags.DEFINE_string('bigtable_table', None, 'The table within the instance to '
+                    'write to.')
 flags.DEFINE_string('project', None, 'The Project to use. (Optional if running '
                     'on a Compute Engine VM, as it can be auto-determined from '
                     'the metadata service.)')
@@ -171,7 +171,7 @@ def make_bigtable_client_and_table():
   instance = FLAGS.bigtable_instance
   if instance is None:
     raise ValueError('Please set an instance on the command line.')
-  table_name = FLAGS.bigtable
+  table_name = FLAGS.bigtable_table
   if table_name is None:
     raise ValueError('Please set a table on the command line.')
   client = tf.contrib.cloud.BigtableClient(project, instance)
