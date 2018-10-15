@@ -28,6 +28,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import collections
+
 import hashlib
 import io
 import json
@@ -48,10 +50,10 @@ flags.DEFINE_boolean('include_masks', False,
 flags.DEFINE_string('train_image_dir', '', 'Training image directory.')
 flags.DEFINE_string('val_image_dir', '', 'Validation image directory.')
 flags.DEFINE_string('test_image_dir', '', 'Test image directory.')
-flags.DEFINE_string('train_annotations_file', '',
-                    'Training annotations JSON file.')
-flags.DEFINE_string('val_annotations_file', '',
-                    'Validation annotations JSON file.')
+flags.DEFINE_string('train_object_annotations_file', '', '')
+flags.DEFINE_string('val_object_annotations_file', '', '')
+flags.DEFINE_string('train_caption_annotations_file', '', '')
+flags.DEFINE_string('val_caption_annotations_file', '', '')
 flags.DEFINE_string('testdev_annotations_file', '',
                     'Test-dev annotations JSON file.')
 flags.DEFINE_string('output_dir', '/tmp/', 'Output data directory.')
@@ -62,7 +64,8 @@ tf.logging.set_verbosity(tf.logging.INFO)
 
 
 def create_tf_example(image,
-                      annotations_list,
+                      bbox_annotations,
+                      caption_annotations,
                       image_dir,
                       category_index,
                       include_masks=False):
@@ -72,7 +75,7 @@ def create_tf_example(image,
     image: dict with keys:
       [u'license', u'file_name', u'coco_url', u'height', u'width',
       u'date_captured', u'flickr_url', u'id']
-    annotations_list:
+    bbox_annotations:
       list of dicts with keys:
       [u'segmentation', u'area', u'iscrowd', u'image_id',
       u'bbox', u'category_id', u'id']
@@ -117,7 +120,7 @@ def create_tf_example(image,
   area = []
   encoded_mask_png = []
   num_annotations_skipped = 0
-  for object_annotations in annotations_list:
+  for object_annotations in bbox_annotations:
     (x, y, width, height) = tuple(object_annotations['bbox'])
     if width <= 0 or height <= 0:
       num_annotations_skipped += 1
@@ -145,6 +148,11 @@ def create_tf_example(image,
       output_io = io.BytesIO()
       pil_image.save(output_io, format='PNG')
       encoded_mask_png.append(output_io.getvalue())
+
+  captions = []
+  for caption_annotation in caption_annotations:
+    captions.append(caption_annotation['caption'].encode('utf8'))
+
   feature_dict = {
       'image/height':
           dataset_util.int64_feature(image_height),
@@ -158,6 +166,8 @@ def create_tf_example(image,
           dataset_util.bytes_feature(key.encode('utf8')),
       'image/encoded':
           dataset_util.bytes_feature(encoded_jpg),
+      'image/caption':
+        dataset_util.bytes_list_feature(captions),
       'image/format':
           dataset_util.bytes_feature('jpeg'.encode('utf8')),
       'image/object/bbox/xmin':
@@ -188,43 +198,68 @@ def _pool_create_tf_example(args):
   return create_tf_example(*args)
 
 
+def _load_object_annotations(object_annotations_file):
+  with tf.gfile.GFile(object_annotations_file, 'r') as fid:
+    obj_annotations = json.load(fid)
+
+  images = obj_annotations['images']
+  category_index = label_map_util.create_category_index(
+      obj_annotations['categories'])
+
+  img_to_obj_annotation = collections.defaultdict(list)
+  tf.logging.info('Building bounding box index.')
+  for annotation in obj_annotations['annotations']:
+    image_id = annotation['image_id']
+    img_to_obj_annotation[image_id].append(annotation)
+
+  missing_annotation_count = 0
+  for image in images:
+    image_id = image['id']
+    if image_id not in img_to_obj_annotation:
+      missing_annotation_count += 1
+
+  tf.logging.info('%d images are missing bboxes.', missing_annotation_count)
+
+  return images, img_to_obj_annotation, category_index
+
+
+def _load_caption_annotations(caption_annotations_file):
+  with tf.gfile.GFile(caption_annotations_file, 'r') as fid:
+    caption_annotations = json.load(fid)
+
+  img_to_caption_annotation = collections.defaultdict(list)
+  tf.logging.info('Building caption index.')
+  for annotation in caption_annotations['annotations']:
+    image_id = annotation['image_id']
+    img_to_caption_annotation[image_id].append(annotation)
+
+  missing_annotation_count = 0
+  images = caption_annotations['images']
+  for image in images:
+    image_id = image['id']
+    if image_id not in img_to_caption_annotation:
+      missing_annotation_count += 1
+
+  tf.logging.info('%d images are missing captions.', missing_annotation_count)
+
+  return img_to_caption_annotation
+
+
 def _create_tf_record_from_coco_annotations(
-    annotations_file, image_dir, output_path, include_masks, num_shards):
+    object_annotations_file,
+    caption_annotations_file,
+    image_dir, output_path, include_masks, num_shards):
   """Loads COCO annotation json files and converts to tf.Record format.
 
   Args:
-    annotations_file: JSON file containing bounding box annotations.
+    object_annotations_file: JSON file containing bounding box annotations.
+    caption_annotations_file: JSON file containing caption annotations.
     image_dir: Directory containing the image files.
     output_path: Path to output tf.Record file.
     include_masks: Whether to include instance segmentations masks
       (PNG encoded) in the result. default: False.
     num_shards: Number of output files to create.
   """
-  with tf.gfile.GFile(annotations_file, 'r') as fid:
-    groundtruth_data = json.load(fid)
-
-  images = groundtruth_data['images']
-  category_index = label_map_util.create_category_index(
-      groundtruth_data['categories'])
-
-  annotations_index = {}
-  if 'annotations' in groundtruth_data:
-    tf.logging.info(
-        'Found groundtruth annotations. Building annotations index.')
-    for annotation in groundtruth_data['annotations']:
-      image_id = annotation['image_id']
-      if image_id not in annotations_index:
-        annotations_index[image_id] = []
-      annotations_index[image_id].append(annotation)
-  missing_annotation_count = 0
-  for image in images:
-    image_id = image['id']
-    if image_id not in annotations_index:
-      missing_annotation_count += 1
-      annotations_index[image_id] = []
-
-  tf.logging.info('%d images are missing annotations.',
-                  missing_annotation_count)
 
   tf.logging.info('writing to output path: %s', output_path)
   writers = [
@@ -232,12 +267,23 @@ def _create_tf_record_from_coco_annotations(
                                   (i, num_shards)) for i in range(num_shards)
   ]
 
+  images, img_to_obj_annotation, category_index = (
+    _load_object_annotations(object_annotations_file)
+  )
+  img_to_caption_annotation = (
+    _load_caption_annotations(caption_annotations_file)
+  )
+
   pool = multiprocessing.Pool()
   total_num_annotations_skipped = 0
   for idx, (_, tf_example, num_annotations_skipped) in enumerate(
       pool.imap(_pool_create_tf_example,
-                [(image, annotations_index[image['id']], image_dir,
-                  category_index, include_masks)
+                [(image,
+                  img_to_obj_annotation[image['id']],
+                  img_to_caption_annotation[image['id']],
+                  image_dir,
+                  category_index,
+                  include_masks)
                  for image in images])):
     if idx % 100 == 0:
       tf.logging.info('On image %d of %d', idx, len(images))
@@ -259,9 +305,6 @@ def main(_):
   assert FLAGS.train_image_dir, '`train_image_dir` missing.'
   assert FLAGS.val_image_dir, '`val_image_dir` missing.'
   assert FLAGS.test_image_dir, '`test_image_dir` missing.'
-  assert FLAGS.train_annotations_file, '`train_annotations_file` missing.'
-  assert FLAGS.val_annotations_file, '`val_annotations_file` missing.'
-  assert FLAGS.testdev_annotations_file, '`testdev_annotations_file` missing.'
 
   if not tf.gfile.IsDirectory(FLAGS.output_dir):
     tf.gfile.MakeDirs(FLAGS.output_dir)
@@ -270,21 +313,17 @@ def main(_):
   testdev_output_path = os.path.join(FLAGS.output_dir, 'test-dev')
 
   _create_tf_record_from_coco_annotations(
-      FLAGS.train_annotations_file,
+      FLAGS.train_object_annotations_file,
+      FLAGS.train_caption_annotations_file,
       FLAGS.train_image_dir,
       train_output_path,
       FLAGS.include_masks,
       num_shards=256)
   _create_tf_record_from_coco_annotations(
-      FLAGS.val_annotations_file,
+      FLAGS.val_object_annotations_file,
+      FLAGS.val_caption_annotations_file,
       FLAGS.val_image_dir,
       val_output_path,
-      FLAGS.include_masks,
-      num_shards=32)
-  _create_tf_record_from_coco_annotations(
-      FLAGS.testdev_annotations_file,
-      FLAGS.test_image_dir,
-      testdev_output_path,
       FLAGS.include_masks,
       num_shards=32)
 

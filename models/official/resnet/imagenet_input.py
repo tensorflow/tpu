@@ -155,9 +155,14 @@ class ImageNetTFExampleInput(object):
     batch_size = params['batch_size']
 
     # TODO(dehao): Replace the following with params['context'].current_host
-    current_host = params["context"].current_input_fn_deployment()[1]
-    dataset = self.make_source_dataset(current_host,
-                                       params['context'].num_hosts)
+    if 'context' in params:
+      current_host = params['context'].current_input_fn_deployment()[1]
+      num_hosts = params['context'].num_hosts
+    else:
+      current_host = 0
+      num_hosts = 1
+
+    dataset = self.make_source_dataset(current_host, num_hosts)
 
     # Use the fused map-and-batch operation.
     #

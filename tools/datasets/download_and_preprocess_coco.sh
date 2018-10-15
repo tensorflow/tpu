@@ -35,8 +35,7 @@ fi
 sudo apt install -y protobuf-compiler python-pil python-lxml\
   python-pip python-dev git unzip
 
-pip install Cython
-pip install git+https://github.com/cocodataset/cocoapi#subdirectory=PythonAPI
+pip install Cython git+https://github.com/cocodataset/cocoapi#subdirectory=PythonAPI
 
 echo "Cloning Tensorflow models directory (for conversion utilities)"
 if [ ! -e tf-models ]; then
@@ -91,8 +90,11 @@ BASE_INSTANCES_URL="http://images.cocodataset.org/annotations"
 INSTANCES_FILE="annotations_trainval2017.zip"
 download_and_unzip ${BASE_INSTANCES_URL} ${INSTANCES_FILE}
 
-TRAIN_ANNOTATIONS_FILE="${SCRATCH_DIR}/annotations/instances_train2017.json"
-VAL_ANNOTATIONS_FILE="${SCRATCH_DIR}/annotations/instances_val2017.json"
+TRAIN_OBJ_ANNOTATIONS_FILE="${SCRATCH_DIR}/annotations/instances_train2017.json"
+VAL_OBJ_ANNOTATIONS_FILE="${SCRATCH_DIR}/annotations/instances_val2017.json"
+
+TRAIN_CAPTION_ANNOTATIONS_FILE="${SCRATCH_DIR}/annotations/captions_train2017.json"
+VAL_CAPTION_ANNOTATIONS_FILE="${SCRATCH_DIR}/annotations/captions_val2017.json"
 
 # Download the test image info.
 BASE_IMAGE_INFO_URL="http://images.cocodataset.org/annotations"
@@ -109,14 +111,18 @@ touch tf-models/__init__.py
 touch tf-models/research/__init__.py
 
 # Run our conversion
-PYTHONPATH="tf-models:tf-models/research" python create_coco_tf_record.py \
+SCRIPT_DIR=$(basename $0)
+
+PYTHONPATH="tf-models:tf-models/research" python $SCRIPT_DIR/create_coco_tf_record.py \
   --logtostderr \
   --include_masks \
   --train_image_dir="${TRAIN_IMAGE_DIR}" \
   --val_image_dir="${VAL_IMAGE_DIR}" \
   --test_image_dir="${TEST_IMAGE_DIR}" \
-  --train_annotations_file="${TRAIN_ANNOTATIONS_FILE}" \
-  --val_annotations_file="${VAL_ANNOTATIONS_FILE}" \
+  --train_object_annotations_file="${TRAIN_OBJ_ANNOTATIONS_FILE}" \
+  --val_object_annotations_file="${VAL_OBJ_ANNOTATIONS_FILE}" \
+  --train_caption_annotations_file="${TRAIN_CAPTION_ANNOTATIONS_FILE}" \
+  --val_caption_annotations_file="${VAL_CAPTION_ANNOTATIONS_FILE}" \
   --testdev_annotations_file="${TESTDEV_ANNOTATIONS_FILE}" \
   --output_dir="${OUTPUT_DIR}"
 

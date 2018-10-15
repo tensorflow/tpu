@@ -34,7 +34,6 @@ import absl.logging as _logging  # pylint: disable=unused-import
 import tensorflow as tf
 
 import amoeba_net_model as model_lib
-import model_specs
 
 # Cloud TPU Cluster Resolvers
 flags.DEFINE_string(
@@ -99,7 +98,7 @@ flags.DEFINE_float(
 
 flags.DEFINE_string(
     'mode', 'train_and_eval',
-    'Mode to run: train, eval, train_and_eval')
+    'Mode to run: train, eval, train_and_eval, predict, or export_savedmodel')
 
 flags.DEFINE_integer(
     'save_checkpoints_steps', None,
@@ -201,6 +200,34 @@ def build_run_config():
   return run_config
 
 
+def build_tensor_serving_input_receiver_fn(
+    shape, batch_size=1, dtype=tf.float32,):
+  """Returns a input_receiver_fn that can be used during serving.
+
+  This expects examples to come through as float tensors, and simply
+  wraps them as TensorServingInputReceivers.
+
+  Arguably, this should live in tf.estimator.export. Testing here first.
+
+  Args:
+    shape: list representing target size of a single example.
+    batch_size: number of input tensors that will be passed for prediction
+    dtype: the expected datatype for the input example
+
+  Returns:
+    A function that itself returns a TensorServingInputReceiver.
+  """
+  def serving_input_receiver_fn():
+    # Prep a placeholder where the input example will be fed in
+    features = tf.placeholder(
+        dtype=dtype, shape=[batch_size] + shape, name='input_tensor')
+
+    return tf.estimator.export.TensorServingInputReceiver(
+        features=features, receiver_tensors=features)
+
+  return serving_input_receiver_fn
+
+
 # TODO(ereal): simplify this.
 def override_with_flags(hparams):
   """Overrides parameters with flag values."""
@@ -221,6 +248,8 @@ def override_with_flags(hparams):
       'moving_average_decay',
       'image_size',
       'num_cells',
+      'reduction_size',
+      'stem_reduction_size',
       'num_epochs',
       'num_epochs_per_eval',
       'optimizer',
@@ -243,28 +272,8 @@ def override_with_flags(hparams):
 
 def build_hparams():
   """Build tf.Hparams for training Amoeba Net."""
-  hparams = model_lib.imagenet_hparams()
-  hparams.add_hparam('reduction_size', FLAGS.reduction_size)
-  operations, hiddenstate_indices, used_hiddenstates = (
-      model_specs.get_normal_cell(FLAGS.cell_name))
-  hparams.add_hparam('normal_cell_operations', operations)
-  hparams.add_hparam('normal_cell_hiddenstate_indices',
-                     hiddenstate_indices)
-  hparams.add_hparam('normal_cell_used_hiddenstates',
-                     used_hiddenstates)
-  operations, hiddenstate_indices, used_hiddenstates = (
-      model_specs.get_reduction_cell(FLAGS.cell_name))
-  hparams.add_hparam('reduction_cell_operations',
-                     operations)
-  hparams.add_hparam('reduction_cell_hiddenstate_indices',
-                     hiddenstate_indices)
-  hparams.add_hparam('reduction_cell_used_hiddenstates',
-                     used_hiddenstates)
-  hparams.add_hparam('stem_reduction_size', FLAGS.stem_reduction_size)
-
-  hparams.set_hparam('data_format', 'NHWC')
+  hparams = model_lib.build_hparams(FLAGS.cell_name)
   override_with_flags(hparams)
-
   return hparams
 
 
@@ -319,6 +328,7 @@ def main(_):
         use_tpu=True,
         config=run_config,
         params=estimator_parmas,
+        predict_batch_size=eval_batch_size,
         train_batch_size=hparams.train_batch_size,
         eval_batch_size=eval_batch_size)
   else:
@@ -377,16 +387,27 @@ def main(_):
           input_fn=imagenet_eval.input_fn, steps=eval_steps, hooks=eval_hooks)
       tf.logging.info('Evaluation results: %s' % eval_results)
   elif mode == 'predict':
-    tf.logging.info('Starting prediction ...')
-    time_hook = model_lib.SessionTimingHook()
-    eval_hooks.append(time_hook)
-    result_iter = image_classifier.predict(
-        input_fn=imagenet_eval.input_fn,
-        hooks=eval_hooks,
-        yield_single_examples=False)
-    results = list(itertools.islice(result_iter, eval_steps))
-    tf.logging.info('Inference speed = {} images per second.'.format(
-        time_hook.compute_speed(len(results) * eval_batch_size)))
+    for checkpoint in _get_next_checkpoint():
+      tf.logging.info('Starting prediction ...')
+      time_hook = model_lib.SessionTimingHook()
+      eval_hooks.append(time_hook)
+      result_iter = image_classifier.predict(
+          input_fn=imagenet_eval.input_fn,
+          hooks=eval_hooks,
+          checkpoint_path=checkpoint,
+          yield_single_examples=False)
+      results = list(itertools.islice(result_iter, eval_steps))
+      tf.logging.info('Inference speed = {} images per second.'.format(
+          time_hook.compute_speed(len(results) * eval_batch_size)))
+  elif mode == 'export_savedmodel':
+    tf.logging.info('Starting exporting saved model ...')
+    image_classifier.export_savedmodel(
+        export_dir_base=model_dir + '/export_savedmodel/',
+        serving_input_receiver_fn=build_tensor_serving_input_receiver_fn(
+            [hparams.image_size, hparams.image_size, 3],
+            batch_size=hparams.eval_batch_size),
+        as_text=True,
+        strip_default_attrs=True)
   else:  # default to train mode.
     current_step = _load_global_step_from_checkpoint_dir(model_dir)
     total_step = int(hparams.num_epochs * train_steps_per_epoch)

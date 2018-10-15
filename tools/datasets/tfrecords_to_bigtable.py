@@ -100,11 +100,11 @@ flags.DEFINE_integer(
     'not be smaller than the actual number of records.')
 flags.DEFINE_integer('num_parallel_reads', None, 'The number of parallel reads '
                      'from the source file system.')
-flags.DEFINE_string('column_family', 'ds', 'The column family to write the '
-                    'data into.')
-flags.DEFINE_string('column', 'd', 'The column name (qualifier) to write the '
-                    'data into.')
-flags.DEFINE_string('row_prefix', None, 'A prefix for each row key.')
+flags.DEFINE_string('column_family', 'tfexample',
+                    'The column family to write the data into.')
+flags.DEFINE_string('column', 'example',
+                    'The column name (qualifier) to write the data into.')
+flags.DEFINE_string('row_prefix', 'train_', 'A prefix for each row key.')
 
 FLAGS = flags.FLAGS
 

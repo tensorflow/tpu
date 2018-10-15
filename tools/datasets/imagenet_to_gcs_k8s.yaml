@@ -22,8 +22,8 @@ spec:
       restartPolicy: Never
       containers:
       - name: imagenet-to-gcs
-        # The official TensorFlow 1.10 TPU model image built from https://github.com/tensorflow/tpu/blob/r1.10/tools/docker/Dockerfile.
-        image: gcr.io/tensorflow/tpu-models:r1.10
+        # The official TensorFlow 1.11 TPU model image built from https://github.com/tensorflow/tpu/blob/r1.11/tools/docker/Dockerfile.
+        image: gcr.io/tensorflow/tpu-models:r1.11
         command:
           - python
           - /tensorflow_tpu_models/tools/datasets/imagenet_to_gcs.py

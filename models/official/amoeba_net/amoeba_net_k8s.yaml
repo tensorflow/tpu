@@ -21,15 +21,15 @@ spec:
     metadata:
       annotations:
         # The Cloud TPUs that will be created for this Job must support
-        # TensorFlow 1.10. This version MUST match the TensorFlow version that
+        # TensorFlow 1.11. This version MUST match the TensorFlow version that
         # your model is built on.
-        tf-version.cloud-tpus.google.com: "1.10"
+        tf-version.cloud-tpus.google.com: "1.11"
     spec:
       restartPolicy: Never
       containers:
       - name: amoeba-net-tpu
-        # The official TensorFlow 1.10 TPU model image built from https://github.com/tensorflow/tpu/blob/r1.10/tools/docker/Dockerfile.
-        image: gcr.io/tensorflow/tpu-models:r1.10
+        # The official TensorFlow 1.11 TPU model image built from https://github.com/tensorflow/tpu/blob/r1.11/tools/docker/Dockerfile.
+        image: gcr.io/tensorflow/tpu-models:r1.11
         command:
           - python
           - /tensorflow_tpu_models/models/experimental/amoeba_net/amoeba_net.py

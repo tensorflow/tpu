@@ -124,9 +124,7 @@ def input_fn(params):
   dataset = tf.data.TFRecordDataset([FLAGS.train_file])
   dataset = dataset.map(parser, num_parallel_calls=batch_size)
   dataset = dataset.prefetch(4 * batch_size).cache().repeat()
-  dataset = dataset.apply(
-      tf.contrib.data.batch_and_drop_remainder(FLAGS.batch_size)
-  )
+  dataset = dataset.batch(FLAGS.batch_size, drop_remainder=True)
   dataset = dataset.prefetch(1)
   return dataset
 

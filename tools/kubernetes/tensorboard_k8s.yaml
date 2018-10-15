@@ -1,0 +1,55 @@
+# Run TensorBoard on Google Kubernetes Engine to visualize model learning
+# statistics.
+#
+# https://cloud.google.com/tpu/docs/kubernetes-engine-setup
+#
+# [Instructions]
+#   1. Change the environment variable MODEL_BUCKET below to the Google Cloud
+#      Storage location where the output model and the TensorFlow events exist.
+#   2. Run `kubectl apply -f tensorboard_k8s.yaml`.
+#   3. Run `kubectl get service tensorboard-service` to get the <EXTERNAL_IP>.
+#      NOTE: A Load Balancer will be created to route the requests to
+#      TensorBoard. This will incur additional cost. See https://cloud.google.com/compute/pricing#lb.
+#   4. Access http://<EXTERNAL_IP>:6006 within your browser.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tensorboard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: tensorboard
+  template:
+    metadata:
+      labels:
+        name: tensorboard
+    spec:
+      restartPolicy: Always
+      containers:
+      - name: tensorboard
+        # The official TensorFlow 1.11 TPU utility image built from https://github.com/tensorflow/tpu/blob/r1.11/tools/docker/Dockerfile.util.
+        image: gcr.io/tensorflow/tpu-util:r1.11
+        command:
+        - tensorboard
+        - --logdir=$(MODEL_BUCKET)
+        env:
+          # [REQUIRED] Must specify the Google Cloud Storage location where
+          # your output model and TensorFlow events are stored.
+        - name: MODEL_BUCKET
+          value: gs://my-project/my-model
+        ports:
+        - containerPort: 6006
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tensorboard-service
+spec:
+  type: LoadBalancer
+  selector:
+    name: tensorboard
+  ports:
+  - port: 6006
+    targetPort: 6006

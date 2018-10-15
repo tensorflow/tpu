@@ -230,8 +230,7 @@ class ImageNetInput(object):
 
     dataset = dataset.map(self.dataset_parser, num_parallel_calls=128)
     dataset = dataset.prefetch(batch_size)
-    dataset = dataset.apply(
-        tf.contrib.data.batch_and_drop_remainder(batch_size))
+    dataset = dataset.batch(batch_size, drop_remainder=True)
     dataset = dataset.prefetch(2)  # Prefetch overlaps in-feed with training
     return dataset
 

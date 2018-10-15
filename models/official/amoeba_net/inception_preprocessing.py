@@ -1,4 +1,4 @@
-# Copyright 2018 Google. All Rights Reserved.
+# Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -200,6 +200,7 @@ def distorted_bounding_box_crop(image,
 
 
 def preprocess_for_train(image, height, width, bbox,
+                         min_object_covered=0.1,
                          fast_mode=True,
                          scope=None,
                          add_image_summaries=True):
@@ -222,6 +223,9 @@ def preprocess_for_train(image, height, width, bbox,
     bbox: 3-D float Tensor of bounding boxes arranged [1, num_boxes, coords]
       where each coordinate is [0, 1) and the coordinates are arranged
       as [ymin, xmin, ymax, xmax].
+    min_object_covered: An optional `float`. Defaults to `0.1`. The cropped
+      area of the image must contain at least this fraction of any bounding box
+      supplied.
     fast_mode: Optional boolean, if True avoids slower transformations (i.e.
       bi-cubic resizing, random_hue or random_contrast).
     scope: Optional scope for name_scope.
@@ -243,7 +247,11 @@ def preprocess_for_train(image, height, width, bbox,
                                                     bbox)
       tf.summary.image('image_with_bounding_boxes', image_with_box)
 
-    distorted_image, distorted_bbox = distorted_bounding_box_crop(image, bbox)
+    distorted_image, distorted_bbox = distorted_bounding_box_crop(
+        image,
+        bbox,
+        min_object_covered=min_object_covered,
+        area_range=(min_object_covered, 1.0))
     # Restore the shape since the dynamic slice based upon the bbox_size loses
     # the third dimension.
     distorted_image.set_shape([None, None, 3])
@@ -334,6 +342,7 @@ def preprocess_image(image,
                      is_training=False,
                      scaled_images=True,
                      bbox=None,
+                     min_object_covered=0.1,
                      fast_mode=True,
                      add_image_summaries=False):
   """Pre-process one image for training or evaluation.
@@ -353,6 +362,9 @@ def preprocess_image(image,
     bbox: 3-D float Tensor of bounding boxes arranged [1, num_boxes, coords]
       where each coordinate is [0, 1) and the coordinates are arranged as
       [ymin, xmin, ymax, xmax].
+    min_object_covered: An optional `float`. Defaults to `0.1`. The cropped
+      area of the image must contain at least this fraction of any bounding box
+      supplied.
     fast_mode: Optional boolean, if True avoids slower transformations.
     add_image_summaries: Enable image summaries.
 
@@ -368,6 +380,7 @@ def preprocess_image(image,
         output_height,
         output_width,
         bbox,
+        min_object_covered,
         fast_mode,
         add_image_summaries=add_image_summaries)
   else:
