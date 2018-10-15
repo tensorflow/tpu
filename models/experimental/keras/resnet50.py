@@ -31,6 +31,7 @@ from absl import logging
 import tensorflow as tf
 import numpy as np
 
+import eval_utils
 import imagenet_input
 from tensorflow.python.keras import backend as K
 
@@ -51,6 +52,9 @@ flags.DEFINE_string(
     ('The directory where the model weights and training/evaluation summaries '
      'are stored. If unset, model weights will be saved to /tmp and no '
      'summaries will be stored.'))
+flags.DEFINE_bool(
+    'eval_top_5_accuracy', False,
+    'Eval both top 1 and top 5 accuracy. Otherwise, only eval top 1 accuracy')
 
 FLAGS = flags.FLAGS
 
@@ -72,6 +76,7 @@ LR_SCHEDULE = [    # (multiplier, epoch to start) tuples
     (1.0, 5), (0.1, 30), (0.01, 60), (0.001, 80)
 ]
 
+EVAL_STEPS = int(APPROX_IMAGENET_TEST_IMAGES // BATCH_SIZE)
 WEIGHTS_TXT = 'resnet50_weights.h5'
 
 
@@ -135,7 +140,7 @@ class LearningRateBatchScheduler(tf.keras.callbacks.Callback):
       K.set_value(self.model.optimizer.lr, lr)
       self.prev_lr = lr
       logging.info('Epoch %05d Batch %05d: LearningRateBatchScheduler change '
-                   'learning rate to %s.' % (self.epochs, batch, lr))
+                   'learning rate to %s.', self.epochs, batch, lr)
 
 
 def main(argv):
@@ -184,11 +189,10 @@ def main(argv):
     logging.info('Evaluating the model on synthetic data.')
     model.evaluate(training_images, training_labels, verbose=0)
   else:
-    imagenet_train, imagenet_eval = [imagenet_input.ImageNetInput(
-        is_training=is_training,
+    imagenet_train = imagenet_input.ImageNetInput(
+        is_training=True,
         data_dir=FLAGS.data,
         per_core_batch_size=PER_CORE_BATCH_SIZE)
-                                     for is_training in [True, False]]
     logging.info('Training model using real data in directory "%s".',
                  FLAGS.data)
     model.fit(imagenet_train.input_fn,
@@ -197,10 +201,26 @@ def main(argv):
               callbacks=callbacks)
 
     logging.info('Evaluating the model on the validation dataset.')
-    score = model.evaluate(
-        imagenet_eval.input_fn,
-        steps=int(APPROX_IMAGENET_TEST_IMAGES // BATCH_SIZE),
-        verbose=1)
+    if FLAGS.eval_top_5_accuracy:
+      logging.info('Evaluating top 1 and top 5 accuracy using a Python '
+                   'generator.')
+      # We feed the inputs from a Python generator, so we need to build a single
+      # batch for all of the cores, which will be split on TPU.
+      imagenet_eval = imagenet_input.ImageNetInput(
+          is_training=False,
+          data_dir=FLAGS.data,
+          per_core_batch_size=BATCH_SIZE)
+      score = eval_utils.multi_top_k_accuracy(
+          model, imagenet_eval.evaluation_generator(K.get_session()),
+          EVAL_STEPS)
+    else:
+      imagenet_eval = imagenet_input.ImageNetInput(
+          is_training=False,
+          data_dir=FLAGS.data,
+          per_core_batch_size=PER_CORE_BATCH_SIZE)
+      score = model.evaluate(imagenet_eval.input_fn,
+                             steps=EVAL_STEPS,
+                             verbose=1)
     print('Evaluation score', score)
 
     if HAS_H5PY:

@@ -139,8 +139,9 @@ class ImageNetInput(object):
     # Read the data from disk in parallel
     dataset = dataset.apply(
         tf.contrib.data.parallel_interleave(
-            fetch_dataset, cycle_length=16, sloppy=True))
-    dataset = dataset.shuffle(1024)
+            fetch_dataset, cycle_length=16, sloppy=self.is_training))
+    if self.is_training:
+      dataset = dataset.shuffle(1024)
 
     # Parse, pre-process, and batch the data in parallel
     dataset = dataset.apply(
@@ -153,16 +154,16 @@ class ImageNetInput(object):
     dataset = dataset.prefetch(tf.contrib.data.AUTOTUNE)
     return dataset
 
-  # TODO(xiejw): Remove this generator once evaluation with dataset is ready.
-  def evaluation_generator(self, master):
+  # TODO(xiejw): Remove this generator when we have support for top_k
+  # evaluation.
+  def evaluation_generator(self, sess):
     """Creates a generator for evaluation."""
     next_batch = self.input_fn().make_one_shot_iterator().get_next()
-    with tf.Session(master) as sess:
-      while True:
-        try:
-          yield sess.run(next_batch)
-        except tf.errors.OutOfRangeError:
-          return
+    while True:
+      try:
+        yield sess.run(next_batch)
+      except tf.errors.OutOfRangeError:
+        return
 
   def input_fn_null(self):
     """Input function which provides null (black) images."""

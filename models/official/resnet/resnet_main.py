@@ -30,6 +30,7 @@ from official.resnet import resnet_model
 from tensorflow.contrib import summary
 from tensorflow.contrib.tpu.python.tpu import async_checkpoint
 from tensorflow.contrib.training.python.training import evaluation
+from tensorflow.core.protobuf import rewriter_config_pb2
 from tensorflow.python.estimator import estimator
 
 
@@ -521,6 +522,10 @@ def main(unused_argv):
       model_dir=FLAGS.model_dir,
       save_checkpoints_steps=save_checkpoints_steps,
       log_step_count_steps=FLAGS.log_step_count_steps,
+      session_config=tf.ConfigProto(
+          graph_options=tf.GraphOptions(
+              rewrite_options=rewriter_config_pb2.RewriterConfig(
+                  disable_meta_optimizer=True))),
       tpu_config=tf.contrib.tpu.TPUConfig(
           iterations_per_loop=FLAGS.iterations_per_loop,
           num_shards=FLAGS.num_cores,

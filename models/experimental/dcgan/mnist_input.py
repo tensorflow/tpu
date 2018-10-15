@@ -70,8 +70,7 @@ class InputFunction(object):
       dataset = dataset.repeat()
     dataset = dataset.shuffle(1024)
     dataset = dataset.prefetch(batch_size)
-    dataset = dataset.apply(
-        tf.contrib.data.batch_and_drop_remainder(batch_size))
+    dataset = dataset.batch(batch_size, drop_remainder=True)
     dataset = dataset.prefetch(2)    # Prefetch overlaps in-feed with training
     images, labels = dataset.make_one_shot_iterator().get_next()
 
