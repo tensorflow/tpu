@@ -1,0 +1,58 @@
+# Train Inception v3 with fake ImageNet dataset using Cloud TPU and Google
+# Kubernetes Engine.
+#
+# [Training Data]
+#   In this example, we use the randomly generated fake ImageNet dataset at
+#   gs://cloud-tpu-test-datasets/fake_imagenet as the training data.
+#
+# [Instructions]
+#   1. Follow the instructions on https://cloud.google.com/tpu/docs/kubernetes-engine-setup
+#      to create a Kubernetes Engine cluster.
+#   2. Change the environment variable MODEL_BUCKET in the Job spec to the
+#      Google Cloud Storage location where you want to store the output model.
+#   3. Run `kubectl create -f inception_v3_k8s.yaml`.
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: inception-v3-tpu
+spec:
+  template:
+    metadata:
+      annotations:
+        # The Cloud TPUs that will be created for this Job must support
+        # TensorFlow 1.10. This version MUST match the TensorFlow version that
+        # your model is built on.
+        tf-version.cloud-tpus.google.com: "1.10"
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: inception-v3-tpu
+        # The official TensorFlow 1.10 TPU model image built from https://github.com/tensorflow/tpu/blob/r1.10/tools/docker/Dockerfile.
+        image: gcr.io/tensorflow/tpu-models:r1.10
+        command:
+          - python
+          - /tensorflow_tpu_models/models/experimental/inception/inception_v3.py
+          - --learning_rate=0.165
+          - --train_steps=250000
+          - --iterations=500
+          - --use_data=real
+          - --mode=train_and_eval
+          - --train_steps_per_eval=2000
+          - --data_dir=$(DATA_BUCKET)
+          - --model_dir=$(MODEL_BUCKET)
+        env:
+          # The Google Cloud Storage location where the fake ImageNet dataset is
+          # stored.
+        - name: DATA_BUCKET
+          value: "gs://cloud-tpu-test-datasets/fake_imagenet"
+          # [REQUIRED] Must specify the Google Cloud Storage location where your
+          # output model will be stored.
+        - name: MODEL_BUCKET
+          value: "gs://<my-model-bucket>/inception_v3"
+        resources:
+          limits:
+            # Request a single v2-8 Cloud TPU device to train the model.
+            # A single v2-8 Cloud TPU device consists of 4 chips, each of which
+            # has 2 cores, so there are 8 cores in total.
+            cloud-tpus.google.com/v2: 8

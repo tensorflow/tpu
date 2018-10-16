@@ -1,0 +1,8 @@
+[core]
+account = saeta@google.com
+project = ctpu9-test-project
+
+[compute]
+zone = us-central1-c
+region = us-central1
+
