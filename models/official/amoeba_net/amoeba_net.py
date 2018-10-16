@@ -137,6 +137,8 @@ flags.DEFINE_integer(
     'stem_reduction_size', 32, 'Stem filter size.')
 flags.DEFINE_float(
     'weight_decay', 4e-05, 'Weight decay for slim model.')
+flags.DEFINE_integer(
+    'num_label_classes', 1001, 'The number of classes that images fit into.')
 
 # Training hyper-parameters
 flags.DEFINE_float(
@@ -166,6 +168,11 @@ flags.DEFINE_float('gradient_clipping_by_global_norm', 0,
 flags.DEFINE_integer(
     'image_size', 299, 'Size of image, assuming image height and width.')
 
+flags.DEFINE_integer(
+    'num_train_images', 1281167, 'The number of images in the training set.')
+flags.DEFINE_integer(
+    'num_eval_images', 50000, 'The number of images in the evaluation set.')
+
 flags.DEFINE_bool(
     'use_bp16', True, 'If True, use bfloat16 for activations')
 
@@ -183,7 +190,7 @@ def build_run_config():
       zone=FLAGS.tpu_zone,
       project=FLAGS.gcp_project)
 
-  eval_steps = model_lib.NUM_EVAL_IMAGES // FLAGS.eval_batch_size
+  eval_steps = FLAGS.num_eval_images // FLAGS.eval_batch_size
   iterations_per_loop = (eval_steps if FLAGS.mode == 'eval'
                          else FLAGS.iterations_per_loop)
   save_checkpoints_steps = FLAGS.save_checkpoints_steps or iterations_per_loop
@@ -261,6 +268,9 @@ def override_with_flags(hparams):
       'weight_decay',
       'num_shards',
       'distributed_group_size',
+      'num_train_images',
+      'num_eval_images',
+      'num_label_classes',
   ]
   for flag_name in override_flag_names:
     flag_value = getattr(FLAGS, flag_name, 'INVALID')
@@ -314,8 +324,8 @@ def main(_):
   estimator_parmas = {}
 
   train_steps_per_epoch = int(
-      math.ceil(model_lib.NUM_TRAIN_IMAGES / float(hparams.train_batch_size)))
-  eval_steps = model_lib.NUM_EVAL_IMAGES // hparams.eval_batch_size
+      math.ceil(hparams.num_train_images / float(hparams.train_batch_size)))
+  eval_steps = hparams.num_eval_images // hparams.eval_batch_size
   eval_batch_size = (None if mode == 'train' else
                      hparams.eval_batch_size)
 
