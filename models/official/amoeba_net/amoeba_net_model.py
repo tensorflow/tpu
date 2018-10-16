@@ -29,11 +29,6 @@ import model_builder
 import model_specs
 
 
-# Dataset constants
-NUM_TRAIN_IMAGES = 1281167
-NUM_EVAL_IMAGES = 50000
-LABEL_CLASSES = 1001
-
 # Random cropping constants
 _RESIZE_SIDE_MIN = 300
 _RESIZE_SIDE_MAX = 600
@@ -56,7 +51,9 @@ def imagenet_hparams():
       ##########################################################################
 
       image_size=299,
-
+      num_train_images=1281167,
+      num_eval_images=50000,
+      num_label_classes=1001,
       ##########################################################################
       # Architectural params. ##################################################
       ##########################################################################
@@ -156,7 +153,18 @@ def imagenet_hparams():
 
 
 def build_hparams(cell_name='amoeba_net_d'):
-  """Build tf.Hparams for training Amoeba Net."""
+  """Build tf.Hparams for training Amoeba Net.
+
+  Args:
+    cell_name:         Which of the cells in model_specs.py to use to build the
+                       amoebanet neural network; the cell names defined in that
+                       module correspond to architectures discovered by an
+                       evolutionary search described in
+                       https://arxiv.org/abs/1802.01548.
+
+  Returns:
+    A set of tf.HParams suitable for Amoeba Net training.
+  """
   hparams = imagenet_hparams()
   operations, hiddenstate_indices, used_hiddenstates = (
       model_specs.get_normal_cell(cell_name))
@@ -222,7 +230,8 @@ class AmoebaNetEstimatorModel(object):
 
   def _build_learning_rate_schedule(self, global_step):
     """Build learning rate."""
-    steps_per_epoch = NUM_TRAIN_IMAGES // self.hparams.train_batch_size
+    steps_per_epoch = (
+        self.hparams.num_train_images // self.hparams.train_batch_size)
     lr_warmup_epochs = 0
     if self.hparams.lr_decay_method == 'exponential':
       lr_warmup_epochs = self.hparams.lr_warmup_epochs
@@ -244,7 +253,8 @@ class AmoebaNetEstimatorModel(object):
     """Build a network that returns loss and logits from features and labels."""
     is_training = (mode == tf.estimator.ModeKeys.TRAIN)
     is_predict = (mode == tf.estimator.ModeKeys.PREDICT)
-    steps_per_epoch = float(NUM_TRAIN_IMAGES) / self.hparams.train_batch_size
+    steps_per_epoch = float(
+        self.hparams.num_train_images) / self.hparams.train_batch_size
     num_total_steps = int(steps_per_epoch * self.hparams.num_epochs)
     self.hparams.set_hparam('drop_path_burn_in_steps', num_total_steps)
 
@@ -260,10 +270,10 @@ class AmoebaNetEstimatorModel(object):
             formatted_hparams(hparams)))
 
     logits, end_points = model_builder.build_network(
-        features, LABEL_CLASSES, is_training, hparams)
+        features, hparams.num_label_classes, is_training, hparams)
 
     if not is_predict:
-      labels = tf.one_hot(labels, LABEL_CLASSES)
+      labels = tf.one_hot(labels, hparams.num_label_classes)
       loss = model_builder.build_softmax_loss(
           logits,
           end_points,

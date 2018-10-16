@@ -296,7 +296,7 @@ def main(_):
   # fine-tuning Hub image modules. Disable aux heads to avoid putting unused
   # variables and ops into the module.
   hparams.set_hparam('use_aux_head', False)
-  eval_steps = model_lib.NUM_EVAL_IMAGES // FLAGS.eval_batch_size
+  eval_steps = FLAGS.num_eval_images // FLAGS.eval_batch_size
   export_path = FLAGS.export_path or (model_dir + '/export')
 
   input_pipeline = model_lib.InputPipeline(
