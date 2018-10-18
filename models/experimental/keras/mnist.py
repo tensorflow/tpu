@@ -26,6 +26,7 @@ from __future__ import division
 from __future__ import print_function
 
 # Standard Imports
+from absl import app
 from absl import flags
 import numpy as np
 import tensorflow as tf
@@ -128,4 +129,4 @@ def main(unused_dev):
 
 if __name__ == '__main__':
   tf.logging.set_verbosity(tf.logging.INFO)
-  tf.app.run()
+  app.run(main)

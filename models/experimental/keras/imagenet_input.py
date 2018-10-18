@@ -59,16 +59,22 @@ class ImageNetInput(object):
       https://github.com/tensorflow/tpu/blob/master/tools/datasets/imagenet_to_gcs.py
 
   Args:
-    is_training: `bool` for whether the input is for training
+    is_training: `bool` for whether the input is for training.
+    use_bfloat16: If True, use bfloat16 precision; else use float32.
     data_dir: `str` for the directory of the training and validation data;
         if 'null' (the literal string 'null', not None), then construct a null
         pipeline, consisting of empty images.
     per_core_batch_size: The per-TPU-core batch size to use.
   """
 
-  def __init__(self, is_training, data_dir, per_core_batch_size=128):
+  def __init__(self,
+               is_training,
+               use_bfloat16,
+               data_dir,
+               per_core_batch_size=128):
     self.image_preprocessing_fn = resnet_preprocessing.preprocess_image
     self.is_training = is_training
+    self.use_bfloat16 = use_bfloat16
     self.data_dir = data_dir
     if self.data_dir == 'null' or self.data_dir == '':
       self.data_dir = None
@@ -103,7 +109,7 @@ class ImageNetInput(object):
     image = self.image_preprocessing_fn(
         image_bytes=image_bytes,
         is_training=self.is_training,
-        use_bfloat16=False)
+        use_bfloat16=self.use_bfloat16)
 
     # Subtract one so that labels are in [0, 1000), and cast to float32 for
     # Keras model.

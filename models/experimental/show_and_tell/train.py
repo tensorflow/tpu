@@ -21,6 +21,7 @@ from __future__ import print_function
 import os
 
 # Standard Imports
+from absl import app
 import tensorflow as tf
 
 import configuration
@@ -178,4 +179,4 @@ def main(unused_argv):
 
 if __name__ == "__main__":
   tf.logging.set_verbosity(tf.logging.INFO)
-  tf.app.run()
+  app.run(main)

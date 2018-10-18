@@ -26,10 +26,11 @@ from __future__ import print_function
 
 import os
 
+from absl import app
 from absl import flags
 from absl import logging
-import tensorflow as tf
 import numpy as np
+import tensorflow as tf
 
 import eval_utils
 import imagenet_input
@@ -54,7 +55,14 @@ flags.DEFINE_string(
      'summaries will be stored.'))
 flags.DEFINE_bool(
     'eval_top_5_accuracy', False,
-    'Eval both top 1 and top 5 accuracy. Otherwise, only eval top 1 accuracy')
+    'Eval both top 1 and top 5 accuracy. Otherwise, only eval top 1 accuracy. '
+    'N.B. enabling this would slow down the eval time due to using python '
+    'generator for evaluation input. Will be deprecated once we have support '
+    'for top_k accuracy evaluation.')
+flags.DEFINE_bool(
+    'use_bfloat16', True,
+    'If True, use bfloat16 for input pipeline and model precision; else use '
+    'float32. This does not apply to fake data, i.e., FLAGS.data is None.')
 
 FLAGS = flags.FLAGS
 
@@ -191,6 +199,7 @@ def main(argv):
   else:
     imagenet_train = imagenet_input.ImageNetInput(
         is_training=True,
+        use_bfloat16=FLAGS.use_bfloat16,
         data_dir=FLAGS.data,
         per_core_batch_size=PER_CORE_BATCH_SIZE)
     logging.info('Training model using real data in directory "%s".',
@@ -208,6 +217,7 @@ def main(argv):
       # batch for all of the cores, which will be split on TPU.
       imagenet_eval = imagenet_input.ImageNetInput(
           is_training=False,
+          use_bfloat16=FLAGS.use_bfloat16,
           data_dir=FLAGS.data,
           per_core_batch_size=BATCH_SIZE)
       score = eval_utils.multi_top_k_accuracy(
@@ -216,6 +226,7 @@ def main(argv):
     else:
       imagenet_eval = imagenet_input.ImageNetInput(
           is_training=False,
+          use_bfloat16=FLAGS.use_bfloat16,
           data_dir=FLAGS.data,
           per_core_batch_size=PER_CORE_BATCH_SIZE)
       score = model.evaluate(imagenet_eval.input_fn,
@@ -232,4 +243,4 @@ def main(argv):
 
 if __name__ == '__main__':
   tf.logging.set_verbosity(tf.logging.INFO)
-  tf.app.run()
+  app.run(main)

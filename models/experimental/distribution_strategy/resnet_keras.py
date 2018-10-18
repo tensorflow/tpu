@@ -24,11 +24,12 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import os
+from absl import app
 from absl import flags
 from absl import logging
-import tensorflow as tf
 import numpy as np
-import os
+import tensorflow as tf
 
 import imagenet_input_keras as imagenet_input
 from tensorflow.contrib.distribute.python import tpu_strategy as tpu_lib
@@ -116,4 +117,4 @@ def main(argv):
 
 if __name__ == '__main__':
   tf.logging.set_verbosity(tf.logging.INFO)
-  tf.app.run()
+  app.run(main)

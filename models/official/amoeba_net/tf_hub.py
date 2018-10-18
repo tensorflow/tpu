@@ -38,6 +38,7 @@ from __future__ import print_function
 import re
 
 # Standard Imports
+from absl import app
 from absl import flags
 import tensorflow as tf
 import tensorflow_hub as hub
@@ -322,4 +323,4 @@ def main(_):
 
 if __name__ == '__main__':
   tf.logging.set_verbosity(tf.logging.INFO)
-  tf.app.run()
+  app.run(main)

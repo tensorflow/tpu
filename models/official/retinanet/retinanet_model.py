@@ -86,21 +86,22 @@ def update_learning_rate_schedule_parameters(params):
       second_lr_drop_step=41250.
 
   Args:
-    params: a parameter dictionary that includes learning_rate,
-      lr_warmup_epoch, first_lr_drop_epoch, and second_lr_drop_epoch.
+    params: a parameter dictionary that includes learning_rate, lr_warmup_epoch,
+      first_lr_drop_epoch, and second_lr_drop_epoch.
   """
   # params['batch_size'] is per-shard within model_fn if use_tpu=true.
-  batch_size = (params['batch_size'] * params['num_shards'] if params['use_tpu']
-                else params['batch_size'])
+  batch_size = (
+      params['batch_size'] * params['num_shards']
+      if params['use_tpu'] else params['batch_size'])
   # Learning rate is proportional to the batch size
-  params['adjusted_learning_rate'] = (params['learning_rate'] * batch_size /
-                                      _DEFAULT_BATCH_SIZE)
+  params['adjusted_learning_rate'] = (
+      params['learning_rate'] * batch_size / _DEFAULT_BATCH_SIZE)
   steps_per_epoch = params['num_examples_per_epoch'] / batch_size
   params['lr_warmup_step'] = int(params['lr_warmup_epoch'] * steps_per_epoch)
-  params['first_lr_drop_step'] = int(params['first_lr_drop_epoch'] *
-                                     steps_per_epoch)
-  params['second_lr_drop_step'] = int(params['second_lr_drop_epoch'] *
-                                      steps_per_epoch)
+  params['first_lr_drop_step'] = int(
+      params['first_lr_drop_epoch'] * steps_per_epoch)
+  params['second_lr_drop_step'] = int(
+      params['second_lr_drop_epoch'] * steps_per_epoch)
 
 
 def learning_rate_schedule(adjusted_learning_rate, lr_warmup_init,
@@ -109,13 +110,12 @@ def learning_rate_schedule(adjusted_learning_rate, lr_warmup_init,
   """Handles linear scaling rule, gradual warmup, and LR decay."""
   # lr_warmup_init is the starting learning rate; the learning rate is linearly
   # scaled up to the full learning rate after `lr_warmup_steps` before decaying.
-  linear_warmup = (lr_warmup_init +
-                   (tf.cast(global_step, dtype=tf.float32) / lr_warmup_step *
-                    (adjusted_learning_rate - lr_warmup_init)))
-  learning_rate = tf.where(global_step < lr_warmup_step,
-                           linear_warmup, adjusted_learning_rate)
-  lr_schedule = [[1.0, lr_warmup_step],
-                 [0.1, first_lr_drop_step],
+  linear_warmup = (
+      lr_warmup_init + (tf.cast(global_step, dtype=tf.float32) / lr_warmup_step
+                        * (adjusted_learning_rate - lr_warmup_init)))
+  learning_rate = tf.where(global_step < lr_warmup_step, linear_warmup,
+                           adjusted_learning_rate)
+  lr_schedule = [[1.0, lr_warmup_step], [0.1, first_lr_drop_step],
                  [0.01, second_lr_drop_step]]
   for mult, start_global_step in lr_schedule:
     learning_rate = tf.where(global_step < start_global_step, learning_rate,
@@ -130,14 +130,15 @@ def focal_loss(logits, targets, alpha, gamma, normalizer):
   where pt is the probability of being classified to the true class.
 
   Args:
-    logits: A float32 tensor of size
-      [batch, height_in, width_in, num_predictions].
-    targets: A float32 tensor of size
-      [batch, height_in, width_in, num_predictions].
+    logits: A float32 tensor of size [batch, height_in, width_in,
+      num_predictions].
+    targets: A float32 tensor of size [batch, height_in, width_in,
+      num_predictions].
     alpha: A float32 scalar multiplying alpha to the loss from positive examples
       and (1-alpha) to the loss from negative examples.
     gamma: A float32 scalar modulating loss from hard and easy examples.
     normalizer: A float32 scalar normalizes the total loss from all examples.
+
   Returns:
     loss: A float32 scalar representing normalized total loss.
   """
@@ -194,12 +195,13 @@ def detection_loss(cls_outputs, box_outputs, labels, params):
     cls_outputs: an OrderDict with keys representing levels and values
       representing logits in [batch_size, height, width, num_anchors].
     box_outputs: an OrderDict with keys representing levels and values
-      representing box regression targets in
-      [batch_size, height, width, num_anchors * 4].
+      representing box regression targets in [batch_size, height, width,
+      num_anchors * 4].
     labels: the dictionary that returned from dataloader that includes
       groundturth targets.
     params: the dictionary including training parameters specified in
       default_haprams function in this file.
+
   Returns:
     total_loss: an integar tensor representing total loss reducing from
       class and box losses from all levels.
@@ -215,9 +217,8 @@ def detection_loss(cls_outputs, box_outputs, labels, params):
   box_losses = []
   for level in levels:
     # Onehot encoding for classification labels.
-    cls_targets_at_level = tf.one_hot(
-        labels['cls_targets_%d' % level],
-        params['num_classes'])
+    cls_targets_at_level = tf.one_hot(labels['cls_targets_%d' % level],
+                                      params['num_classes'])
     bs, width, height, _, _ = cls_targets_at_level.get_shape().as_list()
     cls_targets_at_level = tf.reshape(cls_targets_at_level,
                                       [bs, width, height, -1])
@@ -252,19 +253,18 @@ def add_metric_fn_inputs(params, cls_outputs, box_outputs, metric_fn_inputs):
     cls_outputs: an OrderDict with keys representing levels and values
       representing logits in [batch_size, height, width, num_anchors].
     box_outputs: an OrderDict with keys representing levels and values
-      representing box regression targets in
-      [batch_size, height, width, num_anchors * 4].
+      representing box regression targets in [batch_size, height, width,
+      num_anchors * 4].
     metric_fn_inputs: a dictionary that will hold the top-k selections.
   """
   cls_outputs_all = []
   box_outputs_all = []
+  batch_size = tf.shape(cls_outputs[params['min_level']])[0]
   # Concatenates class and box of all levels into one tensor.
   for level in range(params['min_level'], params['max_level'] + 1):
-    cls_outputs_all.append(tf.reshape(
-        cls_outputs[level],
-        [params['batch_size'], -1, params['num_classes']]))
-    box_outputs_all.append(tf.reshape(
-        box_outputs[level], [params['batch_size'], -1, 4]))
+    cls_outputs_all.append(
+        tf.reshape(cls_outputs[level], [batch_size, -1, params['num_classes']]))
+    box_outputs_all.append(tf.reshape(box_outputs[level], [batch_size, -1, 4]))
   cls_outputs_all = tf.concat(cls_outputs_all, 1)
   box_outputs_all = tf.concat(box_outputs_all, 1)
 
@@ -277,31 +277,29 @@ def add_metric_fn_inputs(params, cls_outputs, box_outputs, metric_fn_inputs):
   box_outputs_all_after_topk = []
   indices_all = []
   classes_all = []
-  for index in range(params['batch_size']):
-    cls_outputs_per_sample = cls_outputs_all[index]
-    box_outputs_per_sample = box_outputs_all[index]
-    cls_outputs_per_sample_reshape = tf.reshape(cls_outputs_per_sample,
-                                                [-1])
-    _, cls_topk_indices = tf.nn.top_k(
-        cls_outputs_per_sample_reshape, k=anchors.MAX_DETECTION_POINTS)
+
+  def _compute_top_k(x):
+    """Compute top-k values for each row in a batch."""
+    cls_outputs_per_sample, box_outputs_per_sample = x
+    cls_outputs_per_sample_reshape = tf.reshape(cls_outputs_per_sample, [-1])
+    _, cls_topk_indices = tf.nn.top_k(cls_outputs_per_sample_reshape,
+                                      k=anchors.MAX_DETECTION_POINTS)
     # Gets top-k class and box scores.
     indices = tf.div(cls_topk_indices, params['num_classes'])
     classes = tf.mod(cls_topk_indices, params['num_classes'])
     cls_indices = tf.stack([indices, classes], axis=1)
-    cls_outputs_after_topk = tf.gather_nd(cls_outputs_per_sample,
-                                          cls_indices)
-    cls_outputs_all_after_topk.append(cls_outputs_after_topk)
-    box_outputs_after_topk = tf.gather_nd(
-        box_outputs_per_sample, tf.expand_dims(indices, 1))
-    box_outputs_all_after_topk.append(box_outputs_after_topk)
+    cls_outputs_after_topk = tf.gather_nd(cls_outputs_per_sample, cls_indices)
+    box_outputs_after_topk = tf.gather_nd(box_outputs_per_sample,
+                                          tf.expand_dims(indices, 1))
+    return [indices, classes, cls_outputs_after_topk, box_outputs_after_topk]
 
-    indices_all.append(indices)
-    classes_all.append(classes)
+  (indices_all, classes_all, cls_outputs_all_after_topk,
+   box_outputs_all_after_topk) = tf.map_fn(
+       _compute_top_k, [cls_outputs_all, box_outputs_all],
+       back_prop=False,
+       dtype=[tf.int32, tf.int32, tf.float32, tf.float32])
+
   # Concatenates via the batch dimension.
-  cls_outputs_all_after_topk = tf.stack(cls_outputs_all_after_topk, axis=0)
-  box_outputs_all_after_topk = tf.stack(box_outputs_all_after_topk, axis=0)
-  indices_all = tf.stack(indices_all, axis=0)
-  classes_all = tf.stack(classes_all, axis=0)
   metric_fn_inputs['cls_outputs_all'] = cls_outputs_all_after_topk
   metric_fn_inputs['box_outputs_all'] = box_outputs_all_after_topk
   metric_fn_inputs['indices_all'] = indices_all
@@ -320,8 +318,7 @@ def coco_metric_fn(batch_size, anchor_labeler, filename=None, **kwargs):
     detections = anchor_labeler.generate_detections(
         cls_outputs_per_sample, box_outputs_per_sample, indices_per_sample,
         classes_per_sample, tf.slice(kwargs['source_ids'], [index], [1]),
-        tf.slice(kwargs['image_scales'], [index], [1])
-    )
+        tf.slice(kwargs['image_scales'], [index], [1]))
     detections_bs.append(detections)
   eval_metric = coco_metric.EvaluationMetric(filename=filename)
   coco_metrics = eval_metric.estimator_metric_fn(detections_bs,
@@ -348,6 +345,7 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
   Returns:
     tpu_spec: the TPUEstimatorSpec to run training, evaluation, or prediction.
   """
+
   def _model_outputs():
     return model(
         features,
@@ -377,6 +375,9 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
     for level in levels:
       predictions['cls_outputs_%d' % level] = cls_outputs[level]
       predictions['box_outputs_%d' % level] = box_outputs[level]
+
+    # Add the computed `top-k` values in addition to the raw boxes.
+    add_metric_fn_inputs(params, cls_outputs, box_outputs, predictions)
     return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions)
 
   # Load pretrained model from checkpoint.
@@ -401,9 +402,11 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
   # cls_loss and box_loss are for logging. only total_loss is optimized.
   total_loss, cls_loss, box_loss = detection_loss(cls_outputs, box_outputs,
                                                   labels, params)
-  total_loss += _WEIGHT_DECAY * tf.add_n(
-      [tf.nn.l2_loss(v) for v in tf.trainable_variables()
-       if 'batch_normalization' not in v.name])
+  total_loss += _WEIGHT_DECAY * tf.add_n([
+      tf.nn.l2_loss(v)
+      for v in tf.trainable_variables()
+      if 'batch_normalization' not in v.name
+  ])
 
   if mode == tf.estimator.ModeKeys.TRAIN:
     optimizer = tf.train.MomentumOptimizer(
@@ -425,15 +428,13 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
 
   eval_metrics = None
   if mode == tf.estimator.ModeKeys.EVAL:
+
     def metric_fn(**kwargs):
       """Returns a dictionary that has the evaluation metrics."""
       batch_size = params['batch_size']
-      eval_anchors = anchors.Anchors(params['min_level'],
-                                     params['max_level'],
-                                     params['num_scales'],
-                                     params['aspect_ratios'],
-                                     params['anchor_scale'],
-                                     params['image_size'])
+      eval_anchors = anchors.Anchors(
+          params['min_level'], params['max_level'], params['num_scales'],
+          params['aspect_ratios'], params['anchor_scale'], params['image_size'])
       anchor_labeler = anchors.AnchorLabeler(eval_anchors,
                                              params['num_classes'])
       cls_loss = tf.metrics.mean(kwargs['cls_loss_repeat'])
@@ -450,11 +451,13 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
       return output_metrics
 
     cls_loss_repeat = tf.reshape(
-        tf.tile(tf.expand_dims(cls_loss, 0), [params['batch_size'],]),
-        [params['batch_size'], 1])
+        tf.tile(tf.expand_dims(cls_loss, 0), [
+            params['batch_size'],
+        ]), [params['batch_size'], 1])
     box_loss_repeat = tf.reshape(
-        tf.tile(tf.expand_dims(box_loss, 0), [params['batch_size'],]),
-        [params['batch_size'], 1])
+        tf.tile(tf.expand_dims(box_loss, 0), [
+            params['batch_size'],
+        ]), [params['batch_size'], 1])
     metric_fn_inputs = {
         'cls_loss_repeat': cls_loss_repeat,
         'box_loss_repeat': box_loss_repeat,
