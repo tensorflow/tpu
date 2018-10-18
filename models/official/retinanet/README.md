@@ -116,7 +116,7 @@ python tpu/models/official/retinanet/retinanet_main.py \
  --resnet_checkpoint=${RESNET_CHECKPOINT} \
  --model_dir=${MODEL_DIR} \
  --hparams=image_size=640 \
- --num_examples_per_epoch=6400 \
+ --num_examples_per_epoch=100 \
  --num_epochs=1
 ```
 
@@ -231,7 +231,7 @@ python tpu/models/official/retinanet/retinanet_main.py  \
  --hparams=image_size=640 \
  --mode=eval \
  --num_epochs=1 \
- --num_examples_per_epoch=100 \
+ --num_examples_per_epoch=1000 \
  --eval_steps=10
 ```
 

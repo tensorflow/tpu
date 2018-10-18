@@ -35,6 +35,7 @@ import io
 import json
 import multiprocessing
 import os
+from absl import app
 from absl import flags
 import numpy as np
 import PIL.Image
@@ -268,11 +269,9 @@ def _create_tf_record_from_coco_annotations(
   ]
 
   images, img_to_obj_annotation, category_index = (
-    _load_object_annotations(object_annotations_file)
-  )
+      _load_object_annotations(object_annotations_file))
   img_to_caption_annotation = (
-    _load_caption_annotations(caption_annotations_file)
-  )
+      _load_caption_annotations(caption_annotations_file))
 
   pool = multiprocessing.Pool()
   total_num_annotations_skipped = 0
@@ -330,4 +329,4 @@ def main(_):
 
 if __name__ == '__main__':
   tf.logging.set_verbosity(tf.logging.INFO)
-  tf.app.run()
+  app.run(main)

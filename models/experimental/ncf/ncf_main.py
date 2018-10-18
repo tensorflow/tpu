@@ -28,11 +28,11 @@ import numpy as np
 import tensorflow as tf
 
 from tensorflow.contrib import tpu
-from tensorflow.contrib.tpu.python.ops import tpu_ops
 import tpu_embedding
 from official.datasets import movielens
 from official.recommendation import constants as rconst
 from official.recommendation import data_preprocessing
+from official.recommendation import neumf_model
 from official.utils.flags import core as flags_core
 
 _TOP_K = 10  # Top-k list for evaluation
@@ -43,11 +43,10 @@ _NDCG_KEY = "NDCG"
 
 _NUM_EPOCHS = 15
 
-GraphSpec = collections.namedtuple(
-    "GraphSpec",
-    ["graph", "embedding", "tpu_loop",
-     "get_infeed_thread_fn", "get_outfeed_thread_fn",
-     "hook_before", "hook_after"])
+GraphSpec = collections.namedtuple("GraphSpec", [
+    "graph", "embedding", "run_tpu_loop", "get_infeed_thread_fn", "hook_before",
+    "hook_after"
+])
 
 
 def main(_):
@@ -82,10 +81,10 @@ def main(_):
     train_graph_spec = build_graph(
         train_params, ncf_dataset, tpu_embedding.TRAINING)
 
-    run_graph(master, train_graph_spec, epoch, ncf_dataset)
+    run_graph(master, train_graph_spec, epoch)
 
     tf.logging.info("Evaluating {}...".format(epoch))
-    run_graph(master, eval_graph_spec, epoch, ncf_dataset)
+    run_graph(master, eval_graph_spec, epoch)
 
   cleanup_fn()  # Cleanup data construction artifacts and subprocess.
 
@@ -121,34 +120,30 @@ def create_params(ncf_dataset):
   return train_params, eval_params
 
 
-def run_graph(master, graph_spec, epoch, ncf_dataset):
+def run_graph(master, graph_spec, epoch):
   """Run graph_spec.graph with master."""
+  tf.logging.info("Running graph for epoch {}...".format(epoch))
   with tf.Session(master, graph_spec.graph) as sess:
+    tf.logging.info("Initializing system for epoch {}...".format(epoch))
     sess.run(tpu.initialize_system(
         embedding_config=graph_spec.embedding.config_proto))
+
+    tf.logging.info("Running before hook for epoch {}...".format(epoch))
     graph_spec.hook_before(sess, epoch)
 
+    tf.logging.info("Running infeed for epoch {}...".format(epoch))
     infeed_thread_fn = graph_spec.get_infeed_thread_fn(sess)
     infeed_thread = threading.Thread(target=infeed_thread_fn)
     tf.logging.info("Staring infeed thread...")
     infeed_thread.start()
 
-    outfeed_thread = None
-    if graph_spec.get_outfeed_thread_fn:
-      outfeed_thread_fn = graph_spec.get_outfeed_thread_fn(
-          sess, ncf_dataset, epoch)
-      outfeed_thread = threading.Thread(target=outfeed_thread_fn)
-      tf.logging.info("Staring outfeed thread...")
-      outfeed_thread.start()
-
-    sess.run(graph_spec.tpu_loop)
+    tf.logging.info("Running TPU loop for epoch {}...".format(epoch))
+    graph_spec.run_tpu_loop(sess, epoch)
 
     tf.logging.info("Joining infeed thread...")
     infeed_thread.join()
-    if outfeed_thread:
-      tf.logging.info("Joining outfeed thread...")
-      outfeed_thread.join()
 
+    tf.logging.info("Running after hook for epoch {}...".format(epoch))
     graph_spec.hook_after(sess, epoch)
 
 
@@ -160,63 +155,45 @@ def build_graph(params, ncf_dataset, mode):
     embedding = get_embedding(params, mode)
     tf.logging.info("tpu_embedding_config_proto: {}."
                     .format(embedding.config_proto))
+    if mode == tpu_embedding.INFERENCE:
+      assert (params["batch_size"] % (embedding.num_cores *
+                                      (1 + rconst.NUM_EVAL_NEGATIVES))) == 0
 
-    input_fn, batch_count, train_record_dir = get_input_fn(
-        params, mode, ncf_dataset)
+    input_fn, train_record_dir, batch_count = data_preprocessing.make_input_fn(
+        ncf_dataset=ncf_dataset, is_training=(mode == tpu_embedding.TRAINING))
 
     get_infeed_thread_fn, infeed_queue = (
         build_infeed(input_fn, params, batch_count, embedding, mode))
 
-    outfeed_dtypes = []
-    outfeed_shapes = []
-    tpu_loop = build_tpu_loop(infeed_queue, outfeed_dtypes, outfeed_shapes,
-                              params, batch_count, embedding, mode)
+    tpu_loop = build_tpu_loop(infeed_queue, params, batch_count, embedding,
+                              mode)
 
-    get_outfeed_thread_fn = build_outfeed(outfeed_dtypes, outfeed_shapes,
-                                          batch_count, embedding, mode)
+    def run_tpu_loop(sess, epoch):
+      if mode == tpu_embedding.TRAINING:
+        sess.run(tpu_loop)
+      else:
+        total_values, count_values = (sess.run(tpu_loop))
+        hr = np.sum(total_values) / np.sum(count_values)
+        tf.logging.info("HR = {} after epoch {}.".format(hr, epoch))
 
     hook_before, hook_after = build_hooks(
         mode, embedding, params, train_record_dir)
 
-    return GraphSpec(graph, embedding, tpu_loop,
-                     get_infeed_thread_fn, get_outfeed_thread_fn,
+    return GraphSpec(graph, embedding, run_tpu_loop, get_infeed_thread_fn,
                      hook_before, hook_after)
-
-
-def get_input_fn(params, mode, ncf_dataset):
-  """Get `input_fn`."""
-  if mode == tpu_embedding.TRAINING:
-    # TODO(shizhiw): can data_preprocessing progress to next epoch automatically
-    # without requiring user to delete train_record_dir?
-    input_fn, train_record_dir, batch_count = \
-          data_preprocessing.make_train_input_fn(ncf_dataset=ncf_dataset)
-    tf.logging.info(train_record_dir)
-    tf.logging.info("train batch count: {}".format(batch_count))
-
-    approx_train_steps = int(ncf_dataset.num_train_positives
-                             * (1 + FLAGS.num_neg) // FLAGS.batch_size)
-    if np.abs(approx_train_steps - batch_count) > 1:
-      raise ValueError(
-          "Estimated ({}) and reported ({}) number of batches differ by more "
-          "than one".format(approx_train_steps, batch_count))
-  else:
-    input_fn = data_preprocessing.make_pred_input_fn(
-        ncf_dataset=ncf_dataset)
-    sample_count = ncf_dataset.num_users * (1 + rconst.NUM_EVAL_NEGATIVES)
-    batch_count = sample_count // params["batch_size"] + (
-        1 if sample_count % params["batch_size"] else 0)
-    train_record_dir = None
-
-  return input_fn, batch_count, train_record_dir
 
 
 def build_infeed(input_fn, params, batch_count, embedding, mode):
   """Build infeed."""
-  infeed_queue = tpu.InfeedQueue(
-      tuple_types=[tf.int32],
-      tuple_shapes=[[params["batch_size"], 1]]
-  )
-  infeed_queue.set_number_of_shards(embedding.num_cores)
+  if mode == tpu_embedding.TRAINING:
+    infeed_queue = tpu.InfeedQueue(
+        tuple_types=[tf.int32], tuple_shapes=[[params["batch_size"], 1]])
+    infeed_queue.set_number_of_shards(embedding.num_cores)
+  else:
+    infeed_queue = tpu.InfeedQueue(
+        tuple_types=[tf.float32], tuple_shapes=[[params["batch_size"], 1]])
+    infeed_queue.set_number_of_shards(embedding.num_cores)
+
   def enqueue_ops_fn():
     """Create enqueue ops."""
     ds = input_fn(params)
@@ -248,13 +225,13 @@ def build_infeed(input_fn, params, batch_count, embedding, mode):
               embedding.batch_size_per_core)],
           values=items_per_core_list[j],
           dense_shape=[embedding.batch_size_per_core, 1])
-      features = {
+      sparse_features = {
           "mf_user": users_sparse,
           "mlp_user": users_sparse,
           "mf_item": items_sparse,
           "mlp_item": items_sparse,
       }
-      sparse_features_list.append(features)
+      sparse_features_list.append(sparse_features)
     enqueue_ops = embedding.generate_enqueue_ops(
         sparse_features_list)
 
@@ -265,8 +242,9 @@ def build_infeed(input_fn, params, batch_count, embedding, mode):
       enqueue_ops.extend(
           infeed_queue.split_inputs_and_generate_enqueue_ops([labels]))
     else:
+      duplicate_mask = tf.cast(features[rconst.DUPLICATE_MASK], tf.float32)
       enqueue_ops.extend(
-          infeed_queue.split_inputs_and_generate_enqueue_ops([items]))
+          infeed_queue.split_inputs_and_generate_enqueue_ops([duplicate_mask]))
 
     return enqueue_ops
 
@@ -288,8 +266,7 @@ def build_infeed(input_fn, params, batch_count, embedding, mode):
   return get_infeed_thread_fn, infeed_queue
 
 
-def build_tpu_loop(infeed_queue, outfeed_dtypes, outfeed_shapes,
-                   params, batch_count, embedding, mode):
+def build_tpu_loop(infeed_queue, params, batch_count, embedding, mode):
   """Build op to run loops on TPU."""
   if mode == tpu_embedding.TRAINING:
     def tpu_step_fn(labels):
@@ -304,73 +281,43 @@ def build_tpu_loop(infeed_queue, outfeed_dtypes, outfeed_shapes,
       optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
 
       # Softmax with the first column of ones is equivalent to sigmoid.
-      logits = tf.concat([tf.ones(logits.shape, dtype=logits.dtype), logits],
-                         axis=1)
+      softmax_logits = tf.concat(
+          [tf.ones(logits.shape, dtype=logits.dtype), logits], axis=1)
 
       loss = tf.losses.sparse_softmax_cross_entropy(
-          labels=labels,
-          logits=logits
-      )
+          labels=labels, logits=softmax_logits)
 
       minimize_op = optimizer.minimize(loss)
       with tf.control_dependencies([minimize_op]):
         send_gradient_op = embedding.generate_send_gradients_op()
 
       return send_gradient_op
+
+    def tpu_loop_fn():
+      return tpu.repeat(batch_count, tpu_step_fn, infeed_queue=infeed_queue)
+
+    tpu_loop = tpu.shard(tpu_loop_fn, num_shards=embedding.num_cores)
+    return tpu_loop
   else:
-    def tpu_step_fn(items):
+
+    def tpu_step_fn(total, count, duplicate_mask):
       """One step in evaluation."""
       logits = logits_fn(embedding, params)
-      tensors = [logits, items]
-      outfeed_dtypes.extend([logits.dtype, items.dtype])
-      outfeed_shapes.extend([logits.shape, items.shape])
-      return [tpu_ops.outfeed_enqueue_tuple(tensors)]
+      in_top_k, _, metric_weights, _ = neumf_model.compute_top_k_and_ndcg(
+          logits, duplicate_mask, FLAGS.ml_perf)
+      metric_weights = tf.cast(metric_weights, tf.float32)
+      total += tf.reduce_sum(tf.multiply(in_top_k, metric_weights))
+      count += tf.reduce_sum(metric_weights)
+      return total, count
 
-  def tpu_loop_fn():
-    return tpu.repeat(
-        batch_count, tpu_step_fn, infeed_queue=infeed_queue)
-  tpu_loop = tpu.shard(tpu_loop_fn,
-                       num_shards=embedding.num_cores)
+    inputs = [tf.constant(0.), tf.constant(0.)]
 
-  return tpu_loop
+    def tpu_loop_fn():
+      return tpu.repeat(
+          batch_count, tpu_step_fn, inputs, infeed_queue=infeed_queue)
 
-
-def build_outfeed(outfeed_dtypes, outfeed_shapes,
-                  batch_count, embedding, mode):
-  """Build outfeed."""
-  if mode == tpu_embedding.TRAINING:
-    return None
-  else:
-    with tf.device(embedding.hosts[0]):
-      logits_list = []
-      items_list = []
-      for j in range(embedding.num_cores_per_host):
-        logits, items = tpu_ops.outfeed_dequeue_tuple(
-            dtypes=outfeed_dtypes, shapes=outfeed_shapes, device_ordinal=j)
-        logits_list.append(logits)
-        items_list.append(items)
-
-    def get_outfeed_thread_fn(sess, ncf_dataset, epoch):
-      """Dequeue from outfeed and calculate metrics."""
-      def outfeed_thread_fn():
-        """Outfeed thread executes this."""
-        logits_list_values = []
-        items_list_values = []
-        for i in range(batch_count):
-          if i % 100 == 0:
-            tf.logging.info("dequeue batch {}.".format(i))
-          logits_list_value, items_list_value = sess.run(
-              (logits_list, items_list))
-          logits_list_values.extend(logits_list_value)
-          items_list_values.extend(items_list_value)
-        eval_results = evaluate_model(logits_list_values,
-                                      items_list_values,
-                                      ncf_dataset)
-        tf.logging.info("eval results for epoch {}: {}"
-                        .format(epoch, eval_results))
-      return outfeed_thread_fn
-
-    return get_outfeed_thread_fn
+    tpu_loop = tpu.shard(tpu_loop_fn, num_shards=embedding.num_cores)
+    return tpu_loop
 
 
 def build_hooks(mode, embedding, params, train_record_dir):
@@ -527,177 +474,6 @@ def wrap_computation_in_while_loop(op_fn, n, parallel_iterations=10):
       parallel_iterations=parallel_iterations)
 
 
-def get_hit_rate_and_ndcg(predicted_scores_by_user, items_by_user, top_k=_TOP_K,
-                          match_mlperf=False):
-  """Returns the hit rate and the normalized DCG for evaluation.
-
-  `predicted_scores_by_user` and `items_by_user` are parallel NumPy arrays with
-  shape (num_users, num_items) such that `predicted_scores_by_user[i, j]` is the
-  predicted score that user `i` would rate item `items_by_user[i][j]`.
-
-  `items_by_user[i, 0]` is the item that user `i` interacted with, while
-  `items_by_user[i, 1:] are items that user `i` did not interact with. The goal
-  of the NCF model to give a high score for `predicted_scores_by_user[i, 0]`
-  compared to `predicted_scores_by_user[i, 1:]`, and the returned HR and NDCG
-  will be higher the more successful the model is at this goal.
-
-  If `match_mlperf` is True, then the HR and NDCG computations are done in a
-  slightly unusual way to match the MLPerf reference implementation.
-  Specifically, if `items_by_user[i, :]` contains duplicate items, it will be
-  treated as if the item only appeared once. Effectively, for duplicate items in
-  a row, the predicted score for all but one of the items will be set to
-  -infinity
-
-  For example, suppose we have that following inputs:
-  predicted_scores_by_user: [[ 2,  3,  3],
-                             [ 5,  4,  4]]
-
-  items_by_user:            [[10, 20, 20],
-                             [30, 40, 40]]
-
-  top_k: 2
-
-  Then with match_mlperf=True, the HR would be 2/2 = 1.0. With
-  match_mlperf=False, the HR would be 1/2 = 0.5. This is because each user has
-  predicted scores for only 2 unique items: 10 and 20 for the first user, and 30
-  and 40 for the second. Therefore, with match_mlperf=True, it's guaranteed the
-  first item's score is in the top 2. With match_mlperf=False, this function
-  would compute the first user's first item is not in the top 2, because item 20
-  has a higher score, and item 20 occurs twice.
-
-  Args:
-    predicted_scores_by_user: 2D Numpy array of the predicted scores.
-      `predicted_scores_by_user[i, j]` is the predicted score that user `i`
-      would rate item `items_by_user[i][j]`.
-    items_by_user: 2d numpy array of the item IDs. For user `i`,
-      `items_by_user[i][0]` is the itme that user `i` interacted with, while
-      `predicted_scores_by_user[i, 1:] are items that user `i` did not interact
-      with.
-    top_k: Only consider the highest rated `top_k` items per user. The HR and
-      NDCG for that user will only be nonzero if the predicted score for that
-      user's first item is in the `top_k` top scores.
-    match_mlperf: If True, compute HR and NDCG slightly differently to match the
-      MLPerf reference implementation.
-
-  Returns:
-    (hr, ndcg) tuple of floats, averaged across all users.
-  """
-  num_users = predicted_scores_by_user.shape[0]
-  zero_indices = np.zeros((num_users, 1), dtype=np.int32)
-
-  if match_mlperf:
-    predicted_scores_by_user = predicted_scores_by_user.copy()
-    items_by_user = items_by_user.copy()
-
-    # For each user, sort the items and predictions by increasing item number.
-    # We use mergesort since it's the only stable sort, which we need to be
-    # equivalent to the MLPerf reference implementation.
-    sorted_items_indices = items_by_user.argsort(kind="mergesort")
-    sorted_items = items_by_user[
-        np.arange(num_users)[:, np.newaxis], sorted_items_indices]
-    sorted_predictions = predicted_scores_by_user[
-        np.arange(num_users)[:, np.newaxis], sorted_items_indices]
-
-    # For items that occur more than once in a user's row, set the predicted
-    # score of the subsequent occurrences to -infinity, which effectively
-    # removes them from the array.
-    diffs = sorted_items[:, :-1] - sorted_items[:, 1:]
-    diffs = np.concatenate(
-        [np.ones((diffs.shape[0], 1), dtype=diffs.dtype), diffs], axis=1)
-    predicted_scores_by_user = np.where(diffs, sorted_predictions, -np.inf)
-
-    # After this block, `zero_indices` will be a (num_users, 1) shaped array
-    # indicating, for each user, the index of item of value 0 in
-    # `sorted_items_indices`. This item is the one we want to check if it is in
-    # the top_k items.
-    zero_indices = np.array(np.where(sorted_items_indices == 0))
-    assert np.array_equal(zero_indices[0, :], np.arange(num_users))
-    zero_indices = zero_indices[1, :, np.newaxis]
-
-  # NumPy has an np.argparition() method, however log(1000) is so small that
-  # sorting the whole array is simpler and fast enough.
-  top_indices = np.argsort(predicted_scores_by_user, axis=1)[:, -top_k:]
-  top_indices = np.flip(top_indices, axis=1)
-
-  # Both HR and NDCG vectorized computation takes advantage of the fact that if
-  # the positive example for a user is not in the top k, that index does not
-  # appear. That is to say:   hit_ind.shape[0] <= num_users
-  hit_ind = np.argwhere(np.equal(top_indices, zero_indices))
-  hr = hit_ind.shape[0] / num_users
-  ndcg = np.sum(np.log(2) / np.log(hit_ind[:, 1] + 2)) / num_users
-  return hr, ndcg
-
-
-def evaluate_model(prediction_batches, item_batches,
-                   ncf_dataset):
-  """Model evaluation with HR and NDCG metrics.
-
-  The evaluation protocol is to rank the test interacted item (truth items)
-  among the randomly chosen 999 items that are not interacted by the user.
-  The performance of the ranked list is judged by Hit Ratio (HR) and Normalized
-  Discounted Cumulative Gain (NDCG).
-
-  For evaluation, the ranked list is truncated at 10 for both metrics. As such,
-  the HR intuitively measures whether the test item is present on the top-10
-  list, and the NDCG accounts for the position of the hit by assigning higher
-  scores to hits at top ranks. Both metrics are calculated for each test user,
-  and the average scores are reported.
-
-  Args:
-    prediction_batches: a list of np.array of predictions.
-    item_batches: a list of np.array of batches.
-    ncf_dataset: An NCFDataSet object, which contains the information about
-      test/eval dataset, such as:
-        * num_users: How many unique users are in the eval set.
-        * test_data: The points which are used for consistent evaluation. These
-          are already included in the pred_input_fn.
-
-  Returns:
-    eval_results: A dict of evaluation results for benchmark logging.
-      eval_results = {
-        _HR_KEY: hr,
-        _NDCG_KEY: ndcg,
-        tf.GraphKeys.GLOBAL_STEP: global_step
-      }
-      where hr is an integer indicating the average HR scores across all users,
-      ndcg is an integer representing the average NDCG scores across all users,
-      and global_step is the global step
-  """
-
-  tf.logging.info("Computing predictions for eval set...")
-
-  # Reshape the predicted scores and items. Each user takes one row.
-  prediction_with_padding = np.concatenate(prediction_batches, axis=0)
-  item_with_padding = np.concatenate(item_batches, axis=0)
-
-  tf.logging.info("*_with_padding: shape: {}, {}.".format(
-      prediction_with_padding.shape,
-      item_with_padding.shape))
-  tf.logging.info("slicing: {}, {}, {}.".format(
-      ncf_dataset.num_users,
-      (1 + rconst.NUM_EVAL_NEGATIVES),
-      ncf_dataset.num_users * (1 + rconst.NUM_EVAL_NEGATIVES)))
-
-  predicted_scores_by_user = prediction_with_padding[
-      :ncf_dataset.num_users * (1 + rconst.NUM_EVAL_NEGATIVES)]\
-      .reshape(ncf_dataset.num_users, -1)
-  items_by_user = item_with_padding[
-      :ncf_dataset.num_users * (1 + rconst.NUM_EVAL_NEGATIVES)]\
-      .reshape(ncf_dataset.num_users, -1)
-
-  tf.logging.info("Computing metrics...")
-
-  hr, ndcg = get_hit_rate_and_ndcg(predicted_scores_by_user, items_by_user,
-                                   match_mlperf=FLAGS.ml_perf)
-
-  eval_results = {
-      _HR_KEY: hr,
-      _NDCG_KEY: ndcg,
-  }
-
-  return eval_results
-
-
 def define_ncf_flags():
   """Add flags for running ncf_main."""
   flags.DEFINE_enum(
@@ -738,7 +514,9 @@ def define_ncf_flags():
           "Download data to data_dir if it is not already present."))
 
   flags.DEFINE_integer(
-      name="eval_batch_size", default=100000, help=flags_core.help_wrap(
+      name="eval_batch_size",
+      default=80000,
+      help=flags_core.help_wrap(
           "The batch size used for evaluation. This should generally be larger"
           "than the training batch size as the lack of back propagation during"
           "evaluation can allow for larger batch sizes to fit in memory. If not"

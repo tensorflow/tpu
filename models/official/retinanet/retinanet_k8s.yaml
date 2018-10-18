@@ -44,8 +44,7 @@ spec:
             --resnet_checkpoint=${RESNET_CHECKPOINT}
             --model_dir=${MODEL_BUCKET}
             --hparams=image_size=640
-            --num_examples_per_epoch=6400
-            --num_epochs=1
+            --num_epochs=15
         env:
           # [REQUIRED] Must specify the Google Cloud Storage location where the
           # training data is stored.

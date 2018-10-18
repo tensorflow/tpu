@@ -22,6 +22,7 @@ from __future__ import division
 from __future__ import print_function
 
 import os
+from absl import app
 from absl import flags
 import absl.logging as _logging  # pylint: disable=unused-import
 import tensorflow as tf
@@ -410,4 +411,4 @@ def main(unused_argv):
 
 if __name__ == "__main__":
   tf.logging.set_verbosity(tf.logging.INFO)
-  tf.app.run()
+  app.run(main)
