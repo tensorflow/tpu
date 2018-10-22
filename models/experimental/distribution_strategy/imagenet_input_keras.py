@@ -48,13 +48,15 @@ class ImageNetInput(object):
     per_core_batch_size: The per-TPU-core batch size to use.
   """
 
-  def __init__(self, is_training, data_dir, per_core_batch_size=128):
+  def __init__(self, is_training, data_dir, per_core_batch_size=128,
+               use_bfloat16=False):
     self.image_preprocessing_fn = resnet_preprocessing.preprocess_image
     self.is_training = is_training
     self.data_dir = data_dir
     if self.data_dir == 'null' or self.data_dir == '':
       self.data_dir = None
     self.per_core_batch_size = per_core_batch_size
+    self.use_bfloat16 = use_bfloat16
 
   def dataset_parser(self, value):
     """Parse an ImageNet record from a serialized string Tensor."""
@@ -85,7 +87,7 @@ class ImageNetInput(object):
     image = self.image_preprocessing_fn(
         image_bytes=image_bytes,
         is_training=self.is_training,
-        use_bfloat16=False)
+        use_bfloat16=self.use_bfloat16)
 
     # Subtract one so that labels are in [0, 1000), and cast to float32 for
     # Keras model.

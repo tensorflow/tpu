@@ -16,8 +16,8 @@
 r"""ResNet-50 implemented with Keras running on Cloud TPUs.
 
 This file shows how you can run ResNet-50 on a Cloud TPU using the TensorFlow
-Keras support. This is configured for ImageNet (e.g. 1000 classes), but you can
-easily adapt to your own datasets by changing the code appropriately.
+Distribution Strategy. This is configured for ImageNet (e.g. 1000 classes),
+but you can easily adapt to your own datasets.
 """
 
 from __future__ import absolute_import
@@ -46,8 +46,10 @@ except ImportError:
 flags.DEFINE_bool('use_tpu', True, 'Use TPU model instead of CPU.')
 flags.DEFINE_string('tpu', None, 'Name of the TPU to use.')
 flags.DEFINE_string('data_dir', None, 'Directory of training and testing data.')
-tf.flags.DEFINE_string('model_dir', '',
-                       'Directory containing model data and checkpoints')
+flags.DEFINE_string('model_dir', '',
+                    'Directory containing model data and checkpoints.')
+flags.DEFINE_bool('use_bfloat16', True,
+                  'Train and evaluate a model using bfloat16.')
 
 FLAGS = flags.FLAGS
 
@@ -93,6 +95,7 @@ def main(argv):
   imagenet_train, imagenet_eval = [imagenet_input.ImageNetInput(
       is_training=is_training,
       data_dir=FLAGS.data_dir,
+      use_bfloat16=FLAGS.use_bfloat16,
       per_core_batch_size=PER_CORE_BATCH_SIZE)
                                    for is_training in [True, False]]
   logging.info('Training model using real data in directory "%s".',
@@ -102,17 +105,17 @@ def main(argv):
             epochs=num_epochs,
             steps_per_epoch=int(APPROX_IMAGENET_TRAINING_IMAGES / batch_size))
 
-  if HAS_H5PY:
-    weights_path = os.path.join(FLAGS.model_dir, WEIGHTS_TXT)
-    logging.info('Save weights into %s', weights_path)
-    model.save_weights(weights_path, overwrite=True)
-
   logging.info('Evaluating the model on the validation dataset.')
   score = model.evaluate(
       imagenet_eval.input_fn(),
       steps=int(APPROX_IMAGENET_TEST_IMAGES // batch_size),
       verbose=1)
   logging.info('Evaluation score: %s', score)
+
+  if HAS_H5PY:
+    weights_path = os.path.join(FLAGS.model_dir, WEIGHTS_TXT)
+    logging.info('Save weights into %s', weights_path)
+    model.save_weights(weights_file, overwrite=True)
 
 
 if __name__ == '__main__':
