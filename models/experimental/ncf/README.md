@@ -29,12 +29,16 @@ This will be updated once the TPU embedding library is included in future TF rel
 ## Setup NCF
 Copy `./ncf_main.py` to your working directory.
 
+```
+wget https://raw.githubusercontent.com/tensorflow/tpu/master/models/experimental/ncf/ncf_main.py
+```
+
 ## Train and Eval
 
 ```shell
 BUCKET_NAME=your_bucket_name
 EXPERIMENT_NAME=your_experiment_name
-python ncf_main.py --data_dir gs://${BUCKET_NAME}/data_dir --learning_rate 0.00136794 --beta1 0.781076 --beta2 0.977589 --epsilon 7.36321e-8  --model_dir gs://${BUCKET_NAME}/model_dirs/${EXPERIMENT_NAME}
+python ncf_main.py --data_dir gs://${BUCKET_NAME}/data_dir --learning_rate 0.00136794 --beta1 0.781076 --beta2 0.977589 --epsilon 7.36321e-8  --model_dir gs://${BUCKET_NAME}/model_dirs/${EXPERIMENT_NAME} |& tee ${EXPERIMENT_NAME}.log
 ```
 Most of the time, the hit rate metric (HR) reaches 0.635 in around 10 epochs.
 

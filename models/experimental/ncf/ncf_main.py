@@ -273,11 +273,18 @@ def build_tpu_loop(infeed_queue, params, batch_count, embedding, mode):
       """Create one step in training."""
       logits = logits_fn(embedding, params)
 
-      optimizer = tf.train.AdamOptimizer(
-          learning_rate=params["learning_rate"],
-          beta1=params["beta1"],
-          beta2=params["beta2"],
-          epsilon=params["epsilon"])
+      if FLAGS.lazy_adam:
+        optimizer = tf.train.AdamOptimizer(
+            learning_rate=params["learning_rate"],
+            beta1=params["beta1"],
+            beta2=params["beta2"],
+            epsilon=params["epsilon"])
+      else:
+        optimizer = tf.contrib.opt.LazyAdamOptimizer(
+            learning_rate=params["learning_rate"],
+            beta1=params["beta1"],
+            beta2=params["beta2"],
+            epsilon=params["epsilon"])
       optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
 
       # Softmax with the first column of ones is equivalent to sigmoid.
@@ -393,6 +400,8 @@ def get_embedding(params, mode):
     optimization_parameters = tpu_embedding.AdamParameters(
         learning_rate, beta1=params["beta1"], beta2=params["beta2"],
         epsilon=params["epsilon"],
+        lazy_adam=FLAGS.lazy_adam,
+        sum_inside_sqrt=FLAGS.adam_sum_inside_sqrt,
         use_gradient_accumulation=FLAGS.use_gradient_accumulation,
         pipeline_execution_with_tensor_core=(
             FLAGS.pipeline_execution_with_tensor_core))
@@ -607,6 +616,17 @@ def define_ncf_flags():
       "needed to synchronize across multiple workers. Generally this flag will "
       "not need to be set."
   ))
+
+  flags.DEFINE_bool(
+      name="lazy_adam", default=False, help=flags_core.help_wrap(
+          "By default, use Adam optimizer. If True, use Lazy Adam optimizer, "
+          "which will be faster but might need tuning for convergence."))
+
+  flags.DEFINE_bool(
+      name="adam_sum_inside_sqrt", default=True, help=flags_core.help_wrap(
+          "If True, Adam or lazy Adam updates on TPU embedding will be faster. "
+          "For details, see "
+          "tensorflow/contrib/tpu/proto/optimization_parameters.proto."))
 
 
 if __name__ == "__main__":
