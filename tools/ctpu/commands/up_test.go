@@ -186,6 +186,29 @@ func TestUpCreatingVmOnly(t *testing.T) {
 	}
 }
 
+func TestUpCreatingTPUOnly(t *testing.T) {
+	libs := newTestLibs()
+	libs.tpu.postCreateInstance = &tpu.Node{State: "READY", ServiceAccount: "compute-123@gserviceaccounts.com"}
+	libs.tpu.SetTfVersions("1.6")
+	c := upCmd{
+		cfg:              libs.cfg,
+		tpu:              libs.tpu,
+		gce:              libs.gce,
+		rmg:              libs.rmg,
+		cli:              libs.cli,
+		machineType:      "n1-standard-2",
+		diskSizeGb:       250,
+		skipConfirmation: true,
+		tpuOnly:          true,
+	}
+	exit := c.Execute(context.Background(), nil)
+	if exit != 0 {
+		t.Fatalf("Exit code incorrect: %d", exit)
+	}
+	verifySingleOperation(t, libs.gce.OperationsPerformed, "")
+	verifySingleOperation(t, libs.tpu.OperationsPerformed, "CREATE-1.6")
+}
+
 func TestUpImageFamily(t *testing.T) {
 	testcases := []struct {
 		tfVersion string
