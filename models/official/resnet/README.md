@@ -245,12 +245,13 @@ may require lowering the `--train_batch_size` to avoid running out of memory.
 ### Using your own data
 
 To use your own data with this model, you first need to write an input pipeline
-similar to [`imagenet_input.py`](imagenet_input.py). It is recommended to use
-TFRecord format for storing your data on disk (see the [ImageNet dataset
-download script][imagenet-download-format-as-tfrecord] for details) and
-`tf.data.Dataset` for the actual pipeline. Then, simply replace the current
-`imagenet_input` in [`resnet_main.py`](resnet_main.py) and adjust the dataset
-constants.
+similar to [`jpeg_to_tf_record.py`](jpeg_to_tfrecord). 
+It is recommended to use TFRecord format for storing your data on disk and
+`tf.data.Dataset` for the actual pipeline. Then, pass in the dataset
+constants as command-line parameters to resnet_main.py. 
+
+[jpeg_to_tfrecord]: https://github.com/tensorflow/tpu/blob/master/tools/datasets/jpeg_to_tf_record.py
+
 
 ### Benchmarking the training speed
 
