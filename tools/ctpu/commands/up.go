@@ -88,6 +88,7 @@ type upCmd struct {
 	printWelcome     bool
 	dryRun           bool
 	vmOnly           bool
+	tpuOnly          bool
 	forwardPorts     bool
 	forwardAgent     bool
 	tfVersion        string
@@ -128,6 +129,8 @@ func (c *upCmd) SetFlags(f *flag.FlagSet) {
 		"Do not make changes; print only what would have happened.")
 	f.BoolVar(&c.vmOnly, "vm-only", false,
 		"Do not allocate a TPU, only allocate a VM (useful if you're not ready to run on a TPU yet).")
+	f.BoolVar(&c.tpuOnly, "tpu-only", false,
+		"Do not allocate a VM, only allocate a TPU (useful if you already have a VM ready).")
 	f.BoolVar(&c.forwardPorts, "forward-ports", true,
 		"Automatically forward useful ports from the Compute Engine VM to your local machine. The ports forwarded are: 6006 (tensorboard), 8888 (jupyter notebooks), 8470 (TPU port), 8466 (TPU profiler port).")
 	f.BoolVar(&c.forwardAgent, "forward-agent", true,
@@ -224,6 +227,9 @@ func (c *upCmd) canonicalizeGCEImage() error {
 }
 
 func (c *upCmd) upVM() error {
+	if c.tpuOnly {
+		return nil
+	}
 	// Create the Compute Engine VM
 	vm, err := c.gce.Instance()
 	if err != nil {
@@ -488,6 +494,12 @@ execution. For the full list of flags, run: ctpu help up
 	if err != nil {
 		fmt.Printf("%v\n", err)
 		return subcommands.ExitFailure
+	}
+
+	// Do not attempt to ssh, as no instance was started.
+	if c.tpuOnly {
+		fmt.Println("Operation success; not ssh-ing to GCE VM due to --tpu-only flag.")
+		return subcommands.ExitSuccess
 	}
 
 	if inOrg, err := c.rmg.IsProjectInGoogleOrg(); err == nil && inOrg && c.cfg.Environment == "devshell" {
