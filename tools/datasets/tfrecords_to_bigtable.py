@@ -59,7 +59,8 @@ interactive python terminal:
 ```
 python
 >>> import tensorflow as tf
->>> from tensorflow.contrib.data.python.ops.writers import TFRecordWriter
+>>> from tensorflow.contrib.data.python.ops.writers import \
+  TFRecordWriter
 >>> ds = tf.data.Dataset.range(10)
 >>> ds = ds.map(lambda x: tf.as_string(x))
 >>> writer = TFRecordWriter('/tmp/testdata.tfrecord')

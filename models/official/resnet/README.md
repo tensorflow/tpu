@@ -245,10 +245,10 @@ may require lowering the `--train_batch_size` to avoid running out of memory.
 ### Using your own data
 
 To use your own data with this model, you first need to write an input pipeline
-similar to [`jpeg_to_tf_record.py`](jpeg_to_tfrecord). 
+similar to [`jpeg_to_tf_record.py`](jpeg_to_tfrecord).
 It is recommended to use TFRecord format for storing your data on disk and
 `tf.data.Dataset` for the actual pipeline. Then, pass in the dataset
-constants as command-line parameters to resnet_main.py. 
+constants as command-line parameters to resnet_main.py.
 
 [jpeg_to_tfrecord]: https://github.com/tensorflow/tpu/blob/master/tools/datasets/jpeg_to_tf_record.py
 
