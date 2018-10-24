@@ -18,6 +18,7 @@ from __future__ import division
 from __future__ import print_function
 
 import numpy as np
+from six.moves import xrange
 
 
 def multi_top_k_accuracy(model, evaluation_generator, eval_steps, ks=(1, 5)):

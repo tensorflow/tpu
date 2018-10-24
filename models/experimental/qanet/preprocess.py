@@ -28,6 +28,7 @@ import os
 from absl import app
 from absl import flags
 
+from six import string_types, text_type
 import tensorflow as tf
 
 import data
@@ -55,7 +56,7 @@ def get_tf_example(example):
     if not isinstance(val, list):
       val = [val]
 
-    if isinstance(val[0], str) or isinstance(val[0], unicode):
+    if isinstance(val[0], string_types):
       dtype = 'bytes'
     elif isinstance(val[0], int):
       dtype = 'int64'
@@ -64,7 +65,7 @@ def get_tf_example(example):
 
     if dtype == 'bytes':
       # Transform unicode into bytes if necessary.
-      if isinstance(val[0], unicode):
+      if isinstance(val[0], text_type):
         val = [each.encode('utf-8') for each in val]
       feature[key] = tf.train.Feature(bytes_list=tf.train.BytesList(value=val))
     elif dtype == 'int64':

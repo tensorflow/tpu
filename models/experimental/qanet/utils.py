@@ -22,6 +22,8 @@ import copy
 import math
 import pprint
 
+from six import text_type
+
 
 # TODO(ddohan): FrozenConfig type
 class Config(dict):
@@ -153,7 +155,7 @@ def _convert_type(val, tp):
   Raises:
     ValueError: If the conversion fails.
   """
-  if tp in [int, float, str, unicode, bool, tuple, list]:
+  if tp in [int, float, str, text_type, bool, tuple, list]:
     in_type = type(val)
     cast = tp(val)
     if in_type(cast) != val:
