@@ -34,6 +34,7 @@ import tensorflow as tf
 
 import eval_utils
 import imagenet_input
+import resnet_model
 from tensorflow.python.keras import backend as K
 
 try:
@@ -59,10 +60,6 @@ flags.DEFINE_bool(
     'N.B. enabling this would slow down the eval time due to using python '
     'generator for evaluation input. Will be deprecated once we have support '
     'for top_k accuracy evaluation.')
-flags.DEFINE_bool(
-    'use_bfloat16', True,
-    'If True, use bfloat16 for input pipeline and model precision; else use '
-    'float32. This does not apply to fake data, i.e., FLAGS.data is None.')
 
 FLAGS = flags.FLAGS
 
@@ -153,13 +150,7 @@ class LearningRateBatchScheduler(tf.keras.callbacks.Callback):
 
 def main(argv):
   logging.info('Building Keras ResNet-50 model')
-  model = tf.keras.applications.resnet50.ResNet50(
-      include_top=True,
-      weights=None,
-      input_tensor=None,
-      input_shape=None,
-      pooling=None,
-      classes=NUM_CLASSES)
+  model = resnet_model.ResNet50(num_classes=NUM_CLASSES)
 
   if FLAGS.use_tpu:
     logging.info('Converting from CPU to TPU model.')
@@ -199,7 +190,6 @@ def main(argv):
   else:
     imagenet_train = imagenet_input.ImageNetInput(
         is_training=True,
-        use_bfloat16=FLAGS.use_bfloat16,
         data_dir=FLAGS.data,
         per_core_batch_size=PER_CORE_BATCH_SIZE)
     logging.info('Training model using real data in directory "%s".',
@@ -217,7 +207,6 @@ def main(argv):
       # batch for all of the cores, which will be split on TPU.
       imagenet_eval = imagenet_input.ImageNetInput(
           is_training=False,
-          use_bfloat16=FLAGS.use_bfloat16,
           data_dir=FLAGS.data,
           per_core_batch_size=BATCH_SIZE)
       score = eval_utils.multi_top_k_accuracy(
@@ -226,7 +215,6 @@ def main(argv):
     else:
       imagenet_eval = imagenet_input.ImageNetInput(
           is_training=False,
-          use_bfloat16=FLAGS.use_bfloat16,
           data_dir=FLAGS.data,
           per_core_batch_size=PER_CORE_BATCH_SIZE)
       score = model.evaluate(imagenet_eval.input_fn,

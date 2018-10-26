@@ -26,12 +26,14 @@ import (
 	"github.com/tensorflow/tpu/tools/ctpu/ctrl"
 )
 
-// RestartTPUCP abstracts the control plane interfaces required for the delete command.
+// RestartTPUCP abstracts the control plane interfaces required for the restart command.
 type RestartTPUCP interface {
 	// Instance retrieves the instance from the control plane (if available).
 	Instance() (*ctrl.TPUInstance, error)
 	// CreateInstance requests the creation of the instance.
-	CreateInstance(ctx context.Context, version string, preemptible bool, hardwareType string) (ctrl.LongRunningOperation, error)
+	//
+	// CreateInstance is implemented by TPUCP.CreateInstance and is expected to match.
+	CreateInstance(ctx context.Context, version string, preemptible bool, hardwareType, network string) (ctrl.LongRunningOperation, error)
 	// DeleteInstance requests the deletion of the instance.
 	DeleteInstance() (ctrl.LongRunningOperation, error)
 }
@@ -110,7 +112,7 @@ func (r *restartCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...i
 		return subcommands.ExitFailure
 	}
 	log.Printf("Re-creating your Cloud TPU instance...")
-	op, err = r.tpu.CreateInstance(ctx, version, preemptible, tpuHardware)
+	op, err = r.tpu.CreateInstance(ctx, version, preemptible, tpuHardware, instance.Network)
 	if err != nil {
 		log.Print(err)
 		return subcommands.ExitFailure
