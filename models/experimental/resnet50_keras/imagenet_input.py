@@ -60,17 +60,17 @@ class ImageNetInput(object):
 
   Args:
     is_training: `bool` for whether the input is for training.
-    use_bfloat16: If True, use bfloat16 precision; else use float32.
     data_dir: `str` for the directory of the training and validation data;
         if 'null' (the literal string 'null', not None), then construct a null
         pipeline, consisting of empty images.
+    use_bfloat16: If True, use bfloat16 precision; else use float32.
     per_core_batch_size: The per-TPU-core batch size to use.
   """
 
   def __init__(self,
                is_training,
-               use_bfloat16,
                data_dir,
+               use_bfloat16=False,
                per_core_batch_size=128):
     self.image_preprocessing_fn = resnet_preprocessing.preprocess_image
     self.is_training = is_training

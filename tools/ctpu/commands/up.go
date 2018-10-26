@@ -38,7 +38,7 @@ type UpTPUCP interface {
 	// OptionallyRetrieveInstance retrieves the instance, but can optionally not enable the TPU API.
 	OptionallyRetrieveInstance(bool) (*ctrl.TPUInstance, bool, error)
 	// CreateInstance requests the creation of the instance.
-	CreateInstance(ctx context.Context, version string, preemptible bool, hardwareType string) (ctrl.LongRunningOperation, error)
+	CreateInstance(ctx context.Context, version string, preemptible bool, hardwareType, network string) (ctrl.LongRunningOperation, error)
 	// ListVersions retrieves the list of available TensorFlow versions.
 	ListVersions() ([]*tpu.TensorFlowVersion, error)
 }
@@ -104,6 +104,7 @@ type upCmd struct {
 	// TPU parameters
 	preemptibleTPU bool
 	tpuHardware    string
+	network        string
 }
 
 // UpCommand creates the up command.
@@ -149,6 +150,7 @@ func (c *upCmd) SetFlags(f *flag.FlagSet) {
 
 	f.BoolVar(&c.preemptibleTPU, "preemptible", false, "Create a preemptible Cloud TPU, instead of a normal (non-preemptible) Cloud TPU. A preemptible Cloud TPU costs less per hour, but the Cloud TPU service can stop/terminate the node at any time.")
 	f.StringVar(&c.tpuHardware, "tpu-size", "v2-8", "Configure the size and generation of the Cloud TPU.")
+	f.StringVar(&c.network, "gcp-network", "default", "Specify the network the Cloud TPU should peer with. Must be non-empty.")
 }
 
 func (upCmd) Synopsis() string {
@@ -303,7 +305,7 @@ func (c *upCmd) upTPU(ctx context.Context) (*ctrl.TPUInstance, error) {
 	if tpu == nil {
 		log.Printf("Creating TPU %s (this may take a few minutes)...\n", c.cfg.FlockName)
 		if !c.dryRun {
-			op, err := c.tpu.CreateInstance(ctx, c.tfVersion, c.preemptibleTPU, c.tpuHardware)
+			op, err := c.tpu.CreateInstance(ctx, c.tfVersion, c.preemptibleTPU, c.tpuHardware, c.network)
 			if err != nil {
 				log.Print(err)
 				return nil, err

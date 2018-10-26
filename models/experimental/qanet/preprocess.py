@@ -28,7 +28,8 @@ import os
 from absl import app
 from absl import flags
 
-from six import string_types, text_type
+from six import string_types
+from six import text_type
 import tensorflow as tf
 
 import data
