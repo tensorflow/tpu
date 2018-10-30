@@ -876,7 +876,7 @@ def main(unused_argv):
 
   if FLAGS.export_dir is not None:
     tf.logging.info('Starting to export model.')
-    inception_classifier.export_savedmodel(
+    inception_classifier.export_saved_model(
         export_dir_base=FLAGS.export_dir,
         serving_input_receiver_fn=image_serving_input_fn)
 

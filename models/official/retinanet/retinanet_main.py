@@ -275,10 +275,10 @@ def main(argv):
           steps=FLAGS.eval_samples // FLAGS.eval_batch_size)
       tf.logging.info('Eval results: %s' % eval_results)
     if FLAGS.model_dir:
-      eval_estimator.export_savedmodel(
+      eval_estimator.export_saved_model(
           export_dir_base=FLAGS.model_dir,
-          serving_input_receiver_fn=lambda: serving_input_fn(
-              hparams.image_size))
+          serving_input_receiver_fn=lambda: serving_input_fn(hparams.image_size)
+      )
 
   elif FLAGS.mode == 'eval':
     # Eval only runs on CPU or GPU host with batch_size = 1.
@@ -330,7 +330,7 @@ def main(argv):
           tf.logging.info(
               'Evaluation finished after training step %d' % current_step)
           break
-        eval_estimator.export_savedmodel(
+        eval_estimator.export_saved_model(
             export_dir_base=FLAGS.model_dir,
             serving_input_receiver_fn=
             lambda: serving_input_fn(hparams.image_size))
@@ -379,7 +379,7 @@ def main(argv):
               FLAGS.validation_file_pattern, is_training=False),
           steps=FLAGS.eval_samples // FLAGS.eval_batch_size)
       tf.logging.info('Evaluation results: %s' % eval_results)
-    eval_estimator.export_savedmodel(
+    eval_estimator.export_saved_model(
         export_dir_base=FLAGS.model_dir,
         serving_input_receiver_fn=lambda: serving_input_fn(hparams.image_size))
 

@@ -412,13 +412,12 @@ def main(_):
           time_hook.compute_speed(len(results) * eval_batch_size)))
   elif mode == 'export_savedmodel':
     tf.logging.info('Starting exporting saved model ...')
-    image_classifier.export_savedmodel(
+    image_classifier.export_saved_model(
         export_dir_base=model_dir + '/export_savedmodel/',
         serving_input_receiver_fn=build_tensor_serving_input_receiver_fn(
             [hparams.image_size, hparams.image_size, 3],
             batch_size=hparams.eval_batch_size),
-        as_text=True,
-        strip_default_attrs=True)
+        as_text=True)
   else:  # default to train mode.
     current_step = _load_global_step_from_checkpoint_dir(model_dir)
     total_step = int(hparams.num_epochs * train_steps_per_epoch)
