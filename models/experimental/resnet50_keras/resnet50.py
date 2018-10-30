@@ -144,8 +144,8 @@ class LearningRateBatchScheduler(tf.keras.callbacks.Callback):
     if lr != self.prev_lr:
       K.set_value(self.model.optimizer.lr, lr)
       self.prev_lr = lr
-      logging.info('Epoch %05d Batch %05d: LearningRateBatchScheduler change '
-                   'learning rate to %s.', self.epochs, batch, lr)
+      logging.debug('Epoch %05d Batch %05d: LearningRateBatchScheduler change '
+                    'learning rate to %s.', self.epochs, batch, lr)
 
 
 def main(argv):
