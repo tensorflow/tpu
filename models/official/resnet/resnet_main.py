@@ -183,6 +183,11 @@ flags.DEFINE_string(
     default=None,
     help=('The directory where the exported SavedModel will be stored.'))
 
+flags.DEFINE_bool(
+    'export_to_tpu', default=False,
+    help=('Whether to export additional metagraph with "serve, tpu" tags'
+          ' in addition to "serve" only metagraph.'))
+
 flags.DEFINE_string(
     'precision', default='bfloat16',
     help=('Precision to use; one of: {bfloat16, float32}'))
@@ -539,7 +544,7 @@ def main(unused_argv):
       config=config,
       train_batch_size=FLAGS.train_batch_size,
       eval_batch_size=FLAGS.eval_batch_size,
-      export_to_tpu=False)
+      export_to_tpu=FLAGS.export_to_tpu)
   assert FLAGS.precision == 'bfloat16' or FLAGS.precision == 'float32', (
       'Invalid value for --precision flag; must be bfloat16 or float32.')
   tf.logging.info('Precision: %s', FLAGS.precision)
