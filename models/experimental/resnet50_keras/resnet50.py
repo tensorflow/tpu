@@ -52,14 +52,14 @@ flags.DEFINE_string('data', None, 'Path to training and testing data.')
 flags.DEFINE_string(
     'model_dir', None,
     ('The directory where the model weights and training/evaluation summaries '
-     'are stored. If unset, model weights will be saved to /tmp and no '
-     'summaries will be stored.'))
+     'are stored. If not specified, save to /tmp/resnet50.'))
 flags.DEFINE_bool(
     'eval_top_5_accuracy', False,
     'Eval both top 1 and top 5 accuracy. Otherwise, only eval top 1 accuracy. '
     'N.B. enabling this would slow down the eval time due to using python '
-    'generator for evaluation input. Will be deprecated once we have support '
-    'for top_k accuracy evaluation.')
+    'generator for evaluation input. ImageNet validation set would take around '
+    '30 minutes. Will be deprecated once we have support for top_k accuracy '
+    'evaluation.')
 
 FLAGS = flags.FLAGS
 
@@ -68,7 +68,7 @@ NUM_CLASSES = 1000
 IMAGE_SIZE = 224
 EPOCHS = 90  # Standard imagenet training regime.
 APPROX_IMAGENET_TRAINING_IMAGES = 1280000  # Approximate number of images.
-APPROX_IMAGENET_TEST_IMAGES = 48000  # Approximate number of images.
+IMAGENET_VALIDATION_IMAGES = 50000  # Number of images.
 
 # Training hyperparameters.
 NUM_CORES = 8
@@ -81,8 +81,9 @@ LR_SCHEDULE = [    # (multiplier, epoch to start) tuples
     (1.0, 5), (0.1, 30), (0.01, 60), (0.001, 80)
 ]
 
-EVAL_STEPS = int(APPROX_IMAGENET_TEST_IMAGES // BATCH_SIZE)
+VALIDATION_STEPS = int(IMAGENET_VALIDATION_IMAGES // BATCH_SIZE)
 WEIGHTS_TXT = 'resnet50_weights.h5'
+DEFAULT_MODEL_DIR = '/tmp/resnet50'
 
 
 def learning_rate_schedule(current_epoch, current_batch):
@@ -157,9 +158,6 @@ def main(argv):
     resolver = tf.contrib.cluster_resolver.TPUClusterResolver(tpu=FLAGS.tpu)
     strategy = tf.contrib.tpu.TPUDistributionStrategy(resolver)
     model = tf.contrib.tpu.keras_to_tpu_model(model, strategy=strategy)
-    session_master = resolver.master()
-  else:
-    session_master = ''
 
   logging.info('Compiling model.')
   model.compile(
@@ -168,10 +166,6 @@ def main(argv):
                                         nesterov=True),
       loss='sparse_categorical_crossentropy',
       metrics=['sparse_categorical_accuracy'])
-
-  callbacks = [LearningRateBatchScheduler(schedule=learning_rate_schedule)]
-  if FLAGS.model_dir:
-    callbacks.append(tf.keras.callbacks.TensorBoard(log_dir=FLAGS.model_dir))
 
   if FLAGS.data is None:
     training_images = np.random.randn(
@@ -183,48 +177,44 @@ def main(argv):
         training_images,
         training_labels,
         epochs=EPOCHS,
-        batch_size=BATCH_SIZE,
-        callbacks=callbacks)
+        batch_size=BATCH_SIZE)
     logging.info('Evaluating the model on synthetic data.')
     model.evaluate(training_images, training_labels, verbose=0)
   else:
+    model_dir = FLAGS.model_dir if FLAGS.model_dir else DEFAULT_MODEL_DIR
     imagenet_train = imagenet_input.ImageNetInput(
         is_training=True,
         data_dir=FLAGS.data,
         per_core_batch_size=PER_CORE_BATCH_SIZE)
     logging.info('Training model using real data in directory "%s".',
                  FLAGS.data)
+    # If evaluating top 5 accuracy, we feed the inputs from a Python generator,
+    # so we need to build a single batch for all of the cores, which will be
+    # split on TPU.
+    per_core_batch_size = (
+        BATCH_SIZE if FLAGS.eval_top_5_accuracy else PER_CORE_BATCH_SIZE)
+    imagenet_validation = imagenet_input.ImageNetInput(
+        is_training=False,
+        data_dir=FLAGS.data,
+        per_core_batch_size=per_core_batch_size)
+
+    callbacks = [
+        LearningRateBatchScheduler(schedule=learning_rate_schedule),
+        eval_utils.TensorBoardWithValidation(
+            log_dir=model_dir,
+            validation_imagenet_input=imagenet_validation,
+            validation_steps=VALIDATION_STEPS,
+            validation_epochs=[30, 60, 90],
+            eval_top_k_accuracy=FLAGS.eval_top_5_accuracy),
+    ]
+
     model.fit(imagenet_train.input_fn,
               epochs=EPOCHS,
               steps_per_epoch=TRAINING_STEPS_PER_EPOCH,
               callbacks=callbacks)
 
-    logging.info('Evaluating the model on the validation dataset.')
-    if FLAGS.eval_top_5_accuracy:
-      logging.info('Evaluating top 1 and top 5 accuracy using a Python '
-                   'generator.')
-      # We feed the inputs from a Python generator, so we need to build a single
-      # batch for all of the cores, which will be split on TPU.
-      imagenet_eval = imagenet_input.ImageNetInput(
-          is_training=False,
-          data_dir=FLAGS.data,
-          per_core_batch_size=BATCH_SIZE)
-      score = eval_utils.multi_top_k_accuracy(
-          model, imagenet_eval.evaluation_generator(K.get_session()),
-          EVAL_STEPS)
-    else:
-      imagenet_eval = imagenet_input.ImageNetInput(
-          is_training=False,
-          data_dir=FLAGS.data,
-          per_core_batch_size=PER_CORE_BATCH_SIZE)
-      score = model.evaluate(imagenet_eval.input_fn,
-                             steps=EVAL_STEPS,
-                             verbose=1)
-    print('Evaluation score', score)
-
     if HAS_H5PY:
-      weights_file = os.path.join(
-          FLAGS.model_dir if FLAGS.model_dir else '/tmp', WEIGHTS_TXT)
+      weights_file = os.path.join(model_dir, WEIGHTS_TXT)
       logging.info('Save weights into %s', weights_file)
       model.save_weights(weights_file, overwrite=True)
 

@@ -20,6 +20,10 @@ from __future__ import print_function
 import numpy as np
 from six.moves import xrange
 
+from tensorflow.python.keras import backend as K
+from tensorflow.python.keras import callbacks
+from tensorflow.python.platform import tf_logging as logging
+
 
 def multi_top_k_accuracy(model, evaluation_generator, eval_steps, ks=(1, 5)):
   """Calculates top k accuracy for the given `k` values.
@@ -54,5 +58,79 @@ def multi_top_k_accuracy(model, evaluation_generator, eval_steps, ks=(1, 5)):
       top_k_matched[k] += matched
     total += len(labels)
 
-  return dict([("top_{0}_accuracy".format(k), matched / float(total))
+  return dict([('top_{0}_accuracy'.format(k), matched / float(total))
                for k, matched in top_k_matched.items()])
+
+
+class TensorBoardWithValidation(callbacks.TensorBoard):
+  """Extend TensorBoard Callback with validation .
+
+  Validation is executed at the end of specified epochs, and the validation
+  metrics are exported to tensorboard for visualization.
+
+  Args:
+      log_dir: the path of the directory where to save the log
+          files to be parsed by TensorBoard.
+      validation_imagenet_input: ImageNetInput for validation.
+      validation_steps: total number of steps to validate.
+      validation_epochs: a list of integers, epochs to run validation.
+      eval_top_k_accuracy: boolean, if true, evaluate top k accuracies using
+          multi_top_k_accuracy(). Otherwise, use model.evaluate().
+          N.B. enabling this would significantly slow down the eval time due to
+          using python generator for evaluation input.
+      top_ks: a tuple of int, position values to calculate top k accurary. It's
+          only used when eval_top_k_accuracy is true.
+  """
+
+  def __init__(self,
+               log_dir,
+               validation_imagenet_input,
+               validation_steps,
+               validation_epochs,
+               eval_top_k_accuracy,
+               top_ks=(1, 5)):
+    super(TensorBoardWithValidation, self).__init__(log_dir)
+    self._validation_imagenet_input = validation_imagenet_input
+    self._validation_steps = validation_steps
+    self._validation_epochs = validation_epochs
+    self._eval_top_k_accuracy = eval_top_k_accuracy
+    self._top_ks = top_ks
+    self._current_epoch = 0
+
+  def on_epoch_end(self, epoch, logs=None):
+    self._current_epoch += 1
+    if self._current_epoch in self._validation_epochs:
+
+      logging.info('Validate in epoch %s', self._current_epoch)
+      if self._eval_top_k_accuracy:
+        score = multi_top_k_accuracy(
+            self.model,
+            self._validation_imagenet_input.evaluation_generator(
+                K.get_session()),
+            self._validation_steps,
+            ks=self._top_ks)
+        for metric_name, metric_value in score.items():
+          logs['val_' + metric_name] = metric_value
+      else:
+        # evaluate() is executed as callbacks during the training. In this case,
+        # _numpy_to_infeed_manager_list is not empty, so save it for
+        # recovery at the end of evaluate call.
+        # TODO(jingli): remove this monkey patch hack once the fix is included
+        # in future TF release.
+        original_numpy_to_infeed_manager_list = []
+        if self.model._numpy_to_infeed_manager_list:
+          original_numpy_to_infeed_manager_list = (
+              self.model._numpy_to_infeed_manager_list)
+          self.model._numpy_to_infeed_manager_list = []
+        # Set _eval_function to None to enforce recompliation to use the newly
+        # created dataset in self._validation_imagenet_input.input_fn in
+        # evaluation.
+        self.model._eval_function = None  # pylint: disable=protected-access
+        scores = self.model.evaluate(self._validation_imagenet_input.input_fn,
+                                     steps=self._validation_steps)
+        self.model._numpy_to_infeed_manager_list = (
+            original_numpy_to_infeed_manager_list)
+        for metric_name, metric_value in zip(self.model.metrics_names, scores):
+          logs['val_' + metric_name] = metric_value
+    # The parent callback is responsible to write the logs as events file.
+    super(TensorBoardWithValidation, self).on_epoch_end(epoch, logs)
