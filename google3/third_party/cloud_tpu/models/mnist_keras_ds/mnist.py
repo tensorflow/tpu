@@ -70,6 +70,17 @@ def run():
   """Run the model training and return evaluation output."""
   use_tpu = FLAGS.use_tpu
 
+  if use_tpu:
+    strategy = tf.contrib.distribute.TPUStrategy(
+        tf.contrib.cluster_resolver.TPUClusterResolver(tpu=FLAGS.tpu),
+        steps_per_run=100)
+    # TODO(b/118776054): Remove the need to do this once we change
+    # the API to always use global batch size.
+    batch_size = BATCH_SIZE // strategy.num_replicas
+  else:
+    strategy = None
+    batch_size = BATCH_SIZE
+
   print('Mode:', 'TPU' if use_tpu else 'CPU')
 
   if FLAGS.fake_data:
@@ -99,17 +110,11 @@ def run():
   y_test = tf.keras.utils.to_categorical(y_test, NUM_CLASSES)
 
   model = mnist_model(input_shape)
-
-  if use_tpu:
-    strategy = tf.contrib.tpu.TPUDistributionStrategy(
-        tf.contrib.cluster_resolver.TPUClusterResolver(tpu=FLAGS.tpu)
-    )
-    model = tf.contrib.tpu.keras_to_tpu_model(model, strategy=strategy)
-
   model.compile(
       loss=tf.keras.losses.categorical_crossentropy,
       optimizer=tf.train.GradientDescentOptimizer(learning_rate=0.05),
-      metrics=['accuracy'])
+      metrics=['accuracy'],
+      distribute=strategy)
 
   callbacks = []
   if FLAGS.model_dir:
@@ -118,12 +123,12 @@ def run():
   model.fit(
       x_train,
       y_train,
-      batch_size=BATCH_SIZE,
+      batch_size=batch_size,
       callbacks=callbacks,
       epochs=EPOCHS,
       verbose=1,
       validation_data=(x_test, y_test))
-  return model.evaluate(x_test, y_test, batch_size=BATCH_SIZE, verbose=1)
+  return model.evaluate(x_test, y_test, batch_size=batch_size, verbose=1)
 
 
 def main(unused_dev):
