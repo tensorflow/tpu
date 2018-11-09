@@ -125,7 +125,20 @@ class TensorBoardWithValidation(callbacks.TensorBoard):
         # Set _eval_function to None to enforce recompliation to use the newly
         # created dataset in self._validation_imagenet_input.input_fn in
         # evaluation.
-        self.model._eval_function = None  # pylint: disable=protected-access
+        # pylint: disable=bare-except
+        # pylint: disable=protected-access
+        try:
+          self.model._eval_function = None
+        except:
+          pass
+
+        try:
+          # In TF 1.12, _eval_function does not exist, only test_function
+          # existed.
+          self.model.test_function = None
+        except:
+          pass
+
         scores = self.model.evaluate(self._validation_imagenet_input.input_fn,
                                      steps=self._validation_steps)
         self.model._numpy_to_infeed_manager_list = (
