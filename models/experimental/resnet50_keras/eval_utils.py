@@ -144,6 +144,7 @@ class TensorBoardWithValidation(callbacks.TensorBoard):
         self.model._numpy_to_infeed_manager_list = (
             original_numpy_to_infeed_manager_list)
         for metric_name, metric_value in zip(self.model.metrics_names, scores):
+          logging.info('Evaluation metric. %s: %s.', metric_name, metric_value)
           logs['val_' + metric_name] = metric_value
     # The parent callback is responsible to write the logs as events file.
     super(TensorBoardWithValidation, self).on_epoch_end(epoch, logs)
