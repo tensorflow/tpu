@@ -45,17 +45,17 @@ class ImageNetInput(object):
     data_dir: `str` for the directory of the training and validation data;
         if 'null' (the literal string 'null', not None), then construct a null
         pipeline, consisting of empty images.
-    per_core_batch_size: The per-TPU-core batch size to use.
+    batch_size: The global batch size to use during training or evaluation.
   """
 
-  def __init__(self, is_training, data_dir, per_core_batch_size=128,
+  def __init__(self, is_training, data_dir, batch_size=1024,
                use_bfloat16=False):
     self.image_preprocessing_fn = resnet_preprocessing.preprocess_image
     self.is_training = is_training
     self.data_dir = data_dir
     if self.data_dir == 'null' or self.data_dir == '':
       self.data_dir = None
-    self.per_core_batch_size = per_core_batch_size
+    self.batch_size = batch_size
     self.use_bfloat16 = use_bfloat16
 
   def dataset_parser(self, value):
@@ -129,7 +129,7 @@ class ImageNetInput(object):
     # Parse, pre-process, and batch the data in parallel
     dataset = dataset.apply(
         tf.contrib.data.map_and_batch(
-            self.dataset_parser, batch_size=self.per_core_batch_size,
+            self.dataset_parser, batch_size=self.batch_size,
             num_parallel_batches=2,
             drop_remainder=True))
 
@@ -140,9 +140,9 @@ class ImageNetInput(object):
   def input_fn_null(self):
     """Input function which provides null (black) images."""
     dataset = tf.data.Dataset.range(1).repeat().map(self._get_null_input)
-    dataset = dataset.prefetch(self.per_core_batch_size)
+    dataset = dataset.prefetch(self.batch_size)
 
-    dataset = dataset.batch(self.per_core_batch_size, drop_remainder=True)
+    dataset = dataset.batch(self.batch_size, drop_remainder=True)
 
     dataset = dataset.prefetch(32)     # Prefetch overlaps in-feed with training
     tf.logging.info('Input dataset: %s', str(dataset))

@@ -50,7 +50,8 @@ flags.DEFINE_boolean("enable_tpu", False,
 # Model settings
 
 flags.DEFINE_string("model_dir", None, "Estimator model_dir.")
-flags.DEFINE_string("mode", "train", "One of {train, eval, predict}.")
+flags.DEFINE_string("mode", "train",
+                    "One of {train, eval, predict, train_and_eval}.")
 flags.DEFINE_string("predict_path", "/tmp/qanet_predictions.json",
                     "Path to write predictions to.")
 flags.DEFINE_string("master", "", "Master")
@@ -74,7 +75,7 @@ def train_and_eval(cfg, do_eval=True, report_fn=None):
   """Run training (and evaluation if on a GPU)."""
   tf.logging.info("cfg.model_dir = " + cfg.model_dir)
   # Save out config to model directory
-  assert FLAGS.mode == "train"
+  assert "train" in FLAGS.mode
   tf.gfile.MakeDirs(cfg.model_dir)
   with tf.gfile.GFile(os.path.join(cfg.model_dir, "config.json"), "w") as f:
     json.dump(cfg, f)
@@ -206,6 +207,7 @@ def create_config(model_dir, hparams=None):
 
   return cfg
 
+
 def run():
   """Runs train/eval/predict depends on mode flag."""
   tf.logging.set_verbosity(tf.logging.INFO)
@@ -223,11 +225,8 @@ def run():
     else:
       cfg.tpu.enable = False
 
-  if cfg.tpu.enable:
-    assert FLAGS.mode == "train"
-
   if "train" in FLAGS.mode:
-    return train_and_eval(cfg, do_eval=not cfg.tpu.enable)
+    return train_and_eval(cfg, do_eval=("eval" in FLAGS.mode))
   elif FLAGS.mode == "eval":
     return evaluate(override_cfg=cfg, model_dir=FLAGS.model_dir)
   elif FLAGS.mode == "predict":

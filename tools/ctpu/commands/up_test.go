@@ -16,9 +16,9 @@
 package commands
 
 import (
+	"context"
 	"testing"
 
-	"context"
 	"github.com/tensorflow/tpu/tools/ctpu/config"
 	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/tpu/v1alpha1"

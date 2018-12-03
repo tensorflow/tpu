@@ -16,12 +16,12 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"sort"
 
 	"cloud.google.com/go/storage"
-	"context"
 	"flag"
 	"github.com/google/subcommands"
 	"github.com/tensorflow/tpu/tools/ctpu/config"

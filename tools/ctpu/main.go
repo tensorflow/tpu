@@ -17,12 +17,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
 	"flag"
 	// context is used to cancel outstanding requests
-	"context"
 	"github.com/google/subcommands"
 	"github.com/tensorflow/tpu/tools/ctpu/commands"
 	"github.com/tensorflow/tpu/tools/ctpu/config"
@@ -74,6 +74,7 @@ func main() {
 	subcommands.Register(commands.TFVersionsCommand(cfg, ctrls.TPU), "configuration")
 	subcommands.Register(commands.TPULocationsCommand(cfg, ctrls.TPU), "configuration")
 	subcommands.Register(commands.QuotaCommand(cfg), "configuration")
+	subcommands.Register(commands.TPUSizeCommand(cfg, ctrls.TPU), "configuration")
 
 	subcommands.Register(commands.PauseCommandAlias(cfg, ctrls.TPU, ctrls.GCE), "aliases for other commands")
 	subcommands.Register(commands.DeleteCommandAlias(cfg, ctrls.TPU, ctrls.GCE), "aliases for other commands")

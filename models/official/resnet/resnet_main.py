@@ -25,6 +25,8 @@ from absl import app
 from absl import flags
 import absl.logging as _logging  # pylint: disable=unused-import
 import tensorflow as tf
+
+from common import tpu_profiler_hook
 from official.resnet import imagenet_input
 from official.resnet import lars_util
 from official.resnet import resnet_model
@@ -33,7 +35,6 @@ from tensorflow.contrib.tpu.python.tpu import async_checkpoint
 from tensorflow.contrib.training.python.training import evaluation
 from tensorflow.core.protobuf import rewriter_config_pb2
 from tensorflow.python.estimator import estimator
-
 
 FLAGS = flags.FLAGS
 
@@ -80,6 +81,10 @@ flags.DEFINE_integer(
           ' bottleneck layers. Deeper models require more training time and'
           ' more memory and may require reducing --train_batch_size to prevent'
           ' running out of memory.'))
+
+flags.DEFINE_integer(
+    'profile_every_n_steps', default=0,
+    help=('Number of steps between collecting profiles if larger than 0'))
 
 flags.DEFINE_string(
     'mode', default='train_and_eval',
@@ -135,13 +140,14 @@ flags.DEFINE_integer(
           ' utilization on the TPU.'))
 
 flags.DEFINE_integer(
-    'num_parallel_calls', default=64,
-    help=('Number of parallel threads in CPU for the input pipeline'))
+    'num_parallel_calls', default=8,
+    help=('Number of parallel threads in CPU for the input pipeline.'
+          ' Recommended value is the number of cores per CPU host.'))
 
 flags.DEFINE_integer(
     'num_cores', default=8,
-    help=('Number of TPU cores. For a single TPU device, this is 8 because each'
-          ' TPU has 4 chips each with 2 cores.'))
+    help=('Number of TPU cores in total. For a single TPU device, this is 8'
+          ' because each TPU has 4 chips each with 2 cores.'))
 
 flags.DEFINE_string(
     'bigtable_project', None,
@@ -630,6 +636,12 @@ def main(unused_argv):
             async_checkpoint.AsyncCheckpointSaverHook(
                 checkpoint_dir=FLAGS.model_dir,
                 save_steps=max(100, FLAGS.iterations_per_loop)))
+      if FLAGS.profile_every_n_steps > 0:
+        hooks.append(
+            tpu_profiler_hook.TPUProfilerHook(
+                save_steps=FLAGS.profile_every_n_steps,
+                output_dir=FLAGS.model_dir, tpu=FLAGS.tpu)
+            )
       resnet_classifier.train(
           input_fn=imagenet_train.input_fn,
           max_steps=FLAGS.train_steps,

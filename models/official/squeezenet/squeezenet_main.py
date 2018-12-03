@@ -32,9 +32,9 @@ import squeezenet_model
 
 # Cloud TPU Cluster Resolvers
 flags.DEFINE_string(
-    'tpu', default=None,
-    help='The Cloud TPU to use for training. This should be either the name '
-    'used when creating the Cloud TPU, or a grpc://ip.address.of.tpu:8470 url.')
+    "tpu", default=None,
+    help="The Cloud TPU to use for training. This should be either the name "
+    "used when creating the Cloud TPU, or a grpc://ip.address.of.tpu:8470 url.")
 flags.DEFINE_string(
     "gcp_project", default=None,
     help="Project name for the Cloud TPU-enabled project. If not specified, we "
@@ -60,25 +60,30 @@ flags.DEFINE_integer("num_epochs", 150,
 flags.DEFINE_integer("num_evals", 10,
                      "How many times to run an evaluation during training.")
 flags.DEFINE_float("learning_rate", 0.03, "Learning rate.")
+flags.DEFINE_float("min_learning_rate", 0.005, "The minimal end learning rate.")
+flags.DEFINE_integer("iterations_per_loop", 100,
+                     "Number of global step increased per session run.")
+flags.DEFINE_integer("num_examples_per_epoch", 1300 * 1000,
+                     "Number of examples to train per epoch.")
+flags.DEFINE_integer("num_eval_examples", 50 * 1000,
+                     "Number of examples to evaluate per run.")
 
 FLAGS = flags.FLAGS
 
 
-def main(argv):
-  del argv
-
+def main(unused_argv):
   tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
       FLAGS.tpu,
       zone=FLAGS.tpu_zone,
       project=FLAGS.gcp_project)
 
-  training_examples = 1300 * 1000 * FLAGS.num_epochs
-  eval_examples = 50 * 1000
+  training_examples = FLAGS.num_examples_per_epoch * FLAGS.num_epochs
+  eval_examples = FLAGS.num_eval_examples
 
   params = {
       "num_classes": 1001,
       "lr": FLAGS.learning_rate,
-      "min_lr": 0.005,
+      "min_lr": FLAGS.min_learning_rate,
       "momentum": FLAGS.momentum,
       "optimizer": FLAGS.optimizer,
       "num_eval_examples": eval_examples,
@@ -93,7 +98,7 @@ def main(argv):
       session_config=tf.ConfigProto(
           allow_soft_placement=True, log_device_placement=False),
       tpu_config=tf.contrib.tpu.TPUConfig(
-          iterations_per_loop=100,
+          iterations_per_loop=FLAGS.iterations_per_loop,
           num_shards=FLAGS.num_shards,
       ),
   )

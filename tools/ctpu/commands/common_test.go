@@ -16,11 +16,11 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"testing"
 
-	"context"
 	"github.com/google/go-cmp/cmp"
 	"github.com/tensorflow/tpu/tools/ctpu/config"
 	"github.com/tensorflow/tpu/tools/ctpu/ctrl"

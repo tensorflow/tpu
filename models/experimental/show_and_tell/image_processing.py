@@ -35,7 +35,7 @@ def distort_image(images, seed):
       [0, 1].
   """
   color_ordering = tf.contrib.stateless.stateless_random_normal(
-      shape=[images.shape[0]],
+      shape=images.shape[0:1],
       seed=tf.cast(tf.stack([0, seed]), tf.int32),
       dtype=tf.float32)
 

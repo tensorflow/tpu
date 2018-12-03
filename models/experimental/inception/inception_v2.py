@@ -109,10 +109,6 @@ flags.DEFINE_bool(
     'use_tpu', True,
     'Use TPUs rather than plain CPUs')
 
-flags.DEFINE_boolean(
-    'per_host_input_for_training', True,
-    'If true, input_fn is invoked per host rather than per shard.')
-
 flags.DEFINE_string(
     'use_data', 'real',
     'One of "fake","real"')
@@ -223,7 +219,6 @@ flags.DEFINE_integer(
     'Number of elements from dataset that shuffler will sample from. '
     'This shuffling is done after prefetching is done. '
     'Set to 0 to disable')
-
 
 FLAGS = flags.FLAGS
 
@@ -365,11 +360,12 @@ class InputPipeline(object):
           effective batch size.
 
     Returns:
-      A (images, labels) tuple of `Tensor`s for a batch of samples.
+      A `tf.data.Dataset` object.
     """
     batch_size = params['batch_size']
 
     if FLAGS.use_data == 'real':
+      assert self.data_dir, 'data_dir is required'
       file_pattern = os.path.join(
           self.data_dir, 'train-*' if self.is_training else 'validation-*')
       dataset = tf.data.Dataset.list_files(file_pattern,
@@ -396,22 +392,28 @@ class InputPipeline(object):
       dataset = dataset.map(
           self.dataset_parser,
           num_parallel_calls=FLAGS.num_parallel_calls)
-
-      dataset = dataset.prefetch(batch_size)
-
-      dataset = dataset.batch(batch_size, drop_remainder=True)
-
-      dataset = dataset.prefetch(2)  # Prefetch overlaps in-feed with training
-
-      images, labels = dataset.make_one_shot_iterator().get_next()
     else:
-      images = tf.random_uniform(
-          [batch_size, FLAGS.height, FLAGS.width, 3], minval=-1, maxval=1)
-      labels = tf.random_uniform(
-          [batch_size], minval=0, maxval=999, dtype=tf.int32)
+      random_image = tf.random.uniform([FLAGS.height, FLAGS.width, 3],
+                                       minval=-1,
+                                       maxval=1)
+      random_label = tf.random.uniform([], minval=0, maxval=999, dtype=tf.int32)
+      dataset = tf.data.Dataset.range(1).repeat().map(
+          lambda data: (random_image, random_label))
 
-    images = tensor_transform_fn(images, params['output_perm'])
-    return images, labels
+    dataset = dataset.prefetch(batch_size)
+
+    dataset = dataset.batch(batch_size, drop_remainder=True)
+
+    dataset = dataset.prefetch(2)  # Prefetch overlaps in-feed with training
+
+    def transpose_images(images):
+      return tensor_transform_fn(images, params['output_perm'])
+
+    dataset = dataset.map(
+        lambda images, labels: (transpose_images(images), labels),
+        num_parallel_calls=FLAGS.num_parallel_calls)
+
+    return dataset
 
 
 def image_serving_input_fn():
@@ -733,8 +735,8 @@ def main(unused_argv):
   eval_batch_size = (None if FLAGS.mode == 'train' else
                      FLAGS.eval_batch_size)
 
-  per_host_input_for_training = (
-      FLAGS.num_shards <= 8 if FLAGS.mode == 'train' else True)
+  tpu_config = tf.contrib.tpu.TPUConfig(
+      iterations_per_loop=iterations, num_shards=FLAGS.num_shards)
 
   run_config = tf.contrib.tpu.RunConfig(
       cluster=tpu_cluster_resolver,
@@ -744,10 +746,7 @@ def main(unused_argv):
       session_config=tf.ConfigProto(
           allow_soft_placement=True,
           log_device_placement=FLAGS.log_device_placement),
-      tpu_config=tf.contrib.tpu.TPUConfig(
-          iterations_per_loop=iterations,
-          num_shards=FLAGS.num_shards,
-          per_host_input_for_training=per_host_input_for_training))
+      tpu_config=tpu_config)
 
   inception_classifier = tf.contrib.tpu.TPUEstimator(
       model_fn=inception_model_fn,

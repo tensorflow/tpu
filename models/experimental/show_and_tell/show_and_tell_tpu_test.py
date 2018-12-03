@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-
-"""Test Keras TPU interface support."""
+"""Test show-and-tell model is TPU compatible."""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -27,11 +26,9 @@ import tensorflow.google as tf
 
 import configuration
 import show_and_tell_model
-import train
 
 tpu = tf.contrib.tpu
 
-INPUT_FILE_PATTERN = 'gs://your-gs-bucket/train-00000*'
 
 @contextlib.contextmanager
 def _reset_for_test():
@@ -69,19 +66,6 @@ class ShowAndTellTPUTest(tf.test.TestCase):
       session.run(tpu_model_fn, inputs)
       session.run(tpu.shutdown_system())
 
-  def testCallInputFn(self):
-    with _reset_for_test() as session:
-      outputs = train.input_fn({
-        'batch_size': 4,
-        'input_file_pattern': INPUT_FILE_PATTERN,
-        'mode': 'train',
-      })
-      tf.logging.info('Outputs: %s', outputs)
-      self.assertEqual(outputs['images'].shape.as_list(), [4, 299, 299, 3])
-      self.assertEqual(outputs['input_mask'].shape[0], 4)
-      for k, v in outputs.items():
-        tf.logging.info('Output %s', k)
-        tf.logging.info(session.run(v).shape)
 
 if __name__ == '__main__':
   tf.logging.set_verbosity(tf.logging.INFO)

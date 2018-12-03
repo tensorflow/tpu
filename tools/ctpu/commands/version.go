@@ -16,9 +16,9 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 
-	"context"
 	"flag"
 	"github.com/google/subcommands"
 )
