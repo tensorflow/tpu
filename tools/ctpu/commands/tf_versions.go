@@ -16,11 +16,11 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"sort"
 
-	"context"
 	"flag"
 	"github.com/google/subcommands"
 	"github.com/tensorflow/tpu/tools/ctpu/config"

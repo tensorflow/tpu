@@ -40,9 +40,12 @@ flags.DEFINE_string(
 
 flags.DEFINE_bool('fake_data', False, 'Use fake data to test functionality.')
 
-BATCH_SIZE = 128
+# Batch size should satify two properties to be able to run in cloud:
+# num_eval_samples % batch_size == 0
+# batch_size % 8 == 0
+BATCH_SIZE = 200
 NUM_CLASSES = 10
-EPOCHS = 12
+EPOCHS = 15
 
 # input image dimensions
 IMG_ROWS, IMG_COLS = 28, 28
@@ -70,16 +73,11 @@ def run():
   """Run the model training and return evaluation output."""
   use_tpu = FLAGS.use_tpu
 
+  strategy = None
   if use_tpu:
     strategy = tf.contrib.distribute.TPUStrategy(
         tf.contrib.cluster_resolver.TPUClusterResolver(tpu=FLAGS.tpu),
         steps_per_run=100)
-    # TODO(b/118776054): Remove the need to do this once we change
-    # the API to always use global batch size.
-    batch_size = BATCH_SIZE // strategy.num_replicas
-  else:
-    strategy = None
-    batch_size = BATCH_SIZE
 
   print('Mode:', 'TPU' if use_tpu else 'CPU')
 
@@ -123,12 +121,12 @@ def run():
   model.fit(
       x_train,
       y_train,
-      batch_size=batch_size,
+      batch_size=BATCH_SIZE,
       callbacks=callbacks,
       epochs=EPOCHS,
       verbose=1,
       validation_data=(x_test, y_test))
-  return model.evaluate(x_test, y_test, batch_size=batch_size, verbose=1)
+  return model.evaluate(x_test, y_test, batch_size=BATCH_SIZE, verbose=1)
 
 
 def main(unused_dev):

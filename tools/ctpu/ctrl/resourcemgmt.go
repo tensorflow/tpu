@@ -16,12 +16,12 @@
 package ctrl
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
 
 	"cloud.google.com/go/storage"
-	"context"
 	"github.com/tensorflow/tpu/tools/ctpu/config"
 	"google.golang.org/api/cloudresourcemanager/v1beta1"
 	"google.golang.org/api/option"

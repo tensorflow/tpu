@@ -16,10 +16,10 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
-	"context"
 	"github.com/google/subcommands"
 	"github.com/tensorflow/tpu/tools/ctpu/config"
 	"github.com/tensorflow/tpu/tools/ctpu/ctrl"

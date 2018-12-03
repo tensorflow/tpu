@@ -16,13 +16,13 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strings"
 	"sync"
 	"time"
 
-	"context"
 	"flag"
 	"github.com/fatih/color"
 	"github.com/google/subcommands"

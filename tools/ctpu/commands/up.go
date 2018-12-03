@@ -16,12 +16,12 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"regexp"
 	"strings"
 
-	"context"
 	"flag"
 	"github.com/fatih/color"
 	"github.com/google/subcommands"
@@ -149,7 +149,7 @@ func (c *upCmd) SetFlags(f *flag.FlagSet) {
 	f.BoolVar(&c.preemptibleVM, "preemptible-vm", false, "Create a preemptible Compute Engine VM, instead of a normal (non-preemptible) VM. A preemptible VM costs less per hour, but the Compute Engine service can terminate the instance at any time.")
 
 	f.BoolVar(&c.preemptibleTPU, "preemptible", false, "Create a preemptible Cloud TPU, instead of a normal (non-preemptible) Cloud TPU. A preemptible Cloud TPU costs less per hour, but the Cloud TPU service can stop/terminate the node at any time.")
-	f.StringVar(&c.tpuHardware, "tpu-size", "v2-8", "Configure the size and generation of the Cloud TPU.")
+	f.StringVar(&c.tpuHardware, "tpu-size", "v2-8", "Configure the size and hardware version of the Cloud TPU. To see the list of available TPU hardware sizes, run `ctpu tpu-sizes`.")
 	f.StringVar(&c.network, "gcp-network", "default", "Specify the network the Cloud TPU should peer with. Must be non-empty.")
 }
 

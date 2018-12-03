@@ -51,22 +51,22 @@ class ImageNetTFExampleInput(object):
     is_training: `bool` for whether the input is for training
     use_bfloat16: If True, use bfloat16 precision; else use float32.
     transpose_input: 'bool' for whether to use the double transpose trick
-    num_cores: `int` for the number of TPU cores
+    num_parallel_calls: `int` for the number of parallel threads.
   """
   __metaclass__ = abc.ABCMeta
 
   def __init__(self,
                is_training,
                use_bfloat16,
-               num_cores=8,
                image_size=224,
-               transpose_input=False):
+               transpose_input=False,
+               num_parallel_calls=8):
     self.image_preprocessing_fn = resnet_preprocessing.preprocess_image
     self.is_training = is_training
     self.use_bfloat16 = use_bfloat16
-    self.num_cores = num_cores
     self.transpose_input = transpose_input
     self.image_size = image_size
+    self.num_parallel_calls = num_parallel_calls
 
   def set_shapes(self, batch_size, images, labels):
     """Statically set the batch_size dimension."""
@@ -94,14 +94,7 @@ class ImageNetTFExampleInput(object):
     """
     keys_to_features = {
         'image/encoded': tf.FixedLenFeature((), tf.string, ''),
-        'image/format': tf.FixedLenFeature((), tf.string, 'jpeg'),
         'image/class/label': tf.FixedLenFeature([], tf.int64, -1),
-        'image/class/text': tf.FixedLenFeature([], tf.string, ''),
-        'image/object/bbox/xmin': tf.VarLenFeature(dtype=tf.float32),
-        'image/object/bbox/ymin': tf.VarLenFeature(dtype=tf.float32),
-        'image/object/bbox/xmax': tf.VarLenFeature(dtype=tf.float32),
-        'image/object/bbox/ymax': tf.VarLenFeature(dtype=tf.float32),
-        'image/object/class/label': tf.VarLenFeature(dtype=tf.int64),
     }
 
     parsed = tf.parse_single_example(value, keys_to_features)
@@ -177,13 +170,13 @@ class ImageNetTFExampleInput(object):
     dataset = dataset.apply(
         tf.contrib.data.map_and_batch(
             self.dataset_parser, batch_size=batch_size,
-            num_parallel_batches=self.num_cores, drop_remainder=True))
+            num_parallel_batches=self.num_parallel_calls, drop_remainder=True))
 
     # Transpose for performance on TPU
     if self.transpose_input:
       dataset = dataset.map(
           lambda images, labels: (tf.transpose(images, [1, 2, 3, 0]), labels),
-          num_parallel_calls=self.num_cores)
+          num_parallel_calls=self.num_parallel_calls)
 
     # Assign static batch size dimension
     dataset = dataset.map(functools.partial(self.set_shapes, batch_size))
@@ -216,7 +209,7 @@ class ImageNetInput(ImageNetTFExampleInput):
                transpose_input,
                data_dir,
                image_size=224,
-               num_parallel_calls=64,
+               num_parallel_calls=8,
                cache=False):
     """Create an input from TFRecord files.
 
@@ -228,6 +221,7 @@ class ImageNetInput(ImageNetTFExampleInput):
           if 'null' (the literal string 'null') or implicitly False
           then construct a null pipeline, consisting of empty images
           and blank labels.
+      image_size: `int` image height and width.
       num_parallel_calls: concurrency level to use when reading data from disk.
       cache: if true, fill the dataset by repeating from its cache
     """
@@ -290,7 +284,7 @@ class ImageNetInput(ImageNetTFExampleInput):
     # Read the data from disk in parallel
     dataset = dataset.apply(
         tf.contrib.data.parallel_interleave(
-            fetch_dataset, cycle_length=self.num_parallel_calls, sloppy=True))
+            fetch_dataset, cycle_length=64, sloppy=True))
 
     if self.cache:
       dataset = dataset.cache().apply(

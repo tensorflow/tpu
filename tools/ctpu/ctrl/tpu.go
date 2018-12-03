@@ -16,6 +16,7 @@
 package ctrl
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -24,7 +25,6 @@ import (
 	"strings"
 	"time"
 
-	"context"
 	"github.com/tensorflow/tpu/tools/ctpu/config"
 	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/googleapi"
@@ -209,6 +209,18 @@ func (g *TPUCP) ListLocations() ([]*tpu.Location, error) {
 		log.Printf("Warning: not all available TPU locations retrieved.")
 	}
 	return locations.Locations, nil
+}
+
+// ListSizes retrieves all TPU sizes for the current configured location.
+func (g *TPUCP) ListSizes() ([]*tpu.AcceleratorType, error) {
+	types, err := g.locations.AcceleratorTypes.List(fmt.Sprintf("projects/%s/locations/%s", g.config.Project, g.config.Zone)).Do()
+	if err != nil {
+		return nil, err
+	}
+	if types.NextPageToken != "" {
+		log.Printf("Warning: not all available TPU sizes retrieved.")
+	}
+	return types.AcceleratorTypes, nil
 }
 
 const tpuMaxLoops = 180 // 15 minutes in 5 second increments

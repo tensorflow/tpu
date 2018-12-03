@@ -16,11 +16,11 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"sort"
 
-	"context"
 	"flag"
 	"github.com/fatih/color"
 	"github.com/google/subcommands"

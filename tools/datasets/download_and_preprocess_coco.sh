@@ -111,7 +111,7 @@ touch tf-models/__init__.py
 touch tf-models/research/__init__.py
 
 # Run our conversion
-SCRIPT_DIR=$(basename $0)
+SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
 
 PYTHONPATH="tf-models:tf-models/research" python $SCRIPT_DIR/create_coco_tf_record.py \
   --logtostderr \

@@ -47,6 +47,9 @@ def poly_rate_schedule(current_epoch,
   elif FLAGS.train_batch_size == 32768:
     plr = 34.0
     w_epochs = 12
+  elif FLAGS.train_batch_size == 65536:
+    plr = 35.0
+    w_epochs = 34
   else:
     plr = 41.0
     w_epochs = 16

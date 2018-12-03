@@ -16,10 +16,10 @@
 package commands
 
 import (
+	"context"
 	"testing"
 	"time"
 
-	"context"
 	"github.com/fatih/color"
 	"github.com/tensorflow/tpu/tools/ctpu/config"
 	"github.com/tensorflow/tpu/tools/ctpu/ctrl"

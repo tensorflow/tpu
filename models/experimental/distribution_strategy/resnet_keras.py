@@ -53,7 +53,7 @@ flags.DEFINE_bool('use_bfloat16', True,
 
 FLAGS = flags.FLAGS
 
-PER_CORE_BATCH_SIZE = 128
+BATCH_SIZE = 1024  # Global batch size
 NUM_CLASSES = 1000
 IMAGE_SIZE = 224
 APPROX_IMAGENET_TRAINING_IMAGES = 1280000  # Approximate number of images.
@@ -71,9 +71,6 @@ def main(argv):
       input_shape=None,
       pooling=None,
       classes=NUM_CLASSES)
-
-  num_cores = 8
-  batch_size = PER_CORE_BATCH_SIZE * num_cores
 
   if FLAGS.use_tpu:
     resolver = tf.contrib.cluster_resolver.TPUClusterResolver(tpu=FLAGS.tpu)
@@ -96,19 +93,19 @@ def main(argv):
       is_training=is_training,
       data_dir=FLAGS.data_dir,
       use_bfloat16=FLAGS.use_bfloat16,
-      per_core_batch_size=PER_CORE_BATCH_SIZE)
+      batch_size=BATCH_SIZE)
                                    for is_training in [True, False]]
   logging.info('Training model using real data in directory "%s".',
                FLAGS.data_dir)
   num_epochs = 90  # Standard imagenet training regime.
   model.fit(imagenet_train.input_fn(),
             epochs=num_epochs,
-            steps_per_epoch=int(APPROX_IMAGENET_TRAINING_IMAGES / batch_size))
+            steps_per_epoch=int(APPROX_IMAGENET_TRAINING_IMAGES / BATCH_SIZE))
 
   logging.info('Evaluating the model on the validation dataset.')
   score = model.evaluate(
       imagenet_eval.input_fn(),
-      steps=int(APPROX_IMAGENET_TEST_IMAGES // batch_size),
+      steps=int(APPROX_IMAGENET_TEST_IMAGES // BATCH_SIZE),
       verbose=1)
   logging.info('Evaluation score: %s', score)
 

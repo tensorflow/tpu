@@ -21,6 +21,7 @@ package ctrl
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -33,7 +34,6 @@ import (
 	"strings"
 	"time"
 
-	"context"
 	"github.com/tensorflow/tpu/tools/ctpu/config"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"

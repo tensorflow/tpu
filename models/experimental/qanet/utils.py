@@ -22,6 +22,7 @@ import copy
 import math
 import pprint
 
+import six
 from six import text_type
 
 
@@ -55,7 +56,7 @@ class Config(dict):
 
 def to_config(mapping):
   out = Config(copy.deepcopy(mapping))
-  for k, v in out.iteritems():
+  for k, v in six.iteritems(out):
     if isinstance(v, dict):
       out[k] = to_config(v)
   return out
@@ -74,7 +75,7 @@ def unflatten_dict(flat_dict):
     {'a.b.c': 1} --> {'a': {'b': {'c': 1}}}
   """
   result = {}
-  for key, val in flat_dict.iteritems():
+  for key, val in six.iteritems(flat_dict):
     parts = key.split('.')
     cur = result
     for part in parts[:-1]:
@@ -215,7 +216,7 @@ def merge(*args, **kwargs):
   configs = list(args)
   configs.append(kwargs)
   for c in configs[1:]:
-    for k, v in c.iteritems():
+    for k, v in six.iteritems(c):
       if isinstance(v, dict):
         v = copy.deepcopy(v)
       if k in config:
