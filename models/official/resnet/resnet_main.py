@@ -230,6 +230,8 @@ flags.DEFINE_bool(
 flags.DEFINE_bool(
     'use_async_checkpointing', default=False, help=('Enable async checkpoint'))
 
+flags.DEFINE_integer('image_size', 224, 'The input image size.')
+
 # Learning rate schedule
 LR_SCHEDULE = [    # (multiplier, epoch to start) tuples
     (1.0, 5), (0.1, 30), (0.01, 60), (0.001, 80)
@@ -293,6 +295,7 @@ def resnet_model_fn(features, labels, mode, params):
     features = tf.transpose(features, [0, 3, 1, 2])
 
   if FLAGS.transpose_input and mode != tf.estimator.ModeKeys.PREDICT:
+    features = tf.reshape(features, [FLAGS.image_size, FLAGS.image_size, 3, -1])
     features = tf.transpose(features, [3, 0, 1, 2])  # HWCN to NHWC
 
   # Normalize the image to zero mean and unit variance.
@@ -579,6 +582,7 @@ def main(unused_argv):
             data_dir=FLAGS.data_dir,
             transpose_input=FLAGS.transpose_input,
             cache=FLAGS.use_cache and is_training,
+            image_size=FLAGS.image_size,
             num_parallel_calls=FLAGS.num_parallel_calls,
             use_bfloat16=use_bfloat16) for is_training in [True, False]
     ]

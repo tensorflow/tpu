@@ -1,0 +1,91 @@
+# Copyright 2018 The TensorFlow Authors. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+"""Parameters used to build Mask-RCNN model."""
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
+import tensorflow as tf
+
+
+def default_hparams():
+  return tf.contrib.training.HParams(
+      # input preprocessing parameters
+      image_size=1024,
+      short_side_image_size=800,
+      long_side_max_image_size=1333,
+      input_rand_hflip=True,
+      train_scale_min=1.0,
+      train_scale_max=1.0,
+      gt_mask_size=112,
+      # dataset specific parameters
+      num_classes=91,
+      skip_crowd_during_training=True,
+      use_category=True,
+      # Region Proposal Network
+      rpn_positive_overlap=0.7,
+      rpn_negative_overlap=0.3,
+      rpn_batch_size_per_im=256,
+      rpn_fg_fraction=0.5,
+      rpn_pre_nms_topn=2000,
+      rpn_post_nms_topn=1000,
+      rpn_nms_threshold=0.7,
+      rpn_min_size=0.,
+      # Proposal layer.
+      batch_size_per_im=512,
+      fg_fraction=0.25,
+      fg_thresh=0.5,
+      bg_thresh_hi=0.5,
+      bg_thresh_lo=0.,
+      # Faster-RCNN heads.
+      fast_rcnn_mlp_head_dim=1024,
+      bbox_reg_weights=(10., 10., 5., 5.),
+      # Mask-RCNN heads.
+      mrcnn_resolution=28,
+      # evaluation
+      test_detections_per_image=100,
+      test_nms=0.5,
+      test_rpn_pre_nms_topn=1000,
+      test_rpn_post_nms_topn=1000,
+      test_rpn_nms_thresh=0.7,
+      # model architecture
+      min_level=2,
+      max_level=6,
+      num_scales=1,
+      aspect_ratios=[(1.0, 1.0), (1.4, 0.7), (0.7, 1.4)],
+      anchor_scale=8.0,
+      resnet_depth=50,
+      # is batchnorm training mode
+      is_training_bn=False,
+      # optimization
+      momentum=0.9,
+      # The default learning rate is w.r.t. a batch of 64. See
+      # update_learning_rate_schedule_parameters() in learning_rates.py for
+      # more details.
+      learning_rate=0.08,
+      lr_warmup_init=0.0067,
+      lr_warmup_epoch=0.27,
+      first_lr_drop_epoch=8.0,
+      second_lr_drop_epoch=10.67,
+      # localization loss
+      delta=0.1,
+      rpn_box_loss_weight=1.0,
+      fast_rcnn_box_loss_weight=1.0,
+      mrcnn_weight_loss_mask=1.0,
+      # enable bfloat
+      use_bfloat16=True,
+      # enable host_call
+      use_host_call=False,
+  )
