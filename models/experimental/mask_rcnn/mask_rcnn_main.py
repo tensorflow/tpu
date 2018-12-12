@@ -33,16 +33,19 @@ import mask_rcnn_params
 
 # Cloud TPU Cluster Resolvers
 flags.DEFINE_string(
-'tpu', default=None,
-help='The Cloud TPU to use for training. This should be either the name '
-'used when creating the Cloud TPU, or a grpc://ip.address.of.tpu:8470 '
-'url.')
+    'tpu',
+    default=None,
+    help='The Cloud TPU to use for training. This should be either the name '
+    'used when creating the Cloud TPU, or a grpc://ip.address.of.tpu:8470 '
+    'url.')
 flags.DEFINE_string(
-    'gcp_project', default=None,
+    'gcp_project',
+    default=None,
     help='Project name for the Cloud TPU-enabled project. If not specified, we '
     'will attempt to automatically detect the GCE project from metadata.')
 flags.DEFINE_string(
-    'tpu_zone', default=None,
+    'tpu_zone',
+    default=None,
     help='GCE zone where the Cloud TPU is located in. If not specified, we '
     'will attempt to automatically detect the GCE project from metadata.')
 
@@ -60,6 +63,9 @@ flags.DEFINE_string('hparams', '',
                     'Comma separated k=v pairs of hyperparameters.')
 flags.DEFINE_integer(
     'num_cores', default=8, help='Number of TPU cores for training')
+flags.DEFINE_multi_integer(
+    'input_partition_dims', None,
+    'A list that describes the partition dims for all the tensors.')
 flags.DEFINE_integer('train_batch_size', 64, 'training batch size')
 flags.DEFINE_integer('eval_batch_size', 8, 'evaluation batch size')
 flags.DEFINE_integer('eval_samples', 5000, 'The number of samples for '
@@ -150,25 +156,15 @@ def write_summary(eval_results, summary_writer, current_step):
     summary_writer.add_summary(tf_summary, current_step)
 
 
-def create_tpu_cluster_resolver():
-  """Create a new TPUClusterResolver."""
-  
-  if FLAGS.use_tpu:
-    tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
-    FLAGS.tpu,
-    zone=FLAGS.tpu_zone,
-    project=FLAGS.gcp_project)
-  else:
-    tpu_cluster_resolver = None
-  return tpu_cluster_resolver
-
-
 def main(argv):
   del argv  # Unused.
-  tpu_cluster_resolver = create_tpu_cluster_resolver()
-  if tpu_cluster_resolver:
+  if FLAGS.use_tpu:
+    tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
+        FLAGS.tpu, zone=FLAGS.tpu_zone, project=FLAGS.gcp_project)
     tpu_grpc_url = tpu_cluster_resolver.get_master()
     tf.Session.reset(tpu_grpc_url)
+  else:
+    tpu_cluster_resolver = None
 
   # Check data path
   if FLAGS.mode in ('train',
@@ -184,9 +180,58 @@ def main(argv):
   # Parse hparams
   hparams = mask_rcnn_params.default_hparams()
   hparams.parse(FLAGS.hparams)
+
+  # The following is for spatial partitioning. `features` has one tensor while
+  # `labels` has 4 + (`max_level` - `min_level` + 1) * 2 tensors. The input
+  # partition is performed on `features` and all partitionable tensors of
+  # `labels`, see the partition logic below.
+  # Note: In the below code, TPUEstimator uses both `shard` and `replica` (with
+  # the same meaning).
+  if FLAGS.input_partition_dims:
+    labels_partition_dims = {
+        'source_ids': None,
+        'groundtruth_data': None,
+        'image_info': None,
+        'cropped_gt_masks': None,
+    }
+    # TODO(b/119617317): The Input Partition Logic. We partition only the
+    # partition-able tensors. Spatial partition requires that the
+    # to-be-partitioned tensors must have a dimension that is a multiple of
+    # `partition_dims`. Depending on the `partition_dims` and the `image_size`
+    # and the `max_level` in hparams, some high-level anchor labels (i.e.,
+    # `cls_targets` and `box_targets`) cannot be partitioned. For example, when
+    # `partition_dims` is [1, 4, 2, 1], image size is 1536, `max_level` is 9,
+    # `cls_targets_8` has a shape of [batch_size, 6, 6, 9], which cannot be
+    # partitioned (6 % 4 != 0). In this case, the level-8 and level-9 target
+    # tensors are not partition-able, and the highest partition-able level is 7.
+    image_size = hparams.get('image_size')
+    for level in range(hparams.get('min_level'), hparams.get('max_level') + 1):
+
+      def _can_partition(spatial_dim):
+        partitionable_index = np.where(
+            spatial_dim % np.array(FLAGS.input_partition_dims) == 0)
+        return len(partitionable_index[0]) == len(FLAGS.input_partition_dims)
+
+      spatial_dim = image_size // (2 ** level)
+      if _can_partition(spatial_dim):
+        labels_partition_dims[
+            'box_targets_%d' % level] = FLAGS.input_partition_dims
+        labels_partition_dims[
+            'score_targets_%d' % level] = FLAGS.input_partition_dims
+      else:
+        labels_partition_dims['box_targets_%d' % level] = None
+        labels_partition_dims['score_targets_%d' % level] = None
+    num_cores_per_replica = np.prod(FLAGS.input_partition_dims)
+    input_partition_dims = [
+        FLAGS.input_partition_dims, labels_partition_dims]
+    num_shards = FLAGS.num_cores // num_cores_per_replica
+  else:
+    num_cores_per_replica = None
+    input_partition_dims = None
+    num_shards = FLAGS.num_cores
   params = dict(
       hparams.values(),
-      num_shards=FLAGS.num_cores,
+      num_shards=num_shards,
       num_examples_per_epoch=FLAGS.num_examples_per_epoch,
       use_tpu=FLAGS.use_tpu,
       resnet_checkpoint=FLAGS.resnet_checkpoint,
@@ -199,12 +244,15 @@ def main(argv):
 
   tpu_config = tf.contrib.tpu.TPUConfig(
       FLAGS.iterations_per_loop,
-      num_shards=FLAGS.num_cores,
+      num_shards=num_shards,
+      num_cores_per_replica=num_cores_per_replica,
+      input_partition_dims=input_partition_dims,
       per_host_input_for_training=tf.contrib.tpu.InputPipelineConfig.PER_HOST_V2
   )
 
   run_config = tf.contrib.tpu.RunConfig(
       cluster=tpu_cluster_resolver,
+      evaluation_master=FLAGS.eval_master,
       model_dir=FLAGS.model_dir,
       log_step_count_steps=FLAGS.iterations_per_loop,
       tpu_config=tpu_config,

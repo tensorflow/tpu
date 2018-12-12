@@ -36,6 +36,7 @@ import eval_utils
 import imagenet_input
 import resnet_model
 from tensorflow.python.keras import backend as K
+from tensorflow.python.keras import optimizers
 
 try:
   import h5py as _  # pylint: disable=g-import-not-at-top
@@ -161,9 +162,8 @@ def main(argv):
 
   logging.info('Compiling model.')
   model.compile(
-      optimizer=tf.keras.optimizers.SGD(lr=BASE_LEARNING_RATE,
-                                        momentum=0.9,
-                                        nesterov=True),
+      optimizer=optimizers.SGD(
+          lr=BASE_LEARNING_RATE, momentum=0.9, nesterov=True),
       loss='sparse_categorical_crossentropy',
       metrics=['sparse_categorical_accuracy'])
 

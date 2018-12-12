@@ -193,7 +193,7 @@ version, and start a Compute Engine VM with a compatible version of TensorFlow
 pre-installed. When everything is ready, ctpu will automatically open an ssh
 connection to your new VM and port-forward commonly used ports. For more
 details, see the documentation at:
-      https://github.com/tensorflow/tpu/tools/ctpu
+      https://github.com/tensorflow/tpu/tree/master/tools/ctpu
 
 `)
 }
