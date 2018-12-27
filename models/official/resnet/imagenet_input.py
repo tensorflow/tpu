@@ -73,7 +73,6 @@ class ImageNetTFExampleInput(object):
     if self.transpose_input:
       images.set_shape(images.get_shape().merge_with(
           tf.TensorShape([None, None, None, batch_size])))
-      images = tf.reshape(images, [-1])
       labels.set_shape(labels.get_shape().merge_with(
           tf.TensorShape([batch_size])))
     else:
