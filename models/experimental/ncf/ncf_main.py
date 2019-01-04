@@ -64,6 +64,7 @@ def main(_):
       batch_size=FLAGS.batch_size,
       eval_batch_size=FLAGS.eval_batch_size,
       num_neg=FLAGS.num_neg,
+      num_cycles=_NUM_EPOCHS,
       epochs_per_cycle=1,
       match_mlperf=FLAGS.ml_perf,
       use_subprocess=FLAGS.use_subprocess,

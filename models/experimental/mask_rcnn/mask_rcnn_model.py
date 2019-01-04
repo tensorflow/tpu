@@ -165,12 +165,14 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
     scaffold_fn = None
 
   # Set up training loss and learning rate.
-  params = learning_rates.update_learning_rate_schedule_parameters(params)
   global_step = tf.train.get_or_create_global_step()
-  learning_rate = learning_rates.learning_rate_schedule(
-      params['adjusted_learning_rate'], params['lr_warmup_init'],
-      params['lr_warmup_step'], params['first_lr_drop_step'],
-      params['second_lr_drop_step'], global_step)
+  learning_rate = learning_rates.step_learning_rate_with_linear_warmup(
+      global_step,
+      params['init_learning_rate'],
+      params['warmup_learning_rate'],
+      params['warmup_steps'],
+      params['learning_rate_levels'],
+      params['learning_rate_steps'])
   # score_loss and box_loss are for logging. only total_loss is optimized.
   total_rpn_loss, rpn_score_loss, rpn_box_loss = losses.rpn_loss(
       model_outputs['rpn_score_outputs'], model_outputs['rpn_box_outputs'],

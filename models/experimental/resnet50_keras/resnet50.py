@@ -24,8 +24,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import os
-
 from absl import app
 from absl import flags
 from absl import logging
@@ -34,33 +32,25 @@ import tensorflow as tf
 
 import eval_utils
 import imagenet_input
+import model_saving_utils
 import resnet_model
 from tensorflow.python.keras import backend as K
-from tensorflow.python.keras import optimizers
+from tensorflow.python.keras.optimizer_v2 import gradient_descent
 
-try:
-  import h5py as _  # pylint: disable=g-import-not-at-top
-  HAS_H5PY = True
-except ImportError:
-  logging.warning('`h5py` is not installed. Please consider installing it '
-                  'to save weights for long-running training.')
-  HAS_H5PY = False
-
-
-flags.DEFINE_bool('use_tpu', True, 'Use TPU model instead of CPU.')
+# Common flags for TPU models.
 flags.DEFINE_string('tpu', None, 'Name of the TPU to use.')
 flags.DEFINE_string('data', None, 'Path to training and testing data.')
 flags.DEFINE_string(
     'model_dir', None,
     ('The directory where the model weights and training/evaluation summaries '
      'are stored. If not specified, save to /tmp/resnet50.'))
+
+# Special flags for Resnet50.
 flags.DEFINE_bool(
     'eval_top_5_accuracy', False,
-    'Eval both top 1 and top 5 accuracy. Otherwise, only eval top 1 accuracy. '
-    'N.B. enabling this would slow down the eval time due to using python '
-    'generator for evaluation input. ImageNet validation set would take around '
-    '30 minutes. Will be deprecated once we have support for top_k accuracy '
-    'evaluation.')
+    'Eval both top 1 and top 5 accuracy. Otherwise, only eval top 1 accuracy.')
+flags.DEFINE_integer('num_cores', 8, 'Number of TPU cores.')
+
 
 FLAGS = flags.FLAGS
 
@@ -70,51 +60,53 @@ IMAGE_SIZE = 224
 EPOCHS = 90  # Standard imagenet training regime.
 APPROX_IMAGENET_TRAINING_IMAGES = 1280000  # Approximate number of images.
 IMAGENET_VALIDATION_IMAGES = 50000  # Number of images.
+PER_CORE_BATCH_SIZE = 128
 
 # Training hyperparameters.
-NUM_CORES = 8
-PER_CORE_BATCH_SIZE = 128
-BATCH_SIZE = NUM_CORES * PER_CORE_BATCH_SIZE
-TRAINING_STEPS_PER_EPOCH = int(APPROX_IMAGENET_TRAINING_IMAGES / BATCH_SIZE)
+USE_BFLOAT16 = True
 BASE_LEARNING_RATE = 0.4
 # Learning rate schedule
 LR_SCHEDULE = [    # (multiplier, epoch to start) tuples
     (1.0, 5), (0.1, 30), (0.01, 60), (0.001, 80)
 ]
 
-VALIDATION_STEPS = int(IMAGENET_VALIDATION_IMAGES // BATCH_SIZE)
-WEIGHTS_TXT = 'resnet50_weights.h5'
 DEFAULT_MODEL_DIR = '/tmp/resnet50'
+WEIGHTS_TXT = 'resnet50_weights.h5'
 
 
-def learning_rate_schedule(current_epoch, current_batch):
-  """Handles linear scaling rule, gradual warmup, and LR decay.
+def learning_rate_schedule_wrapper(training_steps_per_epoch):
+  """Wrapper around the learning rate schedule."""
 
-  The learning rate starts at 0, then it increases linearly per step.
-  After 5 epochs we reach the base learning rate (scaled to account
-    for batch size).
-  After 30, 60 and 80 epochs the learning rate is divided by 10.
-  After 90 epochs training stops and the LR is set to 0. This ensures
-    that we train for exactly 90 epochs for reproducibility.
+  def learning_rate_schedule(current_epoch, current_batch):
+    """Handles linear scaling rule, gradual warmup, and LR decay.
 
-  Args:
-    current_epoch: integer, current epoch indexed from 0.
-    current_batch: integer, current batch in the current epoch, indexed from 0.
+    The learning rate starts at 0, then it increases linearly per step.
+    After 5 epochs we reach the base learning rate (scaled to account
+      for batch size).
+    After 30, 60 and 80 epochs the learning rate is divided by 10.
+    After 90 epochs training stops and the LR is set to 0. This ensures
+      that we train for exactly 90 epochs for reproducibility.
 
-  Returns:
-    Adjusted learning rate.
-  """
-  epoch = current_epoch + float(current_batch) / TRAINING_STEPS_PER_EPOCH
-  warmup_lr_multiplier, warmup_end_epoch = LR_SCHEDULE[0]
-  if epoch < warmup_end_epoch:
-    # Learning rate increases linearly per step.
-    return BASE_LEARNING_RATE * warmup_lr_multiplier * epoch / warmup_end_epoch
-  for mult, start_epoch in LR_SCHEDULE:
-    if epoch >= start_epoch:
-      learning_rate = BASE_LEARNING_RATE * mult
-    else:
-      break
-  return learning_rate
+    Args:
+      current_epoch: integer, current epoch indexed from 0.
+      current_batch: integer, current batch in current epoch, indexed from 0.
+
+    Returns:
+      Adjusted learning rate.
+    """
+    epoch = current_epoch + float(current_batch) / training_steps_per_epoch
+    warmup_lr_multiplier, warmup_end_epoch = LR_SCHEDULE[0]
+    if epoch < warmup_end_epoch:
+      # Learning rate increases linearly per step.
+      return (BASE_LEARNING_RATE * warmup_lr_multiplier *
+              epoch / warmup_end_epoch)
+    for mult, start_epoch in LR_SCHEDULE:
+      if epoch >= start_epoch:
+        learning_rate = BASE_LEARNING_RATE * mult
+      else:
+        break
+    return learning_rate
+  return learning_rate_schedule
 
 
 class LearningRateBatchScheduler(tf.keras.callbacks.Callback):
@@ -150,73 +142,88 @@ class LearningRateBatchScheduler(tf.keras.callbacks.Callback):
                     'learning rate to %s.', self.epochs, batch, lr)
 
 
-def main(argv):
-  logging.info('Building Keras ResNet-50 model')
-  model = resnet_model.ResNet50(num_classes=NUM_CLASSES)
+def sparse_top_k_categorical_accuracy(y_true, y_pred, k=5):
+  """TPU version of sparse_top_k_categorical_accuracy."""
+  y_pred_rank = tf.convert_to_tensor(y_pred).get_shape().ndims
+  y_true_rank = tf.convert_to_tensor(y_true).get_shape().ndims
+  # If the shape of y_true is (num_samples, 1), squeeze to (num_samples,)
+  if (y_true_rank is not None) and (y_pred_rank is not None) and (len(
+      K.int_shape(y_true)) == len(K.int_shape(y_pred))):
+    y_true = tf.squeeze(y_true, [-1])
 
-  if FLAGS.use_tpu:
-    logging.info('Converting from CPU to TPU model.')
-    resolver = tf.contrib.cluster_resolver.TPUClusterResolver(tpu=FLAGS.tpu)
-    strategy = tf.contrib.tpu.TPUDistributionStrategy(resolver)
-    model = tf.contrib.tpu.keras_to_tpu_model(model, strategy=strategy)
+  y_true = tf.cast(y_true, 'int32')
 
-  logging.info('Compiling model.')
-  model.compile(
-      optimizer=optimizers.SGD(
-          lr=BASE_LEARNING_RATE, momentum=0.9, nesterov=True),
-      loss='sparse_categorical_crossentropy',
-      metrics=['sparse_categorical_accuracy'])
+  def host_computation(y_pred_on_host, y_true_on_host):
+    return tf.nn.in_top_k(y_pred_on_host, y_true_on_host, k)
 
-  if FLAGS.data is None:
-    training_images = np.random.randn(
-        BATCH_SIZE, IMAGE_SIZE, IMAGE_SIZE, 3).astype(np.float32)
-    training_labels = np.random.randint(NUM_CLASSES, size=BATCH_SIZE,
-                                        dtype=np.int32)
-    logging.info('Training model using synthetica data.')
-    model.fit(
-        training_images,
-        training_labels,
-        epochs=EPOCHS,
-        batch_size=BATCH_SIZE)
-    logging.info('Evaluating the model on synthetic data.')
-    model.evaluate(training_images, training_labels, verbose=0)
-  else:
-    model_dir = FLAGS.model_dir if FLAGS.model_dir else DEFAULT_MODEL_DIR
-    imagenet_train = imagenet_input.ImageNetInput(
-        is_training=True,
-        data_dir=FLAGS.data,
-        per_core_batch_size=PER_CORE_BATCH_SIZE)
-    logging.info('Training model using real data in directory "%s".',
-                 FLAGS.data)
-    # If evaluating top 5 accuracy, we feed the inputs from a Python generator,
-    # so we need to build a single batch for all of the cores, which will be
-    # split on TPU.
-    per_core_batch_size = (
-        BATCH_SIZE if FLAGS.eval_top_5_accuracy else PER_CORE_BATCH_SIZE)
-    imagenet_validation = imagenet_input.ImageNetInput(
-        is_training=False,
-        data_dir=FLAGS.data,
-        per_core_batch_size=per_core_batch_size)
+  in_top_k_on_device = tf.contrib.tpu.outside_compilation(
+      host_computation, y_pred, y_true)
+  return K.mean(in_top_k_on_device, axis=-1)
 
-    callbacks = [
-        LearningRateBatchScheduler(schedule=learning_rate_schedule),
-        eval_utils.TensorBoardWithValidation(
-            log_dir=model_dir,
-            validation_imagenet_input=imagenet_validation,
-            validation_steps=VALIDATION_STEPS,
-            validation_epochs=[30, 60, 90],
-            eval_top_k_accuracy=FLAGS.eval_top_5_accuracy),
-    ]
 
-    model.fit(imagenet_train.input_fn,
-              epochs=EPOCHS,
-              steps_per_epoch=TRAINING_STEPS_PER_EPOCH,
-              callbacks=callbacks)
+def main(unused_argv):
+  assert FLAGS.data is not None, 'Provide training data path via --data.'
 
-    if HAS_H5PY:
-      weights_file = os.path.join(model_dir, WEIGHTS_TXT)
-      logging.info('Save weights into %s', weights_file)
-      model.save_weights(weights_file, overwrite=True)
+  batch_size = FLAGS.num_cores * PER_CORE_BATCH_SIZE
+  training_steps_per_epoch = int(APPROX_IMAGENET_TRAINING_IMAGES / batch_size)
+  validation_steps = int(IMAGENET_VALIDATION_IMAGES // batch_size)
+
+  model_dir = FLAGS.model_dir if FLAGS.model_dir else DEFAULT_MODEL_DIR
+  logging.info('Saving tensorboard summaries at %s', model_dir)
+
+  logging.info('Use TPU at %s', FLAGS.tpu if FLAGS.tpu is not None else 'local')
+  resolver = tf.contrib.cluster_resolver.TPUClusterResolver(tpu=FLAGS.tpu)
+  tf.contrib.distribute.initialize_tpu_system(resolver)
+  # TODO(b/120613626): Use default cosntructor once the bug generating Nan loss
+  # is fixed.
+  strategy = tf.contrib.distribute.TPUStrategy(
+      resolver, _disable_training_loop_on_host=True)
+
+  logging.info('Use bfloat16: %s.', USE_BFLOAT16)
+  logging.info('Use global batch size: %s.', batch_size)
+  logging.info('Enable top 5 accuracy: %s.', FLAGS.eval_top_5_accuracy)
+  logging.info('Training model using data in directory "%s".', FLAGS.data)
+
+  with strategy.scope():
+    logging.info('Building Keras ResNet-50 model')
+    model = resnet_model.ResNet50(num_classes=NUM_CLASSES)
+
+    logging.info('Compiling model.')
+    metrics = ['sparse_categorical_accuracy']
+
+    if FLAGS.eval_top_5_accuracy:
+      metrics.append(sparse_top_k_categorical_accuracy)
+
+    model.compile(
+        optimizer=gradient_descent.SGD(
+            learning_rate=BASE_LEARNING_RATE, momentum=0.9, nesterov=True),
+        loss='sparse_categorical_crossentropy',
+        metrics=metrics)
+
+  imagenet_train = imagenet_input.ImageNetInput(
+      is_training=True, data_dir=FLAGS.data, batch_size=batch_size,
+      use_bfloat16=USE_BFLOAT16)
+  imagenet_eval = imagenet_input.ImageNetInput(
+      is_training=False, data_dir=FLAGS.data, batch_size=batch_size,
+      use_bfloat16=USE_BFLOAT16)
+
+  lr_schedule_cb = LearningRateBatchScheduler(
+      schedule=learning_rate_schedule_wrapper(training_steps_per_epoch))
+  tensorboard_cb = eval_utils.TensorBoardWithValidation(
+      log_dir=model_dir,
+      validation_imagenet_input=imagenet_eval,
+      validation_steps=validation_steps,
+      validation_epochs=[30, 60, 90])
+
+  training_callbacks = [lr_schedule_cb, tensorboard_cb]
+
+  model.fit(
+      imagenet_train.input_fn(),
+      epochs=EPOCHS,
+      steps_per_epoch=training_steps_per_epoch,
+      callbacks=training_callbacks)
+
+  model_saving_utils.save_model(model, model_dir, WEIGHTS_TXT)
 
 
 if __name__ == '__main__':
