@@ -19,7 +19,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import math
 import os
 from absl import flags
 import numpy as np
@@ -30,6 +29,7 @@ import coco_metric
 import dataloader
 import mask_rcnn_model
 import mask_rcnn_params
+import params_io
 
 # Cloud TPU Cluster Resolvers
 flags.DEFINE_string(
@@ -56,35 +56,18 @@ flags.DEFINE_string(
     'on CPU/GPU')
 flags.DEFINE_bool('use_tpu', True, 'Use TPUs rather than CPUs')
 flags.DEFINE_string('model_dir', None, 'Location of model_dir')
-flags.DEFINE_string('resnet_checkpoint', '',
-                    'Location of the ResNet50 checkpoint to use for model '
-                    'initialization.')
-flags.DEFINE_string('hparams', '',
-                    'Comma separated k=v pairs of hyperparameters.')
+flags.DEFINE_string(
+    'config', '',
+    'A comma-separated k=v pairs, or a YAML config file that specifies the '
+    'parameters to build, train and eval the model.')
+
 flags.DEFINE_integer(
     'num_cores', default=8, help='Number of TPU cores for training')
 flags.DEFINE_multi_integer(
     'input_partition_dims', None,
     'A list that describes the partition dims for all the tensors.')
-flags.DEFINE_integer('train_batch_size', 64, 'training batch size')
-flags.DEFINE_integer('eval_batch_size', 8, 'evaluation batch size')
-flags.DEFINE_integer('eval_samples', 5000, 'The number of samples for '
-                     'evaluation.')
 flags.DEFINE_integer(
     'iterations_per_loop', 2500, 'Number of iterations per TPU training loop')
-flags.DEFINE_string(
-    'training_file_pattern', None,
-    'Glob for training data files (e.g., COCO train - minival set)')
-flags.DEFINE_string(
-    'validation_file_pattern', None,
-    'Glob for evaluation tfrecords (e.g., COCO val2017 set)')
-flags.DEFINE_string(
-    'val_json_file',
-    None,
-    'COCO validation JSON containing golden bounding boxes.')
-flags.DEFINE_integer('num_examples_per_epoch', 120000,
-                     'Number of examples in one epoch')
-flags.DEFINE_float('num_epochs', 12, 'Number of epochs for training')
 flags.DEFINE_string('mode', 'train',
                     'Mode to run: train or eval (default: train)')
 flags.DEFINE_bool('eval_after_training', False, 'Run one eval after the '
@@ -105,17 +88,17 @@ flags.DEFINE_bool(
 FLAGS = flags.FLAGS
 
 
-def evaluation(eval_estimator, val_json_file):
+def evaluation(eval_estimator, config):
   """Runs one evluation."""
   predictor = eval_estimator.predict(
       input_fn=dataloader.InputReader(
-          FLAGS.validation_file_pattern,
+          config.validation_file_pattern,
           mode=tf.estimator.ModeKeys.PREDICT,
-          num_examples=FLAGS.eval_samples),
+          num_examples=config.eval_samples),
       yield_single_examples=False)
   # Every predictor.next() gets a batch of prediction (a dictionary).
   predictions = dict()
-  for _ in range(FLAGS.eval_samples // FLAGS.eval_batch_size):
+  for _ in range(config.eval_samples // config.eval_batch_size):
     prediction = six.next(predictor)
     image_info = prediction['image_info']
     raw_detections = prediction['detections']
@@ -137,7 +120,7 @@ def evaluation(eval_estimator, val_json_file):
       else:
         predictions[k] = np.append(predictions[k], v, axis=0)
 
-  eval_metric = coco_metric.EvaluationMetric(val_json_file)
+  eval_metric = coco_metric.EvaluationMetric(config.val_json_file)
   eval_results = eval_metric.predict_metric_fn(predictions)
   tf.logging.info('Eval results: %s' % eval_results)
 
@@ -156,8 +139,20 @@ def write_summary(eval_results, summary_writer, current_step):
     summary_writer.add_summary(tf_summary, current_step)
 
 
+def save_config(config, model_dir):
+  """Save parameters to config files."""
+  if not tf.gfile.Exists(model_dir):
+    tf.gfile.MakeDirs(model_dir)
+  params_io.save_hparams_to_yaml(config, model_dir + '/params.yaml')
+
+
 def main(argv):
   del argv  # Unused.
+
+  # Configure parameters.
+  config = mask_rcnn_params.default_config()
+  config = params_io.override_hparams(config, FLAGS.config)
+
   if FLAGS.use_tpu:
     tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
         FLAGS.tpu, zone=FLAGS.tpu_zone, project=FLAGS.gcp_project)
@@ -167,19 +162,15 @@ def main(argv):
     tpu_cluster_resolver = None
 
   # Check data path
-  if FLAGS.mode in ('train',
-                    'train_and_eval') and FLAGS.training_file_pattern is None:
-    raise RuntimeError('You must specify --training_file_pattern for training.')
+  if (FLAGS.mode in ('train', 'train_and_eval') and
+      not config.training_file_pattern):
+    raise RuntimeError('You must specify `training_file_pattern` for training.')
   if FLAGS.mode in ('eval', 'train_and_eval'):
-    if FLAGS.validation_file_pattern is None:
-      raise RuntimeError('You must specify --validation_file_pattern '
+    if not config.validation_file_pattern:
+      raise RuntimeError('You must specify `validation_file_pattern` '
                          'for evaluation.')
-    if FLAGS.val_json_file is None:
-      raise RuntimeError('You must specify --val_json_file for evaluation.')
-
-  # Parse hparams
-  hparams = mask_rcnn_params.default_hparams()
-  hparams.parse(FLAGS.hparams)
+    if not config.val_json_file:
+      raise RuntimeError('You must specify `val_json_file` for evaluation.')
 
   # The following is for spatial partitioning. `features` has one tensor while
   # `labels` has 4 + (`max_level` - `min_level` + 1) * 2 tensors. The input
@@ -198,14 +189,14 @@ def main(argv):
     # partition-able tensors. Spatial partition requires that the
     # to-be-partitioned tensors must have a dimension that is a multiple of
     # `partition_dims`. Depending on the `partition_dims` and the `image_size`
-    # and the `max_level` in hparams, some high-level anchor labels (i.e.,
+    # and the `max_level` in config, some high-level anchor labels (i.e.,
     # `cls_targets` and `box_targets`) cannot be partitioned. For example, when
     # `partition_dims` is [1, 4, 2, 1], image size is 1536, `max_level` is 9,
     # `cls_targets_8` has a shape of [batch_size, 6, 6, 9], which cannot be
     # partitioned (6 % 4 != 0). In this case, the level-8 and level-9 target
     # tensors are not partition-able, and the highest partition-able level is 7.
-    image_size = hparams.get('image_size')
-    for level in range(hparams.get('min_level'), hparams.get('max_level') + 1):
+    image_size = config.image_size
+    for level in range(config.min_level, config.max_level + 1):
 
       def _can_partition(spatial_dim):
         partitionable_index = np.where(
@@ -230,12 +221,9 @@ def main(argv):
     input_partition_dims = None
     num_shards = FLAGS.num_cores
   params = dict(
-      hparams.values(),
+      config.values(),
       num_shards=num_shards,
-      num_examples_per_epoch=FLAGS.num_examples_per_epoch,
       use_tpu=FLAGS.use_tpu,
-      resnet_checkpoint=FLAGS.resnet_checkpoint,
-      val_json_file=FLAGS.val_json_file,
       mode=FLAGS.mode,
       # The following are used by the host_call function.
       model_dir=FLAGS.model_dir,
@@ -259,29 +247,29 @@ def main(argv):
   )
 
   if FLAGS.mode == 'train':
+    if FLAGS.model_dir:
+      save_config(config, FLAGS.model_dir)
 
-    max_steps = int((FLAGS.num_epochs * float(FLAGS.num_examples_per_epoch)) /
-                    float(FLAGS.train_batch_size))
     tf.logging.info(params)
     train_estimator = tf.contrib.tpu.TPUEstimator(
         model_fn=mask_rcnn_model.mask_rcnn_model_fn,
         use_tpu=FLAGS.use_tpu,
-        train_batch_size=FLAGS.train_batch_size,
+        train_batch_size=config.train_batch_size,
         config=run_config,
         params=params)
     train_estimator.train(
         input_fn=dataloader.InputReader(
-            FLAGS.training_file_pattern, mode=tf.estimator.ModeKeys.TRAIN,
+            config.training_file_pattern,
+            mode=tf.estimator.ModeKeys.TRAIN,
             use_fake_data=FLAGS.use_fake_data),
-        max_steps=max_steps)
+        max_steps=config.total_steps)
 
     if FLAGS.eval_after_training:
       # Run evaluation after training finishes.
-      eval_params = dict(
+      eval_params_dict = dict(
           params,
           use_tpu=FLAGS.use_tpu,
           input_rand_hflip=False,
-          resnet_checkpoint=None,
           is_training_bn=False,
           transpose_input=False,
       )
@@ -289,34 +277,31 @@ def main(argv):
       eval_estimator = tf.contrib.tpu.TPUEstimator(
           model_fn=mask_rcnn_model.mask_rcnn_model_fn,
           use_tpu=FLAGS.use_tpu,
-          train_batch_size=FLAGS.train_batch_size,
-          eval_batch_size=FLAGS.eval_batch_size,
-          predict_batch_size=FLAGS.eval_batch_size,
+          train_batch_size=config.train_batch_size,
+          eval_batch_size=config.eval_batch_size,
+          predict_batch_size=config.eval_batch_size,
           config=run_config,
-          params=eval_params)
+          params=eval_params_dict)
 
       output_dir = os.path.join(FLAGS.model_dir, 'eval')
       tf.gfile.MakeDirs(output_dir)
       # Summary writer writes out eval metrics.
       summary_writer = tf.summary.FileWriter(output_dir)
-      eval_results = evaluation(eval_estimator,
-                                params['val_json_file'])
-      write_summary(eval_results, summary_writer, max_steps)
+      eval_results = evaluation(eval_estimator, config)
+      write_summary(eval_results, summary_writer, config.total_steps)
 
       summary_writer.close()
 
   elif FLAGS.mode == 'eval':
-
     output_dir = os.path.join(FLAGS.model_dir, 'eval')
     tf.gfile.MakeDirs(output_dir)
     # Summary writer writes out eval metrics.
     summary_writer = tf.summary.FileWriter(output_dir)
 
-    eval_params = dict(
+    eval_params_dict = dict(
         params,
         use_tpu=FLAGS.use_tpu,
         input_rand_hflip=False,
-        resnet_checkpoint=None,
         is_training_bn=False,
         transpose_input=False,
     )
@@ -324,11 +309,11 @@ def main(argv):
     eval_estimator = tf.contrib.tpu.TPUEstimator(
         model_fn=mask_rcnn_model.mask_rcnn_model_fn,
         use_tpu=FLAGS.use_tpu,
-        train_batch_size=FLAGS.train_batch_size,
-        eval_batch_size=FLAGS.eval_batch_size,
-        predict_batch_size=FLAGS.eval_batch_size,
+        train_batch_size=config.train_batch_size,
+        eval_batch_size=config.eval_batch_size,
+        predict_batch_size=config.eval_batch_size,
         config=run_config,
-        params=eval_params)
+        params=eval_params_dict)
 
     def terminate_eval():
       tf.logging.info('Terminating eval after %d seconds of no checkpoints' %
@@ -346,17 +331,10 @@ def main(argv):
 
       tf.logging.info('Starting to evaluate.')
       try:
-
-        current_epoch = current_step / (float(FLAGS.num_examples_per_epoch) /
-                                        FLAGS.train_batch_size)
-        eval_results = evaluation(eval_estimator,
-                                  params['val_json_file'])
+        eval_results = evaluation(eval_estimator, config)
         write_summary(eval_results, summary_writer, current_step)
 
-        total_step = int(
-            (FLAGS.num_epochs * float(FLAGS.num_examples_per_epoch)) / float(
-                FLAGS.train_batch_size))
-        if current_step >= total_step:
+        if current_step >= config.total_steps:
           tf.logging.info('Evaluation finished after training step %d' %
                           current_step)
           break
@@ -371,6 +349,8 @@ def main(argv):
     summary_writer.close()
 
   elif FLAGS.mode == 'train_and_eval':
+    if FLAGS.model_dir:
+      save_config(config, FLAGS.model_dir)
 
     output_dir = os.path.join(FLAGS.model_dir, 'eval')
     tf.gfile.MakeDirs(output_dir)
@@ -378,52 +358,47 @@ def main(argv):
     train_estimator = tf.contrib.tpu.TPUEstimator(
         model_fn=mask_rcnn_model.mask_rcnn_model_fn,
         use_tpu=FLAGS.use_tpu,
-        train_batch_size=FLAGS.train_batch_size,
+        train_batch_size=config.train_batch_size,
         config=run_config,
         params=params)
-    eval_params = dict(
+    eval_params_dict = dict(
         params,
         use_tpu=FLAGS.use_tpu,
         input_rand_hflip=False,
-        resnet_checkpoint=None,
         is_training_bn=False,
     )
     eval_estimator = tf.contrib.tpu.TPUEstimator(
         model_fn=mask_rcnn_model.mask_rcnn_model_fn,
         use_tpu=FLAGS.use_tpu,
-        train_batch_size=FLAGS.train_batch_size,
-        eval_batch_size=FLAGS.eval_batch_size,
-        predict_batch_size=FLAGS.eval_batch_size,
+        train_batch_size=config.train_batch_size,
+        eval_batch_size=config.eval_batch_size,
+        predict_batch_size=config.eval_batch_size,
         config=run_config,
-        params=eval_params)
-    steps_per_epoch = int(FLAGS.num_examples_per_epoch /
-                          FLAGS.train_batch_size)
-    for cycle in range(int(math.floor(FLAGS.num_epochs))):
-      tf.logging.info('Starting training cycle, epoch: %d.' % cycle)
-      train_estimator.train(
-          input_fn=dataloader.InputReader(FLAGS.training_file_pattern,
-                                          mode=tf.estimator.ModeKeys.TRAIN),
-          steps=steps_per_epoch)
+        params=eval_params_dict)
 
-      tf.logging.info('Starting evaluation cycle, epoch: %d.' % cycle)
-      # Run evaluation after every epoch.
-      eval_results = evaluation(eval_estimator,
-                                params['val_json_file'])
-      current_step = (cycle + 1) * steps_per_epoch
+    num_cycles = int(config.total_steps / config.num_steps_per_eval)
+    for cycle in range(num_cycles):
+      tf.logging.info('Start training cycle %d.' % cycle)
+      train_estimator.train(
+          input_fn=dataloader.InputReader(
+              config.training_file_pattern,
+              mode=tf.estimator.ModeKeys.TRAIN),
+          steps=config.num_steps_per_eval)
+
+      tf.logging.info('Start evaluation cycle %d.' % cycle)
+      eval_results = evaluation(eval_estimator, config)
+
+      current_step = int(cycle * config.num_steps_per_eval)
       write_summary(eval_results, summary_writer, current_step)
 
-    current_epoch = int(math.floor(FLAGS.num_epochs))
-    max_steps = int((FLAGS.num_epochs * float(FLAGS.num_examples_per_epoch))
-                    / float(FLAGS.train_batch_size))
-    # Final epoch.
-    tf.logging.info('Starting training cycle, epoch: %d.' % current_epoch)
+    tf.logging.info('Starting training cycle %d.' % num_cycles)
     train_estimator.train(
-        input_fn=dataloader.InputReader(FLAGS.training_file_pattern,
-                                        mode=tf.estimator.ModeKeys.TRAIN),
-        max_steps=max_steps)
-    eval_results = evaluation(eval_estimator,
-                              params['val_json_file'])
-    write_summary(eval_results, summary_writer, max_steps)
+        input_fn=dataloader.InputReader(
+            config.training_file_pattern,
+            mode=tf.estimator.ModeKeys.TRAIN),
+        max_steps=config.total_steps)
+    eval_results = evaluation(eval_estimator, config)
+    write_summary(eval_results, summary_writer, config.total_steps)
     summary_writer.close()
   else:
     tf.logging.info('Mode not found.')

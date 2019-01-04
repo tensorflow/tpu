@@ -23,14 +23,12 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import os
 from absl import app
 from absl import flags
 import tensorflow as tf
 
-import inception_preprocessing
+import supervised_images
 import mobilenet_model as mobilenet_v1
-import vgg_preprocessing
 
 from tensorflow.contrib.framework.python.ops import arg_scope
 from tensorflow.contrib.training.python.training import evaluation
@@ -133,18 +131,6 @@ flags.DEFINE_integer(
     'num_classes', 1001,
     'Number of classes to distinguish')
 
-flags.DEFINE_integer(
-    'width', 224,
-    'Width of input image')
-
-flags.DEFINE_integer(
-    'height', 224,
-    'Height of input image')
-
-flags.DEFINE_bool(
-    'transpose_enabled', False,
-    'Boolean to enable/disable explicit I/O transpose')
-
 flags.DEFINE_bool(
     'use_fused_batchnorm', True,
     'Enable fused batchrnom')
@@ -166,15 +152,6 @@ flags.DEFINE_bool(
     'moving_average', True,
     'Whether to enable moving average computation on variables')
 
-flags.DEFINE_string(
-    'preprocessing', 'inception',
-    'Preprocessing stage to use: one of inception or vgg')
-
-flags.DEFINE_bool(
-    'use_annotated_bbox', False,
-    'If true, use annotated bounding box as input to cropping function, '
-    'else use full image size')
-
 flags.DEFINE_float(
     'learning_rate_decay', 0.94,
     'Exponential decay rate used in learning rate adjustment')
@@ -195,35 +172,9 @@ flags.DEFINE_bool(
     'clear_update_collections', True,
     'Set batchnorm update_collections to None if true, else use default value')
 
-# Dataset specific paramenters
 flags.DEFINE_bool(
-    'prefetch_enabled', True,
-    'Boolean to enable/disable prefetching')
-
-flags.DEFINE_integer(
-    'prefetch_dataset_buffer_size', 8*1024*1024,
-    'Number of bytes in read buffer. 0 means no buffering.')
-
-flags.DEFINE_integer(
-    'num_files_infeed', 8,
-    'Number of training files to read in parallel.')
-
-flags.DEFINE_integer(
-    'num_parallel_calls', 64,
-    'Number of elements to process in parallel (by mapper)')
-
-flags.DEFINE_integer(
-    'initial_shuffle_buffer_size', 1024,
-    'Number of elements from dataset that shuffler will sample from. '
-    'This shuffling is done before any other operations. '
-    'Set to 0 to disable')
-
-flags.DEFINE_integer(
-    'followup_shuffle_buffer_size', 1000,
-    'Number of elements from dataset that shuffler will sample from. '
-    'This shuffling is done after prefetching is done. '
-    'Set to 0 to disable')
-
+    'transpose_enabled', False,
+    'Boolean to enable/disable explicit I/O transpose')
 
 FLAGS = flags.FLAGS
 
@@ -248,174 +199,6 @@ BATCH_NORM_DECAY = 0.996
 BATCH_NORM_EPSILON = 1e-3
 
 
-def preprocess_raw_bytes(image_bytes, is_training=False, bbox=None):
-  """Preprocesses a raw JPEG image.
-
-  This implementation is shared in common between train/eval pipelines,
-  and when serving the model.
-
-  Args:
-    image_bytes: A string Tensor, containing the encoded JPEG.
-    is_training: Whether or not to preprocess for training.
-    bbox:        In inception preprocessing, this bbox can be used for cropping.
-
-  Returns:
-    A 3-Tensor [height, width, RGB channels] of type float32.
-  """
-
-  image = tf.image.decode_jpeg(image_bytes, channels=3)
-  image = tf.image.convert_image_dtype(image, dtype=tf.float32)
-
-  if FLAGS.preprocessing == 'vgg':
-    image = vgg_preprocessing.preprocess_image(
-        image=image,
-        output_height=FLAGS.height,
-        output_width=FLAGS.width,
-        is_training=is_training,
-        resize_side_min=_RESIZE_SIDE_MIN,
-        resize_side_max=_RESIZE_SIDE_MAX)
-  elif FLAGS.preprocessing == 'inception':
-    image = inception_preprocessing.preprocess_image(
-        image=image,
-        output_height=FLAGS.height,
-        output_width=FLAGS.width,
-        is_training=is_training,
-        bbox=bbox)
-  else:
-    assert False, 'Unknown preprocessing type: %s' % FLAGS.preprocessing
-  return image
-
-
-class InputPipeline(object):
-  """Generates ImageNet input_fn for training or evaluation.
-
-  The training data is assumed to be in TFRecord format with keys as specified
-  in the dataset_parser below, sharded across 1024 files, named sequentially:
-      train-00000-of-01024
-      train-00001-of-01024
-      ...
-      train-01023-of-01024
-
-  The validation data is in the same format but sharded in 128 files.
-
-  The fortmat of the data required is created by the script at:
-      https://github.com/tensorflow/tpu/blob/master/tools/datasets/imagenet_to_gcs.py
-
-  Args:
-    is_training: `bool` for whether the input is for training
-  """
-
-  def __init__(self, is_training, data_dir):
-    self.is_training = is_training
-    self.data_dir = data_dir
-
-  def dataset_parser(self, serialized_proto):
-    """Parse an Imagenet record from value."""
-    keys_to_features = {
-        'image/encoded':
-            tf.FixedLenFeature((), tf.string, default_value=''),
-        'image/format':
-            tf.FixedLenFeature((), tf.string, default_value='jpeg'),
-        'image/class/label':
-            tf.FixedLenFeature([], dtype=tf.int64, default_value=-1),
-        'image/class/text':
-            tf.FixedLenFeature([], dtype=tf.string, default_value=''),
-        'image/object/bbox/xmin':
-            tf.VarLenFeature(dtype=tf.float32),
-        'image/object/bbox/ymin':
-            tf.VarLenFeature(dtype=tf.float32),
-        'image/object/bbox/xmax':
-            tf.VarLenFeature(dtype=tf.float32),
-        'image/object/bbox/ymax':
-            tf.VarLenFeature(dtype=tf.float32),
-        'image/object/class/label':
-            tf.VarLenFeature(dtype=tf.int64),
-    }
-
-    features = tf.parse_single_example(serialized_proto, keys_to_features)
-
-    bbox = None
-    if FLAGS.use_annotated_bbox:
-      xmin = tf.expand_dims(features['image/object/bbox/xmin'].values, 0)
-      ymin = tf.expand_dims(features['image/object/bbox/ymin'].values, 0)
-      xmax = tf.expand_dims(features['image/object/bbox/xmax'].values, 0)
-      ymax = tf.expand_dims(features['image/object/bbox/ymax'].values, 0)
-
-      # Note that we impose an ordering of (y, x) just to make life difficult.
-      bbox = tf.concat([ymin, xmin, ymax, xmax], 0)
-
-      # Force the variable number of bounding boxes into the shape
-      # [1, num_boxes, coords].
-      bbox = tf.expand_dims(bbox, 0)
-      bbox = tf.transpose(bbox, [0, 2, 1])
-
-    image = features['image/encoded']
-    image = preprocess_raw_bytes(image, is_training=self.is_training, bbox=bbox)
-
-    label = tf.cast(
-        tf.reshape(features['image/class/label'], shape=[]), dtype=tf.int32)
-
-    return image, label
-
-  def input_fn(self, params):
-    """Input function which provides a single batch for train or eval.
-
-    Args:
-      params: `dict` of parameters passed from the `TPUEstimator`.
-          `params['batch_size']` is always provided and should be used as the
-          effective batch size.
-
-    Returns:
-      A (images, labels) tuple of `Tensor`s for a batch of samples.
-    """
-    batch_size = params['batch_size']
-
-    if FLAGS.use_data == 'real':
-      file_pattern = os.path.join(
-          self.data_dir, 'train-*' if self.is_training else 'validation-*')
-      dataset = tf.data.Dataset.list_files(file_pattern,
-                                           shuffle=self.is_training)
-
-      if self.is_training:
-        dataset = dataset.repeat()
-
-      def prefetch_dataset(filename):
-        dataset = tf.data.TFRecordDataset(
-            filename, buffer_size=FLAGS.prefetch_dataset_buffer_size)
-        return dataset
-
-      dataset = dataset.apply(
-          tf.contrib.data.parallel_interleave(
-              prefetch_dataset,
-              cycle_length=FLAGS.num_files_infeed,
-              sloppy=True))
-
-      if FLAGS.followup_shuffle_buffer_size > 0:
-        dataset = dataset.shuffle(
-            buffer_size=FLAGS.followup_shuffle_buffer_size)
-
-      dataset = dataset.map(
-          self.dataset_parser,
-          num_parallel_calls=FLAGS.num_parallel_calls)
-
-      dataset = dataset.prefetch(batch_size)
-
-      dataset = dataset.batch(batch_size, drop_remainder=True)
-
-      dataset = dataset.prefetch(2)  # Prefetch overlaps in-feed with training
-
-      images, labels = dataset.make_one_shot_iterator().get_next()
-      images.set_shape([batch_size, FLAGS.height, FLAGS.width, 3])
-    else:
-      images = tf.random_uniform(
-          [batch_size, FLAGS.height, FLAGS.width, 3], minval=-1, maxval=1)
-      labels = tf.random_uniform(
-          [batch_size], minval=0, maxval=999, dtype=tf.int32)
-
-    images = tensor_transform_fn(images, params['output_perm'])
-    return images, labels
-
-
 def image_serving_input_fn():
   """Serving input fn for raw images.
 
@@ -430,32 +213,10 @@ def image_serving_input_fn():
       dtype=tf.string,
   )
   images = tf.map_fn(
-      preprocess_raw_bytes, image_bytes_list, back_prop=False, dtype=tf.float32)
+      supervised_images.preprocess_raw_bytes, image_bytes_list,
+      back_prop=False, dtype=tf.float32)
   return tf.estimator.export.ServingInputReceiver(
       images, {'image_bytes': image_bytes_list})
-
-
-def tensor_transform_fn(data, perm):
-  """Transpose function.
-
-  This function is used to transpose an image tensor on the host and then
-  perform an inverse transpose on the TPU. The transpose on the TPU gets
-  effectively elided thus voiding any associated computational cost.
-
-  NOTE: Eventually the compiler will be able to detect when this kind of
-  operation may prove beneficial and perform these types of transformations
-  implicitly, voiding the need for user intervention
-
-  Args:
-    data: Tensor to be transposed
-    perm: Permutation of the dimensions of a
-
-  Returns:
-    Transposed tensor
-  """
-  if FLAGS.transpose_enabled:
-    return tf.transpose(data, perm)
-  return data
 
 
 def model_fn(features, labels, mode, params):
@@ -467,7 +228,8 @@ def model_fn(features, labels, mode, params):
   if isinstance(features, dict):
     features = features['feature']
 
-  features = tensor_transform_fn(features, params['input_perm'])
+  features = supervised_images.tensor_transform_fn(
+      features, params['input_perm'])
 
   if FLAGS.clear_update_collections:
     # updates_collections must be set to None in order to use fused batchnorm
@@ -669,10 +431,10 @@ def main(unused_argv):
 
   # Input pipelines are slightly different (with regards to shuffling and
   # preprocessing) between training and evaluation.
-  imagenet_train = InputPipeline(
+  imagenet_train = supervised_images.InputPipeline(
       is_training=True,
       data_dir=FLAGS.data_dir)
-  imagenet_eval = InputPipeline(
+  imagenet_eval = supervised_images.InputPipeline(
       is_training=False,
       data_dir=FLAGS.data_dir)
 

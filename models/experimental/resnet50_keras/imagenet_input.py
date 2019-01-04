@@ -60,25 +60,17 @@ class ImageNetInput(object):
 
   Args:
     is_training: `bool` for whether the input is for training.
-    data_dir: `str` for the directory of the training and validation data;
-        if 'null' (the literal string 'null', not None), then construct a null
-        pipeline, consisting of empty images.
+    data_dir: `str` for the directory of the training and validation data.
     use_bfloat16: If True, use bfloat16 precision; else use float32.
-    per_core_batch_size: The per-TPU-core batch size to use.
+    batch_size: The global batch size to use.
   """
 
-  def __init__(self,
-               is_training,
-               data_dir,
-               use_bfloat16=False,
-               per_core_batch_size=128):
+  def __init__(self, is_training, data_dir, batch_size, use_bfloat16=False):
     self.image_preprocessing_fn = resnet_preprocessing.preprocess_image
     self.is_training = is_training
     self.use_bfloat16 = use_bfloat16
     self.data_dir = data_dir
-    if self.data_dir == 'null' or self.data_dir == '':
-      self.data_dir = None
-    self.per_core_batch_size = per_core_batch_size
+    self.batch_size = batch_size
 
   def dataset_parser(self, value):
     """Parse an ImageNet record from a serialized string Tensor."""
@@ -125,10 +117,6 @@ class ImageNetInput(object):
     Returns:
       A `tf.data.Dataset` object.
     """
-    if self.data_dir is None:
-      tf.logging.info('Using fake input.')
-      return self.input_fn_null()
-
     # Shuffle the filenames to ensure better randomization.
     file_pattern = os.path.join(
         self.data_dir, 'train-*' if self.is_training else 'validation-*')
@@ -152,36 +140,11 @@ class ImageNetInput(object):
     # Parse, pre-process, and batch the data in parallel
     dataset = dataset.apply(
         tf.contrib.data.map_and_batch(
-            self.dataset_parser, batch_size=self.per_core_batch_size,
+            self.dataset_parser,
+            batch_size=self.batch_size,
             num_parallel_batches=2,
             drop_remainder=True))
 
     # Prefetch overlaps in-feed with training
     dataset = dataset.prefetch(tf.contrib.data.AUTOTUNE)
     return dataset
-
-  # TODO(xiejw): Remove this generator when we have support for top_k
-  # evaluation.
-  def evaluation_generator(self, sess):
-    """Creates a generator for evaluation."""
-    next_batch = self.input_fn().make_one_shot_iterator().get_next()
-    while True:
-      try:
-        yield sess.run(next_batch)
-      except tf.errors.OutOfRangeError:
-        return
-
-  def input_fn_null(self):
-    """Input function which provides null (black) images."""
-    dataset = tf.data.Dataset.range(1).repeat().map(self._get_null_input)
-    dataset = dataset.prefetch(self.per_core_batch_size)
-
-    dataset = dataset.batch(self.per_core_batch_size, drop_remainder=True)
-
-    dataset = dataset.prefetch(32)     # Prefetch overlaps in-feed with training
-    tf.logging.info('Input dataset: %s', str(dataset))
-    return dataset
-
-  def _get_null_input(self, _):
-    null_image = tf.zeros([224, 224, 3], tf.float32)
-    return null_image, tf.constant(0, tf.float32)

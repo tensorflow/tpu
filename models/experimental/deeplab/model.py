@@ -18,6 +18,7 @@ import tensorflow as tf
 
 from tensorflow.contrib.tpu.python.tpu import bfloat16
 from deeplab import common
+from deeplab.core import feature_extractor
 from deeplab.model import multi_scale_logits
 from deeplab.utils.train_utils import add_softmax_cross_entropy_loss_for_each_scale
 
@@ -238,13 +239,17 @@ def model_fn(features, labels, mode, params):
 
   # Restore from checkpoint if available.
   if params['init_checkpoint'] and mode == tf.estimator.ModeKeys.TRAIN:
+    tf.logging.info('Found an init checkpoint.')
+    model_variant = params['model_options'].model_variant
+    var_scope = '{}/'.format(feature_extractor.name_scope[model_variant])
     def scaffold_fn():
       """Create Scaffold for initialization, etc."""
       tf.train.init_from_checkpoint(params['init_checkpoint'], {
-          'resnet_v1_101/': 'resnet_v1_101/',
+          var_scope: var_scope,
       })
       return tf.train.Scaffold()
   else:
+    tf.logging.info('No init checkpoint found. Training from scratch.')
     scaffold_fn = None
   return tf.contrib.tpu.TPUEstimatorSpec(
       mode=mode,

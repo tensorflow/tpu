@@ -20,12 +20,10 @@ from __future__ import print_function
 import tensorflow as tf
 
 
-def default_hparams():
+def default_config():
   return tf.contrib.training.HParams(
       # input preprocessing parameters
       image_size=1024,
-      short_side_image_size=800,
-      long_side_max_image_size=1333,
       input_rand_hflip=True,
       train_scale_min=1.0,
       train_scale_max=1.0,
@@ -71,21 +69,27 @@ def default_hparams():
       is_training_bn=False,
       # optimization
       momentum=0.9,
-      # The default learning rate is w.r.t. a batch of 64. See
-      # update_learning_rate_schedule_parameters() in learning_rates.py for
-      # more details.
-      learning_rate=0.08,
-      lr_warmup_init=0.0067,
-      lr_warmup_epoch=0.27,
-      first_lr_drop_epoch=8.0,
-      second_lr_drop_epoch=10.67,
       # localization loss
       delta=0.1,
       rpn_box_loss_weight=1.0,
       fast_rcnn_box_loss_weight=1.0,
       mrcnn_weight_loss_mask=1.0,
-      # enable bfloat
+      # ---------- Training configurations ----------
+      train_batch_size=64,
+      init_learning_rate=0.08,
+      warmup_learning_rate=0.0067,
+      warmup_steps=500,
+      learning_rate_levels=[0.008, 0.0008],
+      learning_rate_steps=[15000, 20000],
+      total_steps=22500,
+      training_file_pattern='',
+      resnet_checkpoint='',
       use_bfloat16=True,
-      # enable host_call
       use_host_call=False,
+      # ---------- Eval configurations ----------
+      eval_batch_size=8,
+      num_steps_per_eval=2500,
+      eval_samples=5000,
+      validation_file_pattern='',
+      val_json_file='',
   )

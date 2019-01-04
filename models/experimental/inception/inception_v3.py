@@ -409,9 +409,11 @@ class InputPipeline(object):
       dataset = dataset.map(
           self.dataset_parser, num_parallel_calls=FLAGS.num_parallel_calls)
     else:
-      random_image = tf.random.uniform([FLAGS.height, FLAGS.width, 3],
-                                       minval=-1,
-                                       maxval=1)
+      random_image = tf.random.uniform(
+          [FLAGS.height, FLAGS.width, 3],
+          minval=-1,
+          maxval=1,
+          dtype=tf.bfloat16 if self.use_bfloat16 else tf.float32)
       random_label = tf.random.uniform([], minval=0, maxval=999, dtype=tf.int32)
       dataset = tf.data.Dataset.range(1).repeat().map(
           lambda data: (random_image, random_label))

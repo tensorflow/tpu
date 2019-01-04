@@ -273,7 +273,8 @@ def resnet_model_fn(features, labels, mode, params):
   """The model_fn for ResNet to be used with TPUEstimator.
 
   Args:
-    features: `Tensor` of batched images.
+    features: `Tensor` of batched images. If transpose_input is enabled, it
+        is transposed to device layout and reshaped to 1D tensor.
     labels: `Tensor` of labels for the data samples
     mode: one of `tf.estimator.ModeKeys.{TRAIN,EVAL,PREDICT}`
     params: `dict` of parameters passed to the model from the TPUEstimator,
@@ -295,7 +296,8 @@ def resnet_model_fn(features, labels, mode, params):
     features = tf.transpose(features, [0, 3, 1, 2])
 
   if FLAGS.transpose_input and mode != tf.estimator.ModeKeys.PREDICT:
-    features = tf.reshape(features, [FLAGS.image_size, FLAGS.image_size, 3, -1])
+    image_size = tf.sqrt(tf.shape(features)[0] / (3 * tf.shape(labels)[0]))
+    features = tf.reshape(features, [image_size, image_size, 3, -1])
     features = tf.transpose(features, [3, 0, 1, 2])  # HWCN to NHWC
 
   # Normalize the image to zero mean and unit variance.

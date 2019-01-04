@@ -419,4 +419,5 @@ def _build_network_base(images,
   predictions = tf.nn.softmax(logits, name='predictions')
   end_points['logits'] = logits
   end_points['predictions'] = predictions
+  end_points['cell_outputs'] = cell_outputs
   return logits, end_points
