@@ -232,10 +232,10 @@ python tpu/models/official/retinanet/retinanet_main.py  \
  --mode=eval \
  --num_epochs=1 \
  --num_examples_per_epoch=1000 \
- --eval_steps=10
+ --eval_samples=10
 ```
 
-We specified `num_epochs=1` and `eval_steps=10` above to ensure our script
+We specified `num_epochs=1` and `eval_samples=10` above to ensure our script
 finished quickly.  We'll change those now to run over the full evaluation
 dataset:
 
@@ -248,7 +248,7 @@ python tpu/models/official/retinanet/retinanet_main.py  \
  --hparams=image_size=640 \
  --num_epochs=15 \
  --mode=eval \
- --eval_steps=5000
+ --eval_samples=5000
 ```
 
 It takes about 10 minutes to run through the 5000 evaluation steps.  After
