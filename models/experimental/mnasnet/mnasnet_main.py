@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Train a ResNet-50 model on ImageNet on TPU."""
+"""Train a MnasNet on ImageNet on TPU."""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -20,22 +20,20 @@ from __future__ import print_function
 
 import os
 import time
-
 from absl import app
 from absl import flags
-import absl.logging as _logging  # pylint: disable=unused-import
 import numpy as np
 import tensorflow as tf
 
-from common import tpu_profiler_hook
-from official.resnet import imagenet_input
-from official.resnet import lars_util
-from official.resnet import resnet_model
-from tensorflow.contrib import summary
+import imagenet_input
+import mnasnet_models
+import mnasnet_utils
 from tensorflow.contrib.tpu.python.tpu import async_checkpoint
 from tensorflow.contrib.training.python.training import evaluation
 from tensorflow.core.protobuf import rewriter_config_pb2
 from tensorflow.python.estimator import estimator
+from tensorflow.python.keras import backend as K
+
 
 FLAGS = flags.FLAGS
 
@@ -74,28 +72,25 @@ flags.DEFINE_string(
     help=('The directory where the model and training/evaluation summaries are'
           ' stored.'))
 
-flags.DEFINE_integer(
-    'resnet_depth', default=50,
-    help=('Depth of ResNet model to use. Must be one of {18, 34, 50, 101, 152,'
-          ' 200}. ResNet-18 and 34 use the pre-activation residual blocks'
-          ' without bottleneck layers. The other models use pre-activation'
-          ' bottleneck layers. Deeper models require more training time and'
-          ' more memory and may require reducing --train_batch_size to prevent'
-          ' running out of memory.'))
-
-flags.DEFINE_integer(
-    'profile_every_n_steps', default=0,
-    help=('Number of steps between collecting profiles if larger than 0'))
+flags.DEFINE_string(
+    'model_name',
+    default='mnasnet-a1',
+    help=(
+        'The model name to select models among existing MnasNet configurations.'
+    ))
 
 flags.DEFINE_string(
     'mode', default='train_and_eval',
     help='One of {"train_and_eval", "train", "eval"}.')
 
 flags.DEFINE_integer(
-    'train_steps', default=112590,
-    help=('The number of steps to use for training. Default is 112590 steps'
-          ' which is approximately 90 epochs at batch size 1024. This flag'
+    'train_steps', default=437898,
+    help=('The number of steps to use for training. Default is 437898 steps'
+          ' which is approximately 350 epochs at batch size 1024. This flag'
           ' should be adjusted according to the --train_batch_size flag.'))
+
+flags.DEFINE_integer(
+    'input_image_size', default=224, help='Input image size.')
 
 flags.DEFINE_integer(
     'train_batch_size', default=1024, help='Batch size for training.')
@@ -110,10 +105,7 @@ flags.DEFINE_integer(
     'num_eval_images', default=50000, help='Size of evaluation data set.')
 
 flags.DEFINE_integer(
-    'num_label_classes', default=1000, help='Number of classes, at least 2')
-
-flags.DEFINE_integer(
-    'steps_per_eval', default=1251,
+    'steps_per_eval', default=6255,
     help=('Controls how often evaluation is performed. Since evaluation is'
           ' fairly expensive, it is advised to evaluate as infrequently as'
           ' possible (i.e. up to --train_steps, which evaluates the model only'
@@ -141,14 +133,8 @@ flags.DEFINE_integer(
           ' utilization on the TPU.'))
 
 flags.DEFINE_integer(
-    'num_parallel_calls', default=8,
-    help=('Number of parallel threads in CPU for the input pipeline.'
-          ' Recommended value is the number of cores per CPU host.'))
-
-flags.DEFINE_integer(
-    'num_cores', default=8,
-    help=('Number of TPU cores in total. For a single TPU device, this is 8'
-          ' because each TPU has 4 chips each with 2 cores.'))
+    'num_parallel_calls', default=64,
+    help=('Number of parallel threads in CPU for the input pipeline'))
 
 flags.DEFINE_string(
     'bigtable_project', None,
@@ -178,9 +164,17 @@ flags.DEFINE_string(
           ' is either channels_first or channels_last. To run the network on'
           ' CPU or TPU, channels_last should be used. For GPU, channels_first'
           ' will improve performance.'))
+flags.DEFINE_integer(
+    'num_label_classes', default=1000, help='Number of classes, at least 2')
+flags.DEFINE_float(
+    'batch_norm_momentum',
+    default=None,
+    help=('Batch normalization layer momentum of moving average to override.'))
+flags.DEFINE_float(
+    'batch_norm_epsilon',
+    default=None,
+    help=('Batch normalization layer epsilon to override..'))
 
-# TODO(chrisying): remove this flag once --transpose_tpu_infeed flag is enabled
-# by default for TPU
 flags.DEFINE_bool(
     'transpose_input', default=True,
     help='Use TPU double transpose optimization')
@@ -189,18 +183,16 @@ flags.DEFINE_string(
     'export_dir',
     default=None,
     help=('The directory where the exported SavedModel will be stored.'))
-
 flags.DEFINE_bool(
     'export_to_tpu', default=False,
     help=('Whether to export additional metagraph with "serve, tpu" tags'
           ' in addition to "serve" only metagraph.'))
-
-flags.DEFINE_string(
-    'precision', default='bfloat16',
-    help=('Precision to use; one of: {bfloat16, float32}'))
+flags.DEFINE_bool(
+    'post_quantize', default=True, help=('Enable post quantization.'))
 
 flags.DEFINE_float(
-    'base_learning_rate', default=0.1,
+    'base_learning_rate',
+    default=0.016,
     help=('Base learning rate when train batch size is 256.'))
 
 flags.DEFINE_float(
@@ -208,46 +200,44 @@ flags.DEFINE_float(
     help=('Momentum parameter used in the MomentumOptimizer.'))
 
 flags.DEFINE_float(
-    'weight_decay', default=1e-4,
+    'moving_average_decay', default=0.9999,
+    help=('Moving average decay rate.'))
+
+flags.DEFINE_float(
+    'weight_decay', default=1e-5,
     help=('Weight decay coefficiant for l2 regularization.'))
 
 flags.DEFINE_float(
-    'label_smoothing', default=0.0,
+    'label_smoothing', default=0.1,
     help=('Label smoothing parameter used in the softmax_cross_entropy'))
+
+flags.DEFINE_float(
+    'dropout_rate', default=0.2,
+    help=('Dropout rate for the final output layer.'))
+
 
 flags.DEFINE_integer('log_step_count_steps', 64, 'The number of steps at '
                      'which the global step information is logged.')
 
-flags.DEFINE_bool('enable_lars',
-                  default=False,
-                  help=('Enable LARS optimizer for large batch training.'))
-
-flags.DEFINE_float('poly_rate', default=0.0,
-                   help=('Set LARS/Poly learning rate.'))
-
 flags.DEFINE_bool(
     'use_cache', default=True, help=('Enable cache for training input.'))
+
+flags.DEFINE_float(
+    'depth_multiplier', default=None, help=('Depth multiplier per layer.'))
+
+flags.DEFINE_float(
+    'depth_divisor', default=None, help=('Depth divisor (default to 8).'))
+
+flags.DEFINE_float(
+    'min_depth', default=None, help=('Minimal depth (default to None).'))
 
 flags.DEFINE_bool(
     'use_async_checkpointing', default=False, help=('Enable async checkpoint'))
 
-flags.DEFINE_integer('image_size', 224, 'The input image size.')
-
-flags.DEFINE_string(
-    'dropblock_groups', '',
-    help=('A string containing comma separated integers indicating ResNet '
-          'block groups to apply DropBlock. `3,4` means to apply DropBlock to '
-          'block groups 3 and 4. Use an empty string to not apply DropBlock to '
-          'any block group.'))
-flags.DEFINE_float(
-    'dropblock_keep_prob', default=0.9,
-    help=('keep_prob parameter of DropBlock. Will not be used if '
-          'dropblock_groups is empty.'))
-flags.DEFINE_integer(
-    'dropblock_size', default=7,
-    help=('size parameter of DropBlock. Will not be used if dropblock_groups '
-          'is empty.'))
-
+# Learning rate schedule
+LR_SCHEDULE = [    # (multiplier, epoch to start) tuples
+    (1.0, 5), (0.1, 30), (0.01, 60), (0.001, 80)
+]
 
 # The input tensor is in the range of [0, 255], we need to scale them to the
 # range of [0, 1]
@@ -255,55 +245,11 @@ MEAN_RGB = [0.485 * 255, 0.456 * 255, 0.406 * 255]
 STDDEV_RGB = [0.229 * 255, 0.224 * 255, 0.225 * 255]
 
 
-def get_lr_schedule(train_steps, num_train_images, train_batch_size):
-  """learning rate schedule."""
-  steps_per_epoch = np.floor(num_train_images / train_batch_size)
-  train_epochs = train_steps / steps_per_epoch
-  return [  # (multiplier, epoch to start) tuples
-      (1.0, np.floor(5 / 90 * train_epochs)),
-      (0.1, np.floor(30 / 90 * train_epochs)),
-      (0.01, np.floor(60 / 90 * train_epochs)),
-      (0.001, np.floor(80 / 90 * train_epochs))
-  ]
-
-
-def learning_rate_schedule(train_steps, current_epoch):
-  """Handles linear scaling rule, gradual warmup, and LR decay.
-
-  The learning rate starts at 0, then it increases linearly per step.
-  After 5 epochs we reach the base learning rate (scaled to account
-    for batch size).
-  After 30, 60 and 80 epochs the learning rate is divided by 10.
-  After 90 epochs training stops and the LR is set to 0. This ensures
-    that we train for exactly 90 epochs for reproducibility.
+def mnasnet_model_fn(features, labels, mode, params):
+  """The model_fn for MnasNet to be used with TPUEstimator.
 
   Args:
-    train_steps: `int` number of training steps.
-    current_epoch: `Tensor` for current epoch.
-
-  Returns:
-    A scaled `Tensor` for current learning rate.
-  """
-  scaled_lr = FLAGS.base_learning_rate * (FLAGS.train_batch_size / 256.0)
-
-  lr_schedule = get_lr_schedule(
-      train_steps=train_steps,
-      num_train_images=FLAGS.num_train_images,
-      train_batch_size=FLAGS.train_batch_size)
-  decay_rate = (scaled_lr * lr_schedule[0][0] *
-                current_epoch / lr_schedule[0][1])
-  for mult, start_epoch in lr_schedule:
-    decay_rate = tf.where(current_epoch < start_epoch,
-                          decay_rate, scaled_lr * mult)
-  return decay_rate
-
-
-def resnet_model_fn(features, labels, mode, params):
-  """The model_fn for ResNet to be used with TPUEstimator.
-
-  Args:
-    features: `Tensor` of batched images. If transpose_input is enabled, it
-        is transposed to device layout and reshaped to 1D tensor.
+    features: `Tensor` of batched images.
     labels: `Tensor` of labels for the data samples
     mode: one of `tf.estimator.ModeKeys.{TRAIN,EVAL,PREDICT}`
     params: `dict` of parameters passed to the model from the TPUEstimator,
@@ -325,53 +271,40 @@ def resnet_model_fn(features, labels, mode, params):
     features = tf.transpose(features, [0, 3, 1, 2])
 
   if FLAGS.transpose_input and mode != tf.estimator.ModeKeys.PREDICT:
-    image_size = tf.sqrt(tf.shape(features)[0] / (3 * tf.shape(labels)[0]))
-    features = tf.reshape(features, [image_size, image_size, 3, -1])
     features = tf.transpose(features, [3, 0, 1, 2])  # HWCN to NHWC
 
   # Normalize the image to zero mean and unit variance.
   features -= tf.constant(MEAN_RGB, shape=[1, 1, 3], dtype=features.dtype)
   features /= tf.constant(STDDEV_RGB, shape=[1, 1, 3], dtype=features.dtype)
 
-  # DropBlock keep_prob for the 4 block groups of ResNet architecture.
-  # None means applying no DropBlock at the corresponding block group.
-  dropblock_keep_probs = [None] * 4
-  if FLAGS.dropblock_groups:
-    # Scheduled keep_prob for DropBlock.
-    train_steps = tf.cast(FLAGS.train_steps, tf.float32)
-    current_step = tf.cast(tf.train.get_global_step(), tf.float32)
-    current_ratio = current_step / train_steps
-    dropblock_keep_prob = (1 - current_ratio * (1 - FLAGS.dropblock_keep_prob))
+  is_training = (mode == tf.estimator.ModeKeys.TRAIN)
+  has_moving_average_decay = (FLAGS.moving_average_decay > 0)
+  # This is essential, if using a keras-derived model.
+  K.set_learning_phase(is_training)
+  tf.logging.info('Using open-source implementation for MnasNet definition.')
+  override_params = {}
+  if FLAGS.batch_norm_momentum:
+    override_params['batch_norm_momentum'] = FLAGS.batch_norm_momentum
+  if FLAGS.batch_norm_epsilon:
+    override_params['batch_norm_epsilon'] = FLAGS.batch_norm_epsilon
+  if FLAGS.dropout_rate:
+    override_params['dropout_rate'] = FLAGS.dropout_rate
+  if FLAGS.data_format:
+    override_params['data_format'] = FLAGS.data_format
+  if FLAGS.num_label_classes:
+    override_params['num_classes'] = FLAGS.num_label_classes
+  if FLAGS.depth_multiplier:
+    override_params['depth_multiplier'] = FLAGS.depth_multiplier
+  if FLAGS.depth_divisor:
+    override_params['depth_divisor'] = FLAGS.depth_divisor
+  if FLAGS.min_depth:
+    override_params['min_depth'] = FLAGS.min_depth
 
-    # Computes DropBlock keep_prob for different block groups of ResNet.
-    dropblock_groups = [int(x) for x in FLAGS.dropblock_groups.split(',')]
-    for block_group in dropblock_groups:
-      if block_group < 1 or block_group > 4:
-        raise ValueError(
-            'dropblock_groups should be a comma separated list of integers '
-            'between 1 and 4 (dropblcok_groups: {}).'
-            .format(FLAGS.dropblock_groups))
-      dropblock_keep_probs[block_group - 1] = 1 - (
-          (1 - dropblock_keep_prob) / 4.0**(4 - block_group))
-
-  # This nested function allows us to avoid duplicating the logic which
-  # builds the network, for different values of --precision.
-  def build_network():
-    network = resnet_model.resnet_v1(
-        resnet_depth=FLAGS.resnet_depth,
-        num_classes=FLAGS.num_label_classes,
-        dropblock_size=FLAGS.dropblock_size,
-        dropblock_keep_probs=dropblock_keep_probs,
-        data_format=FLAGS.data_format)
-    return network(
-        inputs=features, is_training=(mode == tf.estimator.ModeKeys.TRAIN))
-
-  if FLAGS.precision == 'bfloat16':
-    with tf.contrib.tpu.bfloat16_scope():
-      logits = build_network()
-    logits = tf.cast(logits, tf.float32)
-  elif FLAGS.precision == 'float32':
-    logits = build_network()
+  logits, _ = mnasnet_models.build_mnasnet_model(
+      features,
+      model_name=FLAGS.model_name,
+      training=is_training,
+      override_params=override_params)
 
   if mode == tf.estimator.ModeKeys.PREDICT:
     predictions = {
@@ -401,24 +334,28 @@ def resnet_model_fn(features, labels, mode, params):
       [tf.nn.l2_loss(v) for v in tf.trainable_variables()
        if 'batch_normalization' not in v.name])
 
+  global_step = tf.train.get_global_step()
+  if has_moving_average_decay:
+    ema = tf.train.ExponentialMovingAverage(
+        decay=FLAGS.moving_average_decay, num_updates=global_step)
+    ema_vars = tf.trainable_variables() + tf.get_collection('moving_vars')
+    for v in tf.global_variables():
+      # We maintain mva for batch norm moving mean and variance as well.
+      if 'moving_mean' in v.name or 'moving_variance' in v.name:
+        ema_vars.append(v)
+    ema_vars = list(set(ema_vars))
+
   host_call = None
-  if mode == tf.estimator.ModeKeys.TRAIN:
+  restore_vars_dict = None
+  if is_training:
     # Compute the current epoch and associated learning rate from global_step.
-    global_step = tf.train.get_global_step()
-    steps_per_epoch = FLAGS.num_train_images / FLAGS.train_batch_size
-    current_epoch = (tf.cast(global_step, tf.float32) /
-                     steps_per_epoch)
-    # LARS is a large batch optimizer. LARS enables higher accuracy at batch 16K
-    # and larger batch sizes.
-    if FLAGS.train_batch_size >= 16384 and FLAGS.enable_lars:
-      learning_rate = 0.0
-      optimizer = lars_util.init_lars_optimizer(current_epoch)
-    else:
-      learning_rate = learning_rate_schedule(FLAGS.train_steps, current_epoch)
-      optimizer = tf.train.MomentumOptimizer(
-          learning_rate=learning_rate,
-          momentum=FLAGS.momentum,
-          use_nesterov=True)
+    current_epoch = (
+        tf.cast(global_step, tf.float32) / params['steps_per_epoch'])
+
+    scaled_lr = FLAGS.base_learning_rate * (FLAGS.train_batch_size / 256.0)
+    learning_rate = mnasnet_utils.build_learning_rate(scaled_lr, global_step,
+                                                      params['steps_per_epoch'])
+    optimizer = mnasnet_utils.build_optimizer(learning_rate)
     if FLAGS.use_tpu:
       # When using TPU, wrap the optimizer with CrossShardOptimizer which
       # handles synchronization details between different TPU cores. To the
@@ -430,6 +367,10 @@ def resnet_model_fn(features, labels, mode, params):
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
     with tf.control_dependencies(update_ops):
       train_op = optimizer.minimize(loss, global_step)
+
+    if has_moving_average_decay:
+      with tf.control_dependencies([train_op]):
+        train_op = ema.apply(ema_vars)
 
     if not FLAGS.skip_host_call:
       def host_call_fn(gs, loss, lr, ce):
@@ -458,14 +399,14 @@ def resnet_model_fn(features, labels, mode, params):
         # TPU loop is finished, setting max_queue value to the same as number of
         # iterations will make the summary writer only flush the data to storage
         # once per loop.
-        with summary.create_file_writer(
+        with tf.contrib.summary.create_file_writer(
             FLAGS.model_dir, max_queue=FLAGS.iterations_per_loop).as_default():
-          with summary.always_record_summaries():
-            summary.scalar('loss', loss[0], step=gs)
-            summary.scalar('learning_rate', lr[0], step=gs)
-            summary.scalar('current_epoch', ce[0], step=gs)
+          with tf.contrib.summary.always_record_summaries():
+            tf.contrib.summary.scalar('loss', loss[0], step=gs)
+            tf.contrib.summary.scalar('learning_rate', lr[0], step=gs)
+            tf.contrib.summary.scalar('current_epoch', ce[0], step=gs)
 
-            return summary.all_summary_ops()
+            return tf.contrib.summary.all_summary_ops()
 
       # To log the loss, current learning rate, and epoch for Tensorboard, the
       # summary op needs to be run on the host CPU via host_call. host_call
@@ -481,6 +422,9 @@ def resnet_model_fn(features, labels, mode, params):
 
   else:
     train_op = None
+    if has_moving_average_decay:
+      # Load moving average variables for eval.
+      restore_vars_dict = ema.variables_to_restore(ema_vars)
 
   eval_metrics = None
   if mode == tf.estimator.ModeKeys.EVAL:
@@ -515,12 +459,20 @@ def resnet_model_fn(features, labels, mode, params):
 
     eval_metrics = (metric_fn, [labels, logits])
 
+  num_params = np.sum([np.prod(v.shape) for v in tf.trainable_variables()])
+  tf.logging.info('number of trainable parameters: {}'.format(num_params))
+
+  def _scaffold_fn():
+    saver = tf.train.Saver(restore_vars_dict)
+    return tf.train.Scaffold(saver=saver)
+
   return tf.contrib.tpu.TPUEstimatorSpec(
       mode=mode,
       loss=loss,
       train_op=train_op,
       host_call=host_call,
-      eval_metrics=eval_metrics)
+      eval_metrics=eval_metrics,
+      scaffold_fn=_scaffold_fn if has_moving_average_decay else None)
 
 
 def _verify_non_empty_string(value, field_name):
@@ -576,6 +528,55 @@ def _select_tables_from_flags():
   ]
 
 
+def export(est, export_dir, post_quantize=True):
+  """Export graph to SavedModel and TensorFlow Lite.
+
+  Args:
+    est: estimator instance.
+    export_dir: string, exporting directory.
+    post_quantize: boolean, whether to quantize model checkpoint after training.
+
+  Raises:
+    ValueError: the export directory path is not specified.
+  """
+  if not export_dir:
+    raise ValueError('The export directory path is not specified.')
+  # The guide to serve a exported TensorFlow model is at:
+  #    https://www.tensorflow.org/serving/serving_basic
+  def lite_image_serving_input_fn():
+    """serving input fn for raw images."""
+    input_shape = [1, FLAGS.input_image_size, FLAGS.input_image_size, 3]
+    images = tf.placeholder(shape=input_shape, dtype=tf.float32)
+    return tf.estimator.export.ServingInputReceiver(images, {'images': images})
+
+  tf.logging.info('Starting to export model.')
+  est.export_saved_model(
+      export_dir_base=export_dir,
+      serving_input_receiver_fn=lite_image_serving_input_fn)
+
+  subfolder = sorted(tf.gfile.ListDirectory(export_dir), reverse=True)[0]
+  tf.logging.info('Starting to export TFLite.')
+  converter = tf.lite.TFLiteConverter.from_saved_model(
+      os.path.join(export_dir, subfolder),
+      input_arrays=['truediv'],
+      output_arrays=['logits'])
+  tflite_model = converter.convert()
+  tflite_file = os.path.join(export_dir, FLAGS.model_name + '.tflite')
+  tf.gfile.GFile(tflite_file, 'wb').write(tflite_model)
+
+  if post_quantize:
+    tf.logging.info('Starting to export quantized TFLite.')
+    converter = tf.lite.TFLiteConverter.from_saved_model(
+        os.path.join(export_dir, subfolder),
+        input_arrays=['truediv'],
+        output_arrays=['logits'])
+    converter.post_training_quantize = True
+    quant_tflite_model = converter.convert()
+    quant_tflite_file = os.path.join(export_dir,
+                                     FLAGS.model_name + '_postquant.tflite')
+    tf.gfile.GFile(quant_tflite_file, 'wb').write(quant_tflite_model)
+
+
 def main(unused_argv):
   tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
       FLAGS.tpu if (FLAGS.tpu or FLAGS.use_tpu) else '',
@@ -597,21 +598,18 @@ def main(unused_argv):
                   disable_meta_optimizer=True))),
       tpu_config=tf.contrib.tpu.TPUConfig(
           iterations_per_loop=FLAGS.iterations_per_loop,
-          num_shards=FLAGS.num_cores,
           per_host_input_for_training=tf.contrib.tpu.InputPipelineConfig
           .PER_HOST_V2))  # pylint: disable=line-too-long
-
-  resnet_classifier = tf.contrib.tpu.TPUEstimator(
+  # Initializes model parameters.
+  params = dict(steps_per_epoch=FLAGS.num_train_images / FLAGS.train_batch_size)
+  mnasnet_est = tf.contrib.tpu.TPUEstimator(
       use_tpu=FLAGS.use_tpu,
-      model_fn=resnet_model_fn,
+      model_fn=mnasnet_model_fn,
       config=config,
       train_batch_size=FLAGS.train_batch_size,
       eval_batch_size=FLAGS.eval_batch_size,
-      export_to_tpu=FLAGS.export_to_tpu)
-  assert FLAGS.precision == 'bfloat16' or FLAGS.precision == 'float32', (
-      'Invalid value for --precision flag; must be bfloat16 or float32.')
-  tf.logging.info('Precision: %s', FLAGS.precision)
-  use_bfloat16 = FLAGS.precision == 'bfloat16'
+      export_to_tpu=FLAGS.export_to_tpu,
+      params=params)
 
   # Input pipelines are slightly different (with regards to shuffling and
   # preprocessing) between training and evaluation.
@@ -620,7 +618,7 @@ def main(unused_argv):
     select_train, select_eval = _select_tables_from_flags()
     imagenet_train, imagenet_eval = [imagenet_input.ImageNetBigtableInput(
         is_training=is_training,
-        use_bfloat16=use_bfloat16,
+        use_bfloat16=False,
         transpose_input=FLAGS.transpose_input,
         selection=selection) for (is_training, selection) in
                                      [(True, select_train),
@@ -636,23 +634,20 @@ def main(unused_argv):
             data_dir=FLAGS.data_dir,
             transpose_input=FLAGS.transpose_input,
             cache=FLAGS.use_cache and is_training,
-            image_size=FLAGS.image_size,
+            image_size=FLAGS.input_image_size,
             num_parallel_calls=FLAGS.num_parallel_calls,
-            use_bfloat16=use_bfloat16) for is_training in [True, False]
+            use_bfloat16=False) for is_training in [True, False]
     ]
 
-  steps_per_epoch = FLAGS.num_train_images // FLAGS.train_batch_size
-  eval_steps = FLAGS.num_eval_images // FLAGS.eval_batch_size
-
   if FLAGS.mode == 'eval':
-
+    eval_steps = FLAGS.num_eval_images // FLAGS.eval_batch_size
     # Run evaluation when there's a new checkpoint
     for ckpt in evaluation.checkpoints_iterator(
         FLAGS.model_dir, timeout=FLAGS.eval_timeout):
       tf.logging.info('Starting to evaluate.')
       try:
         start_timestamp = time.time()  # This time will include compilation time
-        eval_results = resnet_classifier.evaluate(
+        eval_results = mnasnet_est.evaluate(
             input_fn=imagenet_eval.input_fn,
             steps=eval_steps,
             checkpoint_path=ckpt)
@@ -675,15 +670,15 @@ def main(unused_argv):
         tf.logging.info(
             'Checkpoint %s no longer exists, skipping checkpoint', ckpt)
 
+    if FLAGS.export_dir:
+      export(mnasnet_est, FLAGS.export_dir, FLAGS.post_quantize)
   else:   # FLAGS.mode == 'train' or FLAGS.mode == 'train_and_eval'
     current_step = estimator._load_global_step_from_checkpoint_dir(FLAGS.model_dir)  # pylint: disable=protected-access,line-too-long
-    steps_per_epoch = FLAGS.num_train_images // FLAGS.train_batch_size
 
-    tf.logging.info('Training for %d steps (%.2f epochs in total). Current'
-                    ' step %d.',
-                    FLAGS.train_steps,
-                    FLAGS.train_steps / steps_per_epoch,
-                    current_step)
+    tf.logging.info(
+        'Training for %d steps (%.2f epochs in total). Current'
+        ' step %d.', FLAGS.train_steps,
+        FLAGS.train_steps / params['steps_per_epoch'], current_step)
 
     start_timestamp = time.time()  # This time will include compilation time
 
@@ -694,13 +689,7 @@ def main(unused_argv):
             async_checkpoint.AsyncCheckpointSaverHook(
                 checkpoint_dir=FLAGS.model_dir,
                 save_steps=max(100, FLAGS.iterations_per_loop)))
-      if FLAGS.profile_every_n_steps > 0:
-        hooks.append(
-            tpu_profiler_hook.TPUProfilerHook(
-                save_steps=FLAGS.profile_every_n_steps,
-                output_dir=FLAGS.model_dir, tpu=FLAGS.tpu)
-            )
-      resnet_classifier.train(
+      mnasnet_est.train(
           input_fn=imagenet_train.input_fn,
           max_steps=FLAGS.train_steps,
           hooks=hooks)
@@ -712,7 +701,7 @@ def main(unused_argv):
         # At the end of training, a checkpoint will be written to --model_dir.
         next_checkpoint = min(current_step + FLAGS.steps_per_eval,
                               FLAGS.train_steps)
-        resnet_classifier.train(
+        mnasnet_est.train(
             input_fn=imagenet_train.input_fn, max_steps=next_checkpoint)
         current_step = next_checkpoint
 
@@ -724,7 +713,7 @@ def main(unused_argv):
         # may be excluded modulo the batch size. As long as the batch size is
         # consistent, the evaluated images are also consistent.
         tf.logging.info('Starting to evaluate.')
-        eval_results = resnet_classifier.evaluate(
+        eval_results = mnasnet_est.evaluate(
             input_fn=imagenet_eval.input_fn,
             steps=FLAGS.num_eval_images // FLAGS.eval_batch_size)
         tf.logging.info('Eval results at step %d: %s',
@@ -733,14 +722,8 @@ def main(unused_argv):
       elapsed_time = int(time.time() - start_timestamp)
       tf.logging.info('Finished training up to step %d. Elapsed seconds %d.',
                       FLAGS.train_steps, elapsed_time)
-
-    if FLAGS.export_dir is not None:
-      # The guide to serve a exported TensorFlow model is at:
-      #    https://www.tensorflow.org/serving/serving_basic
-      tf.logging.info('Starting to export model.')
-      resnet_classifier.export_saved_model(
-          export_dir_base=FLAGS.export_dir,
-          serving_input_receiver_fn=imagenet_input.image_serving_input_fn)
+      if FLAGS.export_dir:
+        export(mnasnet_est, FLAGS.export_dir, FLAGS.post_quantize)
 
 
 if __name__ == '__main__':

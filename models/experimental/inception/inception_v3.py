@@ -49,7 +49,7 @@ flags.DEFINE_string(
     help='GCE zone where the Cloud TPU is located in. If not specified, we '
     'will attempt to automatically detect the GCE project from metadata.')
 
-# Model specific paramenters
+# Model specific parameters
 flags.DEFINE_string(
     'data_dir', '',
     'Directory where input data is stored')

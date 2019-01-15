@@ -26,15 +26,19 @@ python amoeba_net.py --data_dir=gs://cloud-tpu-datasets/imagenet-data --model_di
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-
+import io
 import itertools
 import math
+import os
 from absl import app
 from absl import flags
 import absl.logging as _logging  # pylint: disable=unused-import
+import numpy as np
+from PIL import Image
 import tensorflow as tf
-
 import amoeba_net_model as model_lib
+from tensorflow_serving.apis import predict_pb2
+from tensorflow_serving.apis import prediction_log_pb2
 
 # Cloud TPU Cluster Resolvers
 flags.DEFINE_string(
@@ -77,6 +81,15 @@ flags.DEFINE_string(
     'model_dir', None,
     'Directory where model output is stored')
 
+flags.DEFINE_string(
+    'export_dir', None,
+    'The directory where the exported SavedModel will be stored.')
+
+flags.DEFINE_bool(
+    'export_to_tpu', False,
+    help='Whether to export additional metagraph with "serve, tpu" tags'
+    ' in addition to "serve" only metagraph.')
+
 flags.DEFINE_integer(
     'iterations_per_loop', 500,
     'Number of iterations per TPU training loop.')
@@ -99,7 +112,7 @@ flags.DEFINE_float(
 
 flags.DEFINE_string(
     'mode', 'train_and_eval',
-    'Mode to run: train, eval, train_and_eval, predict, or export_savedmodel')
+    'Mode to run: train, eval, train_and_eval, or predict')
 
 flags.DEFINE_integer(
     'save_checkpoints_steps', None,
@@ -181,6 +194,20 @@ flags.DEFINE_integer(
     'eval_timeout', 60*60*24,
     'Maximum seconds between checkpoints before evaluation terminates.')
 
+# Inference configuration.
+flags.DEFINE_bool(
+    'inference_with_all_cores', True, 'Whether to round-robin'
+    'among all cores visible to the host for TPU inference.')
+flags.DEFINE_bool(
+    'add_warmup_requests', True,
+    'Whether to add warmup requests into the export saved model dir,'
+    'especially for TPU inference.')
+flags.DEFINE_string('model_name', 'amoeba_net',
+                    'Serving model name used for the model server.')
+flags.DEFINE_multi_integer(
+    'inference_batch_sizes', [8],
+    'Known inference batch sizes used to warm up for each core.')
+
 FLAGS = flags.FLAGS
 
 
@@ -208,32 +235,80 @@ def build_run_config():
   return run_config
 
 
-def build_tensor_serving_input_receiver_fn(
-    shape, batch_size=1, dtype=tf.float32,):
-  """Returns a input_receiver_fn that can be used during serving.
+def build_image_serving_input_receiver_fn(shape,
+                                          dtype=tf.float32):
+  """Returns a input_receiver_fn for raw images during serving."""
 
-  This expects examples to come through as float tensors, and simply
-  wraps them as TensorServingInputReceivers.
+  def _preprocess_image(encoded_image):
+    """Preprocess a single raw image."""
+    image = tf.image.decode_image(encoded_image, channels=shape[-1])
+    image.set_shape(shape)
+    return tf.cast(image, dtype)
 
-  Arguably, this should live in tf.estimator.export. Testing here first.
-
-  Args:
-    shape: list representing target size of a single example.
-    batch_size: number of input tensors that will be passed for prediction
-    dtype: the expected datatype for the input example
-
-  Returns:
-    A function that itself returns a TensorServingInputReceiver.
-  """
   def serving_input_receiver_fn():
-    # Prep a placeholder where the input example will be fed in
-    features = tf.placeholder(
-        dtype=dtype, shape=[batch_size] + shape, name='input_tensor')
-
+    image_bytes_list = tf.placeholder(
+        shape=[None],
+        dtype=tf.string,
+    )
+    images = tf.map_fn(
+        _preprocess_image, image_bytes_list, back_prop=False, dtype=dtype)
     return tf.estimator.export.TensorServingInputReceiver(
-        features=features, receiver_tensors=features)
+        features=images, receiver_tensors=image_bytes_list)
 
   return serving_input_receiver_fn
+
+
+def _encode_image(image_array, fmt='PNG'):
+  """encodes an (numpy) image array to string.
+
+  Args:
+    image_array: (numpy) image array
+    fmt: image format to use
+
+  Returns:
+    encoded image string
+  """
+  pil_image = Image.fromarray(image_array)
+  image_io = io.BytesIO()
+  pil_image.save(image_io, format=fmt)
+  return image_io.getvalue()
+
+
+def write_warmup_requests(savedmodel_dir,
+                          model_name,
+                          image_size,
+                          batch_sizes=None,
+                          num_requests=8):
+  """Writes warmup requests for inference into a tfrecord file.
+
+  Args:
+    savedmodel_dir: string, the file to the exported model folder.
+    model_name: string, a model name used inside the model server.
+    image_size: int, size of image, assuming image height and width.
+    batch_sizes: list, a list of batch sizes to create different input requests.
+    num_requests: int, number of requests per batch size.
+
+  Raises:
+    ValueError: if batch_sizes is not a valid integer list.
+  """
+  if not isinstance(batch_sizes, list) or not batch_sizes:
+    raise ValueError('batch sizes should be a valid non-empty list.')
+  extra_assets_dir = os.path.join(savedmodel_dir, 'assets.extra')
+  tf.gfile.MkDir(extra_assets_dir)
+  with tf.python_io.TFRecordWriter(
+      os.path.join(extra_assets_dir, 'tf_serving_warmup_requests')) as writer:
+    for batch_size in batch_sizes:
+      for _ in range(num_requests):
+        request = predict_pb2.PredictRequest()
+        image = np.uint8(np.random.rand(image_size, image_size, 3) * 255)
+        request.inputs['input'].CopyFrom(
+            tf.make_tensor_proto(
+                [_encode_image(image)] * batch_size, shape=[batch_size]))
+        request.model_spec.name = model_name
+        request.model_spec.signature_name = 'serving_default'
+        log = prediction_log_pb2.PredictionLog(
+            predict_log=prediction_log_pb2.PredictLog(request=request))
+        writer.write(log.SerializeToString())
 
 
 # TODO(ereal): simplify this.
@@ -341,7 +416,10 @@ def main(_):
         params=estimator_parmas,
         predict_batch_size=eval_batch_size,
         train_batch_size=hparams.train_batch_size,
-        eval_batch_size=eval_batch_size)
+        eval_batch_size=eval_batch_size,
+        export_to_tpu=FLAGS.export_to_tpu,
+        experimental_exported_model_uses_all_cores=FLAGS
+        .inference_with_all_cores)
   else:
     save_checkpoints_steps = (FLAGS.save_checkpoints_steps or
                               FLAGS.iterations_per_loop)
@@ -410,15 +488,7 @@ def main(_):
       results = list(itertools.islice(result_iter, eval_steps))
       tf.logging.info('Inference speed = {} images per second.'.format(
           time_hook.compute_speed(len(results) * eval_batch_size)))
-  elif mode == 'export_savedmodel':
-    tf.logging.info('Starting exporting saved model ...')
-    image_classifier.export_saved_model(
-        export_dir_base=model_dir + '/export_savedmodel/',
-        serving_input_receiver_fn=build_tensor_serving_input_receiver_fn(
-            [hparams.image_size, hparams.image_size, 3],
-            batch_size=hparams.eval_batch_size),
-        as_text=True)
-  else:  # default to train mode.
+  elif mode == 'train':
     current_step = _load_global_step_from_checkpoint_dir(model_dir)
     total_step = int(hparams.num_epochs * train_steps_per_epoch)
     if current_step < total_step:
@@ -426,6 +496,23 @@ def main(_):
       image_classifier.train(
           input_fn=imagenet_train.input_fn,
           steps=total_step-current_step)
+  else:
+    tf.logging.info('Mode not found.')
+
+  if FLAGS.export_dir is not None:
+    tf.logging.info('Starting exporting saved model ...')
+    serving_shape = [hparams.image_size, hparams.image_size, 3]
+    export_path = image_classifier.export_saved_model(
+        export_dir_base=FLAGS.export_dir,
+        serving_input_receiver_fn=build_image_serving_input_receiver_fn(
+            serving_shape),
+        as_text=True)
+    if FLAGS.add_warmup_requests:
+      write_warmup_requests(
+          export_path,
+          FLAGS.model_name,
+          hparams.image_size,
+          batch_sizes=FLAGS.inference_batch_sizes)
 
 
 if __name__ == '__main__':

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Runs a DCGAN model on MNIST dataset."""
+"""Runs a DCGAN model on MNIST or CIFAR10 datasets."""
 
 from __future__ import absolute_import
 from __future__ import division

@@ -71,6 +71,87 @@ def batch_norm_relu(inputs, is_training, relu=True, init_zero=False,
   return inputs
 
 
+def dropblock(net, is_training, keep_prob, dropblock_size,
+              data_format='channels_first'):
+  """DropBlock: a regularization method for convolutional neural networks.
+
+  DropBlock is a form of structured dropout, where units in a contiguous
+  region of a feature map are dropped together. DropBlock works better than
+  dropout on convolutional layers due to the fact that activation units in
+  convolutional layers are spatially correlated.
+  See https://arxiv.org/pdf/1810.12890.pdf for details.
+
+  Args:
+    net: `Tensor` input tensor.
+    is_training: `bool` for whether the model is training.
+    keep_prob: `float` or `Tensor` keep_prob parameter of DropBlock. "None"
+        means no DropBlock.
+    dropblock_size: `int` size of blocks to be dropped by DropBlock.
+    data_format: `str` either "channels_first" for `[batch, channels, height,
+        width]` or "channels_last for `[batch, height, width, channels]`.
+  Returns:
+      A version of input tensor with DropBlock applied.
+  Raises:
+      if width and height of the input tensor are not equal.
+  """
+
+  if not is_training or keep_prob is None:
+    return net
+
+  tf.logging.info('Applying DropBlock: dropblock_size {}, net.shape {}'.format(
+      dropblock_size, net.shape))
+
+  if data_format == 'channels_last':
+    _, width, height, _ = net.get_shape().as_list()
+  else:
+    _, _, width, height = net.get_shape().as_list()
+  if width != height:
+    raise ValueError('Input tensor with width!=height is not supported.')
+
+  dropblock_size = min(dropblock_size, width)
+  # seed_drop_rate is the gamma parameter of DropBlcok.
+  seed_drop_rate = (1.0 - keep_prob) * width**2 / dropblock_size**2 / (
+      width - dropblock_size + 1)**2
+
+  # Forces the block to be inside the feature map.
+  w_i, h_i = tf.meshgrid(tf.range(width), tf.range(width))
+  valid_block_center = tf.logical_and(
+      tf.logical_and(w_i >= int(dropblock_size // 2),
+                     w_i < width - (dropblock_size - 1) // 2),
+      tf.logical_and(h_i >= int(dropblock_size // 2),
+                     h_i < width - (dropblock_size - 1) // 2))
+
+  valid_block_center = tf.expand_dims(valid_block_center, 0)
+  valid_block_center = tf.expand_dims(
+      valid_block_center, -1 if data_format == 'channels_last' else 0)
+
+  randnoise = tf.random_uniform(net.shape, dtype=tf.float32)
+  block_pattern = (1 - tf.cast(valid_block_center, dtype=tf.float32) + tf.cast(
+      (1 - seed_drop_rate), dtype=tf.float32) + randnoise) >= 1
+  block_pattern = tf.cast(block_pattern, dtype=tf.float32)
+
+  if dropblock_size == width:
+    block_pattern = tf.reduce_min(
+        block_pattern,
+        axis=[1, 2] if data_format == 'channels_last' else [2, 3],
+        keepdims=True)
+  else:
+    if data_format == 'channels_last':
+      ksize = [1, dropblock_size, dropblock_size, 1]
+    else:
+      ksize = [1, 1, dropblock_size, dropblock_size]
+    block_pattern = -tf.nn.max_pool(
+        -block_pattern, ksize=ksize, strides=[1, 1, 1, 1], padding='SAME',
+        data_format='NHWC' if data_format == 'channels_last' else 'NCHW')
+
+  percent_ones = tf.cast(tf.reduce_sum((block_pattern)), tf.float32) / tf.cast(
+      tf.size(block_pattern), tf.float32)
+
+  net = net / tf.cast(percent_ones, net.dtype) * tf.cast(
+      block_pattern, net.dtype)
+  return net
+
+
 def fixed_padding(inputs, kernel_size, data_format='channels_first'):
   """Pads the input along the spatial dimensions independently of input size.
 
@@ -172,7 +253,8 @@ def residual_block(inputs, filters, is_training, strides,
 
 
 def bottleneck_block(inputs, filters, is_training, strides,
-                     use_projection=False, data_format='channels_first'):
+                     use_projection=False, data_format='channels_first',
+                     dropblock_keep_prob=None, dropblock_size=None):
   """Bottleneck block variant for residual networks with BN after convolutions.
 
   Args:
@@ -188,6 +270,10 @@ def bottleneck_block(inputs, filters, is_training, strides,
         filters and the resolution.
     data_format: `str` either "channels_first" for `[batch, channels, height,
         width]` or "channels_last for `[batch, height, width, channels]`.
+    dropblock_keep_prob: `float` or `Tensor` keep_prob parameter of DropBlock.
+        "None" means no DropBlock.
+    dropblock_size: `int` size parameter of DropBlock. Will not be used if
+        dropblock_keep_prob is "None".
 
   Returns:
     The output `Tensor` of the block.
@@ -202,28 +288,41 @@ def bottleneck_block(inputs, filters, is_training, strides,
         data_format=data_format)
     shortcut = batch_norm_relu(shortcut, is_training, relu=False,
                                data_format=data_format)
+  shortcut = dropblock(
+      shortcut, is_training=is_training, data_format=data_format,
+      keep_prob=dropblock_keep_prob, dropblock_size=dropblock_size)
 
   inputs = conv2d_fixed_padding(
       inputs=inputs, filters=filters, kernel_size=1, strides=1,
       data_format=data_format)
   inputs = batch_norm_relu(inputs, is_training, data_format=data_format)
+  inputs = dropblock(
+      inputs, is_training=is_training, data_format=data_format,
+      keep_prob=dropblock_keep_prob, dropblock_size=dropblock_size)
 
   inputs = conv2d_fixed_padding(
       inputs=inputs, filters=filters, kernel_size=3, strides=strides,
       data_format=data_format)
   inputs = batch_norm_relu(inputs, is_training, data_format=data_format)
+  inputs = dropblock(
+      inputs, is_training=is_training, data_format=data_format,
+      keep_prob=dropblock_keep_prob, dropblock_size=dropblock_size)
 
   inputs = conv2d_fixed_padding(
       inputs=inputs, filters=4 * filters, kernel_size=1, strides=1,
       data_format=data_format)
   inputs = batch_norm_relu(inputs, is_training, relu=False, init_zero=True,
                            data_format=data_format)
+  inputs = dropblock(
+      inputs, is_training=is_training, data_format=data_format,
+      keep_prob=dropblock_keep_prob, dropblock_size=dropblock_size)
 
   return tf.nn.relu(inputs + shortcut)
 
 
 def block_group(inputs, filters, block_fn, blocks, strides, is_training, name,
-                data_format='channels_first'):
+                data_format='channels_first', dropblock_keep_prob=None,
+                dropblock_size=None):
   """Creates one group of blocks for the ResNet model.
 
   Args:
@@ -237,23 +336,32 @@ def block_group(inputs, filters, block_fn, blocks, strides, is_training, name,
     name: `str`name for the Tensor output of the block layer.
     data_format: `str` either "channels_first" for `[batch, channels, height,
         width]` or "channels_last for `[batch, height, width, channels]`.
+    dropblock_keep_prob: `float` or `Tensor` keep_prob parameter of DropBlock.
+        "None" means no DropBlock.
+    dropblock_size: `int` size parameter of DropBlock. Will not be used if
+        dropblock_keep_prob is "None".
 
   Returns:
     The output `Tensor` of the block layer.
   """
   # Only the first block per block_group uses projection shortcut and strides.
   inputs = block_fn(inputs, filters, is_training, strides,
-                    use_projection=True, data_format=data_format)
+                    use_projection=True, data_format=data_format,
+                    dropblock_keep_prob=dropblock_keep_prob,
+                    dropblock_size=dropblock_size)
 
   for _ in range(1, blocks):
     inputs = block_fn(inputs, filters, is_training, 1,
-                      data_format=data_format)
+                      data_format=data_format,
+                      dropblock_keep_prob=dropblock_keep_prob,
+                      dropblock_size=dropblock_size)
 
   return tf.identity(inputs, name)
 
 
 def resnet_v1_generator(block_fn, layers, num_classes,
-                        data_format='channels_first'):
+                        data_format='channels_first', dropblock_keep_probs=None,
+                        dropblock_size=None):
   """Generator for ResNet v1 models.
 
   Args:
@@ -265,11 +373,24 @@ def resnet_v1_generator(block_fn, layers, num_classes,
     num_classes: `int` number of possible classes for image classification.
     data_format: `str` either "channels_first" for `[batch, channels, height,
         width]` or "channels_last for `[batch, height, width, channels]`.
+    dropblock_keep_probs: `list` of 4 elements denoting keep_prob of DropBlock
+      for each block group. None indicates no DropBlock for the corresponding
+      block group.
+    dropblock_size: `int`: size parameter of DropBlock.
 
   Returns:
     Model `function` that takes in `inputs` and `is_training` and returns the
     output `Tensor` of the ResNet model.
+
+  Raises:
+    if dropblock_keep_probs is not 'None' or a list with len 4.
   """
+  if dropblock_keep_probs is None:
+    dropblock_keep_probs = [None] * 4
+  if not isinstance(dropblock_keep_probs,
+                    list) or len(dropblock_keep_probs) != 4:
+    raise ValueError('dropblock_keep_probs is not valid:', dropblock_keep_probs)
+
   def model(inputs, is_training):
     """Creation of the model graph."""
     inputs = conv2d_fixed_padding(
@@ -286,19 +407,23 @@ def resnet_v1_generator(block_fn, layers, num_classes,
     inputs = block_group(
         inputs=inputs, filters=64, block_fn=block_fn, blocks=layers[0],
         strides=1, is_training=is_training, name='block_group1',
-        data_format=data_format)
+        data_format=data_format, dropblock_keep_prob=dropblock_keep_probs[0],
+        dropblock_size=dropblock_size)
     inputs = block_group(
         inputs=inputs, filters=128, block_fn=block_fn, blocks=layers[1],
         strides=2, is_training=is_training, name='block_group2',
-        data_format=data_format)
+        data_format=data_format, dropblock_keep_prob=dropblock_keep_probs[1],
+        dropblock_size=dropblock_size)
     inputs = block_group(
         inputs=inputs, filters=256, block_fn=block_fn, blocks=layers[2],
         strides=2, is_training=is_training, name='block_group3',
-        data_format=data_format)
+        data_format=data_format, dropblock_keep_prob=dropblock_keep_probs[2],
+        dropblock_size=dropblock_size)
     inputs = block_group(
         inputs=inputs, filters=512, block_fn=block_fn, blocks=layers[3],
         strides=2, is_training=is_training, name='block_group4',
-        data_format=data_format)
+        data_format=data_format, dropblock_keep_prob=dropblock_keep_probs[3],
+        dropblock_size=dropblock_size)
 
     # The activation is 7x7 so this is a global average pool.
     # TODO(huangyp): reduce_mean will be faster.
@@ -320,7 +445,8 @@ def resnet_v1_generator(block_fn, layers, num_classes,
   return model
 
 
-def resnet_v1(resnet_depth, num_classes, data_format='channels_first'):
+def resnet_v1(resnet_depth, num_classes, data_format='channels_first',
+              dropblock_keep_probs=None, dropblock_size=None):
   """Returns the ResNet model for a given size and number of output classes."""
   model_params = {
       18: {'block': residual_block, 'layers': [2, 2, 2, 2]},
@@ -336,4 +462,6 @@ def resnet_v1(resnet_depth, num_classes, data_format='channels_first'):
 
   params = model_params[resnet_depth]
   return resnet_v1_generator(
-      params['block'], params['layers'], num_classes, data_format)
+      params['block'], params['layers'], num_classes,
+      dropblock_keep_probs=dropblock_keep_probs, dropblock_size=dropblock_size,
+      data_format=data_format)
