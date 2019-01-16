@@ -189,6 +189,9 @@ type GCECreateRequest struct {
 
 	// Preemptible is whether the Compute Engine VM runs in preemptible or not.
 	Preemptible bool
+
+	// Network is the network on which the Compute Engine VM should be created.
+	Network string
 }
 
 var conflictRegex = regexp.MustCompile("The resource 'projects/[^/]+/zones/([^/]+)/instances/([^']+)' already exists")
@@ -283,7 +286,7 @@ func (g *GCECP) makeCreateInstance(request *GCECreateRequest) *compute.Instance 
 		},
 		NetworkInterfaces: []*compute.NetworkInterface{
 			{
-				Network: "global/networks/default",
+				Network: "global/networks/" + request.Network,
 				AccessConfigs: []*compute.AccessConfig{
 					{
 						Name: "External NAT",

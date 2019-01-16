@@ -37,6 +37,7 @@ func TestMakeCreateInstance(t *testing.T) {
 		ImageName:   "my_image_name",
 		MachineType: "n1-standard-2",
 		DiskSizeGb:  350,
+		Network:     "my-shiny-network",
 	}
 	i := cp.makeCreateInstance(&request)
 	if i == nil {
@@ -57,6 +58,9 @@ func TestMakeCreateInstance(t *testing.T) {
 	}
 	if len(i.NetworkInterfaces) != 1 {
 		t.Errorf("wrong number of network interfaces: got %d, want 1", len(i.NetworkInterfaces))
+	}
+	if i.NetworkInterfaces[0].Network != "global/networks/my-shiny-network" {
+		t.Errorf("i.NetworkInterfaces[0].Network = %s, want global/networks/my-shiny-network", i.NetworkInterfaces[0].Network)
 	}
 	mt := "zones/us-central1-c/machineTypes/n1-standard-2"
 	if i.MachineType != mt {

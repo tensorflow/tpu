@@ -93,6 +93,7 @@ type upCmd struct {
 	forwardAgent     bool
 	tfVersion        string
 	requirePerms     bool
+	network          string
 
 	// VM parameters
 	gceImage      string
@@ -104,7 +105,6 @@ type upCmd struct {
 	// TPU parameters
 	preemptibleTPU bool
 	tpuHardware    string
-	network        string
 }
 
 // UpCommand creates the up command.
@@ -150,7 +150,7 @@ func (c *upCmd) SetFlags(f *flag.FlagSet) {
 
 	f.BoolVar(&c.preemptibleTPU, "preemptible", false, "Create a preemptible Cloud TPU, instead of a normal (non-preemptible) Cloud TPU. A preemptible Cloud TPU costs less per hour, but the Cloud TPU service can stop/terminate the node at any time.")
 	f.StringVar(&c.tpuHardware, "tpu-size", "v2-8", "Configure the size and hardware version of the Cloud TPU. To see the list of available TPU hardware sizes, run `ctpu tpu-sizes`.")
-	f.StringVar(&c.network, "gcp-network", "default", "Specify the network the Cloud TPU should peer with. Must be non-empty.")
+	f.StringVar(&c.network, "gcp-network", "default", "Specify the network the Cloud TPU and associated VM should be created in.")
 }
 
 func (upCmd) Synopsis() string {
@@ -253,6 +253,7 @@ func (c *upCmd) upVM() error {
 				MachineType:       c.machineType,
 				DiskSizeGb:        c.diskSizeGb,
 				Preemptible:       c.preemptibleVM,
+				Network:           c.network,
 			}
 			op, err := c.gce.CreateInstance(req)
 			if err != nil {
