@@ -31,8 +31,10 @@ from absl import flags
 import numpy as np
 import tensorflow as tf
 
-flags.DEFINE_bool('use_tpu', True, 'Use TPU model instead of CPU.')
-flags.DEFINE_string('tpu', None, 'Name of the TPU to use.')
+# TODO(sourabhbajaj): Remove the need for this flag.
+flags.DEFINE_bool('use_tpu', True,
+                  'Ignored: preserved for backward compatibility.')
+flags.DEFINE_string('tpu', '', 'Name of the TPU to use.')
 flags.DEFINE_string(
     'model_dir', None,
     ('The directory where the model and training/evaluation summaries '
@@ -40,9 +42,12 @@ flags.DEFINE_string(
 
 flags.DEFINE_bool('fake_data', False, 'Use fake data to test functionality.')
 
-BATCH_SIZE = 128
+# Batch size should satify two properties to be able to run in cloud:
+# num_eval_samples % batch_size == 0
+# batch_size % 8 == 0
+BATCH_SIZE = 200
 NUM_CLASSES = 10
-EPOCHS = 12
+EPOCHS = 15
 
 # input image dimensions
 IMG_ROWS, IMG_COLS = 28, 28
@@ -68,9 +73,9 @@ def mnist_model(input_shape):
 
 def run():
   """Run the model training and return evaluation output."""
-  use_tpu = FLAGS.use_tpu
-
-  print('Mode:', 'TPU' if use_tpu else 'CPU')
+  resolver = tf.contrib.cluster_resolver.TPUClusterResolver(tpu=FLAGS.tpu)
+  tf.contrib.distribute.initialize_tpu_system(resolver)
+  strategy = tf.contrib.distribute.TPUStrategy(resolver, steps_per_run=100)
 
   if FLAGS.fake_data:
     print('Using fake data')
@@ -97,19 +102,12 @@ def run():
   # convert class vectors to binary class matrices
   y_train = tf.keras.utils.to_categorical(y_train, NUM_CLASSES)
   y_test = tf.keras.utils.to_categorical(y_test, NUM_CLASSES)
-
-  model = mnist_model(input_shape)
-
-  if use_tpu:
-    strategy = tf.contrib.tpu.TPUDistributionStrategy(
-        tf.contrib.cluster_resolver.TPUClusterResolver(tpu=FLAGS.tpu)
-    )
-    model = tf.contrib.tpu.keras_to_tpu_model(model, strategy=strategy)
-
-  model.compile(
-      loss=tf.keras.losses.categorical_crossentropy,
-      optimizer=tf.train.GradientDescentOptimizer(learning_rate=0.05),
-      metrics=['accuracy'])
+  with strategy.scope():
+    model = mnist_model(input_shape)
+    model.compile(
+        loss=tf.keras.losses.categorical_crossentropy,
+        optimizer=tf.train.GradientDescentOptimizer(learning_rate=0.05),
+        metrics=['accuracy'])
 
   callbacks = []
   if FLAGS.model_dir:
