@@ -62,7 +62,7 @@ flags.DEFINE_string('resnet_checkpoint', '',
 flags.DEFINE_string('hparams', '',
                     'Comma separated k=v pairs of hyperparameters.')
 flags.DEFINE_integer(
-    'num_shards', default=8, help='Number of shards (TPU cores)')
+    'num_cores', default=8, help='Number of TPU cores to use in training')
 flags.DEFINE_integer('train_batch_size', 64, 'training batch size')
 flags.DEFINE_integer('eval_steps', 5000, 'evaluation steps')
 flags.DEFINE_integer(
@@ -122,7 +122,7 @@ def main(argv):
 
   params = dict(
       hparams.values(),
-      num_shards=FLAGS.num_shards,
+      num_shards=FLAGS.num_cores,
       num_examples_per_epoch=FLAGS.num_examples_per_epoch,
       use_tpu=FLAGS.use_tpu,
       resnet_checkpoint=FLAGS.resnet_checkpoint,
@@ -142,7 +142,7 @@ def main(argv):
       log_step_count_steps=FLAGS.iterations_per_loop,
       session_config=config_proto,
       tpu_config=tpu_config.TPUConfig(FLAGS.iterations_per_loop,
-                                      FLAGS.num_shards))
+                                      FLAGS.num_cores))
 
   # TPU Estimator
   if FLAGS.mode == 'train':
