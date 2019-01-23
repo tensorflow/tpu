@@ -137,7 +137,7 @@ def encode_box_targets(boxes, gt_boxes, gt_labels, bbox_reg_weights):
 
 def proposal_label_op(boxes, gt_boxes, gt_labels, image_info,
                       batch_size_per_im=512, fg_fraction=0.25, fg_thresh=0.5,
-                      bg_thresh_hi=0.5, bg_thresh_lo=0., is_training=True):
+                      bg_thresh_hi=0.5, bg_thresh_lo=0.):
   """Assigns the proposals with ground truth labels and performs subsmpling.
 
   Given proposal `boxes`, `gt_boxes`, and `gt_labels`, the function uses the
@@ -176,8 +176,6 @@ def proposal_label_op(boxes, gt_boxes, gt_labels, image_info,
       considered background (class = 0 if overlap in [LO, HI)).
     bg_thresh_lo: a float represents the overlap threshold for an RoI to be
       considered background (class = 0 if overlap in [LO, HI)).
-    is_training: a boolean that indicates the training mode, which performs
-      subsampling; otherwise, no subsampling.
   Returns:
     box_targets: a tensor with a shape of [batch_size, K, 4]. The tensor
       contains the ground truth pixel coordinates of the scaled images for each
@@ -198,8 +196,7 @@ def proposal_label_op(boxes, gt_boxes, gt_labels, image_info,
 
     # The reference implementation intentionally includes ground truth boxes in
     # the proposals. see https://github.com/facebookresearch/Detectron/blob/master/detectron/datasets/json_dataset.py#L359.  # pylint: disable=line-too-long
-    if is_training:
-      boxes = tf.concat([boxes, scaled_gt_boxes], axis=1)
+    boxes = tf.concat([boxes, scaled_gt_boxes], axis=1)
     iou = _bbox_overlap(boxes, scaled_gt_boxes)
 
     (pre_sample_box_targets, pre_sample_class_targets, max_overlap,
@@ -221,11 +218,6 @@ def proposal_label_op(boxes, gt_boxes, gt_labels, image_info,
     proposal_to_label_map = tf.where(
         negatives, tf.zeros_like(proposal_to_label_map),
         proposal_to_label_map)
-
-    # Returns box/class targets and rois before sampling for evaluation.
-    if not is_training:
-      return (pre_sample_box_targets, pre_sample_class_targets,
-              boxes, proposal_to_label_map)
 
     # Handles ground truth paddings.
     ignore_mask = tf.less(
@@ -1000,7 +992,7 @@ def resnet_fpn(features,
 
     # Use original FPN P6 level implementation from CVPR'17 FPN paper instead of
     # coarse FPN levels introduced for RetinaNet.
-    # Reference: https://github.com/ddkang/Detectron/blob/80f329530843e66d07ca39e19901d5f3e5daf009/lib/modeling/FPN.py  # pylint: disable=line-too-long
+    # Reference: https://github.com/facebookresearch/Detectron/blob/master/detectron/modeling/FPN.py#L224  # pylint: disable=line-too-long
     feats[6] = tf.layers.max_pooling2d(
         inputs=feats[5],
         pool_size=1,
@@ -1016,8 +1008,8 @@ def mask_rcnn(features, labels, all_anchors, mode, params):
   min_level = params['min_level']
   max_level = params['max_level']
   # create feature pyramid networks
-  fpn_feats = resnet_fpn(features, min_level, max_level, params['resnet_depth'],
-                         params['is_training_bn'])
+  fpn_feats = resnet_fpn(features['images'], min_level, max_level,
+                         params['resnet_depth'], params['is_training_bn'])
 
   def rpn_fn(feats):
     rpn_score_outputs, rpn_box_outputs = rpn_net(
@@ -1029,33 +1021,37 @@ def mask_rcnn(features, labels, all_anchors, mode, params):
   def faster_rcnn_fn(feats, rpn_score_outputs, rpn_box_outputs):
     """Generates box and class outputs."""
     # Uses different NMS top-k parameters in different modes.
-    rpn_pre_nms_topn = (
-        params['rpn_pre_nms_topn'] if mode == tf.estimator.ModeKeys.TRAIN else
-        params['test_rpn_pre_nms_topn'])
-    rpn_post_nms_topn = (
-        params['rpn_post_nms_topn'] if mode == tf.estimator.ModeKeys.TRAIN else
-        params['test_rpn_post_nms_topn'])
+    if mode == tf.estimator.ModeKeys.TRAIN:
+      rpn_pre_nms_topn = params['rpn_pre_nms_topn']
+      rpn_post_nms_topn = params['rpn_post_nms_topn']
+    else:
+      rpn_pre_nms_topn = params['test_rpn_pre_nms_topn']
+      rpn_post_nms_topn = params['test_rpn_post_nms_topn']
     _, box_rois = proposal_op(rpn_score_outputs, rpn_box_outputs, all_anchors,
-                              labels['image_info'], rpn_pre_nms_topn,
+                              features['image_info'], rpn_pre_nms_topn,
                               rpn_post_nms_topn, params['rpn_nms_threshold'],
                               params['rpn_min_size'])
     box_rois = tf.to_float(box_rois)
 
-    (box_targets, class_targets, box_rois,
-     proposal_to_label_map) = proposal_label_op(
-         box_rois, labels['groundtruth_data'][:, :, :4],
-         labels['groundtruth_data'][:, :, 6], labels['image_info'],
-         batch_size_per_im=params['batch_size_per_im'],
-         fg_fraction=params['fg_fraction'], fg_thresh=params['fg_thresh'],
-         bg_thresh_hi=params['bg_thresh_hi'],
-         bg_thresh_lo=params['bg_thresh_lo'],
-         is_training=(mode == tf.estimator.ModeKeys.TRAIN))
+    if mode == tf.estimator.ModeKeys.TRAIN:
+      (box_targets, class_targets, box_rois,
+       proposal_to_label_map) = proposal_label_op(
+           box_rois, labels['gt_boxes'],
+           labels['gt_classes'], features['image_info'],
+           batch_size_per_im=params['batch_size_per_im'],
+           fg_fraction=params['fg_fraction'], fg_thresh=params['fg_thresh'],
+           bg_thresh_hi=params['bg_thresh_hi'],
+           bg_thresh_lo=params['bg_thresh_lo'])
 
     class_outputs, box_outputs = faster_rcnn_heads(
         feats, box_rois, num_classes=params['num_classes'],
         mlp_head_dim=params['fast_rcnn_mlp_head_dim'])
-    return (class_outputs, box_outputs, class_targets, box_targets, box_rois,
-            proposal_to_label_map)
+
+    if mode == tf.estimator.ModeKeys.TRAIN:
+      return (class_outputs, box_outputs, box_rois, class_targets, box_targets,
+              proposal_to_label_map)
+    else:
+      return (class_outputs, box_outputs, box_rois)
 
   # Mask part (Mask-RCNN).
   def mask_rcnn_fn(feats, class_targets=None, box_targets=None, box_rois=None,
@@ -1095,8 +1091,7 @@ def mask_rcnn(features, labels, all_anchors, mode, params):
       mask_outputs = tf.gather_nd(mask_outputs, gather_indices)
 
       if mode == tf.estimator.ModeKeys.TRAIN:
-        return (mask_outputs, class_targets, box_targets, box_rois,
-                proposal_to_label_map, mask_targets)
+        return (mask_outputs, class_targets, mask_targets)
       else:
         return mask_outputs
 
@@ -1121,7 +1116,7 @@ def remove_variables(variables, resnet_depth=50):
 
   """
   # Freeze at conv2 based on reference model.
-  # Reference: https://github.com/ddkang/Detectron/blob/80f329530843e66d07ca39e19901d5f3e5daf009/lib/modeling/ResNet.py  # pylint: disable=line-too-long
+  # Reference: https://github.com/facebookresearch/Detectron/blob/master/detectron/core/config.py#L194  # pylint: disable=line-too-long
   remove_list = []
   prefix = 'resnet{}/'.format(resnet_depth)
   remove_list.append(prefix + 'conv2d/')

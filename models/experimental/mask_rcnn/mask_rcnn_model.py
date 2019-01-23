@@ -24,6 +24,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import re
 import six
 import tensorflow as tf
 
@@ -36,12 +37,38 @@ import mask_rcnn_architecture
 _WEIGHT_DECAY = 1e-4
 
 
+def create_optimizer(learning_rate, params):
+  """Creates optimized based on the specified flags."""
+  if params['optimizer'] == 'momentum':
+    optimizer = tf.train.MomentumOptimizer(
+        learning_rate, momentum=params['momentum'])
+  elif params['optimizer'] == 'adam':
+    optimizer = tf.train.AdamOptimizer(learning_rate)
+  elif params['optimizer'] == 'adadelta':
+    optimizer = tf.train.AdadeltaOptimizer(learning_rate)
+  elif params['optimizer'] == 'adagrad':
+    optimizer = tf.train.AdagradOptimizer(learning_rate)
+  elif params['optimizer'] == 'rmsprop':
+    optimizer = tf.train.RMSPropOptimizer(
+        learning_rate, momentum=params['momentum'])
+  elif params['optimizer'] == 'lars':
+    optimizer = tf.contrib.opt.LARSOptimizer(
+        learning_rate,
+        momentum=params['momentum'],
+        weight_decay=params['lars_weight_decay'],
+        skip_list=['batch_normalization', 'bias'])
+  else:
+    raise ValueError('Unsupported optimizer type %s.' % params['optimizer'])
+  return optimizer
+
+
 def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
   """Model defination for the Mask-RCNN model based on ResNet.
 
   Args:
-    features: the input image tensor with shape [batch_size, height, width, 3].
-      The height and width are fixed and equal.
+    features: the input image tensor and auxiliary information, such as
+      `image_info` and `source_ids`. The image tensor has a shape of
+      [batch_size, height, width, 3]. The height and width are fixed and equal.
     labels: the input labels in a dictionary. The labels include score targets
       and box targets which are dense label maps. The labels are generated from
       get_input_fn function in data/dataloader.py
@@ -55,12 +82,8 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
   Returns:
     tpu_spec: the TPUEstimatorSpec to run training, evaluation, or prediction.
   """
-  if mode == tf.estimator.ModeKeys.PREDICT:
-    labels = features
-    features = labels.pop('images')
-
   if params['transpose_input'] and mode == tf.estimator.ModeKeys.TRAIN:
-    features = tf.transpose(features, [3, 0, 1, 2])
+    features['images'] = tf.transpose(features['images'], [3, 0, 1, 2])
 
   image_size = (params['image_size'], params['image_size'])
   all_anchors = anchors.Anchors(params['min_level'], params['max_level'],
@@ -72,20 +95,15 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
     fpn_feats, rpn_fn, faster_rcnn_fn, mask_rcnn_fn = model(
         features, labels, all_anchors, mode, params)
     rpn_score_outputs, rpn_box_outputs = rpn_fn(fpn_feats)
-    (class_outputs, box_outputs, class_targets, box_targets, box_rois,
-     proposal_to_label_map) = faster_rcnn_fn(fpn_feats, rpn_score_outputs,
-                                             rpn_box_outputs)
-    encoded_box_targets = mask_rcnn_architecture.encode_box_targets(
-        box_rois, box_targets, class_targets, params['bbox_reg_weights'])
 
     if mode != tf.estimator.ModeKeys.TRAIN:
-      # Use TEST.NMS in the reference for this value. Reference: https://github.com/ddkang/Detectron/blob/80f329530843e66d07ca39e19901d5f3e5daf009/lib/core/config.py#L227  # pylint: disable=line-too-long
-
       # The mask branch takes inputs from different places in training vs in
       # eval/predict. In training, the mask branch uses proposals combined with
       # labels to produce both mask outputs and targets. At test time, it uses
       # the post-processed predictions to generate masks.
       # Generate detections one image at a time.
+      (class_outputs, box_outputs,
+       box_rois) = faster_rcnn_fn(fpn_feats, rpn_score_outputs, rpn_box_outputs)
       batch_size, _, _ = class_outputs.get_shape().as_list()
       detections = []
       softmax_class_outputs = tf.nn.softmax(class_outputs)
@@ -93,7 +111,7 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
         detections.append(
             anchors.generate_detections_per_image_op(
                 softmax_class_outputs[i], box_outputs[i], box_rois[i],
-                labels['source_ids'][i], labels['image_info'][i],
+                features['source_ids'][i], features['image_info'][i],
                 params['test_detections_per_image'],
                 params['test_rpn_post_nms_topn'], params['test_nms'],
                 params['bbox_reg_weights'])
@@ -101,31 +119,30 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
       detections = tf.stack(detections, axis=0)
       mask_outputs = mask_rcnn_fn(fpn_feats, detections=detections)
     else:
-      (mask_outputs, select_class_targets, select_box_targets, select_box_rois,
-       select_proposal_to_label_map, mask_targets) = mask_rcnn_fn(
-           fpn_feats, class_targets, box_targets, box_rois,
-           proposal_to_label_map)
+      (class_outputs, box_outputs, box_rois, class_targets, box_targets,
+       proposal_to_label_map) = faster_rcnn_fn(fpn_feats, rpn_score_outputs,
+                                               rpn_box_outputs)
+      encoded_box_targets = mask_rcnn_architecture.encode_box_targets(
+          box_rois, box_targets, class_targets, params['bbox_reg_weights'])
+      (mask_outputs, select_class_targets, mask_targets) = mask_rcnn_fn(
+          fpn_feats, class_targets, box_targets, box_rois,
+          proposal_to_label_map)
 
-    model_outputs = {
-        'rpn_score_outputs': rpn_score_outputs,
-        'rpn_box_outputs': rpn_box_outputs,
-        'class_outputs': class_outputs,
-        'box_outputs': box_outputs,
-        'class_targets': class_targets,
-        'box_targets': encoded_box_targets,
-        'box_rois': box_rois,
-        'mask_outputs': mask_outputs,
-    }
     if mode == tf.estimator.ModeKeys.TRAIN:
-      model_outputs.update({
+      return {
+          'rpn_score_outputs': rpn_score_outputs,
+          'rpn_box_outputs': rpn_box_outputs,
+          'class_outputs': class_outputs,
+          'box_outputs': box_outputs,
+          'class_targets': class_targets,
+          'box_targets': encoded_box_targets,
+          'box_rois': box_rois,
           'select_class_targets': select_class_targets,
-          'select_box_targets': select_box_targets,
-          'select_box_rois': select_box_rois,
-          'select_proposal_to_label_map': select_proposal_to_label_map,
-          'mask_targets': mask_targets,})
+          'mask_outputs': mask_outputs,
+          'mask_targets': mask_targets,}
     else:
-      model_outputs.update({'detections': detections})
-    return model_outputs
+      return {'detections': detections,
+              'mask_outputs': mask_outputs}
 
   if params['use_bfloat16']:
     with tf.contrib.tpu.bfloat16_scope():
@@ -135,8 +152,7 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
           if isinstance(v, dict):
             cast_outputs_to_float(v)
           else:
-            if k != 'select_proposal_to_label_map':
-              d[k] = tf.cast(v, tf.float32)
+            d[k] = tf.cast(v, tf.float32)
       cast_outputs_to_float(model_outputs)
   else:
     model_outputs = _model_outputs()
@@ -146,23 +162,11 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
     predictions = {}
     predictions['detections'] = model_outputs['detections']
     predictions['mask_outputs'] = tf.nn.sigmoid(model_outputs['mask_outputs'])
-    predictions['image_info'] = labels['image_info']
+    predictions['image_info'] = features['image_info']
 
     if params['use_tpu']:
       return tf.contrib.tpu.TPUEstimatorSpec(mode=mode, predictions=predictions)
     return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions)
-
-  # Load pretrained model from checkpoint.
-  if params['resnet_checkpoint'] and mode == tf.estimator.ModeKeys.TRAIN:
-
-    def scaffold_fn():
-      """Loads pretrained model through scaffold function."""
-      tf.train.init_from_checkpoint(params['resnet_checkpoint'], {
-          '/': 'resnet%s/' % params['resnet_depth'],
-      })
-      return tf.train.Scaffold()
-  else:
-    scaffold_fn = None
 
   # Set up training loss and learning rate.
   global_step = tf.train.get_or_create_global_step()
@@ -189,19 +193,50 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
         model_outputs['select_class_targets'], params)
   else:
     mask_loss = 0.
-  var_list = variable_filter_fn(
-      tf.trainable_variables(),
-      params['resnet_depth']) if variable_filter_fn else None
+  if variable_filter_fn:
+    var_list = variable_filter_fn(tf.trainable_variables(),
+                                  params['resnet_depth'])
+  else:
+    var_list = None
+  l2_regularization_loss = _WEIGHT_DECAY * tf.add_n(
+      [tf.nn.l2_loss(v) for v in var_list
+       if 'batch_normalization' not in v.name and 'bias' not in v.name])
   total_loss = (total_rpn_loss + total_fast_rcnn_loss + mask_loss +
-                _WEIGHT_DECAY * tf.add_n(
-                    [tf.nn.l2_loss(v) for v in var_list
-                     if 'batch_normalization' not in v.name and 'bias' not in v.name]))
+                l2_regularization_loss)
 
   host_call = None
   if mode == tf.estimator.ModeKeys.TRAIN:
-    optimizer = tf.train.MomentumOptimizer(
-        learning_rate, momentum=params['momentum'])
+    optimizer = create_optimizer(learning_rate, params)
     optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
+
+    if not params['resnet_checkpoint']:
+      scaffold_fn = None
+    else:
+
+      def scaffold_fn():
+        """Loads pretrained model through scaffold function."""
+        # Exclude all variable of optimizer.
+        optimizer_vars = set([var.name for var in optimizer.variables()])
+        prefix = 'resnet%s/' % params['resnet_depth']
+        resnet_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, prefix)
+        vars_to_load = {}
+        for var in resnet_vars:
+          if var.name not in optimizer_vars:
+            var_name = var.name
+            # Trim the index of the variable.
+            if ':' in var_name:
+              var_name = var_name[:var_name.rindex(':')]
+            if params['skip_checkpoint_variables'] and re.match(
+                params['skip_checkpoint_variables'], var_name[len(prefix):]):
+              continue
+            vars_to_load[var_name[len(prefix):]] = var_name
+        tf.logging.info(
+            'Optimizer vars: %s.' % ', '.join(var for var in optimizer_vars))
+        tf.logging.info('Will train: %s.' % vars_to_load)
+        tf.train.init_from_checkpoint(params['resnet_checkpoint'], vars_to_load)
+        if not vars_to_load:
+          raise ValueError('Variables to load is empty.')
+        return tf.train.Scaffold()
 
     # Batch norm requires update_ops to be added as a train_op dependency.
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
@@ -209,7 +244,7 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
     gradients, variables = zip(*grads_and_vars)
     grads_and_vars = []
     # Special treatment for biases (beta is named as bias in reference model)
-    # Reference: https://github.com/ddkang/Detectron/blob/80f329530843e66d07ca39e19901d5f3e5daf009/lib/modeling/optimizer.py#L109  # pylint: disable=line-too-long
+    # Reference: https://github.com/facebookresearch/Detectron/blob/master/detectron/modeling/optimizer.py#L113  # pylint: disable=line-too-long
     for grad, var in zip(gradients, variables):
       if 'beta' in var.name or 'bias' in var.name:
         grad = 2.0 * grad
@@ -316,6 +351,7 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
                     mask_loss_t, learning_rate_t])
   else:
     train_op = None
+    scaffold_fn = None
 
   return tf.contrib.tpu.TPUEstimatorSpec(
       mode=mode,

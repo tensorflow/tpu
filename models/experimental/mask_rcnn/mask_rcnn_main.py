@@ -180,9 +180,8 @@ def main(argv):
   # the same meaning).
   if FLAGS.input_partition_dims:
     labels_partition_dims = {
-        'source_ids': None,
-        'groundtruth_data': None,
-        'image_info': None,
+        'gt_boxes': None,
+        'gt_classes': None,
         'cropped_gt_masks': None,
     }
     # TODO(b/119617317): The Input Partition Logic. We partition only the
@@ -213,8 +212,11 @@ def main(argv):
         labels_partition_dims['box_targets_%d' % level] = None
         labels_partition_dims['score_targets_%d' % level] = None
     num_cores_per_replica = np.prod(FLAGS.input_partition_dims)
-    input_partition_dims = [
-        FLAGS.input_partition_dims, labels_partition_dims]
+    features_partition_dims = {
+        'images': FLAGS.input_partition_dims,
+        'source_ids': None,
+        'image_info': None,}
+    input_partition_dims = [features_partition_dims, labels_partition_dims]
     num_shards = FLAGS.num_cores // num_cores_per_replica
   else:
     num_cores_per_replica = None
