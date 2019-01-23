@@ -86,6 +86,15 @@ def default_config():
       resnet_checkpoint='',
       use_bfloat16=True,
       use_host_call=False,
+      # One of ['momentum', 'adam', 'adadelta', 'adagrad', 'rmsprop', 'lars'].
+      optimizer='momentum',
+      # Skips loading variables from the resnet checkpoint. It is used for
+      # skipping nonexistent variables from the constructed graph. The list
+      # of loaded variables is constructed from the scope 'resnetX', where 'X'
+      # is depth of the resnet model. Supports regular expression.
+      skip_checkpoint_variables='/batch_normalization/beta$',
+      # Weight decay for LARS optimizer.
+      lars_weight_decay=1e-4,
       # ---------- Eval configurations ----------
       eval_batch_size=8,
       num_steps_per_eval=2500,

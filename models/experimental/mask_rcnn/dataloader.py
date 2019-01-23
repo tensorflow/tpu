@@ -66,7 +66,7 @@ class InputProcessor(object):
     offset = tf.expand_dims(offset, axis=0)
     self._image -= offset
 
-    # This is simlar to `PIXEL_MEANS` in the reference. Reference: https://github.com/ddkang/Detectron/blob/80f329530843e66d07ca39e19901d5f3e5daf009/lib/core/config.py#L909  # pylint: disable=line-too-long
+    # This is simlar to `PIXEL_MEANS` in the reference. Reference: https://github.com/facebookresearch/Detectron/blob/master/detectron/core/config.py#L931  # pylint: disable=line-too-long
     scale = tf.constant([0.229, 0.224, 0.225])
     scale = tf.expand_dims(scale, axis=0)
     scale = tf.expand_dims(scale, axis=0)
@@ -134,29 +134,23 @@ class InputProcessor(object):
   def offset_y(self):
     return self._crop_offset_y
 
-  def get_height_length(self):
+  def get_image_info(self):
+    """Returns image information for scaled and original height and width."""
     is_height_long_side = tf.greater(self._scaled_height, self._scaled_width)
-    return tf.where(is_height_long_side,
-                    self._output_size[0],
-                    tf.minimum(self._scaled_height - self.offset_y,
-                               self._output_size[0]))
-
-  def get_width_length(self):
-    is_height_long_side = tf.greater(self._scaled_height, self._scaled_width)
-    return tf.where(is_height_long_side,
-                    tf.minimum(self._scaled_width - self.offset_x,
-                               self._output_size[1]),
-                    self._output_size[1])
-
-  @property
-  def get_original_height(self):
-    # Return original image height.
-    return self._ori_height
-
-  @property
-  def get_original_width(self):
-    # Return original image width.
-    return self._ori_width
+    image_height = tf.where(
+        is_height_long_side,
+        self._output_size[0],
+        tf.minimum(self._scaled_height - self.offset_y, self._output_size[0]))
+    image_width = tf.where(
+        is_height_long_side,
+        tf.minimum(self._scaled_width - self.offset_x, self._output_size[1]),
+        self._output_size[1])
+    return tf.stack([
+        tf.to_float(image_height),
+        tf.to_float(image_width),
+        1.0 / self._image_scale,
+        tf.to_float(self._ori_height),
+        tf.to_float(self._ori_width)])
 
 
 class InstanceSegmentationInputProcessor(InputProcessor):
@@ -243,16 +237,6 @@ class InstanceSegmentationInputProcessor(InputProcessor):
         mode='CONSTANT', constant_values=0.)
     return cropped_gt_masks
 
-  @property
-  def image_scale(self):
-    # Return image scale from original image to scaled image.
-    return self._image_scale
-
-  @property
-  def image_scale_to_original(self):
-    # Return image scale from scaled image to original image.
-    return 1.0 / self._image_scale
-
 
 def pad_to_fixed_size(data, pad_value, output_shape):
   """Pad data to a fixed length at the first dimension.
@@ -310,112 +294,122 @@ class InputReader(object):
         value: A dictionary contains an image and groundtruth annotations.
 
       Returns:
-        image: Image tensor that is preproessed to have normalized value and
-          fixed dimension [image_size, image_size, 3]
-        cls_targets_dict: ordered dictionary with keys
-          [min_level, min_level+1, ..., max_level]. The values are tensor with
-          shape [height_l, width_l, num_anchors]. The height_l and width_l
-          represent the dimension of class logits at l-th level.
-        box_targets_dict: ordered dictionary with keys
-          [min_level, min_level+1, ..., max_level]. The values are tensor with
-          shape [height_l, width_l, num_anchors * 4]. The height_l and
-          width_l represent the dimension of bounding box regression output at
-          l-th level.
-        num_positives: Number of positive anchors in the image.
-        source_id: Source image id. Default value -1 if the source id is empty
-          in the groundtruth annotation.
-        image_scale: Scale of the proccessed image to the original image.
-        boxes: Groundtruth bounding box annotations. The box is represented in
-          [y1, x1, y2, x2] format. The tennsor is padded with -1 to the fixed
-          dimension [self._max_num_instances, 4].
-        is_crowds: Groundtruth annotations to indicate if an annotation
-          represents a group of instances by value {0, 1}. The tennsor is
-          padded with 0 to the fixed dimension [self._max_num_instances].
-        areas: Groundtruth areas annotations. The tennsor is padded with -1
-          to the fixed dimension [self._max_num_instances].
-        classes: Groundtruth classes annotations. The tennsor is padded with -1
-          to the fixed dimension [self._max_num_instances].
+        features: a dictionary that contains the image and auxiliary
+          information. The following describes {key: value} pairs in the
+          dictionary.
+          image: Image tensor that is preproessed to have normalized value and
+            fixed dimension [image_size, image_size, 3]
+          image_info: image information that includes the original height and
+            width, the scale of the proccessed image to the original image, and
+            the scaled height and width.
+          source_ids: Source image id. Default value -1 if the source id is
+            empty in the groundtruth annotation.
+        labels: a dictionary that contains auxiliary information plus (optional)
+          labels. The following describes {key: value} pairs in the dictionary.
+          `labels` is only for training.
+          score_targets_dict: ordered dictionary with keys
+            [min_level, min_level+1, ..., max_level]. The values are tensor with
+            shape [height_l, width_l, num_anchors]. The height_l and width_l
+            represent the dimension of objectiveness score at l-th level.
+          box_targets_dict: ordered dictionary with keys
+            [min_level, min_level+1, ..., max_level]. The values are tensor with
+            shape [height_l, width_l, num_anchors * 4]. The height_l and
+            width_l represent the dimension of bounding box regression output at
+            l-th level.
+          gt_boxes: Groundtruth bounding box annotations. The box is represented
+             in [y1, x1, y2, x2] format. The tennsor is padded with -1 to the
+             fixed dimension [self._max_num_instances, 4].
+          gt_classes: Groundtruth classes annotations. The tennsor is padded
+            with -1 to the fixed dimension [self._max_num_instances].
+          cropped_gt_masks: groundtrugh masks cropped by the bounding box and
+            resized to a fixed size determined by params['gt_mask_size']
       """
       with tf.name_scope('parser'):
         data = example_decoder.decode(value)
-        source_id = data['source_id']
         image = data['image']
-        instance_masks = data['groundtruth_instance_masks']
-        boxes = data['groundtruth_boxes']
-        classes = data['groundtruth_classes']
-        classes = tf.reshape(tf.cast(classes, dtype=tf.float32), [-1, 1])
-        areas = data['groundtruth_area']
-        is_crowds = data['groundtruth_is_crowd']
-        classes = tf.reshape(tf.cast(classes, dtype=tf.float32), [-1, 1])
-        if not params['use_category']:
-          classes = tf.cast(tf.greater(classes, 0), dtype=tf.float32)
-
-        if (params['skip_crowd_during_training'] and
-            self._mode == tf.estimator.ModeKeys.TRAIN):
-          indices = tf.where(tf.logical_not(data['groundtruth_is_crowd']))
-          classes = tf.gather_nd(classes, indices)
-          boxes = tf.gather_nd(boxes, indices)
-          instance_masks = tf.gather_nd(instance_masks, indices)
-
-        input_processor = InstanceSegmentationInputProcessor(
-            image, image_size, boxes, classes, instance_masks)
-        input_processor.normalize_image()
-        if (self._mode == tf.estimator.ModeKeys.TRAIN and
-            params['input_rand_hflip']):
-          input_processor.random_horizontal_flip()
-        if self._mode == tf.estimator.ModeKeys.TRAIN:
-          input_processor.set_training_random_scale_factors(
-              params['train_scale_min'], params['train_scale_max'])
-        else:
-          input_processor.set_scale_factors_to_output_size()
-        image = input_processor.resize_and_crop_image()
-        boxes, classes = input_processor.resize_and_crop_boxes()
-        instance_masks = input_processor.resize_and_crop_masks()
-        cropped_gt_masks = input_processor.crop_gt_masks(
-            instance_masks, boxes, params['gt_mask_size'], image_size)
-
-        # Assign anchors.
-        score_targets, box_targets = anchor_labeler.label_anchors(
-            boxes, classes)
-
+        source_id = data['source_id']
         source_id = tf.where(tf.equal(source_id, tf.constant('')), '-1',
                              source_id)
         source_id = tf.string_to_number(source_id)
 
-        image_scale = input_processor.image_scale_to_original
-        scaled_height = input_processor.get_height_length()
-        scaled_width = input_processor.get_width_length()
-        image_info = tf.stack(
-            [tf.to_float(scaled_height),
-             tf.to_float(scaled_width),
-             image_scale,
-             tf.to_float(input_processor.get_original_height),
-             tf.to_float(input_processor.get_original_width),
-            ])
-        # Pad groundtruth data for evaluation.
-        boxes *= image_scale
-        is_crowds = tf.cast(is_crowds, dtype=tf.float32)
-        boxes = pad_to_fixed_size(boxes, -1, [self._max_num_instances, 4])
-        is_crowds = pad_to_fixed_size(is_crowds, 0,
-                                      [self._max_num_instances, 1])
-        areas = pad_to_fixed_size(areas, -1, [self._max_num_instances, 1])
-        classes = pad_to_fixed_size(classes, -1, [self._max_num_instances, 1])
-        # Pads cropped_gt_masks.
-        cropped_gt_masks = tf.reshape(
-            cropped_gt_masks, [self._max_num_instances, -1])
-        cropped_gt_masks = pad_to_fixed_size(
-            cropped_gt_masks, -1,
-            [self._max_num_instances, (params['gt_mask_size'] + 4) ** 2])
-        cropped_gt_masks = tf.reshape(
-            cropped_gt_masks,
-            [self._max_num_instances, params['gt_mask_size'] + 4,
-             params['gt_mask_size'] + 4])
-        if params['use_bfloat16']:
-          image = tf.cast(image, dtype=tf.bfloat16)
-        return (image, score_targets, box_targets, source_id, image_info,
-                boxes, is_crowds, areas, classes, cropped_gt_masks)
+        if self._mode == tf.estimator.ModeKeys.PREDICT:
+          input_processor = InstanceSegmentationInputProcessor(
+              image, image_size)
+          input_processor.normalize_image()
+          input_processor.set_scale_factors_to_output_size()
+          image = input_processor.resize_and_crop_image()
+          if params['use_bfloat16']:
+            image = tf.cast(image, dtype=tf.bfloat16)
 
-    # batch_size = params['batch_size']
+          image_info = input_processor.get_image_info()
+          return {'images': image, 'image_info': image_info,
+                  'source_ids': source_id}
+
+        elif self._mode == tf.estimator.ModeKeys.TRAIN:
+          instance_masks = data['groundtruth_instance_masks']
+          boxes = data['groundtruth_boxes']
+          classes = data['groundtruth_classes']
+          classes = tf.reshape(tf.cast(classes, dtype=tf.float32), [-1, 1])
+          if not params['use_category']:
+            classes = tf.cast(tf.greater(classes, 0), dtype=tf.float32)
+
+          if (params['skip_crowd_during_training'] and
+              self._mode == tf.estimator.ModeKeys.TRAIN):
+            indices = tf.where(tf.logical_not(data['groundtruth_is_crowd']))
+            classes = tf.gather_nd(classes, indices)
+            boxes = tf.gather_nd(boxes, indices)
+            instance_masks = tf.gather_nd(instance_masks, indices)
+
+          input_processor = InstanceSegmentationInputProcessor(
+              image, image_size, boxes, classes, instance_masks)
+          input_processor.normalize_image()
+          if params['input_rand_hflip']:
+            input_processor.random_horizontal_flip()
+
+          input_processor.set_training_random_scale_factors(
+              params['train_scale_min'], params['train_scale_max'])
+          image = input_processor.resize_and_crop_image()
+
+          boxes, classes = input_processor.resize_and_crop_boxes()
+          instance_masks = input_processor.resize_and_crop_masks()
+          cropped_gt_masks = input_processor.crop_gt_masks(
+              instance_masks, boxes, params['gt_mask_size'], image_size)
+
+          # Assign anchors.
+          score_targets, box_targets = anchor_labeler.label_anchors(
+              boxes, classes)
+
+          # Pad groundtruth data.
+          image_info = input_processor.get_image_info()
+          boxes *= image_info[2]
+          boxes = pad_to_fixed_size(boxes, -1, [self._max_num_instances, 4])
+          classes = pad_to_fixed_size(classes, -1, [self._max_num_instances, 1])
+          # Pads cropped_gt_masks.
+          cropped_gt_masks = tf.reshape(
+              cropped_gt_masks, [self._max_num_instances, -1])
+          cropped_gt_masks = pad_to_fixed_size(
+              cropped_gt_masks, -1,
+              [self._max_num_instances, (params['gt_mask_size'] + 4) ** 2])
+          cropped_gt_masks = tf.reshape(
+              cropped_gt_masks,
+              [self._max_num_instances, params['gt_mask_size'] + 4,
+               params['gt_mask_size'] + 4])
+          if params['use_bfloat16']:
+            image = tf.cast(image, dtype=tf.bfloat16)
+
+          features = {}
+          features['images'] = image
+          features['image_info'] = image_info
+          features['source_ids'] = source_id
+          labels = {}
+          for level in range(params['min_level'], params['max_level'] + 1):
+            labels['score_targets_%d' % level] = score_targets[level]
+            labels['box_targets_%d' % level] = box_targets[level]
+          labels['gt_boxes'] = boxes
+          labels['gt_classes'] = classes
+          labels['cropped_gt_masks'] = cropped_gt_masks
+          return (features, labels)
+
     batch_size = params['batch_size'] if 'batch_size' in params else 1
     dataset = tf.data.Dataset.list_files(
         self._file_pattern, shuffle=(self._mode == tf.estimator.ModeKeys.TRAIN))
@@ -435,44 +429,23 @@ class InputReader(object):
       dataset = dataset.shuffle(64)
 
     # Parse the fetched records to input tensors for model function.
-    dataset = dataset.map(_dataset_parser, num_parallel_calls=64)
-    dataset = dataset.prefetch(batch_size)
-    dataset = dataset.batch(batch_size, drop_remainder=True)
+    dataset = dataset.apply(
+        tf.contrib.data.map_and_batch(
+            _dataset_parser, batch_size=batch_size,
+            num_parallel_batches=64, drop_remainder=True))
 
-    def _process_example(images, score_targets, box_targets, source_ids,
-                         image_info, boxes, is_crowds, areas, classes,
-                         cropped_gt_masks):
-      """Processes one batch of data."""
-      # Transposes images for TPU performance.
-      # Given the batch size, the batch dimesion (N) goes to either the minor
-      # ((H, W, C, N) when N > C) or the second-minor ((H, W, N, C) when N < C)
-      # dimension. Here, we assume N is 4 or 8 and C is 3, so we use
-      # (H, W, C, N).
-      if (params['transpose_input'] and
-          self._mode == tf.estimator.ModeKeys.TRAIN):
-        images = tf.transpose(images, [1, 2, 3, 0])
+    # Transposes images for TPU performance.
+    # Given the batch size, the batch dimesion (N) goes to either the minor
+    # ((H, W, C, N) when N > C) or the second-minor ((H, W, N, C) when N < C)
+    # dimension. Here, we assume N is 4 or 8 and C is 3, so we use
+    # (H, W, C, N).
+    if (params['transpose_input'] and
+        self._mode == tf.estimator.ModeKeys.TRAIN):
+      def _transpose_images(features, labels):
+        features['images'] = tf.transpose(features['images'], [1, 2, 3, 0])
+        return features, labels
+      dataset = dataset.map(_transpose_images, num_parallel_calls=64)
 
-      labels = {}
-      for level in range(params['min_level'], params['max_level'] + 1):
-        labels['score_targets_%d' % level] = score_targets[level]
-        labels['box_targets_%d' % level] = box_targets[level]
-      # Concatenate groundtruth annotations to a tensor.
-      groundtruth_data = tf.concat([boxes, is_crowds, areas, classes], axis=2)
-      labels['source_ids'] = source_ids
-      labels['groundtruth_data'] = groundtruth_data
-      labels['image_info'] = image_info
-      labels['cropped_gt_masks'] = cropped_gt_masks
-      if self._mode == tf.estimator.ModeKeys.PREDICT:
-        features = dict(
-            images=images,
-            image_info=image_info,
-            groundtruth_data=groundtruth_data,
-            source_ids=source_ids)
-        return features
-      else:
-        return images, labels
-
-    dataset = dataset.map(_process_example)
     dataset = dataset.prefetch(tf.contrib.data.AUTOTUNE)
 
     if self._num_examples > 0:

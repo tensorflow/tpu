@@ -25,6 +25,7 @@ from __future__ import print_function
 
 import collections
 import numpy as np
+import six
 from six.moves import xrange  # pylint: disable=redefined-builtin
 import tensorflow as tf
 
@@ -132,8 +133,8 @@ class MnasBlock(object):
     else:
       self._channel_axis = -1
       self._spatial_dims = [1, 2]
-    self.has_se = (self._block_args.se_ratio > 0) & (
-        self._block_args.se_ratio <= 1)
+    self.has_se = (self._block_args.se_ratio is not None) and (
+        self._block_args.se_ratio > 0) and (self._block_args.se_ratio <= 1)
 
     self.endpoints = None
 
@@ -374,7 +375,7 @@ class MnasNetModel(tf.keras.Model):
         outputs = block.call(outputs, training=training)
         self.endpoints['block_%s' % idx] = outputs
         if block.endpoints:
-          for k, v in block.endpoints.iteritems():
+          for k, v in six.iteritems(block.endpoints):
             self.endpoints['block_%s/%s' % (idx, k)] = v
     # Calls final layers and returns logits.
     with tf.variable_scope('mnas_head'):
