@@ -104,20 +104,24 @@ class MaskCOCO(COCO):
     print(detection_results.shape[0])
     print(len(mask_results))
     assert detection_results.shape[1] == 7
-    assert detection_results.shape[0] == len(mask_results)
+    if mask_results:
+      assert detection_results.shape[0] == len(mask_results)
     num_detections = detection_results.shape[0]
     predictions = []
 
     for i in range(num_detections):
       if i % 1000000 == 0:
         print('{}/{}'.format(i, num_detections))
-      predictions += [{
+      prediction = {
           'image_id': int(detection_results[i, 0]),
           'bbox': detection_results[i, 1:5].tolist(),
           'score': detection_results[i, 5],
           'category_id': int(detection_results[i, 6]),
-          'segmentation': mask_results[i],
-          }]
+      }
+      if mask_results:
+        prediction['segmentation'] = mask_results[i]
+
+      predictions += [prediction]
     return predictions
 
 
@@ -190,7 +194,7 @@ def segm_results(masks, detections, image_height, image_width):
 class EvaluationMetric(object):
   """COCO evaluation metric class."""
 
-  def __init__(self, filename):
+  def __init__(self, filename, include_mask):
     """Constructs COCO evaluation class.
 
     The class provides the interface to metrics_fn in TPUEstimator. The
@@ -201,6 +205,7 @@ class EvaluationMetric(object):
     Args:
       filename: Ground truth JSON file name. If filename is None, use
         groundtruth data passed from the dataloader for evaluation.
+      include_mask: boolean to indicate whether or not to include mask eval.
     """
     if filename:
       if filename.startswith('gs://'):
@@ -215,8 +220,10 @@ class EvaluationMetric(object):
     self.filename = filename
     self.metric_names = ['AP', 'AP50', 'AP75', 'APs', 'APm', 'APl', 'ARmax1',
                          'ARmax10', 'ARmax100', 'ARs', 'ARm', 'ARl']
-    mask_metric_names = ['mask_' + x for x in self.metric_names]
-    self.metric_names.extend(mask_metric_names)
+    self._include_mask = include_mask
+    if self._include_mask:
+      mask_metric_names = ['mask_' + x for x in self.metric_names]
+      self.metric_names.extend(mask_metric_names)
 
     self._reset()
 
@@ -231,13 +238,14 @@ class EvaluationMetric(object):
     """Generates COCO metrics."""
 
     for i, detection in enumerate(predictions['detections']):
-      segms = segm_results(predictions['mask_outputs'][i],
-                           detection,
-                           int(predictions['image_info'][i][3]),
-                           int(predictions['image_info'][i][4]))
+      segms = None
+      if self._include_mask:
+        segms = segm_results(predictions['mask_outputs'][i],
+                             detection,
+                             int(predictions['image_info'][i][3]),
+                             int(predictions['image_info'][i][4]))
       self._update_op(
-          detection[np.newaxis, :, :],
-          segms[np.newaxis, :, :, :])
+          detection[np.newaxis, :, :], instance_masks=segms)
     metrics = self._evaluate()
     metrics_dict = {}
     for i, name in enumerate(self.metric_names):
@@ -262,23 +270,27 @@ class EvaluationMetric(object):
     coco_eval.summarize()
     coco_metrics = coco_eval.stats
 
-    # Create another object for instance segmentation metric evaluation.
-    mcoco_eval = COCOeval(self.coco_gt, coco_dt, iouType='segm')
-    mcoco_eval.params.imgIds = image_ids
-    mcoco_eval.evaluate()
-    mcoco_eval.accumulate()
-    mcoco_eval.summarize()
-    mask_coco_metrics = mcoco_eval.stats
+    if self._include_mask:
+      # Create another object for instance segmentation metric evaluation.
+      mcoco_eval = COCOeval(self.coco_gt, coco_dt, iouType='segm')
+      mcoco_eval.params.imgIds = image_ids
+      mcoco_eval.evaluate()
+      mcoco_eval.accumulate()
+      mcoco_eval.summarize()
+      mask_coco_metrics = mcoco_eval.stats
 
-    combined_metrics = np.hstack((coco_metrics, mask_coco_metrics))
+    if self._include_mask:
+      metrics = np.hstack((coco_metrics, mask_coco_metrics))
+    else:
+      metrics = coco_metrics
     # clean self.detections after eva
     # clean self.detections after evaluation is done.
     # this makes sure the next evaluation will start with an empty list of
     # self.detections.
     self._reset()
-    return combined_metrics.astype(np.float32)
+    return metrics.astype(np.float32)
 
-  def _update_op(self, detections, instance_masks):
+  def _update_op(self, detections, instance_masks=None):
     """Update detection results and groundtruth data.
 
     Append detection/mask results to self.detections and self.masks to
@@ -295,15 +307,17 @@ class EvaluationMetric(object):
       if detections[i].shape[0] == 0:
         continue
 
-      # Convert the mask to uint8 and then to fortranarray for RLE encoder.
-      encoded_mask_list = [maskUtils.encode(
-          np.asfortranarray(instance_mask.astype(np.uint8)))
-                           for instance_mask in instance_masks[i]]
       self.detections.extend(detections[i])
-      # The encoder returns a list of RLE-encoded instance masks here.
-      self.masks.append(
-          encoded_mask_list
-      )
+
+      if self._include_mask:
+        # Convert the mask to uint8 and then to fortranarray for RLE encoder.
+        encoded_mask_list = [maskUtils.encode(
+            np.asfortranarray(instance_mask.astype(np.uint8)))
+                             for instance_mask in instance_masks[i]]
+        # The encoder returns a list of RLE-encoded instance masks here.
+        self.masks.append(
+            encoded_mask_list
+        )
 
   def estimator_metric_fn(self, detections, instance_masks):
     """Constructs the metric function for tf.TPUEstimator.

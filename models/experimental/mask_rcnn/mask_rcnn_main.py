@@ -120,7 +120,8 @@ def evaluation(eval_estimator, config):
       else:
         predictions[k] = np.append(predictions[k], v, axis=0)
 
-  eval_metric = coco_metric.EvaluationMetric(config.val_json_file)
+  eval_metric = coco_metric.EvaluationMetric(
+      config.val_json_file, include_mask=config.include_mask)
   eval_results = eval_metric.predict_metric_fn(predictions)
   tf.logging.info('Eval results: %s' % eval_results)
 

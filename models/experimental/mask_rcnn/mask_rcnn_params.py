@@ -51,6 +51,7 @@ def default_config():
       fast_rcnn_mlp_head_dim=1024,
       bbox_reg_weights=(10., 10., 5., 5.),
       # Mask-RCNN heads.
+      include_mask=True,  # whether or not to include mask branch.
       mrcnn_resolution=28,
       # evaluation
       test_detections_per_image=100,

@@ -209,7 +209,8 @@ def conv2d_fixed_padding(inputs, filters, kernel_size, strides,
 
 
 def residual_block(inputs, filters, is_training, strides,
-                   use_projection=False, data_format='channels_first'):
+                   use_projection=False, data_format='channels_first',
+                   dropblock_keep_prob=None, dropblock_size=None):
   """Standard building block for residual networks with BN after convolutions.
 
   Args:
@@ -225,10 +226,15 @@ def residual_block(inputs, filters, is_training, strides,
         filters and the resolution.
     data_format: `str` either "channels_first" for `[batch, channels, height,
         width]` or "channels_last for `[batch, height, width, channels]`.
-
+    dropblock_keep_prob: unused; needed to give method same signature as other
+      blocks
+    dropblock_size: unused; needed to give method same signature as other
+      blocks
   Returns:
     The output `Tensor` of the block.
   """
+  del dropblock_keep_prob
+  del dropblock_size
   shortcut = inputs
   if use_projection:
     # Projection shortcut in first layer to match filters and strides

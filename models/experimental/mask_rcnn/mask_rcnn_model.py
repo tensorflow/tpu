@@ -62,7 +62,44 @@ def create_optimizer(learning_rate, params):
   return optimizer
 
 
-def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
+def remove_variables(variables, resnet_depth=50):
+  """Removes low-level variables from the input.
+
+  Removing low-level parameters (e.g., initial convolution layer) from training
+  usually leads to higher training speed and slightly better testing accuracy.
+  The intuition is that the low-level architecture (e.g., ResNet-50) is able to
+  capture low-level features such as edges; therefore, it does not need to be
+  fine-tuned for the detection task.
+
+  Args:
+    variables: all the variables in training
+    resnet_depth: the depth of ResNet model
+
+  Returns:
+    var_list: a list containing variables for training
+
+  """
+  # Freeze at conv2 based on reference model.
+  # Reference: https://github.com/facebookresearch/Detectron/blob/master/detectron/core/config.py#L194  # pylint: disable=line-too-long
+  remove_list = []
+  prefix = 'resnet{}/'.format(resnet_depth)
+  remove_list.append(prefix + 'conv2d/')
+  remove_list.append(prefix + 'batch_normalization/')
+  for i in range(1, 11):
+    remove_list.append(prefix + 'conv2d_{}/'.format(i))
+    remove_list.append(prefix + 'batch_normalization_{}/'.format(i))
+
+  def _is_kept(variable):
+    for rm_str in remove_list:
+      if rm_str in variable.name:
+        return False
+    return True
+
+  var_list = [v for v in variables if _is_kept(v)]
+  return var_list
+
+
+def _model_fn(features, labels, mode, params, variable_filter_fn=None):
   """Model defination for the Mask-RCNN model based on ResNet.
 
   Args:
@@ -75,7 +112,6 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
     mode: the mode of TPUEstimator including TRAIN, EVAL, and PREDICT.
     params: the dictionary defines hyperparameters of model. The default
       settings are in default_hparams function in this file.
-    model: the Mask-RCNN model outputs class logits and box regression outputs.
     variable_filter_fn: the filter function that takes trainable_variables and
       returns the variable list after applying the filter rule.
 
@@ -92,9 +128,16 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
 
   def _model_outputs():
     """Generates outputs from the model."""
-    fpn_feats, rpn_fn, faster_rcnn_fn, mask_rcnn_fn = model(
-        features, labels, all_anchors, mode, params)
-    rpn_score_outputs, rpn_box_outputs = rpn_fn(fpn_feats)
+
+    fpn_feats = mask_rcnn_architecture.resnet_fpn(
+        features['images'],
+        params['min_level'], params['max_level'], params['resnet_depth'],
+        params['is_training_bn'])
+
+    rpn_score_outputs, rpn_box_outputs = mask_rcnn_architecture.rpn_net(
+        fpn_feats,
+        params['min_level'], params['max_level'],
+        len(params['aspect_ratios'] * params['num_scales']))
 
     if mode != tf.estimator.ModeKeys.TRAIN:
       # The mask branch takes inputs from different places in training vs in
@@ -102,8 +145,12 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
       # labels to produce both mask outputs and targets. At test time, it uses
       # the post-processed predictions to generate masks.
       # Generate detections one image at a time.
-      (class_outputs, box_outputs,
-       box_rois) = faster_rcnn_fn(fpn_feats, rpn_score_outputs, rpn_box_outputs)
+      class_outputs, box_outputs, box_rois = (
+          mask_rcnn_architecture.faster_rcnn_fn(
+              fpn_feats, rpn_score_outputs, rpn_box_outputs,
+              all_anchors, features['image_info'], params,
+              is_training=False))
+
       batch_size, _, _ = class_outputs.get_shape().as_list()
       detections = []
       softmax_class_outputs = tf.nn.softmax(class_outputs)
@@ -117,19 +164,30 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
                 params['bbox_reg_weights'])
             )
       detections = tf.stack(detections, axis=0)
-      mask_outputs = mask_rcnn_fn(fpn_feats, detections=detections)
+      if params['include_mask']:
+        mask_outputs = mask_rcnn_architecture.mask_rcnn_fn(
+            fpn_feats, params, is_training=False, detections=detections)
     else:
       (class_outputs, box_outputs, box_rois, class_targets, box_targets,
-       proposal_to_label_map) = faster_rcnn_fn(fpn_feats, rpn_score_outputs,
-                                               rpn_box_outputs)
+       proposal_to_label_map) = mask_rcnn_architecture.faster_rcnn_fn(
+           fpn_feats, rpn_score_outputs, rpn_box_outputs, all_anchors,
+           features['image_info'], params, is_training=True, labels=labels)
+
       encoded_box_targets = mask_rcnn_architecture.encode_box_targets(
           box_rois, box_targets, class_targets, params['bbox_reg_weights'])
-      (mask_outputs, select_class_targets, mask_targets) = mask_rcnn_fn(
-          fpn_feats, class_targets, box_targets, box_rois,
-          proposal_to_label_map)
+
+      if params['include_mask']:
+        mask_outputs, select_class_targets, mask_targets = (
+            mask_rcnn_architecture.mask_rcnn_fn(
+                fpn_feats, params, is_training=True, detections=None,
+                labels=labels,
+                class_targets=class_targets,
+                box_targets=box_targets,
+                box_rois=box_rois,
+                proposal_to_label_map=proposal_to_label_map))
 
     if mode == tf.estimator.ModeKeys.TRAIN:
-      return {
+      model_outputs = {
           'rpn_score_outputs': rpn_score_outputs,
           'rpn_box_outputs': rpn_box_outputs,
           'class_outputs': class_outputs,
@@ -137,12 +195,22 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
           'class_targets': class_targets,
           'box_targets': encoded_box_targets,
           'box_rois': box_rois,
-          'select_class_targets': select_class_targets,
-          'mask_outputs': mask_outputs,
-          'mask_targets': mask_targets,}
+      }
+      if params['include_mask']:
+        model_outputs.update({
+            'mask_outputs': mask_outputs,
+            'mask_targets': mask_targets,
+            'select_class_targets': select_class_targets,
+        })
     else:
-      return {'detections': detections,
-              'mask_outputs': mask_outputs}
+      model_outputs = {
+          'detections': detections,
+      }
+      if params['include_mask']:
+        model_outputs.update({
+            'mask_outputs': mask_outputs,
+        })
+    return model_outputs
 
   if params['use_bfloat16']:
     with tf.contrib.tpu.bfloat16_scope():
@@ -161,8 +229,9 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
   if mode == tf.estimator.ModeKeys.PREDICT:
     predictions = {}
     predictions['detections'] = model_outputs['detections']
-    predictions['mask_outputs'] = tf.nn.sigmoid(model_outputs['mask_outputs'])
     predictions['image_info'] = features['image_info']
+    if params['include_mask']:
+      predictions['mask_outputs'] = tf.nn.sigmoid(model_outputs['mask_outputs'])
 
     if params['use_tpu']:
       return tf.contrib.tpu.TPUEstimatorSpec(mode=mode, predictions=predictions)
@@ -187,7 +256,7 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
        model_outputs['class_outputs'], model_outputs['box_outputs'],
        model_outputs['class_targets'], model_outputs['box_targets'], params)
   # Only training has the mask loss. Reference: https://github.com/facebookresearch/Detectron/blob/master/detectron/modeling/model_builder.py  # pylint: disable=line-too-long
-  if mode == tf.estimator.ModeKeys.TRAIN:
+  if mode == tf.estimator.ModeKeys.TRAIN and params['include_mask']:
     mask_loss = losses.mask_rcnn_loss(
         model_outputs['mask_outputs'], model_outputs['mask_targets'],
         model_outputs['select_class_targets'], params)
@@ -321,8 +390,9 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
             tf.contrib.summary.scalar(
                 'fast_rcnn_box_loss', tf.reduce_mean(fast_rcnn_box_loss),
                 step=global_step)
-            tf.contrib.summary.scalar(
-                'mask_loss', tf.reduce_mean(mask_loss), step=global_step)
+            if params['include_mask']:
+              tf.contrib.summary.scalar(
+                  'mask_loss', tf.reduce_mean(mask_loss), step=global_step)
             tf.contrib.summary.scalar(
                 'learning_rate', tf.reduce_mean(learning_rate),
                 step=global_step)
@@ -369,5 +439,4 @@ def mask_rcnn_model_fn(features, labels, mode, params):
         labels,
         mode,
         params,
-        model=mask_rcnn_architecture.mask_rcnn,
-        variable_filter_fn=mask_rcnn_architecture.remove_variables)
+        variable_filter_fn=remove_variables)
