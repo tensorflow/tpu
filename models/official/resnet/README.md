@@ -239,7 +239,7 @@ The default ResNet-50 has been carefully tested with the default flags but
 configurations including ResNet-18, 34, 101, 152, 200. The 18 and 34 layer
 configurations use residual blocks without bottlenecks and the remaining
 configurations use bottleneck layers. The configuration can be controlled via
-`--resnet_size`. Bigger models require more training time and more memory, thus
+`--resnet_depth`. Bigger models require more training time and more memory, thus
 may require lowering the `--train_batch_size` to avoid running out of memory.
 
 ### Using your own data
