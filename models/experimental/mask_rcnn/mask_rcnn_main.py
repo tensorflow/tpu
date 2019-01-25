@@ -1,4 +1,4 @@
-# Copyright 2018 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import functools
 import os
 from absl import flags
 import numpy as np
@@ -86,6 +87,54 @@ flags.DEFINE_bool(
     help='Use TPU double transpose optimization')
 
 FLAGS = flags.FLAGS
+
+
+def serving_input_fn(batch_size, image_size):
+  """Input function for SavedModels and TF serving.
+
+  Returns a `tf.estimator.export.ServingInputReceiver` for a SavedModel.
+
+  Args:
+    batch_size: The batch size.
+    image_size: The size the image will be converted to, output image size.
+  """
+
+  def _decode_image(img_bytes):
+    img = tf.image.decode_jpeg(img_bytes)
+    img = tf.image.convert_image_dtype(img, dtype=tf.float32)
+    return img
+
+  def _preprocess_image(img):
+    input_processor = dataloader.InputProcessor(img, (image_size, image_size))
+    input_processor.normalize_image()
+    input_processor.set_scale_factors_to_output_size()
+    img = input_processor.resize_and_crop_image()
+    img_info = input_processor.get_image_info()
+    source_id = tf.constant(-1., dtype=tf.float32)
+    return img, img_info, source_id
+
+  image_bytes_list = tf.placeholder(shape=[batch_size], dtype=tf.string)
+  decoded_images = tf.map_fn(
+      _decode_image, image_bytes_list, back_prop=False, dtype=tf.float32)
+  images, image_info, source_ids = tf.map_fn(
+      _preprocess_image,
+      decoded_images,
+      back_prop=False,
+      dtype=[tf.float32, tf.float32, tf.float32])
+
+  images.set_shape([batch_size, image_size, image_size, 3])
+  image_info.set_shape([batch_size, 5])
+  source_ids.set_shape([batch_size])
+
+  return tf.estimator.export.ServingInputReceiver(
+      features={
+          'images': images,
+          'image_info': image_info,
+          'source_ids': source_ids,
+      },
+      receiver_tensors={
+          'image_bytes': image_bytes_list
+      })
 
 
 def evaluation(eval_estimator, config):
@@ -351,6 +400,14 @@ def main(argv):
                         ckpt)
     summary_writer.close()
 
+    # Export saved model.
+    eval_estimator.export_saved_model(
+        export_dir_base=FLAGS.model_dir,
+        serving_input_receiver_fn=functools.partial(
+            serving_input_fn,
+            batch_size=config.eval_batch_size,
+            image_size=config.image_size))
+
   elif FLAGS.mode == 'train_and_eval':
     if FLAGS.model_dir:
       save_config(config, FLAGS.model_dir)
@@ -403,6 +460,15 @@ def main(argv):
     eval_results = evaluation(eval_estimator, config)
     write_summary(eval_results, summary_writer, config.total_steps)
     summary_writer.close()
+
+    # Export saved model.
+    eval_estimator.export_saved_model(
+        export_dir_base=FLAGS.model_dir,
+        serving_input_receiver_fn=functools.partial(
+            serving_input_fn,
+            batch_size=config.eval_batch_size,
+            image_size=config.image_size))
+
   else:
     tf.logging.info('Mode not found.')
 
