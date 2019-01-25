@@ -24,7 +24,6 @@ from __future__ import division
 from __future__ import print_function
 import atexit
 import copy
-from absl import flags
 import numpy as np
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
@@ -32,8 +31,6 @@ import pycocotools.mask as maskUtils
 import tensorflow as tf
 import cv2
 import tempfile
-
-FLAGS = flags.FLAGS
 
 
 class MaskCOCO(COCO):
@@ -244,8 +241,10 @@ class EvaluationMetric(object):
                              detection,
                              int(predictions['image_info'][i][3]),
                              int(predictions['image_info'][i][4]))
+        segms = segms[np.newaxis, :, :, :]
       self._update_op(
-          detection[np.newaxis, :, :], instance_masks=segms)
+          detection[np.newaxis, :, :],
+          instance_masks=segms)
     metrics = self._evaluate()
     metrics_dict = {}
     for i, name in enumerate(self.metric_names):
@@ -318,41 +317,3 @@ class EvaluationMetric(object):
         self.masks.append(
             encoded_mask_list
         )
-
-  def estimator_metric_fn(self, detections, instance_masks):
-    """Constructs the metric function for tf.TPUEstimator.
-
-    For each metric, we return the evaluation op and an update op; the update op
-    is shared across all metrics and simply appends the set of detections to the
-    `self.detections` list. The metric op is invoked after all examples have
-    been seen and computes the aggregate COCO metrics. Please find details API
-    in: https://www.tensorflow.org/api_docs/python/tf/contrib/learn/MetricSpec
-
-    Args:
-     detections: Detection results in a tensor with each row representing
-       [image_id, x, y, width, height, score, class]. Numpy array shape
-       [batch_size, num_detections, 7].
-     instance_masks: Instance mask predictions associated with each detections.
-       A list of `batch_size` elements, whose shape is [num_detections, height,
-       width].
-
-    Returns:
-      metrics_dict: A dictionary mapping from evaluation name to a tuple of
-        operations (`metric_op`, `update_op`). `update_op` appends the
-        detections for the metric to the `self.detections` list.
-    """
-    with tf.name_scope('coco_metric'):
-      update_op = None
-      update_ops = []
-      batch_size = detections.shape[0]
-      for i in range(batch_size):
-        with tf.control_dependencies(update_ops):
-          update_op = tf.py_func(
-              self._update_op, [tf.expand_dims(detections[i], 0),
-                                tf.expand_dims(instance_masks[i], 0)], [])
-          update_ops.append(update_op)
-      metrics = tf.py_func(self._evaluate, [], tf.float32)
-      metrics_dict = {}
-      for i, name in enumerate(self.metric_names):
-        metrics_dict[name] = (metrics[i], update_op)
-      return metrics_dict
