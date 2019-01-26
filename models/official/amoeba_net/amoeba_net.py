@@ -311,6 +311,14 @@ def write_warmup_requests(savedmodel_dir,
         writer.write(log.SerializeToString())
 
 
+def _log_source_model_dir(savedmodel_dir, model_dir):
+  """Logs the model dir that was used for exporting the saved model."""
+  tf.gfile.MkDir(savedmodel_dir)
+  log_model_dir = os.path.join(savedmodel_dir, 'assets.extra', 'model_dir')
+  with tf.gfile.Open(log_model_dir, 'w') as writer:
+    writer.write(model_dir)
+
+
 # TODO(ereal): simplify this.
 def override_with_flags(hparams):
   """Overrides parameters with flag values."""
@@ -507,6 +515,7 @@ def main(_):
         serving_input_receiver_fn=build_image_serving_input_receiver_fn(
             serving_shape),
         as_text=True)
+    _log_source_model_dir(export_path, model_dir)
     if FLAGS.add_warmup_requests:
       write_warmup_requests(
           export_path,
