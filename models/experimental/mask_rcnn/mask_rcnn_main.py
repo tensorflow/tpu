@@ -120,7 +120,7 @@ def serving_input_fn(batch_size, image_size):
       _preprocess_image,
       decoded_images,
       back_prop=False,
-      dtype=[tf.float32, tf.float32, tf.float32])
+      dtype=(tf.float32, tf.float32, tf.float32))
 
   images.set_shape([batch_size, image_size, image_size, 3])
   image_info.set_shape([batch_size, 5])

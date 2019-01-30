@@ -89,6 +89,14 @@ def default_config():
       use_host_call=False,
       # One of ['momentum', 'adam', 'adadelta', 'adagrad', 'rmsprop', 'lars'].
       optimizer='momentum',
+      # Gradient clipping is a fairly coarse heuristic to stabilize training.
+      # This model clips the gradient by its L2 norm globally (i.e., across
+      # all variables), using a threshold obtained from multiplying this
+      # parameter with sqrt(number_of_weights), to have a meaningful value
+      # across both training phases and different sizes of imported modules.
+      # Refer value: 0.02, for 25M weights, yields clip norm 10.
+      # Zero or negative number means no clipping.
+      global_gradient_clip_ratio=-1,
       # Skips loading variables from the resnet checkpoint. It is used for
       # skipping nonexistent variables from the constructed graph. The list
       # of loaded variables is constructed from the scope 'resnetX', where 'X'

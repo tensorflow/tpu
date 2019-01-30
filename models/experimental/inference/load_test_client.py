@@ -36,7 +36,7 @@ tf.app.flags.DEFINE_float('request_timeout', 300.0,
                           'Timeout for inference request.')
 tf.app.flags.DEFINE_string('model_name', '',
                            'Name of the model being served on the ModelServer')
-tf.app.flags.DEFINE_string('tpu_name', '',
+tf.app.flags.DEFINE_string('tpu', '',
                            'Name of the Cloud TPU for Cluster Resolvers.')
 tf.app.flags.DEFINE_string('image_path', '', 'The path of local image.')
 tf.app.flags.DEFINE_integer('batch_size', 8, 'Per request batch size.')
@@ -144,7 +144,7 @@ def run_load_test(num_requests, qps, request, stub):
     latency.append(w.latency)
 
   tf.logging.info('num_qps:{} requests/second: {} #success:{} #error:{} '
-                  'latencies: [p50:{:.3f} p90:{:.3f} p99:{:.3f}]'.format(
+                  'latencies: [p50:{:.5f} p90:{:.5f} p99:{:.5f}]'.format(
                       qps, num_requests / acc_time, success_count, error_count,
                       np.percentile(latency, 50), np.percentile(latency, 90),
                       np.percentile(latency, 99)))
@@ -184,7 +184,7 @@ def main(argv):
 
   request = generate_request()
   tpu_address = tf.contrib.cluster_resolver.TPUClusterResolver(
-      FLAGS.tpu_name).master()
+      FLAGS.tpu).master()
   tpu_address = tpu_address[len('grpc://'):]
   tf.logging.info('ModelServer at: {}'.format(tpu_address))
   grpc_channel = grpc.insecure_channel(tpu_address)
