@@ -24,6 +24,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import math
 import re
 import six
 import tensorflow as tf
@@ -310,7 +311,22 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
     # Batch norm requires update_ops to be added as a train_op dependency.
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
     grads_and_vars = optimizer.compute_gradients(total_loss, var_list)
-    gradients, variables = zip(*grads_and_vars)
+    if params['global_gradient_clip_ratio'] > 0:
+      # Clips the gradients for training stability.
+      # Refer: https://arxiv.org/abs/1211.5063
+      with tf.name_scope('clipping'):
+        old_grads, variables = zip(*grads_and_vars)
+        num_weights = sum(
+            g.shape.num_elements() for g in old_grads if g is not None)
+        clip_norm = params['global_gradient_clip_ratio'] * math.sqrt(
+            num_weights)
+        tf.logging.info(
+            'Global clip norm set to %g for %d variables with %d elements.' %
+            (clip_norm, sum(1 for g in old_grads if g is not None),
+             num_weights))
+        gradients, _ = tf.clip_by_global_norm(old_grads, clip_norm)
+    else:
+      gradients, variables = zip(*grads_and_vars)
     grads_and_vars = []
     # Special treatment for biases (beta is named as bias in reference model)
     # Reference: https://github.com/facebookresearch/Detectron/blob/master/detectron/modeling/optimizer.py#L113  # pylint: disable=line-too-long

@@ -19,6 +19,7 @@ from __future__ import division
 from __future__ import print_function
 
 import functools
+import tensorflow as tf
 
 from tensorflow.contrib.tpu.python.ops import tpu_ops
 from tensorflow.contrib.tpu.python.tpu import tpu_function
@@ -43,7 +44,7 @@ def cross_replica_average(t, num_groups=1):
       num_shards_per_group, t.dtype)
 
 
-class CrossReplicaBatchNormalization(keras_layers.BatchNormalization):
+class BatchNormalization(keras_layers.BatchNormalization, tf.layers.Layer):
   """Batch Normalization layer that supports cross replica computation on TPU.
 
   This class extends the keras.BatchNormalization implementation by supporting
@@ -62,7 +63,7 @@ class CrossReplicaBatchNormalization(keras_layers.BatchNormalization):
   """
 
   def __init__(self, fused=None, cross_replica_average_fn=None, **kwargs):
-    super(CrossReplicaBatchNormalization, self).__init__(**kwargs)
+    super(BatchNormalization, self).__init__(**kwargs)
     self.cross_replica_average_fn = cross_replica_average_fn
 
     if fused and cross_replica_average_fn is not None:
@@ -70,7 +71,7 @@ class CrossReplicaBatchNormalization(keras_layers.BatchNormalization):
                        ' cross_replica_average_fn')
 
   def _moments(self, inputs, reduction_axes, keep_dims):
-    mean, variance = super(CrossReplicaBatchNormalization, self)._moments(
+    mean, variance = super(BatchNormalization, self)._moments(
         inputs, reduction_axes, keep_dims=keep_dims)
     if self.cross_replica_average_fn:
       mean = self.cross_replica_average_fn(mean)
@@ -99,7 +100,7 @@ def cross_replica_batch_normalization(inputs,
     num_distributed_groups: Number of groups to normalize in the distributed
       batch normalization. Replicas will evenly split into groups. For example,
       1 for global batch norm and -1 or None for per-replica batch norm.
-    **kwargs: For passing through arguments to CrossReplicaBatchNormalization.
+    **kwargs: For passing through arguments to BatchNormalization.
 
   Returns:
     Output tensor.
@@ -107,7 +108,7 @@ def cross_replica_batch_normalization(inputs,
   Raises:
     ValueError: if eager execution is enabled.
   """
-  layer = CrossReplicaBatchNormalization(
+  layer = BatchNormalization(
       cross_replica_average_fn=functools.partial(
           cross_replica_average, num_groups=num_distributed_groups),
       **kwargs)
