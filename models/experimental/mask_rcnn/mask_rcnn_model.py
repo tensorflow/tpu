@@ -30,12 +30,13 @@ import six
 import tensorflow as tf
 
 import anchors
+import fpn
+import heads
 import learning_rates
 import losses
 import mask_rcnn_architecture
-
-
-_WEIGHT_DECAY = 1e-4
+import ops
+import resnet
 
 
 def create_optimizer(learning_rate, params):
@@ -130,87 +131,127 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
   def _model_outputs():
     """Generates outputs from the model."""
 
-    fpn_feats = mask_rcnn_architecture.resnet_fpn(
-        features['images'],
-        params['min_level'], params['max_level'], params['resnet_depth'],
-        params['is_training_bn'])
+    model_outputs = {}
 
-    rpn_score_outputs, rpn_box_outputs = mask_rcnn_architecture.rpn_net(
+    with tf.variable_scope('resnet%s' % params['resnet_depth']):
+      resnet_fn = resnet.resnet_v1(
+          params['resnet_depth'],
+          num_batch_norm_group=params['num_batch_norm_group'])
+      backbone_feats = resnet_fn(features['images'], params['is_training_bn'])
+
+    fpn_feats = fpn.fpn(
+        backbone_feats, params['min_level'], params['max_level'])
+
+    rpn_score_outputs, rpn_box_outputs = heads.rpn_head(
         fpn_feats,
         params['min_level'], params['max_level'],
         len(params['aspect_ratios'] * params['num_scales']))
 
-    if mode != tf.estimator.ModeKeys.TRAIN:
-      # The mask branch takes inputs from different places in training vs in
-      # eval/predict. In training, the mask branch uses proposals combined with
-      # labels to produce both mask outputs and targets. At test time, it uses
-      # the post-processed predictions to generate masks.
-      # Generate detections one image at a time.
-      class_outputs, box_outputs, box_rois = (
-          mask_rcnn_architecture.faster_rcnn_fn(
-              fpn_feats, rpn_score_outputs, rpn_box_outputs,
-              all_anchors, features['image_info'], params,
-              is_training=False))
+    if mode == tf.estimator.ModeKeys.TRAIN:
+      rpn_pre_nms_topn = params['rpn_pre_nms_topn']
+      rpn_post_nms_topn = params['rpn_post_nms_topn']
+    else:
+      rpn_pre_nms_topn = params['test_rpn_pre_nms_topn']
+      rpn_post_nms_topn = params['test_rpn_post_nms_topn']
 
+    _, rpn_box_rois = mask_rcnn_architecture.proposal_op(
+        rpn_score_outputs, rpn_box_outputs, all_anchors,
+        features['image_info'], rpn_pre_nms_topn,
+        rpn_post_nms_topn, params['rpn_nms_threshold'],
+        params['rpn_min_size'])
+    rpn_box_rois = tf.to_float(rpn_box_rois)
+
+    if mode == tf.estimator.ModeKeys.TRAIN:
+      # Sampling
+      box_targets, class_targets, rpn_box_rois, proposal_to_label_map = (
+          mask_rcnn_architecture.proposal_label_op(
+              rpn_box_rois,
+              labels['gt_boxes'],
+              labels['gt_classes'],
+              features['image_info'],
+              batch_size_per_im=params['batch_size_per_im'],
+              fg_fraction=params['fg_fraction'],
+              fg_thresh=params['fg_thresh'],
+              bg_thresh_hi=params['bg_thresh_hi'],
+              bg_thresh_lo=params['bg_thresh_lo']))
+
+    # Performs multi-level RoIAlign.
+    box_roi_features = ops.multilevel_crop_and_resize(
+        fpn_feats, rpn_box_rois, output_size=7)
+
+    class_outputs, box_outputs = heads.box_head(
+        box_roi_features, num_classes=params['num_classes'],
+        mlp_head_dim=params['fast_rcnn_mlp_head_dim'])
+
+    if mode != tf.estimator.ModeKeys.TRAIN:
       batch_size, _, _ = class_outputs.get_shape().as_list()
       detections = []
       softmax_class_outputs = tf.nn.softmax(class_outputs)
       for i in range(batch_size):
         detections.append(
             anchors.generate_detections_per_image_op(
-                softmax_class_outputs[i], box_outputs[i], box_rois[i],
+                softmax_class_outputs[i], box_outputs[i], rpn_box_rois[i],
                 features['source_ids'][i], features['image_info'][i],
                 params['test_detections_per_image'],
                 params['test_rpn_post_nms_topn'], params['test_nms'],
                 params['bbox_reg_weights'])
             )
       detections = tf.stack(detections, axis=0)
-      if params['include_mask']:
-        mask_outputs = mask_rcnn_architecture.mask_rcnn_fn(
-            fpn_feats, params, is_training=False, detections=detections)
+      model_outputs.update({
+          'detections': detections,
+      })
     else:
-      (class_outputs, box_outputs, box_rois, class_targets, box_targets,
-       proposal_to_label_map) = mask_rcnn_architecture.faster_rcnn_fn(
-           fpn_feats, rpn_score_outputs, rpn_box_outputs, all_anchors,
-           features['image_info'], params, is_training=True, labels=labels)
-
       encoded_box_targets = mask_rcnn_architecture.encode_box_targets(
-          box_rois, box_targets, class_targets, params['bbox_reg_weights'])
-
-      if params['include_mask']:
-        mask_outputs, select_class_targets, mask_targets = (
-            mask_rcnn_architecture.mask_rcnn_fn(
-                fpn_feats, params, is_training=True, detections=None,
-                labels=labels,
-                class_targets=class_targets,
-                box_targets=box_targets,
-                box_rois=box_rois,
-                proposal_to_label_map=proposal_to_label_map))
-
-    if mode == tf.estimator.ModeKeys.TRAIN:
-      model_outputs = {
+          rpn_box_rois, box_targets, class_targets, params['bbox_reg_weights'])
+      model_outputs.update({
           'rpn_score_outputs': rpn_score_outputs,
           'rpn_box_outputs': rpn_box_outputs,
           'class_outputs': class_outputs,
           'box_outputs': box_outputs,
           'class_targets': class_targets,
           'box_targets': encoded_box_targets,
-          'box_rois': box_rois,
-      }
-      if params['include_mask']:
-        model_outputs.update({
-            'mask_outputs': mask_outputs,
-            'mask_targets': mask_targets,
-            'select_class_targets': select_class_targets,
-        })
+          'box_rois': rpn_box_rois,
+      })
+
+    # Faster-RCNN mode.
+    if not params['include_mask']:
+      return model_outputs
+
+    # Mask sampling
+    if mode != tf.estimator.ModeKeys.TRAIN:
+      selected_box_rois = detections[:, :, 1:5]
+      class_indices = tf.to_int32(detections[:, :, 6])
     else:
-      model_outputs = {
-          'detections': detections,
-      }
-      if params['include_mask']:
-        model_outputs.update({
-            'mask_outputs': mask_outputs,
-        })
+      (selected_class_targets, selected_box_targets, selected_box_rois,
+       proposal_to_label_map) = (
+           mask_rcnn_architecture.select_fg_for_masks(
+               class_targets, box_targets, rpn_box_rois,
+               proposal_to_label_map,
+               max_num_fg=int(
+                   params['batch_size_per_im'] * params['fg_fraction'])))
+      class_indices = tf.to_int32(selected_class_targets)
+
+    mask_roi_features = ops.multilevel_crop_and_resize(
+        fpn_feats, selected_box_rois, output_size=14)
+    mask_outputs = heads.mask_head(
+        mask_roi_features,
+        class_indices,
+        num_classes=params['num_classes'],
+        mrcnn_resolution=params['mrcnn_resolution'])
+
+    model_outputs.update({
+        'mask_outputs': mask_outputs,
+    })
+
+    if mode == tf.estimator.ModeKeys.TRAIN:
+      mask_targets = mask_rcnn_architecture.get_mask_targets(
+          selected_box_rois, proposal_to_label_map, selected_box_targets,
+          labels['cropped_gt_masks'], params['mrcnn_resolution'])
+      model_outputs.update({
+          'mask_targets': mask_targets,
+          'selected_class_targets': selected_class_targets,
+      })
+
     return model_outputs
 
   if params['use_bfloat16']:
@@ -260,7 +301,7 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
   if mode == tf.estimator.ModeKeys.TRAIN and params['include_mask']:
     mask_loss = losses.mask_rcnn_loss(
         model_outputs['mask_outputs'], model_outputs['mask_targets'],
-        model_outputs['select_class_targets'], params)
+        model_outputs['selected_class_targets'], params)
   else:
     mask_loss = 0.
   if variable_filter_fn:
@@ -268,9 +309,11 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
                                   params['resnet_depth'])
   else:
     var_list = None
-  l2_regularization_loss = _WEIGHT_DECAY * tf.add_n(
-      [tf.nn.l2_loss(v) for v in var_list
-       if 'batch_normalization' not in v.name and 'bias' not in v.name])
+  l2_regularization_loss = params['l2_weight_decay'] * tf.add_n([
+      tf.nn.l2_loss(v)
+      for v in var_list
+      if 'batch_normalization' not in v.name and 'bias' not in v.name
+  ])
   total_loss = (total_rpn_loss + total_fast_rcnn_loss + mask_loss +
                 l2_regularization_loss)
 
@@ -300,9 +343,11 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
                 params['skip_checkpoint_variables'], var_name[len(prefix):]):
               continue
             vars_to_load[var_name[len(prefix):]] = var_name
-        tf.logging.info(
-            'Optimizer vars: %s.' % ', '.join(var for var in optimizer_vars))
-        tf.logging.info('Will train: %s.' % vars_to_load)
+        for var in optimizer_vars:
+          tf.logging.info('Optimizer vars: %s.' % var)
+        var_names = sorted(vars_to_load.keys())
+        for k in var_names:
+          tf.logging.info('Will train: "%s": "%s",' % (k, vars_to_load[k]))
         tf.train.init_from_checkpoint(params['resnet_checkpoint'], vars_to_load)
         if not vars_to_load:
           raise ValueError('Variables to load is empty.')

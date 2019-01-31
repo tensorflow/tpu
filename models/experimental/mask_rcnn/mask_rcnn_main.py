@@ -89,54 +89,6 @@ flags.DEFINE_bool(
 FLAGS = flags.FLAGS
 
 
-def serving_input_fn(batch_size, image_size):
-  """Input function for SavedModels and TF serving.
-
-  Returns a `tf.estimator.export.ServingInputReceiver` for a SavedModel.
-
-  Args:
-    batch_size: The batch size.
-    image_size: The size the image will be converted to, output image size.
-  """
-
-  def _decode_image(img_bytes):
-    img = tf.image.decode_jpeg(img_bytes)
-    img = tf.image.convert_image_dtype(img, dtype=tf.float32)
-    return img
-
-  def _preprocess_image(img):
-    input_processor = dataloader.InputProcessor(img, (image_size, image_size))
-    input_processor.normalize_image()
-    input_processor.set_scale_factors_to_output_size()
-    img = input_processor.resize_and_crop_image()
-    img_info = input_processor.get_image_info()
-    source_id = tf.constant(-1., dtype=tf.float32)
-    return img, img_info, source_id
-
-  image_bytes_list = tf.placeholder(shape=[batch_size], dtype=tf.string)
-  decoded_images = tf.map_fn(
-      _decode_image, image_bytes_list, back_prop=False, dtype=tf.float32)
-  images, image_info, source_ids = tf.map_fn(
-      _preprocess_image,
-      decoded_images,
-      back_prop=False,
-      dtype=(tf.float32, tf.float32, tf.float32))
-
-  images.set_shape([batch_size, image_size, image_size, 3])
-  image_info.set_shape([batch_size, 5])
-  source_ids.set_shape([batch_size])
-
-  return tf.estimator.export.ServingInputReceiver(
-      features={
-          'images': images,
-          'image_info': image_info,
-          'source_ids': source_ids,
-      },
-      receiver_tensors={
-          'image_bytes': image_bytes_list
-      })
-
-
 def evaluation(eval_estimator, config):
   """Runs one evluation."""
   predictor = eval_estimator.predict(
@@ -404,7 +356,7 @@ def main(argv):
     eval_estimator.export_saved_model(
         export_dir_base=FLAGS.model_dir,
         serving_input_receiver_fn=functools.partial(
-            serving_input_fn,
+            dataloader.serving_input_fn,
             batch_size=config.eval_batch_size,
             image_size=config.image_size))
 
@@ -465,7 +417,7 @@ def main(argv):
     eval_estimator.export_saved_model(
         export_dir_base=FLAGS.model_dir,
         serving_input_receiver_fn=functools.partial(
-            serving_input_fn,
+            dataloader.serving_input_fn,
             batch_size=config.eval_batch_size,
             image_size=config.image_size))
 
