@@ -19,7 +19,7 @@ from __future__ import division
 from __future__ import print_function
 
 import tensorflow as tf
-
+import tpu_normalization
 
 _BATCH_NORM_DECAY = 0.997
 _BATCH_NORM_EPSILON = 1e-4
@@ -30,6 +30,7 @@ def batch_norm_relu(inputs,
                     relu=True,
                     init_zero=False,
                     data_format='channels_last',
+                    num_batch_norm_group=None,
                     name=None):
   """Performs a batch normalization followed by a ReLU.
 
@@ -41,6 +42,10 @@ def batch_norm_relu(inputs,
         normalization with 0 instead of 1 (default).
     data_format: `str` either "channels_first" for `[batch, channels, height,
         width]` or "channels_last for `[batch, height, width, channels]`.
+    num_batch_norm_group: If positive, use tpu specifc batch norm implemenation
+      which calculates mean and variance accorss all the replicas. Number of
+      groups to normalize in the distributed batch normalization. Replicas will
+      evenly split into groups.
     name: the name of the batch normalization layer
 
   Returns:
@@ -56,17 +61,30 @@ def batch_norm_relu(inputs,
   else:
     axis = 3
 
-  inputs = tf.layers.batch_normalization(
-      inputs=inputs,
-      axis=axis,
-      momentum=_BATCH_NORM_DECAY,
-      epsilon=_BATCH_NORM_EPSILON,
-      center=True,
-      scale=True,
-      training=is_training_bn,
-      fused=True,
-      gamma_initializer=gamma_initializer,
-      name=name)
+  if num_batch_norm_group > 0:
+    inputs = tpu_normalization.cross_replica_batch_normalization(
+        inputs=inputs,
+        axis=axis,
+        momentum=_BATCH_NORM_DECAY,
+        epsilon=_BATCH_NORM_EPSILON,
+        center=True,
+        scale=True,
+        training=is_training_bn,
+        gamma_initializer=gamma_initializer,
+        num_distributed_groups=num_batch_norm_group,
+        name=name)
+  else:
+    inputs = tf.layers.batch_normalization(
+        inputs=inputs,
+        axis=axis,
+        momentum=_BATCH_NORM_DECAY,
+        epsilon=_BATCH_NORM_EPSILON,
+        center=True,
+        scale=True,
+        training=is_training_bn,
+        fused=True,
+        gamma_initializer=gamma_initializer,
+        name=name)
 
   if relu:
     inputs = tf.nn.relu(inputs)
@@ -141,7 +159,8 @@ def residual_block(inputs,
                    is_training_bn,
                    strides,
                    use_projection=False,
-                   data_format='channels_last'):
+                   data_format='channels_last',
+                   num_batch_norm_group=None):
   """Standard building block for residual networks with BN after convolutions.
 
   Args:
@@ -157,6 +176,10 @@ def residual_block(inputs,
         filters and the resolution.
     data_format: `str` either "channels_first" for `[batch, channels, height,
         width]` or "channels_last for `[batch, height, width, channels]`.
+    num_batch_norm_group: If positive, use tpu specifc batch norm implemenation
+      which calculates mean and variance accorss all the replicas. Number of
+      groups to normalize in the distributed batch normalization. Replicas will
+      evenly split into groups.
 
   Returns:
     The output `Tensor` of the block.
@@ -171,7 +194,11 @@ def residual_block(inputs,
         strides=strides,
         data_format=data_format)
     shortcut = batch_norm_relu(
-        shortcut, is_training_bn, relu=False, data_format=data_format)
+        shortcut,
+        is_training_bn,
+        relu=False,
+        data_format=data_format,
+        num_batch_norm_group=num_batch_norm_group)
 
   inputs = conv2d_fixed_padding(
       inputs=inputs,
@@ -179,7 +206,11 @@ def residual_block(inputs,
       kernel_size=3,
       strides=strides,
       data_format=data_format)
-  inputs = batch_norm_relu(inputs, is_training_bn, data_format=data_format)
+  inputs = batch_norm_relu(
+      inputs,
+      is_training_bn,
+      data_format=data_format,
+      num_batch_norm_group=num_batch_norm_group)
 
   inputs = conv2d_fixed_padding(
       inputs=inputs,
@@ -192,7 +223,8 @@ def residual_block(inputs,
       is_training_bn,
       relu=False,
       init_zero=True,
-      data_format=data_format)
+      data_format=data_format,
+      num_batch_norm_group=num_batch_norm_group)
 
   return tf.nn.relu(inputs + shortcut)
 
@@ -202,7 +234,8 @@ def bottleneck_block(inputs,
                      is_training_bn,
                      strides,
                      use_projection=False,
-                     data_format='channels_last'):
+                     data_format='channels_last',
+                     num_batch_norm_group=None):
   """Bottleneck block variant for residual networks with BN after convolutions.
 
   Args:
@@ -218,6 +251,10 @@ def bottleneck_block(inputs,
         filters and the resolution.
     data_format: `str` either "channels_first" for `[batch, channels, height,
         width]` or "channels_last for `[batch, height, width, channels]`.
+    num_batch_norm_group: If positive, use tpu specifc batch norm implemenation
+      which calculates mean and variance accorss all the replicas. Number of
+      groups to normalize in the distributed batch normalization. Replicas will
+      evenly split into groups.
 
   Returns:
     The output `Tensor` of the block.
@@ -234,7 +271,11 @@ def bottleneck_block(inputs,
         strides=strides,
         data_format=data_format)
     shortcut = batch_norm_relu(
-        shortcut, is_training_bn, relu=False, data_format=data_format)
+        shortcut,
+        is_training_bn,
+        relu=False,
+        data_format=data_format,
+        num_batch_norm_group=num_batch_norm_group)
 
   inputs = conv2d_fixed_padding(
       inputs=inputs,
@@ -242,7 +283,11 @@ def bottleneck_block(inputs,
       kernel_size=1,
       strides=1,
       data_format=data_format)
-  inputs = batch_norm_relu(inputs, is_training_bn, data_format=data_format)
+  inputs = batch_norm_relu(
+      inputs,
+      is_training_bn,
+      data_format=data_format,
+      num_batch_norm_group=num_batch_norm_group)
 
   inputs = conv2d_fixed_padding(
       inputs=inputs,
@@ -250,7 +295,11 @@ def bottleneck_block(inputs,
       kernel_size=3,
       strides=strides,
       data_format=data_format)
-  inputs = batch_norm_relu(inputs, is_training_bn, data_format=data_format)
+  inputs = batch_norm_relu(
+      inputs,
+      is_training_bn,
+      data_format=data_format,
+      num_batch_norm_group=num_batch_norm_group)
 
   inputs = conv2d_fixed_padding(
       inputs=inputs,
@@ -263,7 +312,8 @@ def bottleneck_block(inputs,
       is_training_bn,
       relu=False,
       init_zero=True,
-      data_format=data_format)
+      data_format=data_format,
+      num_batch_norm_group=num_batch_norm_group)
 
   return tf.nn.relu(inputs + shortcut)
 
@@ -275,7 +325,8 @@ def block_group(inputs,
                 strides,
                 is_training_bn,
                 name,
-                data_format='channels_last'):
+                data_format='channels_last',
+                num_batch_norm_group=None):
   """Creates one group of blocks for the ResNet model.
 
   Args:
@@ -289,6 +340,10 @@ def block_group(inputs,
     name: `str`name for the Tensor output of the block layer.
     data_format: `str` either "channels_first" for `[batch, channels, height,
         width]` or "channels_last for `[batch, height, width, channels]`.
+    num_batch_norm_group: If positive, use tpu specifc batch norm implemenation
+      which calculates mean and variance accorss all the replicas. Number of
+      groups to normalize in the distributed batch normalization. Replicas will
+      evenly split into groups.
 
   Returns:
     The output `Tensor` of the block layer.
@@ -300,16 +355,25 @@ def block_group(inputs,
       is_training_bn,
       strides,
       use_projection=True,
-      data_format=data_format)
+      data_format=data_format,
+      num_batch_norm_group=num_batch_norm_group)
 
   for _ in range(1, blocks):
     inputs = block_fn(
-        inputs, filters, is_training_bn, 1, data_format=data_format)
+        inputs,
+        filters,
+        is_training_bn,
+        1,
+        data_format=data_format,
+        num_batch_norm_group=num_batch_norm_group)
 
   return tf.identity(inputs, name)
 
 
-def resnet_v1_generator(block_fn, layers, data_format='channels_last'):
+def resnet_v1_generator(block_fn,
+                        layers,
+                        data_format='channels_last',
+                        num_batch_norm_group=None):
   """Generator of ResNet v1 model with classification layers removed.
 
     Our actual ResNet network.  We return the output of c2, c3,c4,c5
@@ -324,10 +388,15 @@ def resnet_v1_generator(block_fn, layers, data_format='channels_last'):
       the same resolution.
     data_format: `str` either "channels_first" for `[batch, channels, height,
         width]` or "channels_last for `[batch, height, width, channels]`.
+    num_batch_norm_group: If positive, use tpu specifc batch norm implemenation
+      which calculates mean and variance accorss all the replicas. Number of
+      groups to normalize in the distributed batch normalization. Replicas will
+      evenly split into groups.
 
   Returns:
-    Model `function` that takes in `inputs` and `is_training` and returns the
-    output `Tensor` of the ResNet model.
+    Model `function` that takes in `inputs` and `is_training` and returns a
+    dictionary of tensors with level numbers as keys and bottleneck features
+    indexed by the level as values.
   """
   def model(inputs, is_training_bn=False):
     """Creation of the model graph."""
@@ -338,7 +407,11 @@ def resnet_v1_generator(block_fn, layers, data_format='channels_last'):
         strides=2,
         data_format=data_format)
     inputs = tf.identity(inputs, 'initial_conv')
-    inputs = batch_norm_relu(inputs, is_training_bn, data_format=data_format)
+    inputs = batch_norm_relu(
+        inputs,
+        is_training_bn,
+        data_format=data_format,
+        num_batch_norm_group=num_batch_norm_group)
 
     inputs = tf.layers.max_pooling2d(
         inputs=inputs,
@@ -356,7 +429,8 @@ def resnet_v1_generator(block_fn, layers, data_format='channels_last'):
         block_fn=block_fn,
         is_training_bn=is_training_bn,
         name='block_group1',
-        data_format=data_format)
+        data_format=data_format,
+        num_batch_norm_group=num_batch_norm_group)
     c3 = block_group(
         inputs=c2,
         filters=128,
@@ -365,7 +439,8 @@ def resnet_v1_generator(block_fn, layers, data_format='channels_last'):
         block_fn=block_fn,
         is_training_bn=is_training_bn,
         name='block_group2',
-        data_format=data_format)
+        data_format=data_format,
+        num_batch_norm_group=num_batch_norm_group)
     c4 = block_group(
         inputs=c3,
         filters=256,
@@ -374,7 +449,8 @@ def resnet_v1_generator(block_fn, layers, data_format='channels_last'):
         block_fn=block_fn,
         is_training_bn=is_training_bn,
         name='block_group3',
-        data_format=data_format)
+        data_format=data_format,
+        num_batch_norm_group=num_batch_norm_group)
     c5 = block_group(
         inputs=c4,
         filters=512,
@@ -383,13 +459,16 @@ def resnet_v1_generator(block_fn, layers, data_format='channels_last'):
         block_fn=block_fn,
         is_training_bn=is_training_bn,
         name='block_group4',
-        data_format=data_format)
-    return c2, c3, c4, c5
+        data_format=data_format,
+        num_batch_norm_group=num_batch_norm_group)
+    return {2: c2, 3: c3, 4: c4, 5: c5}
 
   return model
 
 
-def resnet_v1(resnet_depth, data_format='channels_last'):
+def resnet_v1(resnet_depth,
+              data_format='channels_last',
+              num_batch_norm_group=None):
   """Returns the ResNet model for a given size and number of output classes."""
   model_params = {
       18: {'block': residual_block, 'layers': [2, 2, 2, 2]},
@@ -405,4 +484,7 @@ def resnet_v1(resnet_depth, data_format='channels_last'):
 
   params = model_params[resnet_depth]
   return resnet_v1_generator(
-      params['block'], params['layers'], data_format)
+      params['block'],
+      params['layers'],
+      data_format,
+      num_batch_norm_group=num_batch_norm_group)

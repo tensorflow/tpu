@@ -66,6 +66,11 @@ def default_config():
       aspect_ratios=[(1.0, 1.0), (1.4, 0.7), (0.7, 1.4)],
       anchor_scale=8.0,
       resnet_depth=50,
+      # Number of groups to normalize in the distributed batch normalization.
+      # Replicas will evenly split into groups. If positive, use tpu specifc
+      # batch norm implemenation which calculates mean and variance accorss all
+      # the replicas.
+      num_batch_norm_group=-1,
       # is batchnorm training mode
       is_training_bn=False,
       # optimization
@@ -75,6 +80,8 @@ def default_config():
       rpn_box_loss_weight=1.0,
       fast_rcnn_box_loss_weight=1.0,
       mrcnn_weight_loss_mask=1.0,
+      # l2 regularization weight.
+      l2_weight_decay=1e-4,
       # ---------- Training configurations ----------
       train_batch_size=64,
       init_learning_rate=0.08,
@@ -96,12 +103,12 @@ def default_config():
       # across both training phases and different sizes of imported modules.
       # Refer value: 0.02, for 25M weights, yields clip norm 10.
       # Zero or negative number means no clipping.
-      global_gradient_clip_ratio=-1,
+      global_gradient_clip_ratio=-1.0,
       # Skips loading variables from the resnet checkpoint. It is used for
       # skipping nonexistent variables from the constructed graph. The list
       # of loaded variables is constructed from the scope 'resnetX', where 'X'
       # is depth of the resnet model. Supports regular expression.
-      skip_checkpoint_variables='/batch_normalization/beta$',
+      skip_checkpoint_variables='^NO_SKIP$',
       # Weight decay for LARS optimizer.
       lars_weight_decay=1e-4,
       # ---------- Eval configurations ----------

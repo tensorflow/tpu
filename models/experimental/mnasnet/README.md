@@ -171,6 +171,8 @@ MnasNet architectures (e.g. MnasNet-A1, MnasNet-B1) through decoding string
 representation of the network.
 * [`preprocessing.py`](preprocessing.py): Useful utilities for
   preprocessing and augmenting ImageNet data for MnasNet training.
+* [`mnasnet_example.ipynb`](mnasnet_example.ipynb): A colab example to load
+ MnasNet saved model files and use it to classify images.
 
 ## Additional notes
 
