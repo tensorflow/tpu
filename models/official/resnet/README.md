@@ -150,9 +150,17 @@ To train this model on Machine Learning Engine, you will need:
 * A GCP project with Cloud Machine Learning Engine enabled
 * A GCS bucket to store your training checkpoints (the "model directory") and for staging the training package
 * (Optional): The ImageNet training and validation data preprocessed into
-  TFRecord format, and stored in GCS.
+  TFRecord format, and stored in GCS. To convert your JPEG files to the required TFRecords format, see
+  https://github.com/tensorflow/tpu/blob/master/tools/datasets/jpeg_to_tf_record.py
 
-Run the following command **from the top level `models` folder**:
+Instructions:
+* Checkout the correct branch of this repository. For example, do 
+```
+git checkout r1.19
+```
+if you plan to use ```--runtime-version 1.9```
+* Change to **from the top level `models` folder**
+* Run the following gcloud command 
 
 ```
 GCS_BUCKET="gs://your-gcs-bucket"
