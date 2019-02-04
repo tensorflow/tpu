@@ -1,6 +1,7 @@
 # Cloud TPU reference model for DCGAN
 
 
+
 ## Running the model
 
 Assuming you have a version of CIFAR or MNIST converted to the tfrecord format located
@@ -26,6 +27,7 @@ python dcgan_main.py\
   --model_dir=gs://my-cloud-bucket/dcgan/mnist\
 ```
 
+
 ## Getting the data
 
 In case you don't yet have the data available in a bucket, follow the intructions
@@ -42,4 +44,4 @@ both downloads and converts CIFAR data into tfrecord format.
 For MNIST
 
 This [script](https://github.com/tensorflow/tensorflow/blob/master/tensorflow/examples/how_tos/reading_data/convert_to_records.py)
-converts MNIST data into tfrecord format.
+converts MNIST data into *tfrecord* format.
