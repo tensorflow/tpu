@@ -46,3 +46,5 @@ For MNIST
 
 This [script](https://github.com/tensorflow/tensorflow/blob/master/tensorflow/examples/how_tos/reading_data/convert_to_records.py)
 converts MNIST data into *tfrecord* format.
+
+Test CLA
