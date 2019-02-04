@@ -33,7 +33,8 @@ python dcgan_main.py\
 In case you don't yet have the data available in a bucket, follow the intructions
 below to download and convert CIFAR or MNIST datasets into tfrecord format.
 
-First, follow the instructions [here](https://cloud.google.com/storage/docs/creating-buckets) to create GCS buckets.
+First, follow the instructions [here](https://cloud.google.com/storage/docs/creating-buckets) to create GCS buckets. Once
+you have created buckets for model and data, follow the instructions below for downloading and converting the dataset of choice.
 
 For CIFAR
 
