@@ -12,7 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Feature Pyramid Network."""
+"""Feature Pyramid Network.
+
+Feature Pyramid Networks were proposed in:
+[1] Tsung-Yi Lin, Piotr Dollar, Ross Girshick, Kaiming He, Bharath Hariharan,
+    , and Serge Belongie
+    Feature Pyramid Networks for Object Detection. CVPR 2017.
+"""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -22,12 +28,10 @@ import tensorflow as tf
 
 import ops
 
-_RESNET_MAX_LEVEL = 5
-
 
 def fpn(feats_bottom_up,
         min_level=3,
-        max_level=7):  # pylint: disable=unused-argument
+        max_level=7):
   """Generates multiple scale feature pyramid (FPN).
 
   Args:
@@ -40,10 +44,13 @@ def fpn(feats_bottom_up,
     feats: a dictionary of tensor with level as keys and the generated FPN
       features as values.
   """
+  backbone_max_level = max(feats_bottom_up.keys())
+  upsample_max_level = (backbone_max_level if max_level > backbone_max_level
+                        else max_level)
   with tf.variable_scope('fpn'):
     # lateral connections
     feats_lateral = {}
-    for level in range(min_level, _RESNET_MAX_LEVEL + 1):
+    for level in range(min_level, upsample_max_level + 1):
       feats_lateral[level] = tf.layers.conv2d(
           feats_bottom_up[level],
           filters=256,
@@ -52,13 +59,13 @@ def fpn(feats_bottom_up,
           name='l%d' % level)
 
     # add top-down path
-    feats = {_RESNET_MAX_LEVEL: feats_lateral[_RESNET_MAX_LEVEL]}
-    for level in range(_RESNET_MAX_LEVEL - 1, min_level - 1, -1):
+    feats = {upsample_max_level: feats_lateral[upsample_max_level]}
+    for level in range(upsample_max_level - 1, min_level - 1, -1):
       feats[level] = ops.nearest_upsampling(
           feats[level + 1], 2) + feats_lateral[level]
 
     # add post-hoc 3x3 convolution kernel
-    for level in range(min_level, _RESNET_MAX_LEVEL + 1):
+    for level in range(min_level, upsample_max_level + 1):
       feats[level] = tf.layers.conv2d(
           feats[level],
           filters=256,
@@ -67,15 +74,22 @@ def fpn(feats_bottom_up,
           padding='same',
           name='post_hoc_d%d' % level)
 
-    # Use original FPN P6 level implementation from CVPR'17 FPN paper instead of
-    # coarse FPN levels introduced for RetinaNet.
-    # Reference: https://github.com/facebookresearch/Detectron/blob/master/detectron/modeling/FPN.py#L224  # pylint: disable=line-too-long
-    feats[6] = tf.layers.max_pooling2d(
-        inputs=feats[5],
-        pool_size=1,
-        strides=2,
-        padding='valid',
-        name='p6')
+    if max_level == upsample_max_level + 1:
+      feats[max_level] = tf.layers.max_pooling2d(
+          inputs=feats[max_level - 1],
+          pool_size=1,
+          strides=2,
+          padding='valid',
+          name='p%d' % level)
+    else:
+      for level in range(upsample_max_level + 1, max_level + 1):
+        feats[level] = tf.layers.conv2d(
+            feats[level - 1],
+            filters=256,
+            strides=(2, 2),
+            kernel_size=(3, 3),
+            padding='same',
+            name='p%d' % level)
 
   return feats
 

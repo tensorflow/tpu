@@ -624,10 +624,12 @@ def define_ncf_flags():
           "which will be faster but might need tuning for convergence."))
 
   flags.DEFINE_bool(
-      name="adam_sum_inside_sqrt", default=True, help=flags_core.help_wrap(
+      name="adam_sum_inside_sqrt",
+      default=True,
+      help=flags_core.help_wrap(
           "If True, Adam or lazy Adam updates on TPU embedding will be faster. "
           "For details, see "
-          "tensorflow/contrib/tpu/proto/optimization_parameters.proto."))
+          "tensorflow/core/protobuf/tpu/optimization_parameters.proto."))
 
 
 if __name__ == "__main__":

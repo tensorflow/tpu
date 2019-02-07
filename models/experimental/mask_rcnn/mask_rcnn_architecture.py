@@ -23,57 +23,12 @@ from __future__ import print_function
 
 import tensorflow as tf
 
-import anchors
+import box_utils
 import ops
 from object_detection import balanced_positive_negative_sampler
 
 
 _EPSILON = 1e-8
-_NMS_TILE_SIZE = 512
-
-
-def _bbox_overlap(boxes, gt_boxes):
-  """Calculates the overlap between proposal and ground truth boxes.
-
-  Some `gt_boxes` may have been padded.  The returned `iou` tensor for these
-  boxes will be -1.
-
-  Args:
-    boxes: a tensor with a shape of [batch_size, N, 4]. N is the number of
-      proposals before groundtruth assignment (e.g., rpn_post_nms_topn). The
-      last dimension is the pixel coordinates in [ymin, xmin, ymax, xmax] form.
-    gt_boxes: a tensor with a shape of [batch_size, MAX_NUM_INSTANCES, 4]. This
-      tensor might have paddings with a negative value.
-  Returns:
-    iou: a tensor with as a shape of [batch_size, N, MAX_NUM_INSTANCES].
-  """
-  with tf.name_scope('bbox_overlap'):
-    bb_y_min, bb_x_min, bb_y_max, bb_x_max = tf.split(
-        value=boxes, num_or_size_splits=4, axis=2)
-    gt_y_min, gt_x_min, gt_y_max, gt_x_max = tf.split(
-        value=gt_boxes, num_or_size_splits=4, axis=2)
-
-    # Calculates the intersection area.
-    i_xmin = tf.maximum(bb_x_min, tf.transpose(gt_x_min, [0, 2, 1]))
-    i_xmax = tf.minimum(bb_x_max, tf.transpose(gt_x_max, [0, 2, 1]))
-    i_ymin = tf.maximum(bb_y_min, tf.transpose(gt_y_min, [0, 2, 1]))
-    i_ymax = tf.minimum(bb_y_max, tf.transpose(gt_y_max, [0, 2, 1]))
-    i_area = tf.maximum((i_xmax - i_xmin), 0) * tf.maximum((i_ymax - i_ymin), 0)
-
-    # Calculates the union area.
-    bb_area = (bb_y_max - bb_y_min) * (bb_x_max - bb_x_min)
-    gt_area = (gt_y_max - gt_y_min) * (gt_x_max - gt_x_min)
-    # Adds a small epsilon to avoid divide-by-zero.
-    u_area = bb_area + tf.transpose(gt_area, [0, 2, 1]) - i_area + 1e-8
-
-    # Calculates IoU.
-    iou = i_area / u_area
-
-    # Fills -1 for padded ground truth boxes.
-    padding_mask = tf.less(i_xmin, tf.zeros_like(i_xmin))
-    iou = tf.where(padding_mask, -tf.ones_like(iou), iou)
-
-    return iou
 
 
 def _add_class_assignments(iou, scaled_gt_boxes, gt_labels):
@@ -123,7 +78,7 @@ def _add_class_assignments(iou, scaled_gt_boxes, gt_labels):
 def encode_box_targets(boxes, gt_boxes, gt_labels, bbox_reg_weights):
   """Encodes predicted boxes with respect to ground truth boxes."""
   with tf.name_scope('encode_box_targets'):
-    box_targets = anchors.batch_encode_box_targets_op(
+    box_targets = box_utils.batch_encode_box_targets_op(
         boxes, gt_boxes, bbox_reg_weights)
     # If a target is background, the encoded box target should be zeros.
     mask = tf.tile(
@@ -195,7 +150,7 @@ def proposal_label_op(boxes, gt_boxes, gt_labels, image_info,
     # The reference implementation intentionally includes ground truth boxes in
     # the proposals. see https://github.com/facebookresearch/Detectron/blob/master/detectron/datasets/json_dataset.py#L359.  # pylint: disable=line-too-long
     boxes = tf.concat([boxes, scaled_gt_boxes], axis=1)
-    iou = _bbox_overlap(boxes, scaled_gt_boxes)
+    iou = box_utils.bbox_overlap(boxes, scaled_gt_boxes)
 
     (pre_sample_box_targets, pre_sample_class_targets, max_overlap,
      proposal_to_label_map) = _add_class_assignments(
@@ -260,272 +215,6 @@ def proposal_label_op(boxes, gt_boxes, gt_labels, image_info,
         tf.gather(tf.reshape(proposal_to_label_map, [-1, 1]), samples_indices),
         [batch_size, -1])
   return sample_box_targets, class_targets, rois, sample_proposal_to_label_map
-
-
-def _top_k(scores, k, boxes_list):
-  """A wrapper that returns top-k scores and correponding boxes.
-
-  This functions selects the top-k scores and boxes as follows.
-
-  indices = argsort(scores)[:k]
-  scores = scores[indices]
-  outputs = []
-  for boxes in boxes_list:
-    outputs.append(boxes[indices, :])
-  return scores, outputs
-
-  Args:
-    scores: a tensor with a shape of [batch_size, N]. N is the number of scores.
-    k: an integer for selecting the top-k elements.
-    boxes_list: a list containing at least one element. Each element has a shape
-      of [batch_size, N, 4].
-  Returns:
-    scores: the selected top-k scores with a shape of [batch_size, k].
-    outputs: the list containing the corresponding boxes in the order of the
-      input `boxes_list`.
-  """
-  assert isinstance(boxes_list, list)
-  assert boxes_list
-
-  with tf.name_scope('top_k_wrapper'):
-    scores, top_k_indices = tf.nn.top_k(scores, k=k)
-    batch_size, _ = scores.get_shape().as_list()
-    outputs = []
-    for boxes in boxes_list:
-      boxes_index_offsets = tf.range(batch_size) * tf.shape(boxes)[1]
-      boxes_indices = tf.reshape(top_k_indices +
-                                 tf.expand_dims(boxes_index_offsets, 1), [-1])
-      boxes = tf.reshape(
-          tf.gather(tf.reshape(boxes, [-1, 4]), boxes_indices),
-          [batch_size, -1, 4])
-      outputs.append(boxes)
-    return scores, outputs
-
-
-def _filter_boxes(scores, boxes, rpn_min_size, image_info):
-  """Filters boxes whose height or width is smaller than rpn_min_size.
-
-  Reference: https://github.com/facebookresearch/Detectron/blob/master/detectron/ops/generate_proposals.py  # pylint: disable=line-too-long
-
-  Args:
-    scores: a tensor with a shape of [batch_size, N].
-    boxes: a tensor with a shape of [batch_size, N, 4]. The proposals
-      are in pixel coordinates.
-    rpn_min_size: a integer that represents the smallest length of the image
-      height or width.
-    image_info: a tensor of shape [batch_size, 5] where the three columns
-      encode the input image's [height, width, scale,
-      original_height, original_width]. `scale` is the scale
-      factor used to scale the network input size to the original image size.
-      See dataloader.DetectionInputProcessor for details.
-  Returns:
-    scores: a tensor with a shape of [batch_size, anchors]. Same shape and dtype
-      as input scores.
-    proposals: a tensor with a shape of [batch_size, anchors, 4]. Same shape and
-      dtype as input boxes.
-  """
-  with tf.name_scope('filter_boxes'):
-    y_min, x_min, y_max, x_max = tf.split(
-        value=boxes, num_or_size_splits=4, axis=2)
-    image_info = tf.cast(tf.expand_dims(image_info, axis=2), dtype=boxes.dtype)
-    # The following tensors have a shape of [batch_size, 1, 1].
-    image_height = image_info[:, 0:1, :]
-    image_width = image_info[:, 1:2, :]
-    image_scale = image_info[:, 2:3, :]
-    min_size = tf.cast(tf.maximum(rpn_min_size, 1), dtype=boxes.dtype)
-
-    # Proposal center is computed relative to the scaled input image.
-    hs = y_max - y_min + 1
-    ws = x_max - x_min + 1
-    y_ctr = y_min + hs / 2
-    x_ctr = x_min + ws / 2
-    height_mask = tf.greater_equal(hs, min_size * image_scale)
-    width_mask = tf.greater_equal(ws, min_size * image_scale)
-    center_mask = tf.logical_and(
-        tf.less(y_ctr, image_height), tf.less(x_ctr, image_width))
-    mask = tf.logical_and(tf.logical_and(height_mask, width_mask),
-                          center_mask)[:, :, 0]
-    scores = tf.where(mask, scores, tf.zeros_like(scores))
-    boxes = tf.cast(tf.expand_dims(mask, 2), boxes.dtype) * boxes
-
-  return scores, boxes
-
-
-def _self_suppression(iou, _, iou_sum):
-  batch_size = tf.shape(iou)[0]
-  can_suppress_others = tf.cast(
-      tf.reshape(tf.reduce_max(iou, 1) <= 0.5, [batch_size, -1, 1]), iou.dtype)
-  iou_suppressed = tf.reshape(
-      tf.cast(tf.reduce_max(can_suppress_others * iou, 1) <= 0.5, iou.dtype),
-      [batch_size, -1, 1]) * iou
-  iou_sum_new = tf.reduce_sum(iou_suppressed, [1, 2])
-  return [
-      iou_suppressed,
-      tf.reduce_any(iou_sum - iou_sum_new > 0.5), iou_sum_new
-  ]
-
-
-def _cross_suppression(boxes, box_slice, iou_threshold, inner_idx):
-  batch_size = tf.shape(boxes)[0]
-  new_slice = tf.slice(boxes, [0, inner_idx * _NMS_TILE_SIZE, 0],
-                       [batch_size, _NMS_TILE_SIZE, 4])
-  iou = _bbox_overlap(new_slice, box_slice)
-  ret_slice = tf.expand_dims(
-      tf.cast(tf.reduce_all(iou < iou_threshold, [1]), box_slice.dtype),
-      2) * box_slice
-  return boxes, ret_slice, iou_threshold, inner_idx + 1
-
-
-def _suppression_loop_body(boxes, iou_threshold, output_size, idx):
-  """Process boxes in the range [idx*_NMS_TILE_SIZE, (idx+1)*_NMS_TILE_SIZE).
-
-  Args:
-    boxes: a tensor with a shape of [batch_size, anchors, 4].
-    iou_threshold: a float representing the threshold for deciding whether boxes
-      overlap too much with respect to IOU.
-    output_size: an int32 tensor of size [batch_size]. Representing the number
-      of selected boxes for each batch.
-    idx: an integer scalar representing induction variable.
-
-  Returns:
-    boxes: updated boxes.
-    iou_threshold: pass down iou_threshold to the next iteration.
-    output_size: the updated output_size.
-    idx: the updated induction variable.
-  """
-  num_tiles = tf.shape(boxes)[1] // _NMS_TILE_SIZE
-  batch_size = tf.shape(boxes)[0]
-
-  # Iterates over tiles that can possibly suppress the current tile.
-  box_slice = tf.slice(boxes, [0, idx * _NMS_TILE_SIZE, 0],
-                       [batch_size, _NMS_TILE_SIZE, 4])
-  _, box_slice, _, _ = tf.while_loop(
-      lambda _boxes, _box_slice, _threshold, inner_idx: inner_idx < idx,
-      _cross_suppression, [boxes, box_slice, iou_threshold,
-                           tf.constant(0)])
-
-  # Iterates over the current tile to compute self-suppression.
-  iou = _bbox_overlap(box_slice, box_slice)
-  mask = tf.expand_dims(
-      tf.reshape(tf.range(_NMS_TILE_SIZE), [1, -1]) > tf.reshape(
-          tf.range(_NMS_TILE_SIZE), [-1, 1]), 0)
-  iou *= tf.cast(tf.logical_and(mask, iou >= iou_threshold), iou.dtype)
-  suppressed_iou, _, _ = tf.while_loop(
-      lambda _iou, loop_condition, _iou_sum: loop_condition, _self_suppression,
-      [iou, tf.constant(True),
-       tf.reduce_sum(iou, [1, 2])])
-  suppressed_box = tf.reduce_sum(suppressed_iou, 1) > 0
-  box_slice *= tf.expand_dims(1.0 - tf.cast(suppressed_box, box_slice.dtype), 2)
-
-  # Uses box_slice to update the input boxes.
-  mask = tf.reshape(
-      tf.cast(tf.equal(tf.range(num_tiles), idx), boxes.dtype), [1, -1, 1, 1])
-  boxes = tf.tile(tf.expand_dims(
-      box_slice, [1]), [1, num_tiles, 1, 1]) * mask + tf.reshape(
-          boxes, [batch_size, num_tiles, _NMS_TILE_SIZE, 4]) * (1 - mask)
-  boxes = tf.reshape(boxes, [batch_size, -1, 4])
-
-  # Updates output_size.
-  output_size += tf.reduce_sum(
-      tf.cast(tf.reduce_any(box_slice > 0, [2]), tf.int32), [1])
-  return boxes, iou_threshold, output_size, idx + 1
-
-
-def _non_max_suppression_padded(
-    scores, boxes, max_output_size, iou_threshold, level):
-  """A wrapper that handles non-maximum suppression.
-
-  Assumption:
-    * The boxes are sorted by scores unless the box is a dot (all coordinates
-      are zero).
-    * Boxes with higher scores can be used to suppress boxes with lower scores.
-
-  The overal design of the algorithm is to handle boxes tile-by-tile:
-
-  boxes = boxes.pad_to_multiply_of(tile_size)
-  num_tiles = len(boxes) // tile_size
-  output_boxes = []
-  for i in range(num_tiles):
-    box_tile = boxes[i*tile_size : (i+1)*tile_size]
-    for j in range(i - 1):
-      suppressing_tile = boxes[j*tile_size : (j+1)*tile_size]
-      iou = _bbox_overlap(box_tile, suppressing_tile)
-      # if the box is suppressed in iou, clear it to a dot
-      box_tile *= _update_boxes(iou)
-    # Iteratively handle the diagnal tile.
-    iou = _box_overlap(box_tile, box_tile)
-    iou_changed = True
-    while iou_changed:
-      # boxes that are not suppressed by anything else
-      suppressing_boxes = _get_suppressing_boxes(iou)
-      # boxes that are suppressed by suppressing_boxes
-      suppressed_boxes = _get_suppressed_boxes(iou, suppressing_boxes)
-      # clear iou to 0 for boxes that are suppressed, as they cannot be used
-      # to suppress other boxes any more
-      new_iou = _clear_iou(iou, suppressed_boxes)
-      iou_changed = (new_iou != iou)
-      iou = new_iou
-    # remaining boxes that can still suppress others, are selected boxes.
-    output_boxes.append(_get_suppressing_boxes(iou))
-    if len(output_boxes) >= max_output_size:
-      break
-
-  Args:
-    scores: a tensor with a shape of [batch_size, anchors].
-    boxes: a tensor with a shape of [batch_size, anchors, 4].
-    max_output_size: a scalar integer `Tensor` representing the maximum number
-      of boxes to be selected by non max suppression.
-    iou_threshold: a float representing the threshold for deciding whether boxes
-      overlap too much with respect to IOU.
-    level: a integer for the level that the function operates on.
-  Returns:
-    nms_scores: a tensor with a shape of [batch_size, anchors]. It has same
-      dtype as input scores.
-    nms_proposals: a tensor with a shape of [batch_size, anchors, 4]. It has
-      same dtype as input boxes.
-  """
-  with tf.name_scope('nms_l%d' % level):
-    batch_size = tf.shape(boxes)[0]
-    num_boxes = tf.shape(boxes)[1]
-    pad = tf.cast(
-        tf.ceil(tf.cast(num_boxes, tf.float32) / _NMS_TILE_SIZE),
-        tf.int32) * _NMS_TILE_SIZE - num_boxes
-    boxes = tf.pad(tf.cast(boxes, tf.float32), [[0, 0], [0, pad], [0, 0]])
-    scores = tf.pad(tf.cast(scores, tf.float32), [[0, 0], [0, pad]])
-    num_boxes += pad
-
-    def _loop_cond(unused_boxes, unused_threshold, output_size, idx):
-      return tf.logical_and(
-          tf.reduce_min(output_size) < max_output_size,
-          idx < num_boxes // _NMS_TILE_SIZE)
-
-    selected_boxes, _, output_size, _ = tf.while_loop(
-        _loop_cond, _suppression_loop_body, [
-            boxes, iou_threshold,
-            tf.zeros([batch_size], tf.int32),
-            tf.constant(0)
-        ])
-    idx = num_boxes - tf.cast(
-        tf.nn.top_k(
-            tf.cast(tf.reduce_any(selected_boxes > 0, [2]), tf.int32) *
-            tf.expand_dims(tf.range(num_boxes, 0, -1), 0), max_output_size)[0],
-        tf.int32)
-    idx = tf.minimum(idx, num_boxes - 1)
-    idx = tf.reshape(
-        idx + tf.reshape(tf.range(batch_size) * num_boxes, [-1, 1]), [-1])
-    boxes = tf.reshape(
-        tf.gather(tf.reshape(boxes, [-1, 4]), idx),
-        [batch_size, max_output_size, 4])
-    boxes = boxes * tf.cast(
-        tf.reshape(tf.range(max_output_size), [1, -1, 1]) < tf.reshape(
-            output_size, [-1, 1, 1]), boxes.dtype)
-    scores = tf.reshape(
-        tf.gather(tf.reshape(scores, [-1, 1]), idx),
-        [batch_size, max_output_size])
-    scores = scores * tf.cast(
-        tf.reshape(tf.range(max_output_size), [1, -1]) < tf.reshape(
-            output_size, [-1, 1]), scores.dtype)
-    return scores, boxes
 
 
 def _proposal_op_per_level(scores, boxes, anchor_boxes, image_info,
@@ -593,20 +282,21 @@ def _proposal_op_per_level(scores, boxes, anchor_boxes, image_info,
     topk_limit = (h * w * num_anchors if h * w * num_anchors < rpn_pre_nms_topn
                   else rpn_pre_nms_topn)
     anchor_boxes = tf.reshape(anchor_boxes, [batch_size, -1, 4])
-    scores, boxes_list = _top_k(scores, k=topk_limit,
-                                boxes_list=[boxes, anchor_boxes])
+    scores, boxes_list = box_utils.top_k(
+        scores, k=topk_limit, boxes_list=[boxes, anchor_boxes])
     boxes = boxes_list[0]
     anchor_boxes = boxes_list[1]
 
     # Transforms anchors into proposals via bbox transformations.
-    boxes = anchors.batch_decode_box_outputs_op(anchor_boxes, boxes)
+    boxes = box_utils.batch_decode_box_outputs_op(anchor_boxes, boxes)
 
     # 2. clip proposals to image (may result in proposals with zero area
     # that will be removed in the next step)
-    boxes = anchors.clip_boxes(boxes, image_info[:, :2])
+    boxes = box_utils.clip_boxes(boxes, image_info[:, :2])
 
     # 3. remove predicted boxes with either height or width < min_size
-    scores, boxes = _filter_boxes(scores, boxes, rpn_min_size, image_info)
+    scores, boxes = box_utils.filter_boxes(
+        scores, boxes, rpn_min_size, image_info)
 
     # 6. apply loose nms (e.g. threshold = 0.7)
     # 7. take after_nms_topN (e.g. 300)
@@ -614,11 +304,12 @@ def _proposal_op_per_level(scores, boxes, anchor_boxes, image_info,
     post_nms_topk_limit = (topk_limit if topk_limit < rpn_post_nms_topn else
                            rpn_post_nms_topn)
     if rpn_nms_threshold > 0:
-      scores, boxes = _non_max_suppression_padded(
+      scores, boxes = box_utils.sorted_non_max_suppression_padded(
           scores, boxes, max_output_size=post_nms_topk_limit,
-          iou_threshold=rpn_nms_threshold, level=level)
+          iou_threshold=rpn_nms_threshold)
 
-    scores, boxes = _top_k(scores, k=post_nms_topk_limit, boxes_list=[boxes])
+    scores, boxes = box_utils.top_k(
+        scores, k=post_nms_topk_limit, boxes_list=[boxes])
     boxes = boxes[0]
     return scores, boxes
 
@@ -696,8 +387,8 @@ def proposal_op(scores_outputs, box_outputs, all_anchors, image_info,
           post_nms_num_anchors if post_nms_num_anchors < rpn_post_nms_topn
           else rpn_post_nms_topn)
 
-      top_k_scores, top_k_rois = _top_k(scores, k=post_nms_topk_limit,
-                                        boxes_list=[rois])
+      top_k_scores, top_k_rois = box_utils.top_k(
+          scores, k=post_nms_topk_limit, boxes_list=[rois])
       top_k_rois = top_k_rois[0]
     top_k_scores = tf.stop_gradient(top_k_scores)
     top_k_rois = tf.stop_gradient(top_k_rois)
@@ -817,3 +508,126 @@ def get_mask_targets(fg_boxes, fg_proposal_to_label_map, fg_box_targets,
     # prevents the flow of gradient to box RoIs.
     features_per_box = tf.stop_gradient(features_per_box)
   return features_per_box
+
+
+def generate_detections_per_image_op(
+    cls_outputs, box_outputs, anchor_boxes, image_id, image_info,
+    num_detections=100, pre_nms_num_detections=1000, nms_threshold=0.3,
+    bbox_reg_weights=(10., 10., 5., 5.)):
+  """Generates detections with model outputs and anchors.
+
+  Args:
+    cls_outputs: a Tensor with shape [N, num_classes], which stacks class
+      logit outputs on all feature levels. The N is the number of total anchors
+      on all levels. The num_classes is the number of classes predicted by the
+      model. Note that the cls_outputs should be the output of softmax().
+    box_outputs: a Tensor with shape [N, 4] or [N, num_classes*4], which stacks
+      box regression outputs on all feature levels. The N is the number of total
+      anchors on all levels. The tensor shape is [N, num_classes*4] when class
+      specific box regression is used.
+    anchor_boxes: a Tensor with shape [N, 4], which stacks anchors on all
+      feature levels. The N is the number of total anchors on all levels.
+    image_id: an integer number to specify the image id.
+    image_info: a tensor of shape [5] which encodes the input image's [height,
+      width, scale, original_height, original_width]
+    num_detections: Number of detections after NMS.
+    pre_nms_num_detections: Number of candidates before NMS.
+    nms_threshold: a float number to specify the threshold of NMS.
+    bbox_reg_weights: a list of 4 float scalars, which are default weights on
+      (dx, dy, dw, dh) for normalizing bbox regression targets.
+  Returns:
+    detections: detection results in a tensor with each row representing
+      [image_id, ymin, xmin, ymax, xmax, score, class]
+  """
+  num_boxes, num_classes = cls_outputs.get_shape().as_list()
+  _, num_box_predictions = box_outputs.get_shape().as_list()
+  use_class_specific_box_regression = (num_classes == num_box_predictions / 4)
+
+  # Remove background class scores.
+  cls_outputs = cls_outputs[:, 1:num_classes]
+  top_k_scores, top_k_indices_with_classes = tf.nn.top_k(
+      tf.reshape(cls_outputs, [-1]),
+      k=pre_nms_num_detections,
+      sorted=False)
+  classes = tf.mod(top_k_indices_with_classes, num_classes - 1)
+  top_k_indices = tf.floordiv(top_k_indices_with_classes, num_classes - 1)
+
+  anchor_boxes = tf.gather(anchor_boxes, top_k_indices)
+  if use_class_specific_box_regression:
+    box_outputs = tf.reshape(
+        box_outputs, [num_boxes, num_classes, 4])[:, 1:num_classes, :]
+    class_indices = classes
+  else:
+    box_outputs = tf.reshape(box_outputs, [num_boxes, 1, 4])
+    class_indices = tf.zeros_like(top_k_indices)
+  box_outputs = tf.gather_nd(box_outputs,
+                             tf.stack([top_k_indices, class_indices], axis=1))
+
+  # apply bounding box regression to anchors
+  boxes = box_utils.batch_decode_box_outputs_op(
+      tf.expand_dims(anchor_boxes, axis=0),
+      tf.expand_dims(box_outputs, axis=0),
+      bbox_reg_weights)[0]
+  boxes = box_utils.clip_boxes(
+      tf.expand_dims(boxes, axis=0),
+      tf.expand_dims(image_info[:2], axis=0))[0]
+
+  list_of_all_boxes = []
+  list_of_all_scores = []
+  list_of_all_classes = []
+  # Skip background class.
+  for class_i in range(num_classes):
+    # Compute bitmask for the given classes.
+    class_i_bitmask = tf.cast(tf.equal(classes, class_i), top_k_scores.dtype)
+    # This works because score is in [0, 1].
+    class_i_scores = top_k_scores * class_i_bitmask
+    # The TPU and CPU have different behaviors for
+    # tf.image.non_max_suppression_padded (b/116754376).
+    (class_i_post_nms_indices,
+     class_i_nms_num_valid) = tf.image.non_max_suppression_padded(
+         tf.to_float(boxes),
+         tf.to_float(class_i_scores),
+         num_detections,
+         iou_threshold=nms_threshold,
+         score_threshold=0.05,
+         pad_to_max_output_size=True,
+         name='nms_detections_' + str(class_i))
+    class_i_post_nms_boxes = tf.gather(boxes, class_i_post_nms_indices)
+    class_i_post_nms_scores = tf.gather(class_i_scores,
+                                        class_i_post_nms_indices)
+    mask = tf.less(tf.range(num_detections), [class_i_nms_num_valid])
+    class_i_post_nms_scores = tf.where(
+        mask, class_i_post_nms_scores, tf.zeros_like(class_i_post_nms_scores))
+    class_i_classes = tf.fill(tf.shape(class_i_post_nms_scores), class_i+1)
+    list_of_all_boxes.append(class_i_post_nms_boxes)
+    list_of_all_scores.append(class_i_post_nms_scores)
+    list_of_all_classes.append(class_i_classes)
+
+  post_nms_boxes = tf.concat(list_of_all_boxes, axis=0)
+  post_nms_scores = tf.concat(list_of_all_scores, axis=0)
+  post_nms_classes = tf.concat(list_of_all_classes, axis=0)
+
+  # sort all results.
+  post_nms_scores, sorted_indices = tf.nn.top_k(
+      tf.to_float(post_nms_scores),
+      k=num_detections,
+      sorted=True)
+
+  post_nms_boxes = tf.gather(post_nms_boxes, sorted_indices)
+  post_nms_classes = tf.gather(post_nms_classes, sorted_indices)
+
+  if isinstance(image_id, int):
+    image_id = tf.constant(image_id)
+  image_id = tf.reshape(image_id, [])
+  detections_result = tf.stack(
+      [
+          tf.to_float(tf.fill(tf.shape(post_nms_scores), image_id)),
+          post_nms_boxes[:, 0],
+          post_nms_boxes[:, 1],
+          post_nms_boxes[:, 2],
+          post_nms_boxes[:, 3],
+          post_nms_scores,
+          tf.to_float(post_nms_classes),
+      ],
+      axis=1)
+  return detections_result
