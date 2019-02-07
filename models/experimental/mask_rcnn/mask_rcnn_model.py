@@ -189,7 +189,7 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
       softmax_class_outputs = tf.nn.softmax(class_outputs)
       for i in range(batch_size):
         detections.append(
-            anchors.generate_detections_per_image_op(
+            mask_rcnn_architecture.generate_detections_per_image_op(
                 softmax_class_outputs[i], box_outputs[i], rpn_box_rois[i],
                 features['source_ids'][i], features['image_info'][i],
                 params['test_detections_per_image'],
@@ -320,7 +320,8 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
   host_call = None
   if mode == tf.estimator.ModeKeys.TRAIN:
     optimizer = create_optimizer(learning_rate, params)
-    optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
+    if params['use_tpu']:
+      optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
 
     if not params['resnet_checkpoint']:
       scaffold_fn = None

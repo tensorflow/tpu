@@ -200,7 +200,7 @@ def main(unused_argv):
       eval_distribute=eval_distribution,
       save_checkpoints_steps=steps_per_eval,
       save_checkpoints_secs=None,
-      keep_checkpoint_max=1000)
+      keep_checkpoint_max=10)
 
   resnet_estimator = tf.estimator.Estimator(
       model_fn=model_fn, config=config)

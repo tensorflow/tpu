@@ -174,10 +174,7 @@ def main(unused_argv):
   logging.info('Use TPU at %s', FLAGS.tpu if FLAGS.tpu is not None else 'local')
   resolver = tf.contrib.cluster_resolver.TPUClusterResolver(tpu=FLAGS.tpu)
   tf.contrib.distribute.initialize_tpu_system(resolver)
-  # TODO(b/120613626): Use default cosntructor once the bug generating Nan loss
-  # is fixed.
-  strategy = tf.contrib.distribute.TPUStrategy(
-      resolver, _disable_training_loop_on_host=True)
+  strategy = tf.contrib.distribute.TPUStrategy(resolver)
 
   logging.info('Use bfloat16: %s.', USE_BFLOAT16)
   logging.info('Use global batch size: %s.', batch_size)
