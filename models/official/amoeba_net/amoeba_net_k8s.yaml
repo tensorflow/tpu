@@ -32,7 +32,7 @@ spec:
         image: gcr.io/tensorflow/tpu-models:r1.11
         command:
           - python
-          - /tensorflow_tpu_models/models/experimental/amoeba_net/amoeba_net.py
+          - /tensorflow_tpu_models/models/official/amoeba_net/amoeba_net.py
           - --data_dir=$(DATA_BUCKET)
           - --model_dir=$(MODEL_BUCKET)
         env:
