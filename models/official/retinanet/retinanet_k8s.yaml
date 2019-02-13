@@ -35,6 +35,7 @@ spec:
           - /bin/sh
           - -c
           - >
+            DEBIAN_FRONTEND=noninteractive apt-get update &&
             DEBIAN_FRONTEND=noninteractive apt-get install -y python-dev python-tk &&
             pip install Cython matplotlib &&
             pip install 'git+https://github.com/cocodataset/cocoapi#egg=pycocotools&subdirectory=PythonAPI' &&
