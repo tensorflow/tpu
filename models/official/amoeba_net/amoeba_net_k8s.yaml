@@ -8,6 +8,7 @@
 # [Instructions]
 #   1. Follow the instructions on https://cloud.google.com/tpu/docs/kubernetes-engine-setup
 #      to create a Kubernetes Engine cluster.
+#      Note: Use a base machine type with more memory than the default n1-standard-1.
 #   2. Change the environment variable MODEL_BUCKET in the Job spec to the
 #      Google Cloud Storage location where you want to store the output model.
 #   3. Run `kubectl create -f amoeba_net_k8s.yaml`.
