@@ -164,8 +164,12 @@ class InstanceSegmentationInputProcessor(InputProcessor):
 
   def random_horizontal_flip(self):
     """Randomly flip input image and bounding boxes."""
-    self._image, self._boxes, self._masks = preprocessor.random_horizontal_flip(
+    results = preprocessor.random_horizontal_flip(
         self._image, boxes=self._boxes, masks=self._masks)
+    self._image = results[0]
+    self._boxes = results[1]
+    if self._masks is not None:
+      self._masks = results[2]
 
   def clip_boxes(self, boxes):
     """Clip boxes to fit in an image."""
@@ -190,7 +194,8 @@ class InstanceSegmentationInputProcessor(InputProcessor):
     indices = tf.where(tf.not_equal(tf.reduce_sum(boxes, axis=1), 0))
     boxes = tf.gather_nd(boxes, indices)
     classes = tf.gather_nd(self._classes, indices)
-    self._masks = tf.gather_nd(self._masks, indices)
+    if self._masks is not None:
+      self._masks = tf.gather_nd(self._masks, indices)
     return boxes, classes
 
   def resize_and_crop_masks(self,
@@ -267,12 +272,13 @@ class InputReader(object):
   """Input reader for dataset."""
 
   def __init__(self, file_pattern, mode=tf.estimator.ModeKeys.TRAIN,
-               num_examples=0, use_fake_data=False):
+               num_examples=0, use_fake_data=False, use_instance_mask=False):
     self._file_pattern = file_pattern
     self._max_num_instances = MAX_NUM_INSTANCES
     self._mode = mode
     self._num_examples = num_examples
     self._use_fake_data = use_fake_data
+    self._use_instance_mask = use_instance_mask
 
   def __call__(self, params):
     image_size = (params['image_size'], params['image_size'])
@@ -285,7 +291,7 @@ class InputReader(object):
         params['rpn_fg_fraction'])
 
     example_decoder = tf_example_decoder.TfExampleDecoder(
-        use_instance_mask=True)
+        use_instance_mask=self._use_instance_mask)
 
     def _dataset_parser(value):
       """Parse data to a fixed dimension input image and learning targets.
@@ -346,7 +352,9 @@ class InputReader(object):
                   'source_ids': source_id}
 
         elif self._mode == tf.estimator.ModeKeys.TRAIN:
-          instance_masks = data['groundtruth_instance_masks']
+          instance_masks = None
+          if self._use_instance_mask:
+            instance_masks = data['groundtruth_instance_masks']
           boxes = data['groundtruth_boxes']
           classes = data['groundtruth_classes']
           classes = tf.reshape(tf.cast(classes, dtype=tf.float32), [-1, 1])
@@ -358,7 +366,8 @@ class InputReader(object):
             indices = tf.where(tf.logical_not(data['groundtruth_is_crowd']))
             classes = tf.gather_nd(classes, indices)
             boxes = tf.gather_nd(boxes, indices)
-            instance_masks = tf.gather_nd(instance_masks, indices)
+            if self._use_instance_mask:
+              instance_masks = tf.gather_nd(instance_masks, indices)
 
           input_processor = InstanceSegmentationInputProcessor(
               image, image_size, boxes, classes, instance_masks)
@@ -371,9 +380,10 @@ class InputReader(object):
           image = input_processor.resize_and_crop_image()
 
           boxes, classes = input_processor.resize_and_crop_boxes()
-          instance_masks = input_processor.resize_and_crop_masks()
-          cropped_gt_masks = input_processor.crop_gt_masks(
-              instance_masks, boxes, params['gt_mask_size'], image_size)
+          if self._use_instance_mask:
+            instance_masks = input_processor.resize_and_crop_masks()
+            cropped_gt_masks = input_processor.crop_gt_masks(
+                instance_masks, boxes, params['gt_mask_size'], image_size)
 
           # Assign anchors.
           score_targets, box_targets = anchor_labeler.label_anchors(
@@ -384,16 +394,19 @@ class InputReader(object):
           boxes *= image_info[2]
           boxes = pad_to_fixed_size(boxes, -1, [self._max_num_instances, 4])
           classes = pad_to_fixed_size(classes, -1, [self._max_num_instances, 1])
+
           # Pads cropped_gt_masks.
-          cropped_gt_masks = tf.reshape(
-              cropped_gt_masks, [self._max_num_instances, -1])
-          cropped_gt_masks = pad_to_fixed_size(
-              cropped_gt_masks, -1,
-              [self._max_num_instances, (params['gt_mask_size'] + 4) ** 2])
-          cropped_gt_masks = tf.reshape(
-              cropped_gt_masks,
-              [self._max_num_instances, params['gt_mask_size'] + 4,
-               params['gt_mask_size'] + 4])
+          if self._use_instance_mask:
+            cropped_gt_masks = tf.reshape(
+                cropped_gt_masks, [self._max_num_instances, -1])
+            cropped_gt_masks = pad_to_fixed_size(
+                cropped_gt_masks, -1,
+                [self._max_num_instances, (params['gt_mask_size'] + 4) ** 2])
+            cropped_gt_masks = tf.reshape(
+                cropped_gt_masks,
+                [self._max_num_instances, params['gt_mask_size'] + 4,
+                 params['gt_mask_size'] + 4])
+
           if params['use_bfloat16']:
             image = tf.cast(image, dtype=tf.bfloat16)
 
@@ -407,7 +420,8 @@ class InputReader(object):
             labels['box_targets_%d' % level] = box_targets[level]
           labels['gt_boxes'] = boxes
           labels['gt_classes'] = classes
-          labels['cropped_gt_masks'] = cropped_gt_masks
+          if self._use_instance_mask:
+            labels['cropped_gt_masks'] = cropped_gt_masks
           return (features, labels)
 
     batch_size = params['batch_size'] if 'batch_size' in params else 1
@@ -482,25 +496,37 @@ def serving_input_fn(batch_size, image_size):
     source_id = tf.constant(-1., dtype=tf.float32)
     return img, img_info, source_id
 
-  image_bytes_list = tf.placeholder(shape=[batch_size], dtype=tf.string)
-  decoded_images = tf.map_fn(
-      _decode_image, image_bytes_list, back_prop=False, dtype=tf.float32)
-  images, image_info, source_ids = tf.map_fn(
-      _preprocess_image,
-      decoded_images,
-      back_prop=False,
-      dtype=(tf.float32, tf.float32, tf.float32))
+  if batch_size == 1:
+    image_bytes = tf.placeholder(dtype=tf.string, shape=[])
+    decoded_image = _decode_image(image_bytes)
+    image, image_info, source_id = _preprocess_image(decoded_image)
+    images = tf.expand_dims(image, axis=0)
+    images_info = tf.expand_dims(image_info, axis=0)
+    source_ids = tf.expand_dims(source_id, axis=0)
+  else:
+    image_bytes_list = tf.placeholder(dtype=tf.string, shape=[batch_size])
+    decoded_images = tf.map_fn(
+        _decode_image, image_bytes_list, back_prop=False, dtype=tf.float32)
+    images, images_info, source_ids = tf.map_fn(
+        _preprocess_image,
+        decoded_images,
+        back_prop=False,
+        dtype=(tf.float32, tf.float32, tf.float32))
 
   images.set_shape([batch_size, image_size, image_size, 3])
-  image_info.set_shape([batch_size, 5])
+  images_info.set_shape([batch_size, 5])
   source_ids.set_shape([batch_size])
+
+  images = tf.identity(images, 'Image')
+  images_info = tf.identity(images_info, 'ImageInfo')
 
   return tf.estimator.export.ServingInputReceiver(
       features={
           'images': images,
-          'image_info': image_info,
+          'image_info': images_info,
           'source_ids': source_ids,
       },
       receiver_tensors={
-          'image_bytes': image_bytes_list
+          'image_bytes': (image_bytes if batch_size == 1
+                          else image_bytes_list),
       })

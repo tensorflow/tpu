@@ -543,18 +543,14 @@ def export(est, export_dir, post_quantize=True):
     raise ValueError('The export directory path is not specified.')
   # The guide to serve a exported TensorFlow model is at:
   #    https://www.tensorflow.org/serving/serving_basic
-  def lite_image_serving_input_fn():
-    """serving input fn for raw images."""
-    input_shape = [1, FLAGS.input_image_size, FLAGS.input_image_size, 3]
-    images = tf.placeholder(shape=input_shape, dtype=tf.float32)
-    return tf.estimator.export.ServingInputReceiver(images, {'images': images})
+  image_serving_input_fn = imagenet_input.build_image_serving_input_fn(
+      FLAGS.input_image_size)
 
   tf.logging.info('Starting to export model.')
-  est.export_saved_model(
+  subfolder = est.export_saved_model(
       export_dir_base=export_dir,
-      serving_input_receiver_fn=lite_image_serving_input_fn)
+      serving_input_receiver_fn=image_serving_input_fn)
 
-  subfolder = sorted(tf.gfile.ListDirectory(export_dir), reverse=True)[0]
   tf.logging.info('Starting to export TFLite.')
   converter = tf.lite.TFLiteConverter.from_saved_model(
       os.path.join(export_dir, subfolder),

@@ -72,51 +72,6 @@ def bbox_overlap(boxes, gt_boxes):
     return iou
 
 
-def clip_boxes(boxes, image_shapes):
-  """Clips boxes to image boundaries.
-
-  Reference: https://github.com/facebookresearch/Detectron/blob/master/detectron/utils/boxes.py#L132  # pylint: disable=line-too-long
-  Args:
-    boxes: a tensor with a shape [batch_size, N, 4].
-    image_shapes: a tensor with a shape of [batch_size, 2]; the last dimension
-      represents [height, width].
-  Returns:
-    clipped_boxes: the clipped boxes. Same shape and dtype as input boxes.
-  Raises:
-    ValueError: If boxes is not a rank-3 tensor or the last dimension of
-      boxes is not 4.
-  """
-  if boxes.shape.ndims != 3:
-    raise ValueError('boxes must be of rank 3.')
-  if boxes.shape[2] != 4:
-    raise ValueError(
-        'boxes.shape[1] is {:d}, but must be divisible by 4.'.format(
-            boxes.shape[1])
-    )
-
-  with tf.name_scope('clip_boxes'):
-    y_min, x_min, y_max, x_max = tf.split(
-        value=boxes, num_or_size_splits=4, axis=2)
-    # Manipulates the minimum and maximum so that type and shape match.
-    image_shapes = tf.cast(
-        tf.expand_dims(image_shapes, axis=2), dtype=boxes.dtype)
-    # The following tensors have a shape of [batch_size, 1, 1].
-    win_y_min = tf.zeros_like(image_shapes[:, 0:1, :])
-    win_x_min = tf.zeros_like(image_shapes[:, 0:1, :])
-    win_y_max = image_shapes[:, 0:1, :]
-    win_x_max = image_shapes[:, 1:2, :]
-
-    y_min_clipped = tf.maximum(tf.minimum(y_min, win_y_max - 1), win_y_min)
-    y_max_clipped = tf.maximum(tf.minimum(y_max, win_y_max - 1), win_y_min)
-    x_min_clipped = tf.maximum(tf.minimum(x_min, win_x_max - 1), win_x_min)
-    x_max_clipped = tf.maximum(tf.minimum(x_max, win_x_max - 1), win_x_min)
-
-    clipped_boxes = tf.concat(
-        [y_min_clipped, x_min_clipped, y_max_clipped, x_max_clipped],
-        axis=2)
-    return clipped_boxes
-
-
 def top_k(scores, k, boxes_list):
   """A wrapper that returns top-k scores and correponding boxes.
 
@@ -155,160 +110,6 @@ def top_k(scores, k, boxes_list):
           [batch_size, -1, 4])
       outputs.append(boxes)
     return scores, outputs
-
-
-def filter_boxes(scores, boxes, rpn_min_size, image_info):
-  """Filters boxes whose height or width is smaller than rpn_min_size.
-
-  Reference: https://github.com/facebookresearch/Detectron/blob/master/detectron/ops/generate_proposals.py  # pylint: disable=line-too-long
-
-  Args:
-    scores: a tensor with a shape of [batch_size, N].
-    boxes: a tensor with a shape of [batch_size, N, 4]. The proposals
-      are in pixel coordinates.
-    rpn_min_size: a integer that represents the smallest length of the image
-      height or width.
-    image_info: a tensor of shape [batch_size, 5] where the three columns
-      encode the input image's [height, width, scale,
-      original_height, original_width]. `scale` is the scale
-      factor used to scale the network input size to the original image size.
-      See dataloader.DetectionInputProcessor for details.
-  Returns:
-    scores: a tensor with a shape of [batch_size, anchors]. Same shape and dtype
-      as input scores.
-    proposals: a tensor with a shape of [batch_size, anchors, 4]. Same shape and
-      dtype as input boxes.
-  """
-  with tf.name_scope('filter_boxes'):
-    y_min, x_min, y_max, x_max = tf.split(
-        value=boxes, num_or_size_splits=4, axis=2)
-    image_info = tf.cast(tf.expand_dims(image_info, axis=2), dtype=boxes.dtype)
-    # The following tensors have a shape of [batch_size, 1, 1].
-    image_height = image_info[:, 0:1, :]
-    image_width = image_info[:, 1:2, :]
-    image_scale = image_info[:, 2:3, :]
-    min_size = tf.cast(tf.maximum(rpn_min_size, 1), dtype=boxes.dtype)
-
-    # Proposal center is computed relative to the scaled input image.
-    hs = y_max - y_min + 1
-    ws = x_max - x_min + 1
-    y_ctr = y_min + hs / 2
-    x_ctr = x_min + ws / 2
-    height_mask = tf.greater_equal(hs, min_size * image_scale)
-    width_mask = tf.greater_equal(ws, min_size * image_scale)
-    center_mask = tf.logical_and(
-        tf.less(y_ctr, image_height), tf.less(x_ctr, image_width))
-    mask = tf.logical_and(tf.logical_and(height_mask, width_mask),
-                          center_mask)[:, :, 0]
-    scores = tf.where(mask, scores, tf.zeros_like(scores))
-    boxes = tf.cast(tf.expand_dims(mask, 2), boxes.dtype) * boxes
-
-  return scores, boxes
-
-
-def batch_decode_box_outputs_op(boxes, delta, weights=None):
-  """Transforms relative regression coordinates to absolute positions.
-
-  Reference: https://github.com/facebookresearch/Detectron/blob/master/detectron/utils/boxes.py#L150  # pylint: disable=line-too-long
-
-  Network predictions are normalized and relative to a given anchor; this
-  reverses the transformation and outputs absolute coordinates for the input
-  image.
-
-  Args:
-    boxes: corresponding anchors with a shape of [batch_size, N, 4], which is
-      in [y_min, x_min, y_max, x_max] form.
-    delta: box regression targets with a shape of [batch_size, N, 4].
-    weights: List of 4 positive scalars to scale ty, tx, th and tw.
-      If set to None, does not perform scaling. The reference implementation
-      uses [10.0, 10.0, 5.0, 5.0].
-  Returns:
-    outputs: bounding boxes.
-  """
-  if weights:
-    assert len(weights) == 4
-    for scalar in weights:
-      assert scalar > 0
-
-  delta = tf.cast(delta, dtype=boxes.dtype)
-  heights = boxes[:, :, 2] - boxes[:, :, 0] + 1.0
-  widths = boxes[:, :, 3] - boxes[:, :, 1] + 1.0
-  ctr_y = boxes[:, :, 0] + 0.5 * heights
-  ctr_x = boxes[:, :, 1] + 0.5 * widths
-
-  dy = delta[:, :, 0]
-  dx = delta[:, :, 1]
-  dh = delta[:, :, 2]
-  dw = delta[:, :, 3]
-  if weights:
-    dy /= weights[0]
-    dx /= weights[1]
-    dh /= weights[2]
-    dw /= weights[3]
-
-  # Prevent sending too large values into tf.exp()
-  dw = tf.minimum(dw, BBOX_XFORM_CLIP)
-  dh = tf.minimum(dh, BBOX_XFORM_CLIP)
-
-  pred_ctr_x = dx * widths + ctr_x
-  pred_ctr_y = dy * heights + ctr_y
-  pred_h = tf.exp(dh) * heights
-  pred_w = tf.exp(dw) * widths
-
-  # ymin
-  ymin = pred_ctr_y - 0.5 * pred_h
-  # xmin
-  xmin = pred_ctr_x - 0.5 * pred_w
-  # ymax (note: "- 1" is correct; don't be fooled by the asymmetry)
-  ymax = pred_ctr_y + 0.5 * pred_h - 1
-  # xmax (note: "- 1" is correct; don't be fooled by the asymmetry)
-  xmax = pred_ctr_x + 0.5 * pred_w - 1
-
-  return tf.stack([ymin, xmin, ymax, xmax], axis=2)
-
-
-def batch_encode_box_targets_op(boxes, gt_boxes, weights=None):
-  """Transforms box target given proposal and ground-truth boxes.
-
-  Network predictions are normalized and relative to a given anchor (or a ground
-  truth box). Reference: https://github.com/facebookresearch/Detectron/blob/master/detectron/utils/boxes.py#L193  # pylint: disable=line-too-long
-
-  Args:
-    boxes: anchors with a shape of [batch_size, N, 4]. Both
-      boxes are in [y_min, x_min, y_max, x_max] form.
-    gt_boxes: corresponding ground truth boxes with a shape of
-      [batch_size, N, 4].
-    weights: List of 4 positive scalars to scale ty, tx, th and tw.
-      If set to None, does not perform scaling. The reference implementation
-      uses [10.0, 10.0, 5.0, 5.0].
-  Returns:
-    outputs: encoded box targets.
-  """
-  if weights:
-    assert len(weights) == 4
-    for scalar in weights:
-      assert scalar > 0
-
-  ex_heights = boxes[:, :, 2] - boxes[:, :, 0] + 1.0
-  ex_widths = boxes[:, :, 3] - boxes[:, :, 1] + 1.0
-  ex_ctr_y = boxes[:, :, 0] + 0.5 * ex_heights
-  ex_ctr_x = boxes[:, :, 1] + 0.5 * ex_widths
-
-  gt_heights = gt_boxes[:, :, 2] - gt_boxes[:, :, 0] + 1.0
-  gt_widths = gt_boxes[:, :, 3] - gt_boxes[:, :, 1] + 1.0
-  gt_ctr_y = gt_boxes[:, :, 0] + 0.5 * gt_heights
-  gt_ctr_x = gt_boxes[:, :, 1] + 0.5 * gt_widths
-
-  targets_dy = (gt_ctr_y - ex_ctr_y) / ex_heights
-  targets_dx = (gt_ctr_x - ex_ctr_x) / ex_widths
-  targets_dh = tf.log(gt_heights / ex_heights)
-  targets_dw = tf.log(gt_widths / ex_widths)
-  if weights:
-    targets_dy *= weights[0]
-    targets_dx *= weights[1]
-    targets_dh *= weights[2]
-    targets_dw *= weights[3]
-  return tf.stack([targets_dy, targets_dx, targets_dh, targets_dw], axis=2)
 
 
 def _self_suppression(iou, _, iou_sum):
@@ -488,3 +289,241 @@ def sorted_non_max_suppression_padded(scores,
           output_size, [-1, 1]), scores.dtype)
   return scores, boxes
 
+
+def encode_boxes(boxes, anchors, weights=None):
+  """Encode boxes to targets.
+
+  Args:
+    boxes: a tensor whose last dimension is 4 representing the coordinates
+      of boxes in ymin, xmin, ymax, xmax order.
+    anchors: a tensor whose shape is the same as `boxes` representing the
+      coordinates of anchors in ymin, xmin, ymax, xmax order.
+    weights: None or a list of four float numbers used to scale coordinates.
+
+  Returns:
+    encoded_boxes: a tensor whose shape is the same as `boxes` representing the
+      encoded box targets.
+  """
+  boxes = tf.cast(boxes, dtype=anchors.dtype)
+  ymin, xmin, ymax, xmax = tf.split(
+      boxes, num_or_size_splits=4, axis=-1)
+  box_h = ymax - ymin + 1.0
+  box_w = xmax - xmin + 1.0
+  box_yc = ymin + 0.5 * box_h
+  box_xc = xmin + 0.5 * box_w
+
+  anchor_ymin, anchor_xmin, anchor_ymax, anchor_xmax = (
+      tf.split(anchors, num_or_size_splits=4, axis=-1))
+  anchor_h = anchor_ymax - anchor_ymin + 1.0
+  anchor_w = anchor_xmax - anchor_xmin + 1.0
+  anchor_yc = anchor_ymin + 0.5 * anchor_h
+  anchor_xc = anchor_xmin + 0.5 * anchor_w
+
+  encoded_dy = (box_yc - anchor_yc) / anchor_h
+  encoded_dx = (box_xc - anchor_xc) / anchor_w
+  encoded_dh = tf.log(box_h / anchor_h)
+  encoded_dw = tf.log(box_w / anchor_w)
+  if weights:
+    encoded_dy *= weights[0]
+    encoded_dx *= weights[1]
+    encoded_dh *= weights[2]
+    encoded_dw *= weights[3]
+
+  encoded_boxes = tf.concat(
+      [encoded_dy, encoded_dx, encoded_dh, encoded_dw],
+      axis=-1)
+  return encoded_boxes
+
+
+def decode_boxes(encoded_boxes, anchors, weights=None):
+  """Decode boxes.
+
+  Args:
+    encoded_boxes: a tensor whose last dimension is 4 representing the
+      coordinates of encoded boxes in ymin, xmin, ymax, xmax order.
+    anchors: a tensor whose shape is the same as `boxes` representing the
+      coordinates of anchors in ymin, xmin, ymax, xmax order.
+    weights: None or a list of four float numbers used to scale coordinates.
+
+  Returns:
+    encoded_boxes: a tensor whose shape is the same as `boxes` representing the
+      decoded box targets.
+  """
+  encoded_boxes = tf.cast(encoded_boxes, dtype=anchors.dtype)
+  dy, dx, dh, dw = tf.split(
+      encoded_boxes, num_or_size_splits=4, axis=-1)
+  if weights:
+    dy /= weights[0]
+    dx /= weights[1]
+    dh /= weights[2]
+    dw /= weights[3]
+  dh = tf.minimum(dh, BBOX_XFORM_CLIP)
+  dw = tf.minimum(dw, BBOX_XFORM_CLIP)
+
+  anchor_ymin, anchor_xmin, anchor_ymax, anchor_xmax = tf.split(
+      anchors, num_or_size_splits=4, axis=-1)
+
+  anchor_h = anchor_ymax - anchor_ymin + 1.0
+  anchor_w = anchor_xmax - anchor_xmin + 1.0
+  anchor_yc = anchor_ymin + 0.5 * anchor_h
+  anchor_xc = anchor_xmin + 0.5 * anchor_w
+
+  decoded_boxes_yc = dy * anchor_h + anchor_yc
+  decoded_boxes_xc = dx * anchor_w + anchor_xc
+  decoded_boxes_h = tf.exp(dh) * anchor_h
+  decoded_boxes_w = tf.exp(dw) * anchor_w
+
+  decoded_boxes_ymin = decoded_boxes_yc - 0.5 * decoded_boxes_h
+  decoded_boxes_xmin = decoded_boxes_xc - 0.5 * decoded_boxes_w
+  decoded_boxes_ymax = decoded_boxes_ymin + decoded_boxes_h - 1.0
+  decoded_boxes_xmax = decoded_boxes_xmin + decoded_boxes_w - 1.0
+
+  decoded_boxes = tf.concat(
+      [decoded_boxes_ymin, decoded_boxes_xmin,
+       decoded_boxes_ymax, decoded_boxes_xmax],
+      axis=-1)
+  return decoded_boxes
+
+
+def clip_boxes(boxes, height, width):
+  """Clip boxes.
+
+  Args:
+    boxes: a tensor whose last dimension is 4 representing the coordinates
+      of boxes in ymin, xmin, ymax, xmax order.
+    height: an integer, a scalar or a tensor such as all but the last dimensions
+      are the same as `boxes`. The last dimension is 1. It represents the height
+      of the image.
+    width: an integer, a scalar or a tensor such as all but the last dimensions
+      are the same as `boxes`. The last dimension is 1. It represents the width
+      of the image.
+
+  Returns:
+    clipped_boxes: a tensor whose shape is the same as `boxes` representing the
+      clipped boxes.
+  """
+  y_min, x_min, y_max, x_max = tf.split(
+      boxes, num_or_size_splits=4, axis=-1)
+
+  height = tf.cast(height, dtype=boxes.dtype)
+  width = tf.cast(width, dtype=boxes.dtype)
+  clipped_y_min = tf.maximum(tf.minimum(y_min, height - 1.0), 0.0)
+  clipped_y_max = tf.maximum(tf.minimum(y_max, height - 1.0), 0.0)
+  clipped_x_min = tf.maximum(tf.minimum(x_min, width - 1.0), 0.0)
+  clipped_x_max = tf.maximum(tf.minimum(x_max, width - 1.0), 0.0)
+
+  clipped_boxes = tf.concat(
+      [clipped_y_min, clipped_x_min, clipped_y_max, clipped_x_max],
+      axis=-1)
+  return clipped_boxes
+
+
+def filter_boxes(boxes, scores, min_size, height, width, scale):
+  """Filter out boxes that are too small.
+
+  Args:
+    boxes: a tensor whose last dimension is 4 representing the coordinates
+      of boxes in ymin, xmin, ymax, xmax order.
+    scores: a tensor such as all but the last dimensions are the same as
+      `boxes`. The last dimension is 1. It represents the scores.
+    min_size: an integer specifying the minimal size.
+    height: an integer, a scalar or a tensor such as all but the last dimensions
+      are the same as `boxes`. The last dimension is 1. It represents the height
+      of the image.
+    width: an integer, a scalar or a tensor such as all but the last dimensions
+      are the same as `boxes`. The last dimension is 1. It represents the width
+      of the image.
+    scale: an integer, a scalar or a tensor such as all but the last dimensions
+      are the same as `boxes`. The last dimension is 1. It represents the scale
+      of the image.
+
+  Returns:
+    filtered_boxes: a tensor whose shape is the same as `boxes` representing the
+      filtered boxes.
+    filtered_scores: a tensor whose shape is the same as `scores` representing
+      the filtered scores.
+  """
+  y_min, x_min, y_max, x_max = tf.split(
+      boxes, num_or_size_splits=4, axis=-1)
+
+  h = y_max - y_min + 1.0
+  w = x_max - x_min + 1.0
+  yc = y_min + h / 2.0
+  xc = x_min + w / 2.0
+
+  height = tf.cast(height, dtype=boxes.dtype)
+  width = tf.cast(width, dtype=boxes.dtype)
+  scale = tf.cast(scale, dtype=boxes.dtype)
+  min_size = tf.cast(tf.maximum(min_size, 1), dtype=boxes.dtype)
+  size_mask = tf.logical_and(
+      tf.greater_equal(h, min_size * scale),
+      tf.greater_equal(w, min_size * scale))
+  center_mask = tf.logical_and(tf.less(yc, height), tf.less(xc, width))
+  selected_mask = tf.logical_and(size_mask, center_mask)
+
+  filtered_scores = tf.where(selected_mask, scores, tf.zeros_like(scores))
+  filtered_boxes = tf.cast(selected_mask, dtype=boxes.dtype) * boxes
+  return filtered_boxes, filtered_scores
+
+
+def to_normalized_coordinates(boxes, height, width):
+  """Converted absolute box coordinates to normalized ones.
+
+  Args:
+    boxes: a tensor whose last dimension is 4 representing the coordinates
+      of boxes in ymin, xmin, ymax, xmax order.
+    height: an integer, a scalar or a tensor such as all but the last dimensions
+      are the same as `boxes`. The last dimension is 1. It represents the height
+      of the image.
+    width: an integer, a scalar or a tensor such as all but the last dimensions
+      are the same as `boxes`. The last dimension is 1. It represents the width
+      of the image.
+
+  Returns:
+    normalized_boxes: a tensor whose shape is the same as `boxes` representing
+      the boxes in normalized coordinates.
+  """
+  height = tf.cast(height, dtype=boxes.dtype)
+  width = tf.cast(width, dtype=boxes.dtype)
+
+  y_min, x_min, y_max, x_max = tf.split(
+      boxes, num_or_size_splits=4, axis=-1)
+
+  y_min /= height
+  y_max /= height
+  x_min /= width
+  x_max /= width
+
+  normalized_boxes = tf.concat([y_min, x_min, y_max, x_max], axis=-1)
+  return normalized_boxes
+
+
+def to_absolute_coordinates(boxes, height, width):
+  """Converted normalized box coordinates to absolute ones.
+
+  Args:
+    boxes: a tensor whose last dimension is 4 representing the coordinates
+      of boxes in ymin, xmin, ymax, xmax order.
+    height: an integer, a scalar or a tensor such as all but the last dimensions
+      are the same as `boxes`. The last dimension is 1. It represents the height
+      of the image.
+    width: an integer, a scalar or a tensor such as all but the last dimensions
+      are the same as `boxes`. The last dimension is 1. It represents the width
+      of the image.
+
+  Returns:
+    absolute_boxes: a tensor whose shape is the same as `boxes` representing the
+      boxes in absolute coordinates.
+  """
+  height = tf.cast(height, dtype=boxes.dtype)
+  width = tf.cast(width, dtype=boxes.dtype)
+
+  y_min, x_min, y_max, x_max = tf.split(
+      boxes, num_or_size_splits=4, axis=-1)
+  y_min *= height
+  y_max *= height
+  x_min *= width
+  x_max *= width
+
+  absolute_boxes = tf.concat([y_min, x_min, y_max, x_max], axis=-1)
+  return absolute_boxes

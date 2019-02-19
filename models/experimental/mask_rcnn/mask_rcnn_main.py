@@ -95,7 +95,8 @@ def evaluation(eval_estimator, config):
       input_fn=dataloader.InputReader(
           config.validation_file_pattern,
           mode=tf.estimator.ModeKeys.PREDICT,
-          num_examples=config.eval_samples),
+          num_examples=config.eval_samples,
+          use_instance_mask=config.include_mask),
       yield_single_examples=False)
   # Every predictor.next() gets a batch of prediction (a dictionary).
   predictions = dict()
@@ -265,7 +266,8 @@ def main(argv):
         input_fn=dataloader.InputReader(
             config.training_file_pattern,
             mode=tf.estimator.ModeKeys.TRAIN,
-            use_fake_data=FLAGS.use_fake_data),
+            use_fake_data=FLAGS.use_fake_data,
+            use_instance_mask=config.include_mask),
         max_steps=config.total_steps)
 
     if FLAGS.eval_after_training:
@@ -357,7 +359,7 @@ def main(argv):
         export_dir_base=FLAGS.model_dir,
         serving_input_receiver_fn=functools.partial(
             dataloader.serving_input_fn,
-            batch_size=config.eval_batch_size,
+            batch_size=1,
             image_size=config.image_size))
 
   elif FLAGS.mode == 'train_and_eval':
@@ -394,7 +396,8 @@ def main(argv):
       train_estimator.train(
           input_fn=dataloader.InputReader(
               config.training_file_pattern,
-              mode=tf.estimator.ModeKeys.TRAIN),
+              mode=tf.estimator.ModeKeys.TRAIN,
+              use_instance_mask=config.include_mask),
           steps=config.num_steps_per_eval)
 
       tf.logging.info('Start evaluation cycle %d.' % cycle)
@@ -407,7 +410,8 @@ def main(argv):
     train_estimator.train(
         input_fn=dataloader.InputReader(
             config.training_file_pattern,
-            mode=tf.estimator.ModeKeys.TRAIN),
+            mode=tf.estimator.ModeKeys.TRAIN,
+            use_instance_mask=config.include_mask),
         max_steps=config.total_steps)
     eval_results = evaluation(eval_estimator, config)
     write_summary(eval_results, summary_writer, config.total_steps)
@@ -418,7 +422,7 @@ def main(argv):
         export_dir_base=FLAGS.model_dir,
         serving_input_receiver_fn=functools.partial(
             dataloader.serving_input_fn,
-            batch_size=config.eval_batch_size,
+            batch_size=1,
             image_size=config.image_size))
 
   else:

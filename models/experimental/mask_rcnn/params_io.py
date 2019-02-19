@@ -54,13 +54,16 @@ def override_hparams(hparams, dict_or_string_or_yaml_file):
   elif isinstance(dict_or_string_or_yaml_file, six.string_types):
     try:
       hparams.parse(dict_or_string_or_yaml_file)
-    except ValueError:
+    except ValueError as parse_error:
       try:
         with tf.gfile.Open(dict_or_string_or_yaml_file) as f:
           hparams.override_from_dict(yaml.load(f))
-      except ValueError as e:
-        message = ('Failed to parse yaml file provided. %s' % e.message)
-        raise ValueError(message)
+      except Exception as read_error:
+        parse_message = (
+            'Failed to parse config string: %s\n' % parse_error.message)
+        read_message = (
+            'Failed to parse yaml file provided. %s' % read_error.message)
+        raise ValueError(parse_message + read_message)
   else:
     raise ValueError('Unknown input type to parse.')
   return hparams
