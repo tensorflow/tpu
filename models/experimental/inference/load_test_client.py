@@ -36,8 +36,12 @@ tf.app.flags.DEFINE_float('request_timeout', 300.0,
                           'Timeout for inference request.')
 tf.app.flags.DEFINE_string('model_name', '',
                            'Name of the model being served on the ModelServer')
-tf.app.flags.DEFINE_string('tpu', '',
-                           'Name of the Cloud TPU for Cluster Resolvers.')
+tf.app.flags.DEFINE_string(
+    'tpu', '',
+    'Inference server ip address and port (grpc://<tpu_ip_address>:8470) or'
+    'the name of the Cloud TPU for Cluster Resolvers. If it is a tpu name, it'
+    'will be resolved to ip address and port. Otherwise, the provided (proxy)'
+    'ip address and port will be directly used.')
 tf.app.flags.DEFINE_string('image_path', '', 'The path of local image.')
 tf.app.flags.DEFINE_integer('batch_size', 8, 'Per request batch size.')
 tf.app.flags.DEFINE_integer('image_size', 224,
@@ -50,8 +54,8 @@ FLAGS = tf.app.flags.FLAGS
 class Worker(object):
   """A loadtest worker which sends RPC request."""
 
-  __slot__ = ('_id', '_request', '_stub', '_queue', '_success',
-              '_start_time', '_end_time', '_qps', '_num_requests')
+  __slot__ = ('_id', '_request', '_stub', '_queue', '_success', '_start_time',
+              '_end_time', '_qps', '_num_requests')
 
   def __init__(self, index, request, stub, queue, qps, num_requests):
     self._id = index
@@ -151,8 +155,8 @@ def run_load_test(num_requests, qps, request, stub):
 
 
 def generate_image():
-  array = np.uint8(np.random.rand(
-      FLAGS.image_size, FLAGS.image_size, FLAGS.channels) * 255)
+  array = np.uint8(
+      np.random.rand(FLAGS.image_size, FLAGS.image_size, FLAGS.channels) * 255)
   pil_image = Image.fromarray(array)
   image_io = io.BytesIO()
   pil_image.save(image_io, format='png')
@@ -174,8 +178,9 @@ def generate_request():
         FLAGS.image_size, FLAGS.image_size, FLAGS.channels))
     image = generate_image()
 
-  request.inputs['input'].CopyFrom(tf.contrib.util.make_tensor_proto(
-      [image]*FLAGS.batch_size, shape=[FLAGS.batch_size]))
+  request.inputs['input'].CopyFrom(
+      tf.contrib.util.make_tensor_proto(
+          [image] * FLAGS.batch_size, shape=[FLAGS.batch_size]))
   return request
 
 

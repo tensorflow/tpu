@@ -49,6 +49,10 @@ def default_config():
       bg_thresh_lo=0.,
       # Faster-RCNN heads.
       fast_rcnn_mlp_head_dim=1024,
+      # Whether or not to output box features. The box features are commonly
+      # used as the visual features for many SOTA image-text generation models,
+      # such as image-captioning and VQA.
+      output_box_features=False,
       bbox_reg_weights=(10., 10., 5., 5.),
       # Mask-RCNN heads.
       include_mask=True,  # whether or not to include mask branch.

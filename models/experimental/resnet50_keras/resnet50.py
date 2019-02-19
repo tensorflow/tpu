@@ -30,7 +30,6 @@ from absl import logging
 import numpy as np
 import tensorflow as tf
 
-import eval_utils
 import imagenet_input
 import model_saving_utils
 import resnet_model
@@ -206,11 +205,8 @@ def main(unused_argv):
 
   lr_schedule_cb = LearningRateBatchScheduler(
       schedule=learning_rate_schedule_wrapper(training_steps_per_epoch))
-  tensorboard_cb = eval_utils.TensorBoardWithValidation(
-      log_dir=model_dir,
-      validation_imagenet_input=imagenet_eval,
-      validation_steps=validation_steps,
-      validation_epochs=[30, 60, 90])
+  tensorboard_cb = tf.keras.callbacks.TensorBoard(
+      log_dir=model_dir)
 
   training_callbacks = [lr_schedule_cb, tensorboard_cb]
 
@@ -218,7 +214,10 @@ def main(unused_argv):
       imagenet_train.input_fn(),
       epochs=EPOCHS,
       steps_per_epoch=training_steps_per_epoch,
-      callbacks=training_callbacks)
+      callbacks=training_callbacks,
+      validation_data=imagenet_eval.input_fn(),
+      validation_steps=validation_steps,
+      validation_freq=[30, 60, 90])
 
   model_saving_utils.save_model(model, model_dir, WEIGHTS_TXT)
 

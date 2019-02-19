@@ -27,23 +27,25 @@ import tensorflow as tf
 import preprocessing
 
 
-def image_serving_input_fn():
-  """Serving input fn for raw images."""
+def build_image_serving_input_fn(image_size):
+  """Builds a serving input fn for raw images."""
+  def _image_serving_input_fn():
+    """Serving input fn for raw images."""
+    def _preprocess_image(image_bytes):
+      """Preprocess a single raw image."""
+      image = preprocessing.preprocess_image(
+          image_bytes=image_bytes, is_training=False, image_size=image_size)
+      return image
 
-  def _preprocess_image(image_bytes):
-    """Preprocess a single raw image."""
-    image = preprocessing.preprocess_image(
-        image_bytes=image_bytes, is_training=False)
-    return image
-
-  image_bytes_list = tf.placeholder(
-      shape=[None],
-      dtype=tf.string,
-  )
-  images = tf.map_fn(
-      _preprocess_image, image_bytes_list, back_prop=False, dtype=tf.float32)
-  return tf.estimator.export.ServingInputReceiver(
-      images, {'image_bytes': image_bytes_list})
+    image_bytes_list = tf.placeholder(
+        shape=[None],
+        dtype=tf.string,
+    )
+    images = tf.map_fn(
+        _preprocess_image, image_bytes_list, back_prop=False, dtype=tf.float32)
+    return tf.estimator.export.ServingInputReceiver(
+        images, {'image_bytes': image_bytes_list})
+  return _image_serving_input_fn
 
 
 class ImageNetTFExampleInput(object):

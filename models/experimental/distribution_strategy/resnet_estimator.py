@@ -29,7 +29,6 @@ import tensorflow as tf
 
 import imagenet_input
 import resnet_model
-from tensorflow.contrib.distribute.python import tpu_strategy as tpu_lib
 
 tf.flags.DEFINE_string('tpu', None, 'Name of TPU to run this against')
 tf.flags.DEFINE_string('gcp_project', None, 'GCP project containing the TPU')
@@ -128,9 +127,13 @@ def model_fn(features, labels, mode):
   cross_entropy = tf.losses.sparse_softmax_cross_entropy(
       labels=labels, logits=logits)
 
-  loss = cross_entropy + _WEIGHT_DECAY * tf.add_n(
-      [tf.nn.l2_loss(v) for v in tf.trainable_variables()
-       if 'batch_normalization' not in v.name])
+  # We need to scale the regularization loss manually as losses other than in
+  # tf.losses and tf.keras.losses don't scale automatically.
+  loss = cross_entropy + _WEIGHT_DECAY * tf.add_n([
+      tf.nn.l2_loss(v)
+      for v in tf.trainable_variables()
+      if 'batch_normalization' not in v.name
+  ]) / tf.distribute.get_strategy().num_replicas_in_sync
 
   if mode == tf.estimator.ModeKeys.EVAL:
     predictions = tf.argmax(logits, axis=1)
@@ -190,10 +193,10 @@ def main(unused_argv):
       FLAGS.eval_batch_size * FLAGS.num_cores)
   steps_per_eval = steps_per_run_train
 
-  train_distribution = tpu_lib.TPUStrategy(tpu_cluster_resolver,
-                                           steps_per_run=steps_per_run_train)
-  eval_distribution = tpu_lib.TPUStrategy(tpu_cluster_resolver,
-                                          steps_per_run=steps_per_run_eval)
+  train_distribution = tf.contrib.distribute.TPUStrategy(
+      tpu_cluster_resolver, steps_per_run=steps_per_run_train)
+  eval_distribution = tf.contrib.distribute.TPUStrategy(
+      tpu_cluster_resolver, steps_per_run=steps_per_run_eval)
   config = tf.estimator.RunConfig(
       model_dir=FLAGS.model_dir,
       train_distribute=train_distribution,

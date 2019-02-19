@@ -85,8 +85,10 @@ def box_head(roi_features, num_classes=91, mlp_head_dim=1024):
       [batch_size, num_rois, num_classes], representing the class predictions.
     box_outputs: a tensor with a shape of
       [batch_size, num_rois, num_classes * 4], representing the box predictions.
+    box_features: a tensor with a shape of
+      [batch_size, num_rois, mlp_head_dim], representing the box features.
   """
-  with tf.variable_scope('box_head'):
+  with tf.variable_scope('box_head', reuse=tf.AUTO_REUSE):
     # reshape inputs beofre FC.
     _, num_rois, height, width, filters = roi_features.get_shape().as_list()
     roi_features = tf.reshape(roi_features,
@@ -95,6 +97,7 @@ def box_head(roi_features, num_classes=91, mlp_head_dim=1024):
                           activation=tf.nn.relu, name='fc6')
     net = tf.layers.dense(net, units=mlp_head_dim,
                           activation=tf.nn.relu, name='fc7')
+    box_features = net
 
     class_outputs = tf.layers.dense(
         net, num_classes,
@@ -106,7 +109,7 @@ def box_head(roi_features, num_classes=91, mlp_head_dim=1024):
         kernel_initializer=tf.random_normal_initializer(stddev=0.001),
         bias_initializer=tf.zeros_initializer(),
         name='box-predict')
-    return class_outputs, box_outputs
+    return class_outputs, box_outputs, box_features
 
 
 def mask_head(roi_features,

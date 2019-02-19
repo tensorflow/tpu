@@ -1,4 +1,4 @@
-# Copyright 2018 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,10 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Mask-RCNN (via ResNet) model definition.
-
-Uses the ResNet model as a basis.
-"""
+"""Training specific ops, including sampling, building targets, etc."""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -24,7 +21,7 @@ from __future__ import print_function
 import tensorflow as tf
 
 import box_utils
-import ops
+import spatial_transform_ops
 from object_detection import balanced_positive_negative_sampler
 
 
@@ -78,8 +75,8 @@ def _add_class_assignments(iou, scaled_gt_boxes, gt_labels):
 def encode_box_targets(boxes, gt_boxes, gt_labels, bbox_reg_weights):
   """Encodes predicted boxes with respect to ground truth boxes."""
   with tf.name_scope('encode_box_targets'):
-    box_targets = box_utils.batch_encode_box_targets_op(
-        boxes, gt_boxes, bbox_reg_weights)
+    box_targets = box_utils.encode_boxes(
+        boxes=gt_boxes, anchors=boxes, weights=bbox_reg_weights)
     # If a target is background, the encoded box target should be zeros.
     mask = tf.tile(
         tf.expand_dims(tf.equal(gt_labels, tf.zeros_like(gt_labels)), axis=2),
@@ -217,184 +214,6 @@ def proposal_label_op(boxes, gt_boxes, gt_labels, image_info,
   return sample_box_targets, class_targets, rois, sample_proposal_to_label_map
 
 
-def _proposal_op_per_level(scores, boxes, anchor_boxes, image_info,
-                           rpn_pre_nms_topn, rpn_post_nms_topn,
-                           rpn_nms_threshold, rpn_min_size, level):
-  """Proposes RoIs for the second stage nets.
-
-  This proposal op performs the following operations.
-    1. for each location i in a (H, W) grid:
-         generate A anchor boxes centered on cell i
-         apply predicted bbox deltas to each of the A anchors at cell i
-    2. clip predicted boxes to image
-    3. remove predicted boxes with either height or width < threshold
-    4. sort all (proposal, score) pairs by score from highest to lowest
-    5. take the top rpn_pre_nms_topn proposals before NMS
-    6. apply NMS with a loose threshold (0.7) to the remaining proposals
-    7. take after_nms_topN proposals after NMS
-    8. return the top proposals
-  Reference: https://github.com/facebookresearch/Detectron/blob/master/detectron/ops/generate_proposals.py  # pylint: disable=line-too-long
-
-  Args:
-    scores: a tensor with a shape of
-      [batch_size, height, width, num_anchors].
-    boxes: a tensor with a shape of
-      [batch_size, height, width, num_anchors * 4], in the encoded form.
-    anchor_boxes: an Anchors object that contains the anchors with a shape of
-      [batch_size, height, width, num_anchors * 4].
-    image_info: a tensor of shape [batch_size, 5] where the three columns
-      encode the input image's [height, width, scale,
-      original_height, original_width]. Height and width are for
-      the input to the network, not the original image; scale is the scale
-      factor used to scale the network input size to the original image size.
-      See dataloader.DetectionInputProcessor for details. The last two are
-      original height and width. See dataloader.DetectionInputProcessor for
-      details.
-    rpn_pre_nms_topn: a integer number of top scoring RPN proposals to keep
-      before applying NMS. This is *per FPN level* (not total).
-    rpn_post_nms_topn: a integer number of top scoring RPN proposals to keep
-      after applying NMS. This is the total number of RPN proposals produced.
-    rpn_nms_threshold: a float number between 0 and 1 as the NMS threshold
-      used on RPN proposals.
-    rpn_min_size: a integer number as the minimum proposal height and width as
-      both need to be greater than this number. Note that this number is at
-      origingal image scale; not scale used during training or inference).
-    level: a integer number for the level that the function operates on.
-  Returns:
-    scores: a tensor with a shape of [batch_size, rpn_post_nms_topn, 1]
-      representing the scores of the proposals. It has same dtype as input
-      scores.
-    boxes: a tensor with a shape of [batch_size, rpn_post_nms_topn, 4]
-      represneting the boxes of the proposals. The boxes are in normalized
-      coordinates with a form of [ymin, xmin, ymax, xmax]. It has same dtype as
-      input boxes.
-
-  """
-  with tf.name_scope('proposal-l%d' % level):
-    # 4. sort all (proposal, score) pairs by score from highest to lowest
-    # 5. take the top rpn_pre_nms_topn proposals before NMS
-    batch_size, h, w, num_anchors = scores.get_shape().as_list()
-    scores = tf.reshape(scores, [batch_size, -1])
-    boxes = tf.reshape(boxes, [batch_size, -1, 4])
-    # Map scores to [0, 1] for convenince of setting min score.
-    scores = tf.sigmoid(scores)
-
-    topk_limit = (h * w * num_anchors if h * w * num_anchors < rpn_pre_nms_topn
-                  else rpn_pre_nms_topn)
-    anchor_boxes = tf.reshape(anchor_boxes, [batch_size, -1, 4])
-    scores, boxes_list = box_utils.top_k(
-        scores, k=topk_limit, boxes_list=[boxes, anchor_boxes])
-    boxes = boxes_list[0]
-    anchor_boxes = boxes_list[1]
-
-    # Transforms anchors into proposals via bbox transformations.
-    boxes = box_utils.batch_decode_box_outputs_op(anchor_boxes, boxes)
-
-    # 2. clip proposals to image (may result in proposals with zero area
-    # that will be removed in the next step)
-    boxes = box_utils.clip_boxes(boxes, image_info[:, :2])
-
-    # 3. remove predicted boxes with either height or width < min_size
-    scores, boxes = box_utils.filter_boxes(
-        scores, boxes, rpn_min_size, image_info)
-
-    # 6. apply loose nms (e.g. threshold = 0.7)
-    # 7. take after_nms_topN (e.g. 300)
-    # 8. return the top proposals (-> RoIs top)
-    post_nms_topk_limit = (topk_limit if topk_limit < rpn_post_nms_topn else
-                           rpn_post_nms_topn)
-    if rpn_nms_threshold > 0:
-      scores, boxes = box_utils.sorted_non_max_suppression_padded(
-          scores, boxes, max_output_size=post_nms_topk_limit,
-          iou_threshold=rpn_nms_threshold)
-
-    scores, boxes = box_utils.top_k(
-        scores, k=post_nms_topk_limit, boxes_list=[boxes])
-    boxes = boxes[0]
-    return scores, boxes
-
-
-def proposal_op(scores_outputs, box_outputs, all_anchors, image_info,
-                rpn_pre_nms_topn, rpn_post_nms_topn, rpn_nms_threshold,
-                rpn_min_size):
-  """Proposes RoIs for the second stage nets.
-
-  This proposal op performs the following operations.
-    1. propose rois at each level.
-    2. collect all proposals.
-    3. keep rpn_post_nms_topn proposals by their sorted scores from the highest
-       to the lowest.
-  Reference: https://github.com/facebookresearch/Detectron/blob/master/detectron/ops/collect_and_distribute_fpn_rpn_proposals.py  # pylint: disable=line-too-long
-
-  Args:
-    scores_outputs: an OrderDict with keys representing levels and values
-      representing logits in [batch_size, height, width, num_anchors].
-    box_outputs: an OrderDict with keys representing levels and values
-      representing box regression targets in
-      [batch_size, height, width, num_anchors * 4]
-    all_anchors: an Anchors object that contains the all anchors.
-    image_info: a tensor of shape [batch_size, 5] where the three columns
-      encode the input image's [height, width, scale,
-      original_height, original_width]. Height and width are for
-      the input to the network, not the original image; scale is the scale
-      factor used to scale the network input size to the original image size.
-      See dataloader.DetectionInputProcessor for details. The last two are
-      original height and width. See dataloader.DetectionInputProcessor for
-      details.
-    rpn_pre_nms_topn: a integer number of top scoring RPN proposals to keep
-      before applying NMS. This is *per FPN level* (not total).
-    rpn_post_nms_topn: a integer number of top scoring RPN proposals to keep
-      after applying NMS. This is the total number of RPN proposals produced.
-    rpn_nms_threshold: a float number between 0 and 1 as the NMS threshold
-      used on RPN proposals.
-    rpn_min_size: a integer number as the minimum proposal height and width as
-      both need to be greater than this number. Note that this number is at
-      origingal image scale; not scale used during training or inference).
-  Returns:
-    scores: a tensor with a shape of [batch_size, rpn_post_nms_topn, 1]
-      representing the scores of the proposals.
-    rois: a tensor with a shape of [batch_size, rpn_post_nms_topn, 4]
-      representing the boxes of the proposals. The boxes are in normalized
-      coordinates with a form of [ymin, xmin, ymax, xmax].
-  """
-  with tf.name_scope('proposal'):
-    levels = scores_outputs.keys()
-    scores = []
-    rois = []
-    anchor_boxes = all_anchors.get_unpacked_boxes()
-    for level in levels:
-      # Expands the batch dimension for anchors as anchors do not have batch
-      # dimension. Note that batch_size is invariant across levels.
-      batch_size = scores_outputs[level].shape[0]
-      anchor_boxes_batch = tf.cast(
-          tf.tile(tf.expand_dims(anchor_boxes[level], axis=0),
-                  [batch_size, 1, 1, 1]),
-          dtype=scores_outputs[level].dtype)
-      scores_per_level, boxes_per_level = _proposal_op_per_level(
-          scores_outputs[level], box_outputs[level], anchor_boxes_batch,
-          image_info, rpn_pre_nms_topn, rpn_post_nms_topn, rpn_nms_threshold,
-          rpn_min_size, level)
-      scores.append(scores_per_level)
-      rois.append(boxes_per_level)
-    scores = tf.concat(scores, axis=1)
-    rois = tf.concat(rois, axis=1)
-
-    with tf.name_scope('post_nms_topk'):
-      # Selects the top-k rois, k being rpn_post_nms_topn or the number of total
-      # anchors after non-max suppression.
-      post_nms_num_anchors = scores.shape[1]
-      post_nms_topk_limit = (
-          post_nms_num_anchors if post_nms_num_anchors < rpn_post_nms_topn
-          else rpn_post_nms_topn)
-
-      top_k_scores, top_k_rois = box_utils.top_k(
-          scores, k=post_nms_topk_limit, boxes_list=[rois])
-      top_k_rois = top_k_rois[0]
-    top_k_scores = tf.stop_gradient(top_k_scores)
-    top_k_rois = tf.stop_gradient(top_k_rois)
-    return top_k_scores, top_k_rois
-
-
 def select_fg_for_masks(class_targets, box_targets, boxes,
                         proposal_to_label_map, max_num_fg=128):
   """Selects the fore ground objects for mask branch during training.
@@ -491,7 +310,7 @@ def get_mask_targets(fg_boxes, fg_proposal_to_label_map, fg_box_targets,
          tf.to_float(tf.ones_like(x_transform) * (max_feature_width - 1))],
         axis=-1)
 
-    features_per_box = ops.selective_crop_and_resize(
+    features_per_box = spatial_transform_ops.selective_crop_and_resize(
         tf.expand_dims(mask_gt_labels, -1),
         tf.concat([y_transform, x_transform, h_transform, w_transform], -1),
         tf.expand_dims(levels, -1),
@@ -508,126 +327,3 @@ def get_mask_targets(fg_boxes, fg_proposal_to_label_map, fg_box_targets,
     # prevents the flow of gradient to box RoIs.
     features_per_box = tf.stop_gradient(features_per_box)
   return features_per_box
-
-
-def generate_detections_per_image_op(
-    cls_outputs, box_outputs, anchor_boxes, image_id, image_info,
-    num_detections=100, pre_nms_num_detections=1000, nms_threshold=0.3,
-    bbox_reg_weights=(10., 10., 5., 5.)):
-  """Generates detections with model outputs and anchors.
-
-  Args:
-    cls_outputs: a Tensor with shape [N, num_classes], which stacks class
-      logit outputs on all feature levels. The N is the number of total anchors
-      on all levels. The num_classes is the number of classes predicted by the
-      model. Note that the cls_outputs should be the output of softmax().
-    box_outputs: a Tensor with shape [N, 4] or [N, num_classes*4], which stacks
-      box regression outputs on all feature levels. The N is the number of total
-      anchors on all levels. The tensor shape is [N, num_classes*4] when class
-      specific box regression is used.
-    anchor_boxes: a Tensor with shape [N, 4], which stacks anchors on all
-      feature levels. The N is the number of total anchors on all levels.
-    image_id: an integer number to specify the image id.
-    image_info: a tensor of shape [5] which encodes the input image's [height,
-      width, scale, original_height, original_width]
-    num_detections: Number of detections after NMS.
-    pre_nms_num_detections: Number of candidates before NMS.
-    nms_threshold: a float number to specify the threshold of NMS.
-    bbox_reg_weights: a list of 4 float scalars, which are default weights on
-      (dx, dy, dw, dh) for normalizing bbox regression targets.
-  Returns:
-    detections: detection results in a tensor with each row representing
-      [image_id, ymin, xmin, ymax, xmax, score, class]
-  """
-  num_boxes, num_classes = cls_outputs.get_shape().as_list()
-  _, num_box_predictions = box_outputs.get_shape().as_list()
-  use_class_specific_box_regression = (num_classes == num_box_predictions / 4)
-
-  # Remove background class scores.
-  cls_outputs = cls_outputs[:, 1:num_classes]
-  top_k_scores, top_k_indices_with_classes = tf.nn.top_k(
-      tf.reshape(cls_outputs, [-1]),
-      k=pre_nms_num_detections,
-      sorted=False)
-  classes = tf.mod(top_k_indices_with_classes, num_classes - 1)
-  top_k_indices = tf.floordiv(top_k_indices_with_classes, num_classes - 1)
-
-  anchor_boxes = tf.gather(anchor_boxes, top_k_indices)
-  if use_class_specific_box_regression:
-    box_outputs = tf.reshape(
-        box_outputs, [num_boxes, num_classes, 4])[:, 1:num_classes, :]
-    class_indices = classes
-  else:
-    box_outputs = tf.reshape(box_outputs, [num_boxes, 1, 4])
-    class_indices = tf.zeros_like(top_k_indices)
-  box_outputs = tf.gather_nd(box_outputs,
-                             tf.stack([top_k_indices, class_indices], axis=1))
-
-  # apply bounding box regression to anchors
-  boxes = box_utils.batch_decode_box_outputs_op(
-      tf.expand_dims(anchor_boxes, axis=0),
-      tf.expand_dims(box_outputs, axis=0),
-      bbox_reg_weights)[0]
-  boxes = box_utils.clip_boxes(
-      tf.expand_dims(boxes, axis=0),
-      tf.expand_dims(image_info[:2], axis=0))[0]
-
-  list_of_all_boxes = []
-  list_of_all_scores = []
-  list_of_all_classes = []
-  # Skip background class.
-  for class_i in range(num_classes):
-    # Compute bitmask for the given classes.
-    class_i_bitmask = tf.cast(tf.equal(classes, class_i), top_k_scores.dtype)
-    # This works because score is in [0, 1].
-    class_i_scores = top_k_scores * class_i_bitmask
-    # The TPU and CPU have different behaviors for
-    # tf.image.non_max_suppression_padded (b/116754376).
-    (class_i_post_nms_indices,
-     class_i_nms_num_valid) = tf.image.non_max_suppression_padded(
-         tf.to_float(boxes),
-         tf.to_float(class_i_scores),
-         num_detections,
-         iou_threshold=nms_threshold,
-         score_threshold=0.05,
-         pad_to_max_output_size=True,
-         name='nms_detections_' + str(class_i))
-    class_i_post_nms_boxes = tf.gather(boxes, class_i_post_nms_indices)
-    class_i_post_nms_scores = tf.gather(class_i_scores,
-                                        class_i_post_nms_indices)
-    mask = tf.less(tf.range(num_detections), [class_i_nms_num_valid])
-    class_i_post_nms_scores = tf.where(
-        mask, class_i_post_nms_scores, tf.zeros_like(class_i_post_nms_scores))
-    class_i_classes = tf.fill(tf.shape(class_i_post_nms_scores), class_i+1)
-    list_of_all_boxes.append(class_i_post_nms_boxes)
-    list_of_all_scores.append(class_i_post_nms_scores)
-    list_of_all_classes.append(class_i_classes)
-
-  post_nms_boxes = tf.concat(list_of_all_boxes, axis=0)
-  post_nms_scores = tf.concat(list_of_all_scores, axis=0)
-  post_nms_classes = tf.concat(list_of_all_classes, axis=0)
-
-  # sort all results.
-  post_nms_scores, sorted_indices = tf.nn.top_k(
-      tf.to_float(post_nms_scores),
-      k=num_detections,
-      sorted=True)
-
-  post_nms_boxes = tf.gather(post_nms_boxes, sorted_indices)
-  post_nms_classes = tf.gather(post_nms_classes, sorted_indices)
-
-  if isinstance(image_id, int):
-    image_id = tf.constant(image_id)
-  image_id = tf.reshape(image_id, [])
-  detections_result = tf.stack(
-      [
-          tf.to_float(tf.fill(tf.shape(post_nms_scores), image_id)),
-          post_nms_boxes[:, 0],
-          post_nms_boxes[:, 1],
-          post_nms_boxes[:, 2],
-          post_nms_boxes[:, 3],
-          post_nms_scores,
-          tf.to_float(post_nms_classes),
-      ],
-      axis=1)
-  return detections_result

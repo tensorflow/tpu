@@ -26,7 +26,7 @@ from __future__ import print_function
 
 import tensorflow as tf
 
-import ops
+import spatial_transform_ops
 
 
 def fpn(feats_bottom_up,
@@ -61,7 +61,7 @@ def fpn(feats_bottom_up,
     # add top-down path
     feats = {upsample_max_level: feats_lateral[upsample_max_level]}
     for level in range(upsample_max_level - 1, min_level - 1, -1):
-      feats[level] = ops.nearest_upsampling(
+      feats[level] = spatial_transform_ops.nearest_upsampling(
           feats[level + 1], 2) + feats_lateral[level]
 
     # add post-hoc 3x3 convolution kernel
