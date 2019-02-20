@@ -472,7 +472,7 @@ class InputReader(object):
     return dataset
 
 
-def serving_input_fn(batch_size, image_size):
+def serving_input_fn(batch_size, image_size, feed_jpeg=False):
   """Input function for SavedModels and TF serving.
 
   Returns a `tf.estimator.export.ServingInputReceiver` for a SavedModel.
@@ -480,6 +480,7 @@ def serving_input_fn(batch_size, image_size):
   Args:
     batch_size: The batch size.
     image_size: The size the image will be converted to, output image size.
+    feed_jpeg: Whether feed the JPEG bytes or the normalized image tensor.
   """
 
   def _decode_image(img_bytes):
@@ -496,22 +497,34 @@ def serving_input_fn(batch_size, image_size):
     source_id = tf.constant(-1., dtype=tf.float32)
     return img, img_info, source_id
 
-  if batch_size == 1:
-    image_bytes = tf.placeholder(dtype=tf.string, shape=[])
-    decoded_image = _decode_image(image_bytes)
-    image, image_info, source_id = _preprocess_image(decoded_image)
+  if feed_jpeg:
+    if batch_size == 1:
+      image_bytes = tf.placeholder(dtype=tf.string, shape=[])
+      decoded_image = _decode_image(image_bytes)
+      image, image_info, source_id = _preprocess_image(decoded_image)
+      images = tf.expand_dims(image, axis=0)
+      images_info = tf.expand_dims(image_info, axis=0)
+      source_ids = tf.expand_dims(source_id, axis=0)
+    else:
+      image_bytes_list = tf.placeholder(dtype=tf.string, shape=[batch_size])
+      decoded_images = tf.map_fn(
+          _decode_image, image_bytes_list, back_prop=False, dtype=tf.float32)
+      images, images_info, source_ids = tf.map_fn(
+          _preprocess_image,
+          decoded_images,
+          back_prop=False,
+          dtype=(tf.float32, tf.float32, tf.float32))
+  else:
+    image = tf.placeholder(dtype=tf.float32)
+    assert batch_size == 1
+    image_shape = tf.shape(image)
+    height = image_shape[0]
+    width = image_shape[1]
+    image_info = tf.stack([height, width, 1, height, width])
+    source_id = tf.constant(-1., dtype=tf.float32)
     images = tf.expand_dims(image, axis=0)
     images_info = tf.expand_dims(image_info, axis=0)
     source_ids = tf.expand_dims(source_id, axis=0)
-  else:
-    image_bytes_list = tf.placeholder(dtype=tf.string, shape=[batch_size])
-    decoded_images = tf.map_fn(
-        _decode_image, image_bytes_list, back_prop=False, dtype=tf.float32)
-    images, images_info, source_ids = tf.map_fn(
-        _preprocess_image,
-        decoded_images,
-        back_prop=False,
-        dtype=(tf.float32, tf.float32, tf.float32))
 
   images.set_shape([batch_size, image_size, image_size, 3])
   images_info.set_shape([batch_size, 5])
@@ -520,13 +533,24 @@ def serving_input_fn(batch_size, image_size):
   images = tf.identity(images, 'Image')
   images_info = tf.identity(images_info, 'ImageInfo')
 
-  return tf.estimator.export.ServingInputReceiver(
-      features={
-          'images': images,
-          'image_info': images_info,
-          'source_ids': source_ids,
-      },
-      receiver_tensors={
-          'image_bytes': (image_bytes if batch_size == 1
-                          else image_bytes_list),
-      })
+  if feed_jpeg:
+    return tf.estimator.export.ServingInputReceiver(
+        features={
+            'images': images,
+            'image_info': images_info,
+            'source_ids': source_ids,
+        },
+        receiver_tensors={
+            'image_bytes': (image_bytes if batch_size == 1
+                            else image_bytes_list),
+        })
+  else:
+    return tf.estimator.export.ServingInputReceiver(
+        features={
+            'images': images,
+            'image_info': images_info,
+            'source_ids': source_ids,
+        },
+        receiver_tensors={
+            'image': image,
+        })

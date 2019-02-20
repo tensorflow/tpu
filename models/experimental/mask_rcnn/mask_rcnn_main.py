@@ -215,10 +215,14 @@ def main(argv):
         labels_partition_dims['box_targets_%d' % level] = None
         labels_partition_dims['score_targets_%d' % level] = None
     num_cores_per_replica = np.prod(FLAGS.input_partition_dims)
+    image_partition_dims = [
+        FLAGS.input_partition_dims[i] for i in [1, 2, 3, 0]
+    ] if FLAGS.transpose_input else FLAGS.input_partition_dims
     features_partition_dims = {
-        'images': FLAGS.input_partition_dims,
+        'images': image_partition_dims,
         'source_ids': None,
-        'image_info': None,}
+        'image_info': None,
+    }
     input_partition_dims = [features_partition_dims, labels_partition_dims]
     num_shards = FLAGS.num_cores // num_cores_per_replica
   else:
