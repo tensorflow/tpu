@@ -183,22 +183,23 @@ def generate_detections_tpu(class_outputs,
       image in the batch. Each detection is stored in the format of
       [image_id, ymin, xmin, ymax, xmax, score, class] in the last dimension.
   """
-  batch_size, _, _ = class_outputs.get_shape().as_list()
-  detections = []
-  softmax_class_outputs = tf.nn.softmax(class_outputs)
-  for i in range(batch_size):
-    detections.append(generate_detections_per_image_tpu(
-        softmax_class_outputs[i],
-        box_outputs[i],
-        anchor_boxes[i],
-        image_id[i],
-        image_info[i],
-        pre_nms_num_detections,
-        post_nms_num_detections,
-        nms_threshold,
-        bbox_reg_weights))
-  detections = tf.stack(detections, axis=0)
-  return detections
+  with tf.name_scope('generate_detections'):
+    batch_size, _, _ = class_outputs.get_shape().as_list()
+    detections = []
+    softmax_class_outputs = tf.nn.softmax(class_outputs)
+    for i in range(batch_size):
+      detections.append(generate_detections_per_image_tpu(
+          softmax_class_outputs[i],
+          box_outputs[i],
+          anchor_boxes[i],
+          image_id[i],
+          image_info[i],
+          pre_nms_num_detections,
+          post_nms_num_detections,
+          nms_threshold,
+          bbox_reg_weights))
+    detections = tf.stack(detections, axis=0)
+    return detections
 
 
 def generate_detections_gpu(class_outputs,
@@ -240,84 +241,64 @@ def generate_detections_gpu(class_outputs,
       image in the batch. Each detection is stored in the format of
       [image_id, ymin, xmin, ymax, xmax, score, class] in the last dimension.
   """
-  batch_size, num_boxes, num_classes = class_outputs.get_shape().as_list()
-  softmax_class_outputs = tf.nn.softmax(class_outputs)
+  with tf.name_scope('generate_detections'):
+    batch_size, num_boxes, num_classes = class_outputs.get_shape().as_list()
+    softmax_class_outputs = tf.nn.softmax(class_outputs)
 
-  # Remove background
-  scores = tf.slice(softmax_class_outputs, [0, 0, 1], [-1, -1, -1])
-  boxes = tf.slice(
-      tf.reshape(box_outputs, [batch_size, num_boxes, num_classes, 4]),
-      [0, 0, 1, 0], [-1, -1, -1, -1])
+    # Remove background
+    scores = tf.slice(softmax_class_outputs, [0, 0, 1], [-1, -1, -1])
+    boxes = tf.slice(
+        tf.reshape(box_outputs, [batch_size, num_boxes, num_classes, 4]),
+        [0, 0, 1, 0], [-1, -1, -1, -1])
 
-  anchor_boxes = tf.tile(
-      tf.expand_dims(anchor_boxes, axis=2), [1, 1, num_classes - 1, 1])
+    anchor_boxes = tf.tile(
+        tf.expand_dims(anchor_boxes, axis=2), [1, 1, num_classes - 1, 1])
 
-  num_detections = num_boxes * (num_classes - 1)
+    num_detections = num_boxes * (num_classes - 1)
 
-  boxes = tf.reshape(boxes, [batch_size, num_detections, 4])
-  scores = tf.reshape(scores, [batch_size, num_detections, 1])
-  anchor_boxes = tf.reshape(anchor_boxes, [batch_size, num_detections, 4])
+    boxes = tf.reshape(boxes, [batch_size, num_detections, 4])
+    scores = tf.reshape(scores, [batch_size, num_detections, 1])
+    anchor_boxes = tf.reshape(anchor_boxes, [batch_size, num_detections, 4])
 
-  # Decode
-  boxes = box_utils.decode_boxes(
-      boxes, anchor_boxes, bbox_reg_weights)
+    # Decode
+    boxes = box_utils.decode_boxes(
+        boxes, anchor_boxes, bbox_reg_weights)
 
-  # Clip boxes
-  height, width, scale = tf.split(
-      image_info[:, :3], num_or_size_splits=3, axis=-1)
-  height = tf.expand_dims(height, axis=-1)
-  width = tf.expand_dims(width, axis=-1)
-  scale = tf.expand_dims(scale, axis=-1)
-  boxes = box_utils.clip_boxes(boxes, height, width)
+    # Clip boxes
+    height, width, scale = tf.split(
+        image_info[:, :3], num_or_size_splits=3, axis=-1)
+    height = tf.expand_dims(height, axis=-1)
+    width = tf.expand_dims(width, axis=-1)
+    scale = tf.expand_dims(scale, axis=-1)
+    boxes = box_utils.clip_boxes(boxes, height, width)
 
-  pre_nms_boxes = tf.reshape(
-      boxes, [batch_size, num_boxes, num_classes - 1, 4])
-  pre_nms_scores = tf.reshape(
-      scores, [batch_size, num_boxes, num_classes - 1])
+    # NMS
+    pre_nms_boxes = box_utils.to_normalized_coordinates(
+        boxes, height, width)
+    pre_nms_boxes = tf.reshape(
+        pre_nms_boxes, [batch_size, num_boxes, num_classes - 1, 4])
+    pre_nms_scores = tf.reshape(
+        scores, [batch_size, num_boxes, num_classes - 1])
+    post_nms_boxes, post_nms_scores, post_nms_classes, _ = (
+        tf.image.combined_non_max_suppression(
+            pre_nms_boxes,
+            pre_nms_scores,
+            max_output_size_per_class=pre_nms_num_detections,
+            max_total_size=post_nms_num_detections,
+            iou_threshold=nms_threshold,
+            score_threshold=0.0,
+            pad_per_class=False))
+    post_nms_classes = post_nms_classes + 1
+    post_nms_boxes = box_utils.to_absolute_coordinates(
+        post_nms_boxes, height, width)
 
-  # NMS
-  pre_nms_boxes = box_utils.to_normalized_coordinates(
-      pre_nms_boxes, height, width)
-  post_nms_boxes, post_nms_scores, post_nms_classes, valid_boxes = (
-      tf.image.combined_non_max_suppression(
-          pre_nms_boxes,
-          pre_nms_scores,
-          max_output_size_per_class=pre_nms_num_detections,
-          max_total_size=post_nms_num_detections,
-          iou_threshold=nms_threshold,
-          score_threshold=0.0,
-          pad_per_class=False))
-  post_nms_classes = post_nms_classes + 1
-  post_nms_boxes = box_utils.to_absolute_coordinates(
-      post_nms_boxes, height, width)
-
-  # Only works with static batch size.
-  # Unroll batch dimension.
-  post_boxes_list = tf.unstack(post_nms_boxes)
-  post_scores_list = tf.unstack(post_nms_scores)
-  post_classes_list = tf.unstack(post_nms_classes)
-  valid_boxes_list = tf.unstack(valid_boxes)
-  image_id_list = tf.unstack(image_id)
-
-  detections = []
-  for boxes_i, scores_i, classes_i, _, image_id_i in (
-      zip(post_boxes_list, post_scores_list, post_classes_list,
-          valid_boxes_list, image_id_list)):
-    post_nms_top_k_scores = tf.reshape(scores_i, [post_nms_num_detections])
-    post_nms_top_k_boxes = tf.reshape(boxes_i, [post_nms_num_detections, 4])
-    post_nms_top_k_classes = tf.reshape(classes_i, [post_nms_num_detections])
-
-    this_batch_detections = tf.stack(
-        [
-            tf.to_float(tf.fill(tf.shape(post_nms_top_k_scores), image_id_i)),
-            post_nms_top_k_boxes[:, 0],
-            post_nms_top_k_boxes[:, 1],
-            post_nms_top_k_boxes[:, 2],
-            post_nms_top_k_boxes[:, 3],
-            post_nms_top_k_scores,
-            tf.to_float(post_nms_top_k_classes),
-        ],
-        axis=1)
-    detections.append(this_batch_detections)
-  detections = tf.stack(detections, axis=0)
-  return detections
+    image_ids = tf.tile(
+        tf.reshape(image_id, [batch_size, 1, 1]),
+        [1, post_nms_num_detections, 1])
+    detections = tf.concat([
+        tf.to_float(image_ids),
+        post_nms_boxes,
+        tf.expand_dims(post_nms_scores, axis=-1),
+        tf.to_float(tf.expand_dims(post_nms_classes, axis=-1)),
+    ], axis=-1)
+    return detections

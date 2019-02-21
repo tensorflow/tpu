@@ -304,35 +304,36 @@ def encode_boxes(boxes, anchors, weights=None):
     encoded_boxes: a tensor whose shape is the same as `boxes` representing the
       encoded box targets.
   """
-  boxes = tf.cast(boxes, dtype=anchors.dtype)
-  ymin, xmin, ymax, xmax = tf.split(
-      boxes, num_or_size_splits=4, axis=-1)
-  box_h = ymax - ymin + 1.0
-  box_w = xmax - xmin + 1.0
-  box_yc = ymin + 0.5 * box_h
-  box_xc = xmin + 0.5 * box_w
+  with tf.name_scope('encode_box'):
+    boxes = tf.cast(boxes, dtype=anchors.dtype)
+    ymin, xmin, ymax, xmax = tf.split(
+        boxes, num_or_size_splits=4, axis=-1)
+    box_h = ymax - ymin + 1.0
+    box_w = xmax - xmin + 1.0
+    box_yc = ymin + 0.5 * box_h
+    box_xc = xmin + 0.5 * box_w
 
-  anchor_ymin, anchor_xmin, anchor_ymax, anchor_xmax = (
-      tf.split(anchors, num_or_size_splits=4, axis=-1))
-  anchor_h = anchor_ymax - anchor_ymin + 1.0
-  anchor_w = anchor_xmax - anchor_xmin + 1.0
-  anchor_yc = anchor_ymin + 0.5 * anchor_h
-  anchor_xc = anchor_xmin + 0.5 * anchor_w
+    anchor_ymin, anchor_xmin, anchor_ymax, anchor_xmax = (
+        tf.split(anchors, num_or_size_splits=4, axis=-1))
+    anchor_h = anchor_ymax - anchor_ymin + 1.0
+    anchor_w = anchor_xmax - anchor_xmin + 1.0
+    anchor_yc = anchor_ymin + 0.5 * anchor_h
+    anchor_xc = anchor_xmin + 0.5 * anchor_w
 
-  encoded_dy = (box_yc - anchor_yc) / anchor_h
-  encoded_dx = (box_xc - anchor_xc) / anchor_w
-  encoded_dh = tf.log(box_h / anchor_h)
-  encoded_dw = tf.log(box_w / anchor_w)
-  if weights:
-    encoded_dy *= weights[0]
-    encoded_dx *= weights[1]
-    encoded_dh *= weights[2]
-    encoded_dw *= weights[3]
+    encoded_dy = (box_yc - anchor_yc) / anchor_h
+    encoded_dx = (box_xc - anchor_xc) / anchor_w
+    encoded_dh = tf.log(box_h / anchor_h)
+    encoded_dw = tf.log(box_w / anchor_w)
+    if weights:
+      encoded_dy *= weights[0]
+      encoded_dx *= weights[1]
+      encoded_dh *= weights[2]
+      encoded_dw *= weights[3]
 
-  encoded_boxes = tf.concat(
-      [encoded_dy, encoded_dx, encoded_dh, encoded_dw],
-      axis=-1)
-  return encoded_boxes
+    encoded_boxes = tf.concat(
+        [encoded_dy, encoded_dx, encoded_dh, encoded_dw],
+        axis=-1)
+    return encoded_boxes
 
 
 def decode_boxes(encoded_boxes, anchors, weights=None):
@@ -349,40 +350,41 @@ def decode_boxes(encoded_boxes, anchors, weights=None):
     encoded_boxes: a tensor whose shape is the same as `boxes` representing the
       decoded box targets.
   """
-  encoded_boxes = tf.cast(encoded_boxes, dtype=anchors.dtype)
-  dy, dx, dh, dw = tf.split(
-      encoded_boxes, num_or_size_splits=4, axis=-1)
-  if weights:
-    dy /= weights[0]
-    dx /= weights[1]
-    dh /= weights[2]
-    dw /= weights[3]
-  dh = tf.minimum(dh, BBOX_XFORM_CLIP)
-  dw = tf.minimum(dw, BBOX_XFORM_CLIP)
+  with tf.name_scope('decode_box'):
+    encoded_boxes = tf.cast(encoded_boxes, dtype=anchors.dtype)
+    dy, dx, dh, dw = tf.split(
+        encoded_boxes, num_or_size_splits=4, axis=-1)
+    if weights:
+      dy /= weights[0]
+      dx /= weights[1]
+      dh /= weights[2]
+      dw /= weights[3]
+    dh = tf.minimum(dh, BBOX_XFORM_CLIP)
+    dw = tf.minimum(dw, BBOX_XFORM_CLIP)
 
-  anchor_ymin, anchor_xmin, anchor_ymax, anchor_xmax = tf.split(
-      anchors, num_or_size_splits=4, axis=-1)
+    anchor_ymin, anchor_xmin, anchor_ymax, anchor_xmax = tf.split(
+        anchors, num_or_size_splits=4, axis=-1)
 
-  anchor_h = anchor_ymax - anchor_ymin + 1.0
-  anchor_w = anchor_xmax - anchor_xmin + 1.0
-  anchor_yc = anchor_ymin + 0.5 * anchor_h
-  anchor_xc = anchor_xmin + 0.5 * anchor_w
+    anchor_h = anchor_ymax - anchor_ymin + 1.0
+    anchor_w = anchor_xmax - anchor_xmin + 1.0
+    anchor_yc = anchor_ymin + 0.5 * anchor_h
+    anchor_xc = anchor_xmin + 0.5 * anchor_w
 
-  decoded_boxes_yc = dy * anchor_h + anchor_yc
-  decoded_boxes_xc = dx * anchor_w + anchor_xc
-  decoded_boxes_h = tf.exp(dh) * anchor_h
-  decoded_boxes_w = tf.exp(dw) * anchor_w
+    decoded_boxes_yc = dy * anchor_h + anchor_yc
+    decoded_boxes_xc = dx * anchor_w + anchor_xc
+    decoded_boxes_h = tf.exp(dh) * anchor_h
+    decoded_boxes_w = tf.exp(dw) * anchor_w
 
-  decoded_boxes_ymin = decoded_boxes_yc - 0.5 * decoded_boxes_h
-  decoded_boxes_xmin = decoded_boxes_xc - 0.5 * decoded_boxes_w
-  decoded_boxes_ymax = decoded_boxes_ymin + decoded_boxes_h - 1.0
-  decoded_boxes_xmax = decoded_boxes_xmin + decoded_boxes_w - 1.0
+    decoded_boxes_ymin = decoded_boxes_yc - 0.5 * decoded_boxes_h
+    decoded_boxes_xmin = decoded_boxes_xc - 0.5 * decoded_boxes_w
+    decoded_boxes_ymax = decoded_boxes_ymin + decoded_boxes_h - 1.0
+    decoded_boxes_xmax = decoded_boxes_xmin + decoded_boxes_w - 1.0
 
-  decoded_boxes = tf.concat(
-      [decoded_boxes_ymin, decoded_boxes_xmin,
-       decoded_boxes_ymax, decoded_boxes_xmax],
-      axis=-1)
-  return decoded_boxes
+    decoded_boxes = tf.concat(
+        [decoded_boxes_ymin, decoded_boxes_xmin,
+         decoded_boxes_ymax, decoded_boxes_xmax],
+        axis=-1)
+    return decoded_boxes
 
 
 def clip_boxes(boxes, height, width):
@@ -402,20 +404,21 @@ def clip_boxes(boxes, height, width):
     clipped_boxes: a tensor whose shape is the same as `boxes` representing the
       clipped boxes.
   """
-  y_min, x_min, y_max, x_max = tf.split(
-      boxes, num_or_size_splits=4, axis=-1)
+  with tf.name_scope('clip_box'):
+    y_min, x_min, y_max, x_max = tf.split(
+        boxes, num_or_size_splits=4, axis=-1)
 
-  height = tf.cast(height, dtype=boxes.dtype)
-  width = tf.cast(width, dtype=boxes.dtype)
-  clipped_y_min = tf.maximum(tf.minimum(y_min, height - 1.0), 0.0)
-  clipped_y_max = tf.maximum(tf.minimum(y_max, height - 1.0), 0.0)
-  clipped_x_min = tf.maximum(tf.minimum(x_min, width - 1.0), 0.0)
-  clipped_x_max = tf.maximum(tf.minimum(x_max, width - 1.0), 0.0)
+    height = tf.cast(height, dtype=boxes.dtype)
+    width = tf.cast(width, dtype=boxes.dtype)
+    clipped_y_min = tf.maximum(tf.minimum(y_min, height - 1.0), 0.0)
+    clipped_y_max = tf.maximum(tf.minimum(y_max, height - 1.0), 0.0)
+    clipped_x_min = tf.maximum(tf.minimum(x_min, width - 1.0), 0.0)
+    clipped_x_max = tf.maximum(tf.minimum(x_max, width - 1.0), 0.0)
 
-  clipped_boxes = tf.concat(
-      [clipped_y_min, clipped_x_min, clipped_y_max, clipped_x_max],
-      axis=-1)
-  return clipped_boxes
+    clipped_boxes = tf.concat(
+        [clipped_y_min, clipped_x_min, clipped_y_max, clipped_x_max],
+        axis=-1)
+    return clipped_boxes
 
 
 def filter_boxes(boxes, scores, min_size, height, width, scale):
@@ -443,27 +446,28 @@ def filter_boxes(boxes, scores, min_size, height, width, scale):
     filtered_scores: a tensor whose shape is the same as `scores` representing
       the filtered scores.
   """
-  y_min, x_min, y_max, x_max = tf.split(
-      boxes, num_or_size_splits=4, axis=-1)
+  with tf.name_scope('filter_box'):
+    y_min, x_min, y_max, x_max = tf.split(
+        boxes, num_or_size_splits=4, axis=-1)
 
-  h = y_max - y_min + 1.0
-  w = x_max - x_min + 1.0
-  yc = y_min + h / 2.0
-  xc = x_min + w / 2.0
+    h = y_max - y_min + 1.0
+    w = x_max - x_min + 1.0
+    yc = y_min + h / 2.0
+    xc = x_min + w / 2.0
 
-  height = tf.cast(height, dtype=boxes.dtype)
-  width = tf.cast(width, dtype=boxes.dtype)
-  scale = tf.cast(scale, dtype=boxes.dtype)
-  min_size = tf.cast(tf.maximum(min_size, 1), dtype=boxes.dtype)
-  size_mask = tf.logical_and(
-      tf.greater_equal(h, min_size * scale),
-      tf.greater_equal(w, min_size * scale))
-  center_mask = tf.logical_and(tf.less(yc, height), tf.less(xc, width))
-  selected_mask = tf.logical_and(size_mask, center_mask)
+    height = tf.cast(height, dtype=boxes.dtype)
+    width = tf.cast(width, dtype=boxes.dtype)
+    scale = tf.cast(scale, dtype=boxes.dtype)
+    min_size = tf.cast(tf.maximum(min_size, 1), dtype=boxes.dtype)
+    size_mask = tf.logical_and(
+        tf.greater_equal(h, min_size * scale),
+        tf.greater_equal(w, min_size * scale))
+    center_mask = tf.logical_and(tf.less(yc, height), tf.less(xc, width))
+    selected_mask = tf.logical_and(size_mask, center_mask)
 
-  filtered_scores = tf.where(selected_mask, scores, tf.zeros_like(scores))
-  filtered_boxes = tf.cast(selected_mask, dtype=boxes.dtype) * boxes
-  return filtered_boxes, filtered_scores
+    filtered_scores = tf.where(selected_mask, scores, tf.zeros_like(scores))
+    filtered_boxes = tf.cast(selected_mask, dtype=boxes.dtype) * boxes
+    return filtered_boxes, filtered_scores
 
 
 def to_normalized_coordinates(boxes, height, width):
@@ -483,19 +487,20 @@ def to_normalized_coordinates(boxes, height, width):
     normalized_boxes: a tensor whose shape is the same as `boxes` representing
       the boxes in normalized coordinates.
   """
-  height = tf.cast(height, dtype=boxes.dtype)
-  width = tf.cast(width, dtype=boxes.dtype)
+  with tf.name_scope('normalize_box'):
+    height = tf.cast(height, dtype=boxes.dtype)
+    width = tf.cast(width, dtype=boxes.dtype)
 
-  y_min, x_min, y_max, x_max = tf.split(
-      boxes, num_or_size_splits=4, axis=-1)
+    y_min, x_min, y_max, x_max = tf.split(
+        boxes, num_or_size_splits=4, axis=-1)
 
-  y_min /= height
-  y_max /= height
-  x_min /= width
-  x_max /= width
+    y_min /= height
+    y_max /= height
+    x_min /= width
+    x_max /= width
 
-  normalized_boxes = tf.concat([y_min, x_min, y_max, x_max], axis=-1)
-  return normalized_boxes
+    normalized_boxes = tf.concat([y_min, x_min, y_max, x_max], axis=-1)
+    return normalized_boxes
 
 
 def to_absolute_coordinates(boxes, height, width):
@@ -515,15 +520,16 @@ def to_absolute_coordinates(boxes, height, width):
     absolute_boxes: a tensor whose shape is the same as `boxes` representing the
       boxes in absolute coordinates.
   """
-  height = tf.cast(height, dtype=boxes.dtype)
-  width = tf.cast(width, dtype=boxes.dtype)
+  with tf.name_scope('denormalize_box'):
+    height = tf.cast(height, dtype=boxes.dtype)
+    width = tf.cast(width, dtype=boxes.dtype)
 
-  y_min, x_min, y_max, x_max = tf.split(
-      boxes, num_or_size_splits=4, axis=-1)
-  y_min *= height
-  y_max *= height
-  x_min *= width
-  x_max *= width
+    y_min, x_min, y_max, x_max = tf.split(
+        boxes, num_or_size_splits=4, axis=-1)
+    y_min *= height
+    y_max *= height
+    x_min *= width
+    x_max *= width
 
-  absolute_boxes = tf.concat([y_min, x_min, y_max, x_max], axis=-1)
-  return absolute_boxes
+    absolute_boxes = tf.concat([y_min, x_min, y_max, x_max], axis=-1)
+    return absolute_boxes
