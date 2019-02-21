@@ -196,7 +196,7 @@ flags.DEFINE_integer(
 
 # Inference configuration.
 flags.DEFINE_bool(
-    'inference_with_all_cores', True, 'Whether to round-robin'
+    'inference_with_all_cores', False, 'Whether to round-robin'
     'among all cores visible to the host for TPU inference.')
 flags.DEFINE_bool(
     'add_warmup_requests', True,
@@ -409,17 +409,29 @@ def main(_):
 
   if hparams.use_tpu:
     run_config = build_run_config()
-    image_classifier = tf.contrib.tpu.TPUEstimator(
-        model_fn=model.model_fn,
-        use_tpu=True,
-        config=run_config,
-        params=estimator_parmas,
-        predict_batch_size=eval_batch_size,
-        train_batch_size=hparams.train_batch_size,
-        eval_batch_size=eval_batch_size,
-        export_to_tpu=FLAGS.export_to_tpu,
-        experimental_exported_model_uses_all_cores=FLAGS
-        .inference_with_all_cores)
+    # Temporary treatment until flags are released.
+    if FLAGS.inference_with_all_cores:
+      image_classifier = tf.contrib.tpu.TPUEstimator(
+          model_fn=model.model_fn,
+          use_tpu=True,
+          config=run_config,
+          params=estimator_parmas,
+          predict_batch_size=eval_batch_size,
+          train_batch_size=hparams.train_batch_size,
+          eval_batch_size=eval_batch_size,
+          export_to_tpu=FLAGS.export_to_tpu,
+          experimental_exported_model_uses_all_cores=FLAGS
+          .inference_with_all_cores)
+    else:
+      image_classifier = tf.contrib.tpu.TPUEstimator(
+          model_fn=model.model_fn,
+          use_tpu=True,
+          config=run_config,
+          params=estimator_parmas,
+          predict_batch_size=eval_batch_size,
+          train_batch_size=hparams.train_batch_size,
+          eval_batch_size=eval_batch_size,
+          export_to_tpu=FLAGS.export_to_tpu)
   else:
     save_checkpoints_steps = (FLAGS.save_checkpoints_steps or
                               FLAGS.iterations_per_loop)

@@ -53,7 +53,7 @@ def default_config():
       # used as the visual features for many SOTA image-text generation models,
       # such as image-captioning and VQA.
       output_box_features=False,
-      bbox_reg_weights=(10., 10., 5., 5.),
+      bbox_reg_weights=[10., 10., 5., 5.],
       # Mask-RCNN heads.
       include_mask=True,  # whether or not to include mask branch.
       mrcnn_resolution=28,
@@ -67,7 +67,7 @@ def default_config():
       min_level=2,
       max_level=6,
       num_scales=1,
-      aspect_ratios=[(1.0, 1.0), (1.4, 0.7), (0.7, 1.4)],
+      aspect_ratios=[[1.0, 1.0], [1.4, 0.7], [0.7, 1.4]],
       anchor_scale=8.0,
       resnet_depth=50,
       # Number of groups to normalize in the distributed batch normalization.

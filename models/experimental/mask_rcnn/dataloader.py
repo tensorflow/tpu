@@ -515,23 +515,17 @@ def serving_input_fn(batch_size, image_size, feed_jpeg=False):
           back_prop=False,
           dtype=(tf.float32, tf.float32, tf.float32))
   else:
-    image = tf.placeholder(dtype=tf.float32)
     assert batch_size == 1
-    image_shape = tf.shape(image)
-    height = image_shape[0]
-    width = image_shape[1]
-    image_info = tf.stack([height, width, 1, height, width])
-    source_id = tf.constant(-1., dtype=tf.float32)
-    images = tf.expand_dims(image, axis=0)
-    images_info = tf.expand_dims(image_info, axis=0)
-    source_ids = tf.expand_dims(source_id, axis=0)
+    images = tf.placeholder(
+        dtype=tf.float32, shape=(1, image_size, image_size, 3))
+    images_info = tf.constant(
+        [[image_size, image_size, 1, image_size, image_size]],
+        dtype=tf.int32)
+    source_ids = tf.constant([-1.], dtype=tf.float32)
 
   images.set_shape([batch_size, image_size, image_size, 3])
   images_info.set_shape([batch_size, 5])
   source_ids.set_shape([batch_size])
-
-  images = tf.identity(images, 'Image')
-  images_info = tf.identity(images_info, 'ImageInfo')
 
   if feed_jpeg:
     return tf.estimator.export.ServingInputReceiver(
@@ -552,5 +546,5 @@ def serving_input_fn(batch_size, image_size, feed_jpeg=False):
             'source_ids': source_ids,
         },
         receiver_tensors={
-            'image': image,
+            'images': images,
         })

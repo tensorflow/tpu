@@ -187,16 +187,15 @@ def _propose_rois_gpu(scores,
         scale)
     scores = tf.squeeze(scores, axis=-1)
 
-  pre_nms_boxes = tf.reshape(boxes, [batch_size, num_boxes, 1, 4])
-  pre_nms_scores = tf.reshape(scores, [batch_size, num_boxes, 1])
-
   post_nms_topk_limit = (topk_limit if topk_limit < rpn_post_nms_topn else
                          rpn_post_nms_topn)
   if rpn_nms_threshold > 0:
     # Normalize coordinates as combined_non_max_suppression currently
     # only support normalized coordinates.
     pre_nms_boxes = box_utils.to_normalized_coordinates(
-        pre_nms_boxes, height, width)
+        boxes, height, width)
+    pre_nms_boxes = tf.reshape(pre_nms_boxes, [batch_size, num_boxes, 1, 4])
+    pre_nms_scores = tf.reshape(scores, [batch_size, num_boxes, 1])
     boxes, scores, _, _ = tf.image.combined_non_max_suppression(
         pre_nms_boxes,
         pre_nms_scores,
@@ -301,7 +300,7 @@ def multilevel_propose_rois(scores_outputs,
     scores = tf.concat(scores, axis=1)
     rois = tf.concat(rois, axis=1)
 
-    with tf.name_scope('post_nms_topk'):
+    with tf.name_scope('roi_post_nms_topk'):
       post_nms_num_anchors = scores.shape[1]
       post_nms_topk_limit = (
           post_nms_num_anchors if post_nms_num_anchors < rpn_post_nms_topn

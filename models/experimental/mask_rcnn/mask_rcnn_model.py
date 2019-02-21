@@ -218,7 +218,6 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
             params['test_nms'],
             params['bbox_reg_weights'])
 
-      detections = tf.identity(detections, 'Detections')
       model_outputs.update({
           'detections': detections,
       })
@@ -229,7 +228,6 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
         _, _, final_box_features = heads.box_head(
             final_roi_features, num_classes=params['num_classes'],
             mlp_head_dim=params['fast_rcnn_mlp_head_dim'])
-        final_box_features = tf.identity(final_box_features, 'BoxFeatures')
         model_outputs.update({
             'box_features': final_box_features,
         })
@@ -272,7 +270,6 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
         num_classes=params['num_classes'],
         mrcnn_resolution=params['mrcnn_resolution'])
 
-    mask_outputs = tf.identity(mask_outputs, 'Masks')
     model_outputs.update({
         'mask_outputs': mask_outputs,
     })
@@ -304,12 +301,17 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
   # First check if it is in PREDICT mode.
   if mode == tf.estimator.ModeKeys.PREDICT:
     predictions = {}
-    predictions['detections'] = model_outputs['detections']
-    predictions['image_info'] = features['image_info']
+    predictions['detections'] = tf.identity(
+        model_outputs['detections'], 'Detections')
+    predictions['image_info'] = tf.identity(
+        model_outputs['image_info'], 'ImageInfo')
     if params['output_box_features']:
-      predictions['box_features'] = model_outputs['box_features']
+      predictions['box_features'] = tf.identity(
+          model_outputs['box_features'], 'BoxFeatures')
     if params['include_mask']:
-      predictions['mask_outputs'] = tf.nn.sigmoid(model_outputs['mask_outputs'])
+      predictions['mask_outputs'] = tf.identity(
+          tf.nn.sigmoid(model_outputs['mask_outputs']),
+          'Masks')
 
     if params['use_tpu']:
       return tf.contrib.tpu.TPUEstimatorSpec(mode=mode, predictions=predictions)

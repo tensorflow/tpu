@@ -90,9 +90,10 @@ def box_head(roi_features, num_classes=91, mlp_head_dim=1024):
   """
   with tf.variable_scope('box_head', reuse=tf.AUTO_REUSE):
     # reshape inputs beofre FC.
-    _, num_rois, height, width, filters = roi_features.get_shape().as_list()
+    batch_size, num_rois, height, width, filters = (
+        roi_features.get_shape().as_list())
     roi_features = tf.reshape(roi_features,
-                              [-1, num_rois, height * width * filters])
+                              [batch_size, num_rois, height * width * filters])
     net = tf.layers.dense(roi_features, units=mlp_head_dim,
                           activation=tf.nn.relu, name='fc6')
     net = tf.layers.dense(net, units=mlp_head_dim,

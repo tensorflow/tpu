@@ -166,7 +166,7 @@ For more detailed information, read the documentation within each file.
   TPUEstimator and handles training and evaluating the model.
 * [`mnasnet_model.py`](mnasnet_model.py): Modeling library which constructs the
   network via modular MnasBlock.
-* [`mnasnet_model.py`](mnasnet_models.py): A script that defines benchmark
+* [`mnasnet_models.py`](mnasnet_models.py): A script that defines benchmark
 MnasNet architectures (e.g. MnasNet-A1, MnasNet-B1) through decoding string
 representation of the network.
 * [`preprocessing.py`](preprocessing.py): Useful utilities for
