@@ -100,6 +100,10 @@ def evaluation(eval_estimator, config):
       yield_single_examples=False)
   # Every predictor.next() gets a batch of prediction (a dictionary).
   predictions = dict()
+  assert config.eval_samples // config.eval_batch_size > 0, (
+      'config.eval_samples'
+      ' >= '
+      'config.eval_batch_size')
   for _ in range(config.eval_samples // config.eval_batch_size):
     prediction = six.next(predictor)
     image_info = prediction['image_info']

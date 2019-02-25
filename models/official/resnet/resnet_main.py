@@ -27,6 +27,7 @@ import absl.logging as _logging  # pylint: disable=unused-import
 import numpy as np
 import tensorflow as tf
 
+from common import inference_warmup
 from common import tpu_profiler_hook
 from official.resnet import imagenet_input
 from official.resnet import lars_util
@@ -247,6 +248,20 @@ flags.DEFINE_integer(
     'dropblock_size', default=7,
     help=('size parameter of DropBlock. Will not be used if dropblock_groups '
           'is empty.'))
+
+# Inference configuration.
+flags.DEFINE_bool(
+    'inference_with_all_cores', False, 'Whether to round-robin'
+    'among all cores visible to the host for TPU inference.')
+flags.DEFINE_bool(
+    'add_warmup_requests', False,
+    'Whether to add warmup requests into the export saved model dir,'
+    'especially for TPU inference.')
+flags.DEFINE_string('model_name', 'resnet',
+                    'Serving model name used for the model server.')
+flags.DEFINE_multi_integer(
+    'inference_batch_sizes', [8],
+    'Known inference batch sizes used to warm up for each core.')
 
 
 # The input tensor is in the range of [0, 255], we need to scale them to the
@@ -601,13 +616,24 @@ def main(unused_argv):
           per_host_input_for_training=tf.contrib.tpu.InputPipelineConfig
           .PER_HOST_V2))  # pylint: disable=line-too-long
 
-  resnet_classifier = tf.contrib.tpu.TPUEstimator(
-      use_tpu=FLAGS.use_tpu,
-      model_fn=resnet_model_fn,
-      config=config,
-      train_batch_size=FLAGS.train_batch_size,
-      eval_batch_size=FLAGS.eval_batch_size,
-      export_to_tpu=FLAGS.export_to_tpu)
+  if FLAGS.inference_with_all_cores:
+    resnet_classifier = tf.contrib.tpu.TPUEstimator(
+        use_tpu=FLAGS.use_tpu,
+        model_fn=resnet_model_fn,
+        config=config,
+        train_batch_size=FLAGS.train_batch_size,
+        eval_batch_size=FLAGS.eval_batch_size,
+        export_to_tpu=FLAGS.export_to_tpu,
+        experimental_exported_model_uses_all_cores=FLAGS
+        .inference_with_all_cores)
+  else:
+    resnet_classifier = tf.contrib.tpu.TPUEstimator(
+        use_tpu=FLAGS.use_tpu,
+        model_fn=resnet_model_fn,
+        config=config,
+        train_batch_size=FLAGS.train_batch_size,
+        eval_batch_size=FLAGS.eval_batch_size,
+        export_to_tpu=FLAGS.export_to_tpu)
   assert FLAGS.precision == 'bfloat16' or FLAGS.precision == 'float32', (
       'Invalid value for --precision flag; must be bfloat16 or float32.')
   tf.logging.info('Precision: %s', FLAGS.precision)
@@ -738,9 +764,16 @@ def main(unused_argv):
       # The guide to serve a exported TensorFlow model is at:
       #    https://www.tensorflow.org/serving/serving_basic
       tf.logging.info('Starting to export model.')
-      resnet_classifier.export_saved_model(
+      export_path = resnet_classifier.export_saved_model(
           export_dir_base=FLAGS.export_dir,
           serving_input_receiver_fn=imagenet_input.image_serving_input_fn)
+      if FLAGS.add_warmup_requests:
+        inference_warmup.write_warmup_requests(
+            export_path,
+            FLAGS.model_name,
+            FLAGS.image_size,
+            batch_sizes=FLAGS.inference_batch_sizes,
+            image_format='JPEG')
 
 
 if __name__ == '__main__':

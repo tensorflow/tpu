@@ -164,9 +164,11 @@ class ImageNetTFExampleInput(object):
     # batch size. As long as this validation is done with consistent batch size,
     # exactly the same images will be used.
     dataset = dataset.apply(
-        tf.contrib.data.map_and_batch(
-            self.dataset_parser, batch_size=batch_size,
-            num_parallel_batches=self.num_cores, drop_remainder=True))
+        tf.data.experimental.map_and_batch(
+            self.dataset_parser,
+            batch_size=batch_size,
+            num_parallel_batches=self.num_cores,
+            drop_remainder=True))
 
     # Transpose for performance on TPU
     if self.transpose_input:
@@ -178,7 +180,15 @@ class ImageNetTFExampleInput(object):
     dataset = dataset.map(functools.partial(self.set_shapes, batch_size))
 
     # Prefetch overlaps in-feed with training
-    dataset = dataset.prefetch(tf.contrib.data.AUTOTUNE)
+    dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
+
+    # Use a private thread pool and limit intra-op parallelism.
+    options = tf.data.Options()
+    options.experimental_threading.max_intra_op_parallelism = 1
+    options.experimental_threading.private_threadpool_size = 16
+    options.experimental_deterministic = False
+    dataset = dataset.with_options(options)
+
     return dataset
 
 
@@ -283,13 +293,13 @@ class ImageNetInput(ImageNetTFExampleInput):
       return dataset
 
     # Read the data from disk in parallel
-    dataset = dataset.apply(
-        tf.contrib.data.parallel_interleave(
-            fetch_dataset, cycle_length=self.num_parallel_calls, sloppy=True))
+    dataset = dataset.interleave(
+        fetch_dataset,
+        cycle_length=self.num_parallel_calls,
+        num_parallel_calls=self.num_parallel_calls)
 
     if self.cache:
-      dataset = dataset.cache().apply(
-          tf.contrib.data.shuffle_and_repeat(1024 * 16))
+      dataset = dataset.cache().shuffle(1024 * 16).repeat()
     else:
       dataset = dataset.shuffle(1024)
     return dataset

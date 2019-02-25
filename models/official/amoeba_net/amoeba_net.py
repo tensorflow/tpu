@@ -26,19 +26,15 @@ python amoeba_net.py --data_dir=gs://cloud-tpu-datasets/imagenet-data --model_di
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-import io
 import itertools
 import math
-import os
 from absl import app
 from absl import flags
 import absl.logging as _logging  # pylint: disable=unused-import
-import numpy as np
-from PIL import Image
 import tensorflow as tf
 import amoeba_net_model as model_lib
-from tensorflow_serving.apis import predict_pb2
-from tensorflow_serving.apis import prediction_log_pb2
+from common import inference_warmup
+
 
 # Cloud TPU Cluster Resolvers
 flags.DEFINE_string(
@@ -199,7 +195,7 @@ flags.DEFINE_bool(
     'inference_with_all_cores', False, 'Whether to round-robin'
     'among all cores visible to the host for TPU inference.')
 flags.DEFINE_bool(
-    'add_warmup_requests', True,
+    'add_warmup_requests', False,
     'Whether to add warmup requests into the export saved model dir,'
     'especially for TPU inference.')
 flags.DEFINE_string('model_name', 'amoeba_net',
@@ -256,59 +252,6 @@ def build_image_serving_input_receiver_fn(shape,
         features=images, receiver_tensors=image_bytes_list)
 
   return serving_input_receiver_fn
-
-
-def _encode_image(image_array, fmt='PNG'):
-  """encodes an (numpy) image array to string.
-
-  Args:
-    image_array: (numpy) image array
-    fmt: image format to use
-
-  Returns:
-    encoded image string
-  """
-  pil_image = Image.fromarray(image_array)
-  image_io = io.BytesIO()
-  pil_image.save(image_io, format=fmt)
-  return image_io.getvalue()
-
-
-def write_warmup_requests(savedmodel_dir,
-                          model_name,
-                          image_size,
-                          batch_sizes=None,
-                          num_requests=8):
-  """Writes warmup requests for inference into a tfrecord file.
-
-  Args:
-    savedmodel_dir: string, the file to the exported model folder.
-    model_name: string, a model name used inside the model server.
-    image_size: int, size of image, assuming image height and width.
-    batch_sizes: list, a list of batch sizes to create different input requests.
-    num_requests: int, number of requests per batch size.
-
-  Raises:
-    ValueError: if batch_sizes is not a valid integer list.
-  """
-  if not isinstance(batch_sizes, list) or not batch_sizes:
-    raise ValueError('batch sizes should be a valid non-empty list.')
-  extra_assets_dir = os.path.join(savedmodel_dir, 'assets.extra')
-  tf.gfile.MkDir(extra_assets_dir)
-  with tf.python_io.TFRecordWriter(
-      os.path.join(extra_assets_dir, 'tf_serving_warmup_requests')) as writer:
-    for batch_size in batch_sizes:
-      for _ in range(num_requests):
-        request = predict_pb2.PredictRequest()
-        image = np.uint8(np.random.rand(image_size, image_size, 3) * 255)
-        request.inputs['input'].CopyFrom(
-            tf.make_tensor_proto(
-                [_encode_image(image)] * batch_size, shape=[batch_size]))
-        request.model_spec.name = model_name
-        request.model_spec.signature_name = 'serving_default'
-        log = prediction_log_pb2.PredictionLog(
-            predict_log=prediction_log_pb2.PredictLog(request=request))
-        writer.write(log.SerializeToString())
 
 
 # TODO(ereal): simplify this.
@@ -520,7 +463,7 @@ def main(_):
             serving_shape),
         as_text=True)
     if FLAGS.add_warmup_requests:
-      write_warmup_requests(
+      inference_warmup.write_warmup_requests(
           export_path,
           FLAGS.model_name,
           hparams.image_size,

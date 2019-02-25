@@ -51,8 +51,6 @@ flags.DEFINE_bool(
 flags.DEFINE_integer('num_cores', 8, 'Number of TPU cores.')
 
 
-FLAGS = flags.FLAGS
-
 # Imagenet training and test data sets.
 NUM_CLASSES = 1000
 IMAGE_SIZE = 224
@@ -71,6 +69,14 @@ LR_SCHEDULE = [    # (multiplier, epoch to start) tuples
 
 DEFAULT_MODEL_DIR = '/tmp/resnet50'
 WEIGHTS_TXT = 'resnet50_weights.h5'
+
+# Allow overriding epochs, steps_per_epoch for testing
+flags.DEFINE_integer('num_epochs', EPOCHS, '')
+flags.DEFINE_integer(
+    'steps_per_epoch', None,
+    'Steps for epoch during training. If unspecified, use default value.')
+
+FLAGS = flags.FLAGS
 
 
 def learning_rate_schedule_wrapper(training_steps_per_epoch):
@@ -164,7 +170,9 @@ def main(unused_argv):
   assert FLAGS.data is not None, 'Provide training data path via --data.'
 
   batch_size = FLAGS.num_cores * PER_CORE_BATCH_SIZE
-  training_steps_per_epoch = int(APPROX_IMAGENET_TRAINING_IMAGES / batch_size)
+
+  training_steps_per_epoch = FLAGS.steps_per_epoch or (
+      int(APPROX_IMAGENET_TRAINING_IMAGES // batch_size))
   validation_steps = int(IMAGENET_VALIDATION_IMAGES // batch_size)
 
   model_dir = FLAGS.model_dir if FLAGS.model_dir else DEFAULT_MODEL_DIR
@@ -212,7 +220,7 @@ def main(unused_argv):
 
   model.fit(
       imagenet_train.input_fn(),
-      epochs=EPOCHS,
+      epochs=FLAGS.num_epochs,
       steps_per_epoch=training_steps_per_epoch,
       callbacks=training_callbacks,
       validation_data=imagenet_eval.input_fn(),

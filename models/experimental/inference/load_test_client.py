@@ -43,6 +43,8 @@ tf.app.flags.DEFINE_string(
     'will be resolved to ip address and port. Otherwise, the provided (proxy)'
     'ip address and port will be directly used.')
 tf.app.flags.DEFINE_string('image_path', '', 'The path of local image.')
+tf.app.flags.DEFINE_string('image_format', 'jpeg',
+                           'The image format for generated image (png, jpeg)')
 tf.app.flags.DEFINE_integer('batch_size', 8, 'Per request batch size.')
 tf.app.flags.DEFINE_integer('image_size', 224,
                             'Height and width of the image (square image).')
@@ -159,7 +161,7 @@ def generate_image():
       np.random.rand(FLAGS.image_size, FLAGS.image_size, FLAGS.channels) * 255)
   pil_image = Image.fromarray(array)
   image_io = io.BytesIO()
-  pil_image.save(image_io, format='png')
+  pil_image.save(image_io, format=FLAGS.image_format)
   return image_io.getvalue()
 
 
