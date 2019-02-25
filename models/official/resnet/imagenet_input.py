@@ -40,8 +40,8 @@ def image_serving_input_fn():
   )
   images = tf.map_fn(
       _preprocess_image, image_bytes_list, back_prop=False, dtype=tf.float32)
-  return tf.estimator.export.ServingInputReceiver(
-      images, {'image_bytes': image_bytes_list})
+  return tf.estimator.export.TensorServingInputReceiver(
+      features=images, receiver_tensors=image_bytes_list)
 
 
 class ImageNetTFExampleInput(object):

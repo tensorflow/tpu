@@ -43,6 +43,7 @@ def image_serving_input_fn():
   return tf.estimator.export.ServingInputReceiver(
       images, {'image_bytes': image_bytes_list})
 
+
 class ImageNetInput(object):
   """Generates ImageNet input_fn for training or evaluation.
 
@@ -131,20 +132,28 @@ class ImageNetInput(object):
       return dataset
 
     # Read the data from disk in parallel
-    dataset = dataset.apply(
-        tf.contrib.data.parallel_interleave(
-            fetch_dataset, cycle_length=16, sloppy=self.is_training))
+    dataset = dataset.interleave(fetch_dataset, cycle_length=16)
+
     if self.is_training:
       dataset = dataset.shuffle(1024)
 
     # Parse, pre-process, and batch the data in parallel
     dataset = dataset.apply(
-        tf.contrib.data.map_and_batch(
+        tf.data.experimental.map_and_batch(
             self.dataset_parser,
             batch_size=self.batch_size,
             num_parallel_batches=2,
             drop_remainder=True))
 
     # Prefetch overlaps in-feed with training
-    dataset = dataset.prefetch(tf.contrib.data.AUTOTUNE)
+    dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
+
+    # Use a private thread pool and limit intra-op parallelism.
+    options = tf.data.Options()
+    options.experimental_threading.max_intra_op_parallelism = 1
+    options.experimental_threading.private_threadpool_size = 16
+    if self.is_training:
+      options.experimental_deterministic = False
+    dataset = dataset.with_options(options)
+
     return dataset

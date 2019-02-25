@@ -527,6 +527,9 @@ def serving_input_fn(batch_size, image_size, feed_jpeg=False):
   images_info.set_shape([batch_size, 5])
   source_ids.set_shape([batch_size])
 
+  images = tf.identity(images, 'Image')
+  images_info = tf.identity(images_info, 'ImageInfo')
+
   if feed_jpeg:
     return tf.estimator.export.ServingInputReceiver(
         features={
