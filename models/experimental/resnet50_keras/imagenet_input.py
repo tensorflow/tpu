@@ -148,12 +148,13 @@ class ImageNetInput(object):
     # Prefetch overlaps in-feed with training
     dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
 
-    # Use a private thread pool and limit intra-op parallelism.
-    options = tf.data.Options()
-    options.experimental_threading.max_intra_op_parallelism = 1
-    options.experimental_threading.private_threadpool_size = 16
     if self.is_training:
+      # Use a private thread pool and limit intra-op parallelism. Enable
+      # non-determinism only for training.
+      options = tf.data.Options()
+      options.experimental_threading.max_intra_op_parallelism = 1
+      options.experimental_threading.private_threadpool_size = 16
       options.experimental_deterministic = False
-    dataset = dataset.with_options(options)
+      dataset = dataset.with_options(options)
 
     return dataset

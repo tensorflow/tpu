@@ -49,6 +49,10 @@ tf.app.flags.DEFINE_integer('batch_size', 8, 'Per request batch size.')
 tf.app.flags.DEFINE_integer('image_size', 224,
                             'Height and width of the image (square image).')
 tf.app.flags.DEFINE_integer('channels', 3, 'Load image number of channels.')
+tf.app.flags.DEFINE_string(
+    'api_key', '',
+    'API Key for ESP service if authenticating external requests.')
+
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -57,9 +61,9 @@ class Worker(object):
   """A loadtest worker which sends RPC request."""
 
   __slot__ = ('_id', '_request', '_stub', '_queue', '_success', '_start_time',
-              '_end_time', '_qps', '_num_requests')
+              '_end_time', '_qps', '_num_requests', '_metadata')
 
-  def __init__(self, index, request, stub, queue, qps, num_requests):
+  def __init__(self, index, request, stub, queue, qps, num_requests, metadata):
     self._id = index
     self._request = request
     self._stub = stub
@@ -69,6 +73,7 @@ class Worker(object):
     self._success = None
     self._start_time = None
     self._end_time = None
+    self._metadata = metadata
 
   def start(self):
     """Start to send request."""
@@ -91,7 +96,8 @@ class Worker(object):
     def _send_rpc():
       self._start_time = time.time()
       resp_future = self._stub.Predict.future(self._request,
-                                              FLAGS.request_timeout)
+                                              FLAGS.request_timeout,
+                                              metadata=self._metadata)
       resp_future.add_done_callback(_callback)
 
     _send_rpc()
@@ -123,6 +129,10 @@ def run_load_test(num_requests, qps, request, stub):
     request: The PredictRequest proto.
     stub: The model server stub to which send inference requests.
   """
+  metadata = []
+  if FLAGS.api_key:
+    metadata.append(('x-api-key', FLAGS.api_key))
+
   rate_limiter = RateLimiter(max_calls=qps, period=1)
   q = Queue.Queue()
   for i in range(num_requests):
@@ -131,7 +141,7 @@ def run_load_test(num_requests, qps, request, stub):
   workers = []
   start = time.time()
   for i in range(num_requests):
-    worker = Worker(i, request, stub, q, qps, num_requests)
+    worker = Worker(i, request, stub, q, qps, num_requests, metadata)
     workers.append(worker)
     if i % qps == 0:
       tf.logging.info('sent {} requests.'.format(i))

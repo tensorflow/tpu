@@ -73,6 +73,8 @@ class TfExampleDecoder(object):
             tf.VarLenFeature(tf.int64),
         'image/object/mask':
             tf.VarLenFeature(tf.string),
+        'image/object/attribute/label':
+            tf.VarLenFeature(tf.int64),
     }
     self.items_to_handlers = {
         'image': slim_example_decoder.Image(
@@ -99,6 +101,8 @@ class TfExampleDecoder(object):
             slim_example_decoder.Tensor('image/object/weight')),
         'groundtruth_classes': (
             slim_example_decoder.Tensor('image/object/class/label')),
+        'groundtruth_attributes': (
+            slim_example_decoder.Tensor('image/object/attribute/label')),
     }
     if use_instance_mask:
       mask_decoder = slim_example_decoder.ItemHandlerCallback(
@@ -162,7 +166,7 @@ class TfExampleDecoder(object):
         filename.
       groundtruth_boxes - 2D float32 tensor of shape
         [None, 4] containing box corners.
-      groundtruth_classes - 1D int64 tensor of shape
+      groundtruth_classes - 1D int64 tensor of shape [None]
       groundtruth_weights - 1D float32 tensor of
         shape [None] indicating the weights of groundtruth boxes.
         [None] containing classes for the boxes.
@@ -178,6 +182,7 @@ class TfExampleDecoder(object):
         [None] indicating if the boxes represent `group_of` instances.
       groundtruth_instance_masks - 3D float32 tensor of
         shape [None, None, None] containing instance masks.
+      groundtruth_attributes - 1D int64 tensor of shape [None]
     """
     serialized_example = tf.reshape(tf_example_string_tensor, shape=[])
     decoder = slim_example_decoder.TFExampleDecoder(self.keys_to_features,

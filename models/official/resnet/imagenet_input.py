@@ -25,6 +25,7 @@ import os
 import tensorflow as tf
 from official.resnet import resnet_preprocessing
 
+
 def image_serving_input_fn():
   """Serving input fn for raw images."""
 
@@ -136,8 +137,8 @@ class ImageNetTFExampleInput(object):
 
     Args:
       params: `dict` of parameters passed from the `TPUEstimator`.
-          `params['batch_size']` is always provided and should be used as the
-          effective batch size.
+        `params['batch_size']` is always provided and should be used as the
+        effective batch size.
 
     Returns:
       A `tf.data.Dataset` object.
@@ -170,8 +171,10 @@ class ImageNetTFExampleInput(object):
     # exactly the same images will be used.
     dataset = dataset.apply(
         tf.contrib.data.map_and_batch(
-            self.dataset_parser, batch_size=batch_size,
-            num_parallel_batches=self.num_parallel_calls, drop_remainder=True))
+            self.dataset_parser,
+            batch_size=batch_size,
+            num_parallel_batches=self.num_parallel_calls,
+            drop_remainder=True))
 
     # Transpose for performance on TPU
     if self.transpose_input:
@@ -211,20 +214,26 @@ class ImageNetInput(ImageNetTFExampleInput):
                data_dir,
                image_size=224,
                num_parallel_calls=8,
-               cache=False):
+               cache=False,
+               dataset_split=None,
+               shuffle_shards=False):
     """Create an input from TFRecord files.
 
     Args:
       is_training: `bool` for whether the input is for training
       use_bfloat16: If True, use bfloat16 precision; else use float32.
       transpose_input: 'bool' for whether to use the double transpose trick
-      data_dir: `str` for the directory of the training and validation data;
-          if 'null' (the literal string 'null') or implicitly False
-          then construct a null pipeline, consisting of empty images
-          and blank labels.
+      data_dir: `str` for the directory of the training and validation data; if
+        'null' (the literal string 'null') or implicitly False then construct a
+        null pipeline, consisting of empty images and blank labels.
       image_size: `int` image height and width.
       num_parallel_calls: concurrency level to use when reading data from disk.
       cache: if true, fill the dataset by repeating from its cache
+      dataset_split: If provided, must be one of 'train' or 'validation' and
+        specifies the dataset split to read, overriding the default set by
+        is_training. In this case, is_training specifies whether the data is
+        augmented.
+      shuffle_shards: Whether to shuffle the dataset shards.
     """
     super(ImageNetInput, self).__init__(
         is_training=is_training,
@@ -237,20 +246,22 @@ class ImageNetInput(ImageNetTFExampleInput):
       self.data_dir = None
     self.num_parallel_calls = num_parallel_calls
     self.cache = cache
+    self.dataset_split = dataset_split
+    self.shuffle_shards = shuffle_shards
 
   def _get_null_input(self, data):
     """Returns a null image (all black pixels).
 
     Args:
-      data: element of a dataset, ignored in this method, since it produces
-          the same null image regardless of the element.
+      data: element of a dataset, ignored in this method, since it produces the
+        same null image regardless of the element.
 
     Returns:
       a tensor representing a null image.
     """
     del data  # Unused since output is constant regardless of input
-    return tf.zeros([self.image_size, self.image_size, 3], tf.bfloat16
-                    if self.use_bfloat16 else tf.float32)
+    return tf.zeros([self.image_size, self.image_size, 3],
+                    tf.bfloat16 if self.use_bfloat16 else tf.float32)
 
   def dataset_parser(self, value):
     """See base class."""
@@ -265,13 +276,21 @@ class ImageNetInput(ImageNetTFExampleInput):
       return tf.data.Dataset.range(1).repeat().map(self._get_null_input)
 
     # Shuffle the filenames to ensure better randomization.
-    file_pattern = os.path.join(
-        self.data_dir, 'train-*' if self.is_training else 'validation-*')
+    if not self.dataset_split:
+      file_pattern = os.path.join(
+          self.data_dir, 'train-*' if self.is_training else 'validation-*')
+    else:
+      if self.dataset_split not in ['train', 'validation']:
+        raise ValueError(
+            "If provided, dataset_split must be 'train' or 'validation', was %s"
+            % self.dataset_split)
+      file_pattern = os.path.join(self.data_dir, self.dataset_split + '-*')
 
     # For multi-host training, we want each hosts to always process the same
     # subset of files.  Each host only sees a subset of the entire dataset,
     # allowing us to cache larger datasets in memory.
-    dataset = tf.data.Dataset.list_files(file_pattern, shuffle=False)
+    dataset = tf.data.Dataset.list_files(
+        file_pattern, shuffle=self.shuffle_shards)
     dataset = dataset.shard(num_hosts, index)
 
     if self.is_training and not self.cache:
@@ -296,18 +315,18 @@ class ImageNetInput(ImageNetTFExampleInput):
 
 
 # Defines a selection of data from a Cloud Bigtable.
-BigtableSelection = namedtuple('BigtableSelection',
-                               ['project',
-                                'instance',
-                                'table',
-                                'prefix',
-                                'column_family',
-                                'column_qualifier'])
+BigtableSelection = namedtuple('BigtableSelection', [
+    'project',
+    'instance',
+    'table',
+    'prefix',
+    'column_family',
+    'column_qualifier',
+])
 
 
 class ImageNetBigtableInput(ImageNetTFExampleInput):
-  """Generates ImageNet input_fn from a Bigtable for training or evaluation.
-  """
+  """Generates ImageNet input_fn from a Bigtable for training or evaluation."""
 
   def __init__(self, is_training, use_bfloat16, transpose_input, selection):
     """Constructs an ImageNet input from a BigtableSelection.
@@ -329,9 +348,8 @@ class ImageNetBigtableInput(ImageNetTFExampleInput):
     data = self.selection
     client = tf.contrib.cloud.BigtableClient(data.project, data.instance)
     table = client.table(data.table)
-    ds = table.parallel_scan_prefix(data.prefix,
-                                    columns=[(data.column_family,
-                                              data.column_qualifier)])
+    ds = table.parallel_scan_prefix(
+        data.prefix, columns=[(data.column_family, data.column_qualifier)])
     # The Bigtable datasets will have the shape (row_key, data)
     ds_data = ds.map(lambda index, data: data)
 

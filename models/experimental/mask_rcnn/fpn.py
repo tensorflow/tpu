@@ -31,7 +31,8 @@ import spatial_transform_ops
 
 def fpn(feats_bottom_up,
         min_level=3,
-        max_level=7):
+        max_level=7,
+        filters=256):
   """Generates multiple scale feature pyramid (FPN).
 
   Args:
@@ -39,6 +40,7 @@ def fpn(feats_bottom_up,
       feature tensors as values. They are the features to generate FPN features.
     min_level: the minimum level number to generate FPN features.
     max_level: the maximum level number to generate FPN features.
+    filters: the FPN filter size.
 
   Returns:
     feats: a dictionary of tensor with level as keys and the generated FPN
@@ -53,7 +55,7 @@ def fpn(feats_bottom_up,
     for level in range(min_level, upsample_max_level + 1):
       feats_lateral[level] = tf.layers.conv2d(
           feats_bottom_up[level],
-          filters=256,
+          filters=filters,
           kernel_size=(1, 1),
           padding='same',
           name='l%d' % level)
@@ -68,7 +70,7 @@ def fpn(feats_bottom_up,
     for level in range(min_level, upsample_max_level + 1):
       feats[level] = tf.layers.conv2d(
           feats[level],
-          filters=256,
+          filters=filters,
           strides=(1, 1),
           kernel_size=(3, 3),
           padding='same',
@@ -85,7 +87,7 @@ def fpn(feats_bottom_up,
       for level in range(upsample_max_level + 1, max_level + 1):
         feats[level] = tf.layers.conv2d(
             feats[level - 1],
-            filters=256,
+            filters=filters,
             strides=(2, 2),
             kernel_size=(3, 3),
             padding='same',
