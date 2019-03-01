@@ -1,0 +1,8 @@
+train_steps: 7116
+train_batch_size: 16384
+eval_batch_size: 1024
+iterations_per_loop: 7116
+skip_host_call: True
+num_cores: 128
+enable_lars: True
+label_smoothing: 0.1
