@@ -269,6 +269,10 @@ def main(argv):
         config=run_config,
         params=eval_params)
     if FLAGS.eval_after_training:
+
+      if FLAGS.val_json_file is None:
+        raise RuntimeError('You must specify --val_json_file for evaluation.')
+
       eval_results = eval_estimator.evaluate(
           input_fn=dataloader.InputReader(
               FLAGS.validation_file_pattern, is_training=False),
