@@ -19,6 +19,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     apt-get update && \
     apt-get install -y google-cloud-sdk && \
     pip install wheel && \
+    pip install pyyaml && \
     pip install tensorflow==1.11 && \
     pip install google-cloud-storage && \
     pip install google-api-python-client && \
