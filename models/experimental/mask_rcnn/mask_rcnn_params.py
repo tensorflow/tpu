@@ -23,10 +23,8 @@ import tensorflow as tf
 def default_config():
   return tf.contrib.training.HParams(
       # input preprocessing parameters
-      image_size=1024,
+      image_size=[1024, 1024],
       input_rand_hflip=True,
-      train_scale_min=1.0,
-      train_scale_max=1.0,
       gt_mask_size=112,
       # dataset specific parameters
       num_classes=91,

@@ -18,6 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add - && \
     apt-get update && \
     apt-get install -y google-cloud-sdk && \
+    pip install pyyaml && \
     pip install wheel && \
     pip install tensorflow==1.13.1 && \
     pip install google-cloud-storage && \

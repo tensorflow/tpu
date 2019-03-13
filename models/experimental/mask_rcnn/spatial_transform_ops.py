@@ -245,11 +245,16 @@ def multilevel_crop_and_resize(features, boxes, output_size=7):
 
     # Map levels to [0, max_level-min_level].
     levels -= min_level
+    level_strides = tf.pow([[2.0]], tf.cast(levels, tf.float32))
     boundary = tf.cast(
-        tf.tile(tf.expand_dims([[tf.cast(max_feature_width, tf.float32)]] /
-                               tf.pow([[2.0]], tf.cast(levels, tf.float32)) - 1,
-                               axis=2),
-                [1, 1, 2]),
+        tf.concat([
+            tf.expand_dims([[tf.cast(max_feature_height, tf.float32)]] /
+                           level_strides - 1,
+                           axis=-1),
+            tf.expand_dims([[tf.cast(max_feature_width, tf.float32)]] /
+                           level_strides - 1,
+                           axis=-1),
+        ], axis=-1),
         boxes.dtype)
 
     return selective_crop_and_resize(

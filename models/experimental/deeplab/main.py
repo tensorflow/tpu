@@ -80,7 +80,7 @@ flags.DEFINE_float('momentum', 0.9,
 # 8x num_shards to exploit TPU memory chunks.
 flags.DEFINE_integer('eval_batch_size', 8, 'Batch size for evaluation.')
 flags.DEFINE_integer('train_batch_size', 64, 'Batch size for training.')
-flags.DEFINE_integer('train_steps', 20000,
+flags.DEFINE_integer('train_steps', 50000,
                      'The number of steps to use for training.')
 flags.DEFINE_integer('steps_per_eval', 2000,
                      ('Controls how often evaluation is performed.'))

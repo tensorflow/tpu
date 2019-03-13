@@ -47,16 +47,19 @@ def write_warmup_requests(savedmodel_dir,
                           image_size,
                           batch_sizes=None,
                           num_requests=8,
-                          image_format='PNG'):
+                          image_format='PNG',
+                          input_signature='input'):
   """Writes warmup requests for inference into a tfrecord file.
 
   Args:
     savedmodel_dir: string, the file to the exported model folder.
     model_name: string, a model name used inside the model server.
-    image_size: int, size of image, assuming image height and width.
+    image_size: tuple/list or int, size of image. For list/tuple input, assuming
+      it contains image height and width.
     batch_sizes: list, a list of batch sizes to create different input requests.
     num_requests: int, number of requests per batch size.
     image_format: string, the format of the image to write (PNG, JPEG)
+    input_signature: string, input signature defined in exported saved model.
 
   Raises:
     ValueError: if batch_sizes is not a valid integer list.
@@ -67,13 +70,23 @@ def write_warmup_requests(savedmodel_dir,
     raise ValueError('batch sizes should be a valid non-empty list.')
   extra_assets_dir = os.path.join(savedmodel_dir, 'assets.extra')
   tf.gfile.MkDir(extra_assets_dir)
+  if isinstance(image_size, int):
+    height = image_size
+    width = image_size
+  elif isinstance(image_size, tuple) or isinstance(image_size, list):
+    height = image_size[0]
+    width = image_size[1]
+  else:
+    raise ValueError(
+        'image_size is not a supported type: %s' % type(image_size))
+
   with tf.python_io.TFRecordWriter(
       os.path.join(extra_assets_dir, 'tf_serving_warmup_requests')) as writer:
     for batch_size in batch_sizes:
       for _ in range(num_requests):
         request = predict_pb2.PredictRequest()
-        image = np.uint8(np.random.rand(image_size, image_size, 3) * 255)
-        request.inputs['input'].CopyFrom(
+        image = np.uint8(np.random.rand(height, width, 3) * 255)
+        request.inputs[input_signature].CopyFrom(
             tf.make_tensor_proto(
                 [_encode_image(image, image_format)] * batch_size,
                 shape=[batch_size]))
