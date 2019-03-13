@@ -122,8 +122,24 @@ class MaskCOCO(COCO):
     return predictions
 
 
-def segm_results(masks, detections, image_height, image_width):
-  """Generates segmentation results."""
+def generate_segmentation_from_masks(masks,
+                                     detected_boxes,
+                                     image_height,
+                                     image_width):
+  """Generates segmentation result from instance masks.
+
+  Args:
+    masks: a numpy array of shape [N, mask_height, mask_width] representing the
+      instance masks w.r.t. the `detected_boxes`.
+    detected_boxes: a numpy array of shape [N, 4] representing the reference
+      bounding boxes.
+    image_height: an integer representing the height of the image.
+    image_width: an integer representing the width of the image.
+
+  Returns:
+    segms: a numpy array of shape [N, image_height, image_width] representing
+      the instance masks *pasted* on the image canvas.
+  """
 
   def expand_boxes(boxes, scale):
     """Expands an array of boxes by a given scale."""
@@ -155,7 +171,7 @@ def segm_results(masks, detections, image_height, image_width):
   mask_size = masks.shape[2]
   scale = (mask_size + 2.0) / mask_size
 
-  ref_boxes = expand_boxes(detections[:, 1:5], scale)
+  ref_boxes = expand_boxes(detected_boxes, scale)
   ref_boxes = ref_boxes.astype(np.int32)
   padded_mask = np.zeros((mask_size + 2, mask_size + 2), dtype=np.float32)
   segms = []
@@ -237,10 +253,11 @@ class EvaluationMetric(object):
     for i, detection in enumerate(predictions['detections']):
       segms = None
       if self._include_mask:
-        segms = segm_results(predictions['mask_outputs'][i],
-                             detection,
-                             int(predictions['image_info'][i][3]),
-                             int(predictions['image_info'][i][4]))
+        segms = generate_segmentation_from_masks(
+            predictions['mask_outputs'][i],
+            detection[:, 1:5],
+            int(predictions['image_info'][i][3]),
+            int(predictions['image_info'][i][4]))
         segms = segms[np.newaxis, :, :, :]
       self._update_op(
           detection[np.newaxis, :, :],

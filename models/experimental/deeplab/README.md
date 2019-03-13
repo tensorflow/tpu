@@ -39,5 +39,5 @@ python main.py \
 --multi_grid=4 \
 --decoder_use_separable_conv=false
 ```
-You can use `mode=eval` for evaluation after training is completed. The model should train to above 0.76 MIOU in around 9 hours.
+You can use `mode=eval` for evaluation after training is completed. The model should train to close to 0.77 MIOU in around 9 hours.
 

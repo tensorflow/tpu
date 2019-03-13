@@ -23,14 +23,14 @@ import functools
 import os
 from absl import flags
 import numpy as np
-import six
 import tensorflow as tf
 
-import coco_metric
 import dataloader
+import evaluation
 import mask_rcnn_model
 import mask_rcnn_params
 import params_io
+import serving_inputs
 
 # Cloud TPU Cluster Resolvers
 flags.DEFINE_string(
@@ -87,63 +87,6 @@ flags.DEFINE_bool(
     help='Use TPU double transpose optimization')
 
 FLAGS = flags.FLAGS
-
-
-def evaluation(eval_estimator, config):
-  """Runs one evluation."""
-  predictor = eval_estimator.predict(
-      input_fn=dataloader.InputReader(
-          config.validation_file_pattern,
-          mode=tf.estimator.ModeKeys.PREDICT,
-          num_examples=config.eval_samples,
-          use_instance_mask=config.include_mask),
-      yield_single_examples=False)
-  # Every predictor.next() gets a batch of prediction (a dictionary).
-  predictions = dict()
-  assert config.eval_samples // config.eval_batch_size > 0, (
-      'config.eval_samples'
-      ' >= '
-      'config.eval_batch_size')
-  for _ in range(config.eval_samples // config.eval_batch_size):
-    prediction = six.next(predictor)
-    image_info = prediction['image_info']
-    raw_detections = prediction['detections']
-    processed_detections = raw_detections
-    for b in range(raw_detections.shape[0]):
-      scale = image_info[b][2]
-      for box_id in range(raw_detections.shape[1]):
-        # Map [y1, x1, y2, x2] -> [x1, y1, w, h] and multiply detections
-        # by image scale.
-        new_box = raw_detections[b, box_id, :]
-        y1, x1, y2, x2 = new_box[1:5]
-        new_box[1:5] = scale * np.array([x1, y1, x2 - x1, y2 - y1])
-        processed_detections[b, box_id, :] = new_box
-    prediction['detections'] = processed_detections
-
-    for k, v in six.iteritems(prediction):
-      if k not in predictions:
-        predictions[k] = v
-      else:
-        predictions[k] = np.append(predictions[k], v, axis=0)
-
-  eval_metric = coco_metric.EvaluationMetric(
-      config.val_json_file, include_mask=config.include_mask)
-  eval_results = eval_metric.predict_metric_fn(predictions)
-  tf.logging.info('Eval results: %s' % eval_results)
-
-  return eval_results
-
-
-def write_summary(eval_results, summary_writer, current_step):
-  """Write out eval results for the checkpoint."""
-  with tf.Graph().as_default():
-    summaries = []
-    for metric in eval_results:
-      summaries.append(
-          tf.Summary.Value(
-              tag=metric, simple_value=eval_results[metric]))
-    tf_summary = tf.Summary(value=list(summaries))
-    summary_writer.add_summary(tf_summary, current_step)
 
 
 def save_config(config, model_dir):
@@ -209,8 +152,9 @@ def main(argv):
             spatial_dim % np.array(FLAGS.input_partition_dims) == 0)
         return len(partitionable_index[0]) == len(FLAGS.input_partition_dims)
 
-      spatial_dim = image_size // (2 ** level)
-      if _can_partition(spatial_dim):
+      assert len(image_size) == 2
+      spatial_dim = [d // (2 ** level) for d in image_size]
+      if _can_partition(spatial_dim[0]) and _can_partition(spatial_dim[1]):
         labels_partition_dims[
             'box_targets_%d' % level] = FLAGS.input_partition_dims
         labels_partition_dims[
@@ -301,8 +245,15 @@ def main(argv):
       tf.gfile.MakeDirs(output_dir)
       # Summary writer writes out eval metrics.
       summary_writer = tf.summary.FileWriter(output_dir)
-      eval_results = evaluation(eval_estimator, config)
-      write_summary(eval_results, summary_writer, config.total_steps)
+      eval_results = evaluation.evaluate(
+          eval_estimator,
+          config.validation_file_pattern,
+          config.eval_samples,
+          config.eval_batch_size,
+          config.include_mask,
+          config.val_json_file)
+      evaluation.write_summary(
+          eval_results, summary_writer, config.total_steps)
 
       summary_writer.close()
 
@@ -345,8 +296,15 @@ def main(argv):
 
       tf.logging.info('Starting to evaluate.')
       try:
-        eval_results = evaluation(eval_estimator, config)
-        write_summary(eval_results, summary_writer, current_step)
+        eval_results = evaluation.evaluate(
+            eval_estimator,
+            config.validation_file_pattern,
+            config.eval_samples,
+            config.eval_batch_size,
+            config.include_mask,
+            config.val_json_file)
+        evaluation.write_summary(
+            eval_results, summary_writer, config.total_steps)
 
         if current_step >= config.total_steps:
           tf.logging.info('Evaluation finished after training step %d' %
@@ -366,9 +324,11 @@ def main(argv):
     eval_estimator.export_saved_model(
         export_dir_base=FLAGS.model_dir,
         serving_input_receiver_fn=functools.partial(
-            dataloader.serving_input_fn,
+            serving_inputs.serving_input_fn,
             batch_size=1,
-            image_size=config.image_size))
+            desired_image_size=config.image_size,
+            padding_stride=(2 ** config.max_level),
+            input_type='image_bytes'))
 
   elif FLAGS.mode == 'train_and_eval':
     if FLAGS.model_dir:
@@ -412,7 +372,7 @@ def main(argv):
       eval_results = evaluation(eval_estimator, config)
 
       current_step = int(cycle * config.num_steps_per_eval)
-      write_summary(eval_results, summary_writer, current_step)
+      evaluation.write_summary(eval_results, summary_writer, current_step)
 
     tf.logging.info('Starting training cycle %d.' % num_cycles)
     train_estimator.train(
@@ -421,17 +381,27 @@ def main(argv):
             mode=tf.estimator.ModeKeys.TRAIN,
             use_instance_mask=config.include_mask),
         max_steps=config.total_steps)
-    eval_results = evaluation(eval_estimator, config)
-    write_summary(eval_results, summary_writer, config.total_steps)
+
+    eval_results = evaluation.evaluate(
+        eval_estimator,
+        config.validation_file_pattern,
+        config.eval_samples,
+        config.eval_batch_size,
+        config.include_mask,
+        config.val_json_file)
+    evaluation.write_summary(
+        eval_results, summary_writer, config.total_steps)
     summary_writer.close()
 
     # Export saved model.
     eval_estimator.export_saved_model(
         export_dir_base=FLAGS.model_dir,
         serving_input_receiver_fn=functools.partial(
-            dataloader.serving_input_fn,
+            serving_inputs.serving_input_fn,
             batch_size=1,
-            image_size=config.image_size))
+            desired_image_size=config.image_size,
+            padding_stride=(2 ** config.max_level),
+            input_type='image_bytes'))
 
   else:
     tf.logging.info('Mode not found.')

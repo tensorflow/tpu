@@ -10,11 +10,16 @@ We provide two AutoML models in [`mnasnet_models.py`](mnasnet_models.py) :
 
   * <b>mnasnet-b1</b> has ~74.4% top-1 ImageNet accuracy without squeeze-and-excitation.
 
+MnasNet inference has 1.8x faster throughput (55% lower latency) than the
+corresponding MobileNetV2 model.
+
+![MnasNet-A1 and MobileNetV2](g3doc/mnasnet_vs_mobilenetv2_2.png)
+
 Comparing to [MobileNetV2](https://arxiv.org/pdf/1801.04381.pdf),
 MnasNet-A1 model has clear better performance in accuracy when they are at the
 same latency level.
 
-![MnasNet-A1 and MobileNetV2](g3doc/mnasnet_vs_mobilenetv2.png)
+![MnasNet-A1 and MobileNetV2 Details](g3doc/mnasnet_vs_mobilenetv2.png)
 
 
 Here are the details of Mnasnet-A1 on ImageNet:

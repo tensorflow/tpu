@@ -103,6 +103,178 @@ def remove_variables(variables, resnet_depth=50):
   return var_list
 
 
+def build_model_graph(features, labels, is_training, params):
+  """Builds the forward model graph."""
+  model_outputs = {}
+
+  if params['transpose_input'] and is_training:
+    features['images'] = tf.transpose(features['images'], [3, 0, 1, 2])
+  batch_size, image_height, image_width, _ = (
+      features['images'].get_shape().as_list())
+  if 'source_ids' not in features:
+    features['source_ids'] = -1 * tf.ones([batch_size], dtype=tf.float32)
+
+  all_anchors = anchors.Anchors(params['min_level'], params['max_level'],
+                                params['num_scales'], params['aspect_ratios'],
+                                params['anchor_scale'],
+                                (image_height, image_width))
+
+  with tf.variable_scope('resnet%s' % params['resnet_depth']):
+    resnet_fn = resnet.resnet_v1(
+        params['resnet_depth'],
+        num_batch_norm_group=params['num_batch_norm_group'])
+    backbone_feats = resnet_fn(
+        features['images'],
+        (params['is_training_bn'] and is_training))
+
+  fpn_feats = fpn.fpn(
+      backbone_feats, params['min_level'], params['max_level'])
+
+  rpn_score_outputs, rpn_box_outputs = heads.rpn_head(
+      fpn_feats,
+      params['min_level'], params['max_level'],
+      len(params['aspect_ratios'] * params['num_scales']))
+
+  if is_training:
+    rpn_pre_nms_topn = params['rpn_pre_nms_topn']
+    rpn_post_nms_topn = params['rpn_post_nms_topn']
+  else:
+    rpn_pre_nms_topn = params['test_rpn_pre_nms_topn']
+    rpn_post_nms_topn = params['test_rpn_post_nms_topn']
+
+  rpn_box_scores, rpn_box_rois = roi_ops.multilevel_propose_rois(
+      rpn_score_outputs,
+      rpn_box_outputs,
+      all_anchors,
+      features['image_info'],
+      rpn_pre_nms_topn,
+      rpn_post_nms_topn,
+      params['rpn_nms_threshold'],
+      params['rpn_min_size'],
+      bbox_reg_weights=None,
+      use_tpu=params['use_tpu'])
+  rpn_box_rois = tf.to_float(rpn_box_rois)
+  if is_training:
+    rpn_box_rois = tf.stop_gradient(rpn_box_rois)
+    rpn_box_scores = tf.stop_gradient(rpn_box_scores)
+
+  if is_training:
+    # Sampling
+    box_targets, class_targets, rpn_box_rois, proposal_to_label_map = (
+        training_ops.proposal_label_op(
+            rpn_box_rois,
+            labels['gt_boxes'],
+            labels['gt_classes'],
+            features['image_info'],
+            batch_size_per_im=params['batch_size_per_im'],
+            fg_fraction=params['fg_fraction'],
+            fg_thresh=params['fg_thresh'],
+            bg_thresh_hi=params['bg_thresh_hi'],
+            bg_thresh_lo=params['bg_thresh_lo']))
+
+  # Performs multi-level RoIAlign.
+  box_roi_features = spatial_transform_ops.multilevel_crop_and_resize(
+      fpn_feats, rpn_box_rois, output_size=7)
+
+  class_outputs, box_outputs, _ = heads.box_head(
+      box_roi_features, num_classes=params['num_classes'],
+      mlp_head_dim=params['fast_rcnn_mlp_head_dim'])
+
+  if not is_training:
+    if params['use_tpu']:
+      detections = postprocess_ops.generate_detections_tpu(
+          class_outputs,
+          box_outputs,
+          rpn_box_rois,
+          features['source_ids'],
+          features['image_info'],
+          params['test_rpn_post_nms_topn'],
+          params['test_detections_per_image'],
+          params['test_nms'],
+          params['bbox_reg_weights'])
+    else:
+      detections = postprocess_ops.generate_detections_gpu(
+          class_outputs,
+          box_outputs,
+          rpn_box_rois,
+          features['source_ids'],
+          features['image_info'],
+          params['test_rpn_post_nms_topn'],
+          params['test_detections_per_image'],
+          params['test_nms'],
+          params['bbox_reg_weights'])
+
+    model_outputs.update({
+        'detections': tf.identity(detections, 'Detections'),
+    })
+    if params['output_box_features']:
+      final_box_rois = detections[:, :, 1:5]
+      final_roi_features = spatial_transform_ops.multilevel_crop_and_resize(
+          fpn_feats, final_box_rois, output_size=7)
+      _, _, final_box_features = heads.box_head(
+          final_roi_features, num_classes=params['num_classes'],
+          mlp_head_dim=params['fast_rcnn_mlp_head_dim'])
+      model_outputs.update({
+          'box_features': tf.identity(final_box_features, 'BoxFeatures'),
+      })
+  else:
+    encoded_box_targets = training_ops.encode_box_targets(
+        rpn_box_rois, box_targets, class_targets, params['bbox_reg_weights'])
+    model_outputs.update({
+        'rpn_score_outputs': rpn_score_outputs,
+        'rpn_box_outputs': rpn_box_outputs,
+        'class_outputs': class_outputs,
+        'box_outputs': box_outputs,
+        'class_targets': class_targets,
+        'box_targets': encoded_box_targets,
+        'box_rois': rpn_box_rois,
+    })
+
+  # Faster-RCNN mode.
+  if not params['include_mask']:
+    return model_outputs
+
+  # Mask sampling
+  if not is_training:
+    selected_box_rois = detections[:, :, 1:5]
+    class_indices = tf.to_int32(detections[:, :, 6])
+  else:
+    (selected_class_targets, selected_box_targets, selected_box_rois,
+     proposal_to_label_map) = (
+         training_ops.select_fg_for_masks(
+             class_targets, box_targets, rpn_box_rois,
+             proposal_to_label_map,
+             max_num_fg=int(
+                 params['batch_size_per_im'] * params['fg_fraction'])))
+    class_indices = tf.to_int32(selected_class_targets)
+
+  mask_roi_features = spatial_transform_ops.multilevel_crop_and_resize(
+      fpn_feats, selected_box_rois, output_size=14)
+  mask_outputs = heads.mask_head(
+      mask_roi_features,
+      class_indices,
+      num_classes=params['num_classes'],
+      mrcnn_resolution=params['mrcnn_resolution'])
+
+  model_outputs.update({
+      'mask_outputs': mask_outputs,
+  })
+
+  if is_training:
+    mask_targets = training_ops.get_mask_targets(
+        selected_box_rois, proposal_to_label_map, selected_box_targets,
+        labels['cropped_gt_masks'], params['mrcnn_resolution'])
+    model_outputs.update({
+        'mask_targets': mask_targets,
+        'selected_class_targets': selected_class_targets,
+    })
+  else:
+    model_outputs['mask_outputs'] = tf.identity(tf.nn.sigmoid(
+        model_outputs['mask_outputs']), 'Masks')
+
+  return model_outputs
+
+
 def _model_fn(features, labels, mode, params, variable_filter_fn=None):
   """Model defination for the Mask-RCNN model based on ResNet.
 
@@ -122,175 +294,10 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
   Returns:
     tpu_spec: the TPUEstimatorSpec to run training, evaluation, or prediction.
   """
-  if params['transpose_input'] and mode == tf.estimator.ModeKeys.TRAIN:
-    features['images'] = tf.transpose(features['images'], [3, 0, 1, 2])
-
-  image_size = (params['image_size'], params['image_size'])
-  all_anchors = anchors.Anchors(params['min_level'], params['max_level'],
-                                params['num_scales'], params['aspect_ratios'],
-                                params['anchor_scale'], image_size)
-
-  def _model_outputs():
-    """Generates outputs from the model."""
-
-    model_outputs = {}
-
-    with tf.variable_scope('resnet%s' % params['resnet_depth']):
-      resnet_fn = resnet.resnet_v1(
-          params['resnet_depth'],
-          num_batch_norm_group=params['num_batch_norm_group'])
-      backbone_feats = resnet_fn(features['images'], params['is_training_bn'])
-
-    fpn_feats = fpn.fpn(
-        backbone_feats, params['min_level'], params['max_level'])
-
-    rpn_score_outputs, rpn_box_outputs = heads.rpn_head(
-        fpn_feats,
-        params['min_level'], params['max_level'],
-        len(params['aspect_ratios'] * params['num_scales']))
-
-    if mode == tf.estimator.ModeKeys.TRAIN:
-      rpn_pre_nms_topn = params['rpn_pre_nms_topn']
-      rpn_post_nms_topn = params['rpn_post_nms_topn']
-    else:
-      rpn_pre_nms_topn = params['test_rpn_pre_nms_topn']
-      rpn_post_nms_topn = params['test_rpn_post_nms_topn']
-
-    rpn_box_scores, rpn_box_rois = roi_ops.multilevel_propose_rois(
-        rpn_score_outputs,
-        rpn_box_outputs,
-        all_anchors,
-        features['image_info'],
-        rpn_pre_nms_topn,
-        rpn_post_nms_topn,
-        params['rpn_nms_threshold'],
-        params['rpn_min_size'],
-        bbox_reg_weights=None,
-        use_tpu=params['use_tpu'])
-    rpn_box_rois = tf.to_float(rpn_box_rois)
-    if mode == tf.estimator.ModeKeys.TRAIN:
-      rpn_box_rois = tf.stop_gradient(rpn_box_rois)
-      rpn_box_scores = tf.stop_gradient(rpn_box_scores)
-
-    if mode == tf.estimator.ModeKeys.TRAIN:
-      # Sampling
-      box_targets, class_targets, rpn_box_rois, proposal_to_label_map = (
-          training_ops.proposal_label_op(
-              rpn_box_rois,
-              labels['gt_boxes'],
-              labels['gt_classes'],
-              features['image_info'],
-              batch_size_per_im=params['batch_size_per_im'],
-              fg_fraction=params['fg_fraction'],
-              fg_thresh=params['fg_thresh'],
-              bg_thresh_hi=params['bg_thresh_hi'],
-              bg_thresh_lo=params['bg_thresh_lo']))
-
-    # Performs multi-level RoIAlign.
-    box_roi_features = spatial_transform_ops.multilevel_crop_and_resize(
-        fpn_feats, rpn_box_rois, output_size=7)
-
-    class_outputs, box_outputs, _ = heads.box_head(
-        box_roi_features, num_classes=params['num_classes'],
-        mlp_head_dim=params['fast_rcnn_mlp_head_dim'])
-
-    if mode != tf.estimator.ModeKeys.TRAIN:
-      if params['use_tpu']:
-        detections = postprocess_ops.generate_detections_tpu(
-            class_outputs,
-            box_outputs,
-            rpn_box_rois,
-            features['source_ids'],
-            features['image_info'],
-            params['test_rpn_post_nms_topn'],
-            params['test_detections_per_image'],
-            params['test_nms'],
-            params['bbox_reg_weights'])
-      else:
-        detections = postprocess_ops.generate_detections_gpu(
-            class_outputs,
-            box_outputs,
-            rpn_box_rois,
-            features['source_ids'],
-            features['image_info'],
-            params['test_rpn_post_nms_topn'],
-            params['test_detections_per_image'],
-            params['test_nms'],
-            params['bbox_reg_weights'])
-
-      detections = tf.identity(detections, 'Detections')
-      model_outputs.update({
-          'detections': detections,
-      })
-      if params['output_box_features']:
-        final_box_rois = detections[:, :, 1:5]
-        final_roi_features = spatial_transform_ops.multilevel_crop_and_resize(
-            fpn_feats, final_box_rois, output_size=7)
-        _, _, final_box_features = heads.box_head(
-            final_roi_features, num_classes=params['num_classes'],
-            mlp_head_dim=params['fast_rcnn_mlp_head_dim'])
-        final_box_features = tf.identity(final_box_features, 'BoxFeatures')
-        model_outputs.update({
-            'box_features': final_box_features,
-        })
-    else:
-      encoded_box_targets = training_ops.encode_box_targets(
-          rpn_box_rois, box_targets, class_targets, params['bbox_reg_weights'])
-      model_outputs.update({
-          'rpn_score_outputs': rpn_score_outputs,
-          'rpn_box_outputs': rpn_box_outputs,
-          'class_outputs': class_outputs,
-          'box_outputs': box_outputs,
-          'class_targets': class_targets,
-          'box_targets': encoded_box_targets,
-          'box_rois': rpn_box_rois,
-      })
-
-    # Faster-RCNN mode.
-    if not params['include_mask']:
-      return model_outputs
-
-    # Mask sampling
-    if mode != tf.estimator.ModeKeys.TRAIN:
-      selected_box_rois = detections[:, :, 1:5]
-      class_indices = tf.to_int32(detections[:, :, 6])
-    else:
-      (selected_class_targets, selected_box_targets, selected_box_rois,
-       proposal_to_label_map) = (
-           training_ops.select_fg_for_masks(
-               class_targets, box_targets, rpn_box_rois,
-               proposal_to_label_map,
-               max_num_fg=int(
-                   params['batch_size_per_im'] * params['fg_fraction'])))
-      class_indices = tf.to_int32(selected_class_targets)
-
-    mask_roi_features = spatial_transform_ops.multilevel_crop_and_resize(
-        fpn_feats, selected_box_rois, output_size=14)
-    mask_outputs = heads.mask_head(
-        mask_roi_features,
-        class_indices,
-        num_classes=params['num_classes'],
-        mrcnn_resolution=params['mrcnn_resolution'])
-
-    mask_outputs = tf.identity(mask_outputs, 'Masks')
-    model_outputs.update({
-        'mask_outputs': mask_outputs,
-    })
-
-    if mode == tf.estimator.ModeKeys.TRAIN:
-      mask_targets = training_ops.get_mask_targets(
-          selected_box_rois, proposal_to_label_map, selected_box_targets,
-          labels['cropped_gt_masks'], params['mrcnn_resolution'])
-      model_outputs.update({
-          'mask_targets': mask_targets,
-          'selected_class_targets': selected_class_targets,
-      })
-
-    return model_outputs
-
   if params['use_bfloat16']:
     with tf.contrib.tpu.bfloat16_scope():
-      model_outputs = _model_outputs()
+      model_outputs = build_model_graph(
+          features, labels, mode == tf.estimator.ModeKeys.TRAIN, params)
       def cast_outputs_to_float(d):
         for k, v in sorted(six.iteritems(d)):
           if isinstance(v, dict):
@@ -299,7 +306,8 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
             d[k] = tf.cast(v, tf.float32)
       cast_outputs_to_float(model_outputs)
   else:
-    model_outputs = _model_outputs()
+    model_outputs = build_model_graph(
+        features, labels, mode == tf.estimator.ModeKeys.TRAIN, params)
 
   # First check if it is in PREDICT mode.
   if mode == tf.estimator.ModeKeys.PREDICT:
@@ -309,7 +317,7 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
     if params['output_box_features']:
       predictions['box_features'] = model_outputs['box_features']
     if params['include_mask']:
-      predictions['mask_outputs'] = tf.nn.sigmoid(model_outputs['mask_outputs'])
+      predictions['mask_outputs'] = model_outputs['mask_outputs']
 
     if params['use_tpu']:
       return tf.contrib.tpu.TPUEstimatorSpec(mode=mode, predictions=predictions)
@@ -344,7 +352,7 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
     var_list = variable_filter_fn(tf.trainable_variables(),
                                   params['resnet_depth'])
   else:
-    var_list = None
+    var_list = tf.trainable_variables()
   l2_regularization_loss = params['l2_weight_decay'] * tf.add_n([
       tf.nn.l2_loss(v)
       for v in var_list
@@ -413,7 +421,7 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
     # Special treatment for biases (beta is named as bias in reference model)
     # Reference: https://github.com/facebookresearch/Detectron/blob/master/detectron/modeling/optimizer.py#L113  # pylint: disable=line-too-long
     for grad, var in zip(gradients, variables):
-      if 'beta' in var.name or 'bias' in var.name:
+      if grad is not None and ('beta' in var.name or 'bias' in var.name):
         grad = 2.0 * grad
       grads_and_vars.append((grad, var))
     minimize_op = optimizer.apply_gradients(grads_and_vars,
