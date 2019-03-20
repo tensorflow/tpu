@@ -536,6 +536,7 @@ def main(unused_argv):
         train_batch_size=params['train_batch_size'],
         eval_batch_size=params['eval_batch_size'],
         export_to_tpu=FLAGS.export_to_tpu)
+
   assert (params['precision'] == 'bfloat16' or
           params['precision'] == 'float32'), (
               'Invalid value for precision parameter; '

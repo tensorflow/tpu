@@ -141,6 +141,9 @@ class MnasBlock(object):
     # Builds the block accordings to arguments.
     self._build()
 
+  def block_args(self):
+    return self._block_args
+
   def _build(self):
     """Builds MnasNet block according to the arguments."""
     filters = self._block_args.input_filters * self._block_args.expand_ratio
@@ -351,12 +354,13 @@ class MnasNetModel(tf.keras.Model):
     else:
       self._dropout = None
 
-  def call(self, inputs, training=True):
+  def call(self, inputs, training=True, features_only=None):
     """Implementation of MnasNetModel call().
 
     Args:
       inputs: input tensors.
       training: boolean, whether the model is constructed for training.
+      features_only: build the base feature network only.
 
     Returns:
       output tensors.
@@ -369,21 +373,36 @@ class MnasNetModel(tf.keras.Model):
           self._bn0(self._conv_stem(inputs), training=training))
     tf.logging.info('Built stem layers with output shape: %s' % outputs.shape)
     self.endpoints['stem'] = outputs
+
     # Calls blocks.
+    reduction_idx = 0
     for idx, block in enumerate(self._blocks):
+      is_reduction = False
+      if ((idx == len(self._blocks) - 1) or
+          self._blocks[idx + 1].block_args().strides[0] > 1):
+        is_reduction = True
+        reduction_idx += 1
+
       with tf.variable_scope('mnas_blocks_%s' % idx):
         outputs = block.call(outputs, training=training)
         self.endpoints['block_%s' % idx] = outputs
+        if is_reduction:
+          self.endpoints['reduction_%s' % reduction_idx] = outputs
         if block.endpoints:
           for k, v in six.iteritems(block.endpoints):
             self.endpoints['block_%s/%s' % (idx, k)] = v
-    # Calls final layers and returns logits.
-    with tf.variable_scope('mnas_head'):
-      outputs = tf.nn.relu(
-          self._bn1(self._conv_head(outputs), training=training))
-      outputs = self._avg_pooling(outputs)
-      if self._dropout:
-        outputs = self._dropout(outputs, training=training)
-      outputs = self._fc(outputs)
-      self.endpoints['head'] = outputs
+            if is_reduction:
+              self.endpoints['reduction_%s/%s' % (reduction_idx, k)] = v
+    self.endpoints['global_pool'] = outputs
+
+    if not features_only:
+      # Calls final layers and returns logits.
+      with tf.variable_scope('mnas_head'):
+        outputs = tf.nn.relu(
+            self._bn1(self._conv_head(outputs), training=training))
+        outputs = self._avg_pooling(outputs)
+        if self._dropout:
+          outputs = self._dropout(outputs, training=training)
+        outputs = self._fc(outputs)
+        self.endpoints['head'] = outputs
     return outputs

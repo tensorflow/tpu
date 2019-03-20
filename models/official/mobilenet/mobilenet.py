@@ -23,6 +23,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import os
 from absl import app
 from absl import flags
 import tensorflow as tf
@@ -56,6 +57,11 @@ flags.DEFINE_string(
 flags.DEFINE_string(
     'model_dir', None,
     'Directory where model output is stored')
+
+flags.DEFINE_string(
+    'tflite_export_dir',
+    default=None,
+    help=('The directory where the exported tflite files will be stored.'))
 
 flags.DEFINE_string(
     'export_dir',
@@ -176,6 +182,13 @@ flags.DEFINE_bool(
     'transpose_enabled', False,
     'Boolean to enable/disable explicit I/O transpose')
 
+flags.DEFINE_integer(
+    'serving_image_size', 224,
+    'image height/width for serving input tensor.')
+
+flags.DEFINE_bool('post_quantize', True,
+                  'Whether to export quantized tflite file.')
+
 FLAGS = flags.FLAGS
 
 # Dataset constants
@@ -217,6 +230,23 @@ def image_serving_input_fn():
       back_prop=False, dtype=tf.float32)
   return tf.estimator.export.ServingInputReceiver(
       images, {'image_bytes': image_bytes_list})
+
+
+def tensor_serving_input_fn():
+  """Serving input fn for decoded Tensors.
+
+  This function is consumed when exporting a SavedModel.
+
+  Returns:
+    A ServingInputReceiver capable of serving MobileNet predictions.
+  """
+
+  input_placeholder = tf.placeholder(
+      shape=[None, FLAGS.serving_image_size, FLAGS.serving_image_size, 3],
+      dtype=tf.float32,
+  )
+  return tf.estimator.export.TensorServingInputReceiver(
+      features=input_placeholder, receiver_tensors=input_placeholder)
 
 
 def model_fn(features, labels, mode, params):
@@ -485,11 +515,28 @@ def main(unused_argv):
     inception_classifier.train(
         input_fn=imagenet_train.input_fn, steps=FLAGS.train_steps)
 
-  if FLAGS.export_dir is not None:
-    tf.logging.info('Starting to export model.')
+  if FLAGS.export_dir:
+    tf.logging.info('Starting to export model with image input.')
     inception_classifier.export_saved_model(
         export_dir_base=FLAGS.export_dir,
         serving_input_receiver_fn=image_serving_input_fn)
+
+  if FLAGS.tflite_export_dir:
+    tf.logging.info('Starting to export default TensorFlow model.')
+    savedmodel_dir = inception_classifier.export_saved_model(
+        export_dir_base=FLAGS.tflite_export_dir,
+        serving_input_receiver_fn=tensor_serving_input_fn)
+    tf.logging.info('Starting to export TFLite.')
+    converter = tf.lite.TFLiteConverter.from_saved_model(
+        savedmodel_dir,
+        output_arrays=['softmax_tensor'])
+    tflite_file_name = 'mobilenet.tflite'
+    if FLAGS.post_quantize:
+      converter.post_training_quantize = True
+      tflite_file_name = 'quantized_' + tflite_file_name
+    tflite_file = os.path.join(savedmodel_dir, tflite_file_name)
+    tflite_model = converter.convert()
+    tf.gfile.GFile(tflite_file, 'wb').write(tflite_model)
 
 
 if __name__ == '__main__':
