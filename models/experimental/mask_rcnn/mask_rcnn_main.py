@@ -96,12 +96,13 @@ def save_config(config, model_dir):
   params_io.save_hparams_to_yaml(config, model_dir + '/params.yaml')
 
 
-def main(argv):
-  del argv  # Unused.
+def run(config, train_input_fn=None, eval_input_fn=None):
+  """Run mask-rnn train/eval with given config."""
 
-  # Configure parameters.
-  config = mask_rcnn_params.default_config()
-  config = params_io.override_hparams(config, FLAGS.config)
+  if FLAGS.mode in ('train', 'train_and_eval'):
+    assert train_input_fn is not None, 'train_input_fn cannot be None.'
+  if FLAGS.mode in ('eval', 'train_and_eval'):
+    assert eval_input_fn is not None, 'eval_input_fn cannot be None.'
 
   if FLAGS.use_tpu:
     tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
@@ -110,17 +111,6 @@ def main(argv):
     tf.Session.reset(tpu_grpc_url)
   else:
     tpu_cluster_resolver = None
-
-  # Check data path
-  if (FLAGS.mode in ('train', 'train_and_eval') and
-      not config.training_file_pattern):
-    raise RuntimeError('You must specify `training_file_pattern` for training.')
-  if FLAGS.mode in ('eval', 'train_and_eval'):
-    if not config.validation_file_pattern:
-      raise RuntimeError('You must specify `validation_file_pattern` '
-                         'for evaluation.')
-    if not config.val_json_file:
-      raise RuntimeError('You must specify `val_json_file` for evaluation.')
 
   # The following is for spatial partitioning. `features` has one tensor while
   # `labels` has 4 + (`max_level` - `min_level` + 1) * 2 tensors. The input
@@ -214,14 +204,9 @@ def main(argv):
         train_batch_size=config.train_batch_size,
         config=run_config,
         params=params)
-    train_estimator.train(
-        input_fn=dataloader.InputReader(
-            config.training_file_pattern,
-            mode=tf.estimator.ModeKeys.TRAIN,
-            use_fake_data=FLAGS.use_fake_data,
-            use_instance_mask=config.include_mask),
-        max_steps=config.total_steps)
+    train_estimator.train(input_fn=train_input_fn, max_steps=config.total_steps)
 
+    eval_results = None
     if FLAGS.eval_after_training:
       # Run evaluation after training finishes.
       eval_params_dict = dict(
@@ -247,7 +232,7 @@ def main(argv):
       summary_writer = tf.summary.FileWriter(output_dir)
       eval_results = evaluation.evaluate(
           eval_estimator,
-          config.validation_file_pattern,
+          eval_input_fn,
           config.eval_samples,
           config.eval_batch_size,
           config.include_mask,
@@ -256,6 +241,7 @@ def main(argv):
           eval_results, summary_writer, config.total_steps)
 
       summary_writer.close()
+    return eval_results
 
   elif FLAGS.mode == 'eval':
     output_dir = os.path.join(FLAGS.model_dir, 'eval')
@@ -285,6 +271,7 @@ def main(argv):
                       FLAGS.eval_timeout)
       return True
 
+    eval_results = None
     # Run evaluation when there's a new checkpoint
     for ckpt in tf.contrib.training.checkpoints_iterator(
         FLAGS.model_dir,
@@ -298,7 +285,7 @@ def main(argv):
       try:
         eval_results = evaluation.evaluate(
             eval_estimator,
-            config.validation_file_pattern,
+            eval_input_fn,
             config.eval_samples,
             config.eval_batch_size,
             config.include_mask,
@@ -329,6 +316,7 @@ def main(argv):
             desired_image_size=config.image_size,
             padding_stride=(2 ** config.max_level),
             input_type='image_bytes'))
+    return eval_results
 
   elif FLAGS.mode == 'train_and_eval':
     if FLAGS.model_dir:
@@ -362,11 +350,7 @@ def main(argv):
     for cycle in range(num_cycles):
       tf.logging.info('Start training cycle %d.' % cycle)
       train_estimator.train(
-          input_fn=dataloader.InputReader(
-              config.training_file_pattern,
-              mode=tf.estimator.ModeKeys.TRAIN,
-              use_instance_mask=config.include_mask),
-          steps=config.num_steps_per_eval)
+          input_fn=train_input_fn, steps=config.num_steps_per_eval)
 
       tf.logging.info('Start evaluation cycle %d.' % cycle)
       eval_results = evaluation(eval_estimator, config)
@@ -375,16 +359,11 @@ def main(argv):
       evaluation.write_summary(eval_results, summary_writer, current_step)
 
     tf.logging.info('Starting training cycle %d.' % num_cycles)
-    train_estimator.train(
-        input_fn=dataloader.InputReader(
-            config.training_file_pattern,
-            mode=tf.estimator.ModeKeys.TRAIN,
-            use_instance_mask=config.include_mask),
-        max_steps=config.total_steps)
+    train_estimator.train(input_fn=train_input_fn, max_steps=config.total_steps)
 
     eval_results = evaluation.evaluate(
         eval_estimator,
-        config.validation_file_pattern,
+        eval_input_fn,
         config.eval_samples,
         config.eval_batch_size,
         config.include_mask,
@@ -402,9 +381,46 @@ def main(argv):
             desired_image_size=config.image_size,
             padding_stride=(2 ** config.max_level),
             input_type='image_bytes'))
+    return eval_results
 
   else:
     tf.logging.info('Mode not found.')
+    return None
+
+
+def main(argv):
+  del argv  # Unused.
+
+  # Configure parameters.
+  config = mask_rcnn_params.default_config()
+  config = params_io.override_hparams(config, FLAGS.config)
+
+  # Check data path
+  train_input_fn = None
+  eval_input_fn = None
+  if (FLAGS.mode in ('train', 'train_and_eval') and
+      not config.training_file_pattern):
+    raise RuntimeError('You must specify `training_file_pattern` for training.')
+  if FLAGS.mode in ('eval', 'train_and_eval'):
+    if not config.validation_file_pattern:
+      raise RuntimeError('You must specify `validation_file_pattern` '
+                         'for evaluation.')
+    if not config.val_json_file:
+      raise RuntimeError('You must specify `val_json_file` for evaluation.')
+
+  if FLAGS.mode in ('train', 'train_and_eval'):
+    train_input_fn = dataloader.InputReader(
+        config.training_file_pattern,
+        mode=tf.estimator.ModeKeys.TRAIN,
+        use_fake_data=FLAGS.use_fake_data,
+        use_instance_mask=config.include_mask)
+  if FLAGS.mode in ('eval', 'train_and_eval'):
+    eval_input_fn = dataloader.InputReader(
+        config.validation_file_pattern,
+        mode=tf.estimator.ModeKeys.PREDICT,
+        num_examples=config.eval_samples,
+        use_instance_mask=config.include_mask)
+  run(config, train_input_fn=train_input_fn, eval_input_fn=eval_input_fn)
 
 
 if __name__ == '__main__':

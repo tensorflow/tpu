@@ -23,54 +23,87 @@ import six
 import tensorflow as tf
 
 import coco_metric
-import dataloader
 
 
-def evaluate(eval_estimator,
-             validation_file_pattern,
-             num_eval_samples,
-             eval_batch_size,
-             include_mask=True,
-             validation_json_file=None):
-  """Runs COCO evaluation once."""
-  predictor = eval_estimator.predict(
-      input_fn=dataloader.InputReader(
-          validation_file_pattern,
-          mode=tf.estimator.ModeKeys.PREDICT,
-          num_examples=num_eval_samples,
-          use_instance_mask=include_mask),
-      yield_single_examples=False)
-  # Every predictor.next() gets a batch of prediction (a dictionary).
+def process_prediction_for_eval(prediction):
+  """Process the model prediction for COCO eval."""
+  image_info = prediction['image_info']
+  raw_detections = prediction['detections']
+  processed_detections = raw_detections
+  for b in range(raw_detections.shape[0]):
+    scale = image_info[b][2]
+    for box_id in range(raw_detections.shape[1]):
+      # Map [y1, x1, y2, x2] -> [x1, y1, w, h] and multiply detections
+      # by image scale.
+      new_box = raw_detections[b, box_id, :]
+      y1, x1, y2, x2 = new_box[1:5]
+      new_box[1:5] = scale * np.array([x1, y1, x2 - x1, y2 - y1])
+      processed_detections[b, box_id, :] = new_box
+  prediction['detections'] = processed_detections
+  return prediction
+
+
+def compute_coco_eval_metric(predictor,
+                             num_batches=-1,
+                             include_mask=True,
+                             annotation_json_file=None):
+  """Compute COCO eval metric given a prediction generator.
+
+  Args:
+    predictor: a generator that iteratively pops a dictionary of predictions
+      with the format compatible with COCO eval tool.
+    num_batches: the number of batches to be aggregated in eval. This is how
+      many times that the predictor gets pulled.
+    include_mask: a boolean that indicates whether we include the mask eval.
+    annotation_json_file: the annotation json file of the eval dataset.
+
+  Returns:
+    eval_results: the aggregated COCO metric eval results.
+  """
+  # TODO(pengchong): remove assertion once we support eval without json.
+  assert annotation_json_file is not None
+
   predictions = dict()
-  num_eval_times = num_eval_samples // eval_batch_size
-  assert num_eval_times > 0, 'num_eval_samples >= eval_batch_size!'
-  for _ in range(num_eval_times):
-    prediction = six.next(predictor)
-    image_info = prediction['image_info']
-    raw_detections = prediction['detections']
-    processed_detections = raw_detections
-    for b in range(raw_detections.shape[0]):
-      scale = image_info[b][2]
-      for box_id in range(raw_detections.shape[1]):
-        # Map [y1, x1, y2, x2] -> [x1, y1, w, h] and multiply detections
-        # by image scale.
-        new_box = raw_detections[b, box_id, :]
-        y1, x1, y2, x2 = new_box[1:5]
-        new_box[1:5] = scale * np.array([x1, y1, x2 - x1, y2 - y1])
-        processed_detections[b, box_id, :] = new_box
-    prediction['detections'] = processed_detections
+  batch_idx = 0
+  while num_batches < 0 or batch_idx < num_batches:
+    try:
+      prediction = six.next(predictor)
+      tf.logging.info('Running inference on batch %d/%d...' %
+                      (batch_idx + 1, num_batches))
+    except StopIteration:
+      tf.logging.info('Get StopIteration at %d batch.' % (batch_idx + 1))
+      break
 
+    prediction = process_prediction_for_eval(prediction)
     for k, v in six.iteritems(prediction):
       if k not in predictions:
         predictions[k] = v
       else:
         predictions[k] = np.append(predictions[k], v, axis=0)
 
+    batch_idx = batch_idx + 1
+
   eval_metric = coco_metric.EvaluationMetric(
-      validation_json_file, include_mask=include_mask)
+      annotation_json_file, include_mask=include_mask)
   eval_results = eval_metric.predict_metric_fn(predictions)
   tf.logging.info('Eval results: %s' % eval_results)
+  return eval_results
 
+
+def evaluate(eval_estimator,
+             input_fn,
+             num_eval_samples,
+             eval_batch_size,
+             include_mask=True,
+             validation_json_file=None):
+  """Runs COCO evaluation once."""
+  predictor = eval_estimator.predict(
+      input_fn=input_fn, yield_single_examples=False)
+  # Every predictor.next() gets a batch of prediction (a dictionary).
+  num_eval_times = num_eval_samples // eval_batch_size
+  assert num_eval_times > 0, 'num_eval_samples >= eval_batch_size!'
+  eval_results = compute_coco_eval_metric(
+      predictor, num_eval_times, include_mask, validation_json_file)
   return eval_results
 
 

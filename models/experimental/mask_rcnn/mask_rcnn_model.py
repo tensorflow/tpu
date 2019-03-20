@@ -275,6 +275,26 @@ def build_model_graph(features, labels, is_training, params):
   return model_outputs
 
 
+def _build_assigment_map(optimizer, prefix=None, skip_variables_regex=None):
+  """Generate assigment map for loading checkpoints."""
+  optimizer_vars = set([var.name for var in optimizer.variables()])
+  all_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=prefix)
+  if not prefix:
+    prefix = ''
+  assignment_map = {}
+  for var in all_vars:
+    if var.name not in optimizer_vars:
+      var_name = var.name
+      # Trim the index of the variable.
+      if ':' in var_name:
+        var_name = var_name[:var_name.rindex(':')]
+      if skip_variables_regex and re.match(skip_variables_regex,
+                                           var_name[len(prefix):]):
+        continue
+      assignment_map[var_name[len(prefix):]] = var_name
+  return assignment_map
+
+
 def _model_fn(features, labels, mode, params, variable_filter_fn=None):
   """Model defination for the Mask-RCNN model based on ResNet.
 
@@ -367,36 +387,37 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
     if params['use_tpu']:
       optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
 
-    if not params['resnet_checkpoint']:
-      scaffold_fn = None
-    else:
+    scaffold_fn = None
+    if params['warm_start_path']:
 
-      def scaffold_fn():
+      def warm_start_scaffold_fn():
+        tf.logging.info(
+            'model_fn warm start from: %s",' % params['warm_start_path'])
+        assignment_map = _build_assigment_map(
+            optimizer,
+            prefix=None,
+            skip_variables_regex=params['skip_checkpoint_variables'])
+        tf.train.init_from_checkpoint(params['warm_start_path'], assignment_map)
+        return tf.train.Scaffold()
+
+      scaffold_fn = warm_start_scaffold_fn
+
+    elif params['resnet_checkpoint']:
+
+      def resnet_scaffold_fn():
         """Loads pretrained model through scaffold function."""
         # Exclude all variable of optimizer.
-        optimizer_vars = set([var.name for var in optimizer.variables()])
         prefix = 'resnet%s/' % params['resnet_depth']
-        resnet_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, prefix)
-        vars_to_load = {}
-        for var in resnet_vars:
-          if var.name not in optimizer_vars:
-            var_name = var.name
-            # Trim the index of the variable.
-            if ':' in var_name:
-              var_name = var_name[:var_name.rindex(':')]
-            if params['skip_checkpoint_variables'] and re.match(
-                params['skip_checkpoint_variables'], var_name[len(prefix):]):
-              continue
-            vars_to_load[var_name[len(prefix):]] = var_name
-        for var in optimizer_vars:
-          tf.logging.info('Optimizer vars: %s.' % var)
-        var_names = sorted(vars_to_load.keys())
-        for k in var_names:
-          tf.logging.info('Will train: "%s": "%s",' % (k, vars_to_load[k]))
+        vars_to_load = _build_assigment_map(
+            optimizer,
+            prefix=prefix,
+            skip_variables_regex=params['skip_checkpoint_variables'])
         tf.train.init_from_checkpoint(params['resnet_checkpoint'], vars_to_load)
         if not vars_to_load:
           raise ValueError('Variables to load is empty.')
         return tf.train.Scaffold()
+
+      scaffold_fn = resnet_scaffold_fn
 
     # Batch norm requires update_ops to be added as a train_op dependency.
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)

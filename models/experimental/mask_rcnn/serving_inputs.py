@@ -19,6 +19,9 @@ import tensorflow as tf
 import preprocess_ops
 
 
+INPUT_SIGNATURE = 'input'
+
+
 def parse_tf_example(tf_example_string):
   """Parse the serialized tf.Example and decode it to the image tensor."""
   decoder = tf.contrib.slim.tfexample_decoder.TFExampleDecoder({
@@ -159,25 +162,22 @@ def serving_input_fn(batch_size,
     placeholder, features = image_tensor_input(
         batch_size, desired_image_size, padding_stride)
     return tf.estimator.export.ServingInputReceiver(
-        features=features,
-        receiver_tensors={
-            'input': placeholder,
+        features=features, receiver_tensors={
+            INPUT_SIGNATURE: placeholder,
         })
   elif input_type == 'image_bytes':
     placeholder, features = image_bytes_input(
         batch_size, desired_image_size, padding_stride)
     return tf.estimator.export.ServingInputReceiver(
-        features=features,
-        receiver_tensors={
-            'input': placeholder,
+        features=features, receiver_tensors={
+            INPUT_SIGNATURE: placeholder,
         })
   elif input_type == 'tf_example':
     placeholder, features = tf_example_input(
         batch_size, desired_image_size, padding_stride)
     return tf.estimator.export.ServingInputReceiver(
-        features=features,
-        receiver_tensors={
-            'input': placeholder,
+        features=features, receiver_tensors={
+            INPUT_SIGNATURE: placeholder,
         })
   else:
     raise NotImplementedError('Unknown input type!')

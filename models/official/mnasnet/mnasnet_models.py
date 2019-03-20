@@ -167,8 +167,24 @@ def mnasnet_a1(depth_multiplier=None):
   return decoder.decode(blocks_args), global_params
 
 
+def get_model_params(model_name, override_params):
+  """Get the block args and global params for a given model."""
+  if model_name == 'mnasnet-a1':
+    blocks_args, global_params = mnasnet_a1()
+  elif model_name == 'mnasnet-b1':
+    blocks_args, global_params = mnasnet_b1()
+  else:
+    raise NotImplementedError('model name is not pre-defined: %s' % model_name)
+
+  if override_params:
+    # ValueError will be raised here if override_params has fields not included
+    # in global_params.
+    global_params = global_params._replace(**override_params)
+  return blocks_args, global_params
+
+
 def build_mnasnet_model(images, model_name, training, override_params=None):
-  """A helper functiion to creates a MnasNet model and returns predicted logits.
+  """A helper functiion to create a MnasNet model and return predicted logits.
 
   Args:
     images: input images tensor.
@@ -185,17 +201,7 @@ def build_mnasnet_model(images, model_name, training, override_params=None):
     When override_params has invalid fields, raises ValueError.
   """
   assert isinstance(images, tf.Tensor)
-  if model_name == 'mnasnet-a1':
-    blocks_args, global_params = mnasnet_a1()
-  elif model_name == 'mnasnet-b1':
-    blocks_args, global_params = mnasnet_b1()
-  else:
-    raise NotImplementedError('model name is not pre-defined: %s' % model_name)
-
-  if override_params:
-    # ValueError will be raised here if override_params has fields not included
-    # in global_params.
-    global_params = global_params._replace(**override_params)
+  blocks_args, global_params = get_model_params(model_name, override_params)
 
   with tf.variable_scope(model_name):
     model = mnasnet_model.MnasNetModel(blocks_args, global_params)
@@ -203,3 +209,31 @@ def build_mnasnet_model(images, model_name, training, override_params=None):
 
   logits = tf.identity(logits, 'logits')
   return logits, model.endpoints
+
+
+def build_mnasnet_base(images, model_name, training, override_params=None):
+  """A helper functiion to create a MnasNet base model and return global_pool.
+
+  Args:
+    images: input images tensor.
+    model_name: string, the model name of a pre-defined MnasNet.
+    training: boolean, whether the model is constructed for training.
+    override_params: A dictionary of params for overriding. Fields must exist in
+      mnasnet_model.GlobalParams.
+
+  Returns:
+    features: global pool features.
+    endpoints: the endpoints for each layer.
+  Raises:
+    When model_name specified an undefined model, raises NotImplementedError.
+    When override_params has invalid fields, raises ValueError.
+  """
+  assert isinstance(images, tf.Tensor)
+  blocks_args, global_params = get_model_params(model_name, override_params)
+
+  with tf.variable_scope(model_name):
+    model = mnasnet_model.MnasNetModel(blocks_args, global_params)
+    features = model(images, training=training, features_only=True)
+
+  features = tf.identity(features, 'global_pool')
+  return features, model.endpoints

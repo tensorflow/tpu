@@ -41,7 +41,16 @@ class InputReader(object):
     self._use_fake_data = use_fake_data
     self._use_instance_mask = use_instance_mask
 
-  def __call__(self, params):
+  def _create_dataset_fn(self):
+    # Prefetch data from files.
+    def _prefetch_dataset(filename):
+      dataset = tf.data.TFRecordDataset(filename).prefetch(1)
+      return dataset
+
+    return _prefetch_dataset
+
+  def _create_dataset_parser_fn(self, params):
+    """Create parser for parsing input data (dictionary)."""
     example_decoder = tf_example_decoder.TfExampleDecoder(
         use_instance_mask=self._use_instance_mask)
 
@@ -203,20 +212,21 @@ class InputReader(object):
             labels['cropped_gt_masks'] = cropped_gt_masks
           return (features, labels)
 
+    return _dataset_parser
+
+  def __call__(self, params):
+    dataset_parser_fn = self._create_dataset_parser_fn(params)
+    dataset_fn = self._create_dataset_fn()
     batch_size = params['batch_size'] if 'batch_size' in params else 1
     dataset = tf.data.Dataset.list_files(
         self._file_pattern, shuffle=(self._mode == tf.estimator.ModeKeys.TRAIN))
     if self._mode == tf.estimator.ModeKeys.TRAIN:
       dataset = dataset.repeat()
 
-    # Prefetch data from files.
-    def _prefetch_dataset(filename):
-      dataset = tf.data.TFRecordDataset(filename).prefetch(1)
-      return dataset
-
     dataset = dataset.apply(
         tf.contrib.data.parallel_interleave(
-            _prefetch_dataset, cycle_length=32,
+            dataset_fn,
+            cycle_length=32,
             sloppy=(self._mode == tf.estimator.ModeKeys.TRAIN)))
     if self._mode == tf.estimator.ModeKeys.TRAIN:
       dataset = dataset.shuffle(64)
@@ -224,8 +234,10 @@ class InputReader(object):
     # Parse the fetched records to input tensors for model function.
     dataset = dataset.apply(
         tf.contrib.data.map_and_batch(
-            _dataset_parser, batch_size=batch_size,
-            num_parallel_batches=64, drop_remainder=True))
+            dataset_parser_fn,
+            batch_size=batch_size,
+            num_parallel_batches=64,
+            drop_remainder=True))
 
     # Transposes images for TPU performance.
     # Given the batch size, the batch dimesion (N) goes to either the minor
