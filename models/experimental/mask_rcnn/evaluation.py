@@ -28,18 +28,18 @@ import coco_metric
 def process_prediction_for_eval(prediction):
   """Process the model prediction for COCO eval."""
   image_info = prediction['image_info']
-  raw_detections = prediction['detections']
-  processed_detections = raw_detections
-  for b in range(raw_detections.shape[0]):
-    scale = image_info[b][2]
-    for box_id in range(raw_detections.shape[1]):
+  box_coordinates = prediction['box_coordinates']
+  processed_box_coordinates = np.zeros_like(box_coordinates)
+
+  for image_id in range(box_coordinates.shape[0]):
+    scale = image_info[image_id][2]
+    for box_id in range(box_coordinates.shape[1]):
       # Map [y1, x1, y2, x2] -> [x1, y1, w, h] and multiply detections
       # by image scale.
-      new_box = raw_detections[b, box_id, :]
-      y1, x1, y2, x2 = new_box[1:5]
-      new_box[1:5] = scale * np.array([x1, y1, x2 - x1, y2 - y1])
-      processed_detections[b, box_id, :] = new_box
-  prediction['detections'] = processed_detections
+      y1, x1, y2, x2 = box_coordinates[image_id, box_id, :]
+      new_box = scale * np.array([x1, y1, x2 - x1, y2 - y1])
+      processed_box_coordinates[image_id, box_id, :] = new_box
+  prediction['box_coordinates'] = processed_box_coordinates
   return prediction
 
 
@@ -77,11 +77,14 @@ def compute_coco_eval_metric(predictor,
     prediction = process_prediction_for_eval(prediction)
     for k, v in six.iteritems(prediction):
       if k not in predictions:
-        predictions[k] = v
+        predictions[k] = [v]
       else:
-        predictions[k] = np.append(predictions[k], v, axis=0)
+        predictions[k].append(v)
 
     batch_idx = batch_idx + 1
+
+  for k, v in six.iteritems(predictions):
+    predictions[k] = np.concatenate(predictions[k], axis=0)
 
   eval_metric = coco_metric.EvaluationMetric(
       annotation_json_file, include_mask=include_mask)
@@ -117,5 +120,3 @@ def write_summary(eval_results, summary_writer, current_step):
               tag=metric, simple_value=eval_results[metric]))
     tf_summary = tf.Summary(value=list(summaries))
     summary_writer.add_summary(tf_summary, current_step)
-
-

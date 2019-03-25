@@ -186,7 +186,6 @@ def build_model_graph(features, labels, is_training, params):
           class_outputs,
           box_outputs,
           rpn_box_rois,
-          features['source_ids'],
           features['image_info'],
           params['test_rpn_post_nms_topn'],
           params['test_detections_per_image'],
@@ -197,7 +196,6 @@ def build_model_graph(features, labels, is_training, params):
           class_outputs,
           box_outputs,
           rpn_box_rois,
-          features['source_ids'],
           features['image_info'],
           params['test_rpn_post_nms_topn'],
           params['test_detections_per_image'],
@@ -205,10 +203,15 @@ def build_model_graph(features, labels, is_training, params):
           params['bbox_reg_weights'])
 
     model_outputs.update({
-        'detections': tf.identity(detections, 'Detections'),
+        'image_id': tf.identity(features['source_ids'], 'ImageId'),
+        'num_valid_boxes': tf.identity(detections[0], 'NumValidBoxes'),
+        'box_coordinates': tf.identity(detections[1], 'BoxCoordinates'),
+        'box_classes': tf.identity(detections[2], 'BoxClasses'),
+        'box_scores': tf.identity(detections[3], 'BoxScores'),
     })
+
     if params['output_box_features']:
-      final_box_rois = detections[:, :, 1:5]
+      final_box_rois = model_outputs['box_coordinates']
       final_roi_features = spatial_transform_ops.multilevel_crop_and_resize(
           fpn_feats, final_box_rois, output_size=7)
       _, _, final_box_features = heads.box_head(
@@ -236,8 +239,8 @@ def build_model_graph(features, labels, is_training, params):
 
   # Mask sampling
   if not is_training:
-    selected_box_rois = detections[:, :, 1:5]
-    class_indices = tf.to_int32(detections[:, :, 6])
+    selected_box_rois = model_outputs['box_coordinates']
+    class_indices = tf.to_int32(model_outputs['box_classes'])
   else:
     (selected_class_targets, selected_box_targets, selected_box_rois,
      proposal_to_label_map) = (
@@ -332,12 +335,8 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
   # First check if it is in PREDICT mode.
   if mode == tf.estimator.ModeKeys.PREDICT:
     predictions = {}
-    predictions['detections'] = model_outputs['detections']
+    predictions.update(**model_outputs)
     predictions['image_info'] = features['image_info']
-    if params['output_box_features']:
-      predictions['box_features'] = model_outputs['box_features']
-    if params['include_mask']:
-      predictions['mask_outputs'] = model_outputs['mask_outputs']
 
     if params['use_tpu']:
       return tf.contrib.tpu.TPUEstimatorSpec(mode=mode, predictions=predictions)

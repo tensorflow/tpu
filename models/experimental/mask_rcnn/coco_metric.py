@@ -41,9 +41,7 @@ class MaskCOCO(COCO):
     """Load result file and return a result api object.
 
     Args:
-      detection_results: a numpy array of detection results of shape:
-        [num_images * detection_per_image, 7]. The format is:
-        [image_id, x, y, width, height, score, class].
+      detection_results: a dictionary containing predictions results.
       mask_results: a list of RLE encoded binary instance masks. Length is
         num_images * detections_per_image.
 
@@ -55,32 +53,33 @@ class MaskCOCO(COCO):
     print('Loading and preparing results...')
     predictions = self.load_predictions(detection_results, mask_results)
     assert isinstance(predictions, list), 'results in not an array of objects'
+    if predictions:
+      image_ids = [pred['image_id'] for pred in predictions]
+      assert set(image_ids) == (set(image_ids) & set(self.getImgIds())), \
+             'Results do not correspond to current coco set'
 
-    image_ids = [pred['image_id'] for pred in predictions]
-    assert set(image_ids) == (set(image_ids) & set(self.getImgIds())), \
-           'Results do not correspond to current coco set'
+      if (predictions and 'bbox' in predictions[0] and predictions[0]['bbox']):
+        res.dataset['categories'] = copy.deepcopy(self.dataset['categories'])
+        for idx, pred in enumerate(predictions):
+          bb = pred['bbox']
+          x1, x2, y1, y2 = [bb[0], bb[0] + bb[2], bb[1], bb[1] + bb[3]]
+          if 'segmentation' not in pred:
+            pred['segmentation'] = [[x1, y1, x1, y2, x2, y2, x2, y1]]
+          pred['area'] = bb[2] * bb[3]
+          pred['id'] = idx + 1
+          pred['iscrowd'] = 0
+      elif 'segmentation' in predictions[0]:
+        res.dataset['categories'] = copy.deepcopy(self.dataset['categories'])
+        for idx, pred in enumerate(predictions):
+          # now only support compressed RLE format as segmentation results
+          pred['area'] = maskUtils.area(pred['segmentation'])
+          if 'bbox' not in pred:
+            pred['bbox'] = maskUtils.toBbox(pred['segmentation'])
+          pred['id'] = idx + 1
+          pred['iscrowd'] = 0
 
-    if ('bbox' in predictions[0] and predictions[0]['bbox']):
-      res.dataset['categories'] = copy.deepcopy(self.dataset['categories'])
-      for idx, pred in enumerate(predictions):
-        bb = pred['bbox']
-        x1, x2, y1, y2 = [bb[0], bb[0]+bb[2], bb[1], bb[1]+bb[3]]
-        if 'segmentation' not in pred:
-          pred['segmentation'] = [[x1, y1, x1, y2, x2, y2, x2, y1]]
-        pred['area'] = bb[2]*bb[3]
-        pred['id'] = idx+1
-        pred['iscrowd'] = 0
-    elif 'segmentation' in predictions[0]:
-      res.dataset['categories'] = copy.deepcopy(self.dataset['categories'])
-      for idx, pred in enumerate(predictions):
-        # now only support compressed RLE format as segmentation results
-        pred['area'] = maskUtils.area(pred['segmentation'])
-        if 'bbox' not in pred:
-          pred['bbox'] = maskUtils.toBbox(pred['segmentation'])
-        pred['id'] = idx+1
-        pred['iscrowd'] = 0
+      res.dataset['annotations'] = predictions
 
-    res.dataset['annotations'] = predictions
     res.createIndex()
     return res
 
@@ -88,37 +87,49 @@ class MaskCOCO(COCO):
     """Create prediction dictionary list from detection and mask results.
 
     Args:
-      detection_results: a numpy array of detection results of shape:
-        [num_images * detection_per_image, 7].
+      detection_results: a dictionary containing numpy arrays which corresponds
+        to prediction results.
       mask_results: a list of RLE encoded binary instance masks. Length is
         num_images * detections_per_image.
 
     Returns:
-      annotations (python nested list)
+      a list of dictionary including different prediction results from the model
+        in numpy form.
     """
-    print('Converting ndarray to lists...')
-    assert isinstance(detection_results, np.ndarray)
-    print(detection_results.shape[0])
-    print(len(mask_results))
-    assert detection_results.shape[1] == 7
-    if mask_results:
-      assert detection_results.shape[0] == len(mask_results)
-    num_detections = detection_results.shape[0]
     predictions = []
+    num_detections = detection_results['box_scores'].size
+    current_index = 0
+    for i, image_id in enumerate(detection_results['image_id']):
+      box_coorindates_in_image = detection_results['box_coordinates'][i]
+      segments = generate_segmentation_from_masks(
+          detection_results['mask_outputs'][i],
+          box_coorindates_in_image,
+          int(detection_results['image_info'][i][3]),
+          int(detection_results['image_info'][i][4]))
 
-    for i in range(num_detections):
-      if i % 1000000 == 0:
-        print('{}/{}'.format(i, num_detections))
-      prediction = {
-          'image_id': int(detection_results[i, 0]),
-          'bbox': detection_results[i, 1:5].tolist(),
-          'score': detection_results[i, 5],
-          'category_id': int(detection_results[i, 6]),
-      }
-      if mask_results:
-        prediction['segmentation'] = mask_results[i]
+      # Convert the mask to uint8 and then to fortranarray for RLE encoder.
+      encoded_masks = [
+          maskUtils.encode(np.asfortranarray(instance_mask.astype(np.uint8)))
+          for instance_mask in segments
+      ]
 
-      predictions += [prediction]
+      for box_index in range(detection_results['num_valid_boxes'][i]):
+        if current_index % 1000000 == 0:
+          print('{}/{}'.format(current_index, num_detections))
+        current_index += 1
+
+        prediction = {
+            'image_id': int(image_id),
+            'bbox': detection_results['box_coordinates'][i][box_index].tolist(),
+            'score': detection_results['box_scores'][i][box_index],
+            'category_id': int(detection_results['box_classes'][i][box_index]),
+        }
+
+        if mask_results:
+          prediction['segmentation'] = encoded_masks
+
+        predictions.append(prediction)
+
     return predictions
 
 
@@ -211,9 +222,8 @@ class EvaluationMetric(object):
     """Constructs COCO evaluation class.
 
     The class provides the interface to metrics_fn in TPUEstimator. The
-    _update_op() takes detections from each image and push them to
-    self.detections. The _evaluate() loads a JSON file in COCO annotation format
-    as the groundtruths and runs COCO evaluation.
+    _evaluate() loads a JSON file in COCO annotation format as the
+    groundtruths and runs COCO evaluation.
 
     Args:
       filename: Ground truth JSON file name. If filename is None, use
@@ -249,36 +259,9 @@ class EvaluationMetric(object):
 
   def predict_metric_fn(self, predictions):
     """Generates COCO metrics."""
-
-    for i, detection in enumerate(predictions['detections']):
-      segms = None
-      if self._include_mask:
-        segms = generate_segmentation_from_masks(
-            predictions['mask_outputs'][i],
-            detection[:, 1:5],
-            int(predictions['image_info'][i][3]),
-            int(predictions['image_info'][i][4]))
-        segms = segms[np.newaxis, :, :, :]
-      self._update_op(
-          detection[np.newaxis, :, :],
-          instance_masks=segms)
-    metrics = self._evaluate()
-    metrics_dict = {}
-    for i, name in enumerate(self.metric_names):
-      metrics_dict[name] = metrics[i]
-    return metrics_dict
-
-  def _evaluate(self):
-    """Evaluates with detections from all images with COCO API.
-
-    Returns:
-      coco_metric: float numpy array with shape [24] representing the
-        coco-style evaluation metrics (box and mask).
-    """
-    detections = np.array(self.detections)
-    concat_masks = [x for img_masks in self.masks for x in img_masks]
-    image_ids = list(set(detections[:, 0]))
-    coco_dt = self.coco_gt.loadRes(detections, concat_masks)
+    self.detections = predictions
+    image_ids = list(set(self.detections['image_id']))
+    coco_dt = self.coco_gt.loadRes(self.detections, self.masks)
     coco_eval = COCOeval(self.coco_gt, coco_dt, iouType='bbox')
     coco_eval.params.imgIds = image_ids
     coco_eval.evaluate()
@@ -299,38 +282,14 @@ class EvaluationMetric(object):
       metrics = np.hstack((coco_metrics, mask_coco_metrics))
     else:
       metrics = coco_metrics
-    # clean self.detections after eva
+
     # clean self.detections after evaluation is done.
     # this makes sure the next evaluation will start with an empty list of
     # self.detections.
     self._reset()
-    return metrics.astype(np.float32)
+    metrics = metrics.astype(np.float32)
 
-  def _update_op(self, detections, instance_masks=None):
-    """Update detection results and groundtruth data.
-
-    Append detection/mask results to self.detections and self.masks to
-    aggregate results from all validation set.
-
-    Args:
-     detections: Detection results in a tensor with each row representing
-       [image_id, x, y, width, height, score, class]. Numpy array shape
-       [batch_size, num_detections, 7].
-     instance_masks: Instance mask predictions associated with each detections
-       [batch_size, num_detections, height, width].
-    """
-    for i in range(len(detections)):
-      if detections[i].shape[0] == 0:
-        continue
-
-      self.detections.extend(detections[i])
-
-      if self._include_mask:
-        # Convert the mask to uint8 and then to fortranarray for RLE encoder.
-        encoded_mask_list = [maskUtils.encode(
-            np.asfortranarray(instance_mask.astype(np.uint8)))
-                             for instance_mask in instance_masks[i]]
-        # The encoder returns a list of RLE-encoded instance masks here.
-        self.masks.append(
-            encoded_mask_list
-        )
+    metrics_dict = {}
+    for i, name in enumerate(self.metric_names):
+      metrics_dict[name] = metrics[i]
+    return metrics_dict
