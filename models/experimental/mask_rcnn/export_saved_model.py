@@ -15,6 +15,16 @@
 
 # pylint: disable=line-too-long
 r"""A binary to export the Mask-RCNN model.
+
+If this script is run on cloud environment, the following
+lines need to be added the beginning of this file:
+```
+import sys
+sys.path.insert(0, '../../common')
+```
+
+If an error in parsing yaml file is encountered, removing `train_scale_max` and
+`train_scale_min` in the yaml file might fix it.
 """
 # pylint: enable=line-too-long
 

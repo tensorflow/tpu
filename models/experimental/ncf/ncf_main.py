@@ -18,417 +18,434 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import collections
-import copy
-import threading
+import os
 
 from absl import app as absl_app
 from absl import flags
 import numpy as np
 import tensorflow as tf
 
-from tensorflow.contrib import tpu
-import tpu_embedding
+# pylint: disable=g-direct-tensorflow-import
+from tensorflow.python.tpu import _tpu_estimator_embedding as embedding
+from tensorflow.python.tpu import feature_column
+# pylint: enable=g-direct-tensorflow-import
 from official.datasets import movielens
 from official.recommendation import constants as rconst
+from official.recommendation import data_pipeline
 from official.recommendation import data_preprocessing
 from official.recommendation import neumf_model
 from official.utils.flags import core as flags_core
+from official.utils.logs import hooks_helper
 
-_TOP_K = 10  # Top-k list for evaluation
 
-# keys for evaluation metrics
-_HR_KEY = "HR"
-_NDCG_KEY = "NDCG"
+FLAGS = flags.FLAGS
 
-_NUM_EPOCHS = 15
+flags.DEFINE_enum(
+    name="dataset", default="ml-20m",
+    enum_values=["ml-1m", "ml-20m"], case_sensitive=False,
+    help=flags_core.help_wrap(
+        "Dataset to be trained and evaluated."))
 
-GraphSpec = collections.namedtuple("GraphSpec", [
-    "graph", "embedding", "run_tpu_loop", "get_infeed_thread_fn", "hook_before",
-    "hook_after"
-])
+flags.DEFINE_string(
+    "data_dir", default=None,
+    help=("The directory where movielens data is stored."))
+
+flags.DEFINE_integer(
+    "batch_size", default=2048*16, help="Batch size.")
+
+flags.DEFINE_string(
+    "model_dir", default=None,
+    help=("The directory where the model and summaries are stored."))
+
+flags.DEFINE_string(
+    "tpu", default=None,
+    help="The Cloud TPU to use for training. This should be either the name "
+    "used when creating the Cloud TPU, or a grpc://ip.address.of.tpu:8470 "
+    "url.")
+
+flags.DEFINE_string(
+    "gcp_project", default=None,
+    help="Project name for the Cloud TPU-enabled project. If not specified, "
+    "we will attempt to automatically detect the GCE project from metadata.")
+
+flags.DEFINE_string(
+    "tpu_zone", default=None,
+    help="GCE zone where the Cloud TPU is located in. If not specified, we "
+    "will attempt to automatically detect the zone from metadata.")
+
+flags.DEFINE_integer(
+    name="eval_batch_size",
+    default=80000,
+    help=flags_core.help_wrap(
+        "The batch size used for evaluation. This should generally be larger"
+        "than the training batch size as the lack of back propagation during"
+        "evaluation can allow for larger batch sizes to fit in memory. If not"
+        "specified, the training batch size (--batch_size) will be used."))
+
+flags.DEFINE_integer(
+    name="num_factors", default=64,
+    help=flags_core.help_wrap("The Embedding size of MF model."))
+
+flags.DEFINE_list(
+    name="layers", default=[256, 256, 128, 64],
+    help=flags_core.help_wrap(
+        "The sizes of hidden layers for MLP. Example "
+        "to specify different sizes of MLP layers: --layers=32,16,8,4"))
+
+flags.DEFINE_float(
+    name="mf_regularization", default=0.,
+    help=flags_core.help_wrap(
+        "The regularization factor for MF embeddings. The factor is used by "
+        "regularizer which allows to apply penalties on layer parameters or "
+        "layer activity during optimization."))
+
+flags.DEFINE_list(
+    name="mlp_regularization", default=["0.", "0.", "0.", "0."],
+    help=flags_core.help_wrap(
+        "The regularization factor for each MLP layer. See mf_regularization "
+        "help for more info about regularization factor."))
+
+flags.DEFINE_integer(
+    name="num_neg", default=4,
+    help=flags_core.help_wrap(
+        "The Number of negative instances to pair with a positive instance."))
+
+flags.DEFINE_float(
+    name="learning_rate", default=0.0005,
+    help=flags_core.help_wrap("The learning rate."))
+
+flags.DEFINE_bool(
+    name="ml_perf", default=True,
+    help=flags_core.help_wrap(
+        "If set, changes the behavior of the model slightly to match the "
+        "MLPerf reference implementations here: \n"
+        "https://github.com/mlperf/reference/tree/master/recommendation/"
+        "pytorch\n"
+        "The two changes are:\n"
+        "1. When computing the HR and NDCG during evaluation, remove "
+        "duplicate user-item pairs before the computation. This results in "
+        "better HRs and NDCGs.\n"
+        "2. Use a different sorting algorithm when sorting the input data, "
+        "which performs better due to the fact the sorting algorithms are "
+        "not stable."))
+
+flags.DEFINE_float(
+    name="beta1", default=0.9,
+    help=flags_core.help_wrap("AdamOptimizer parameter hyperparam beta1."))
+
+flags.DEFINE_float(
+    name="beta2", default=0.999,
+    help=flags_core.help_wrap("AdamOptimizer parameter hyperparam beta2."))
+
+flags.DEFINE_float(
+    name="epsilon", default=1e-08,
+    help=flags_core.help_wrap("AdamOptimizer parameter hyperparam epsilon."))
+
+flags.DEFINE_bool(
+    name="use_gradient_accumulation", default=True,
+    help=flags_core.help_wrap(
+        "setting this to `True` makes embedding "
+        "gradients calculation more accurate but slower. Please see "
+        " `optimization_parameters.proto` for details."))
+
+flags.DEFINE_enum(
+    name="constructor_type", default="bisection",
+    enum_values=["bisection", "materialized"], case_sensitive=False,
+    help=flags_core.help_wrap(
+        "Strategy to use for generating false negatives. materialized has a "
+        "precompute that scales badly, but a faster per-epoch construction "
+        "time and can be faster on very large systems."))
+
+flags.DEFINE_integer(
+    name="iterations_per_loop", default=1000,
+    help=flags_core.help_wrap(
+        "The number of iterations to perform in a single TPU loop."))
+
+flags.DEFINE_integer(
+    name="num_tpu_shards", default=8,
+    help=flags_core.help_wrap("Number of shards (TPU chips)."))
+
+flags.DEFINE_integer(
+    name="seed", default=None, help=flags_core.help_wrap(
+        "This value will be used to seed both NumPy and TensorFlow."))
+
+flags.DEFINE_integer(
+    name="train_epochs", default=2, help=flags_core.help_wrap(
+        "Number of epochs to train."))
+
+flags.DEFINE_bool(
+    name="use_synthetic_data", short_name="synth", default=False,
+    help=flags_core.help_wrap(
+        "If set, use fake data (zeroes) instead of a real dataset. "
+        "This mode is useful for performance debugging, as it removes "
+        "input processing steps, but will not learn anything."))
+
+flags.DEFINE_bool(
+    name="lazy_adam", default=False, help=flags_core.help_wrap(
+        "By default, use Adam optimizer. If True, use Lazy Adam optimizer, "
+        "which will be faster but might need tuning for convergence."))
+
+flags.DEFINE_bool(
+    name="adam_sum_inside_sqrt",
+    default=True,
+    help=flags_core.help_wrap(
+        "If True, Adam or lazy Adam updates on TPU embedding will be faster. "
+        "For details, see "
+        "tensorflow/core/protobuf/tpu/optimization_parameters.proto."))
+
+
+def create_tpu_estimator(model_fn, feature_columns, params):
+  """Creates the TPU Estimator from the NCF model_fn."""
+
+  tpu_cluster_resolver = tf.distribute.cluster_resolver.TPUClusterResolver(
+      params["tpu"],
+      zone=params["tpu_zone"],
+      project=params["gcp_project"],
+      coordinator_name="coordinator")
+
+  config = tf.contrib.tpu.RunConfig(
+      cluster=tpu_cluster_resolver,
+      model_dir=params["model_dir"],
+      tpu_config=tf.contrib.tpu.TPUConfig(
+          iterations_per_loop=params["iterations_per_loop"],
+          per_host_input_for_training=tf.contrib.tpu.InputPipelineConfig
+          .PER_HOST_V2))
+
+  return tf.contrib.tpu.TPUEstimator(
+      use_tpu=params["use_tpu"],
+      model_fn=model_fn,
+      config=config,
+      train_batch_size=params["global_batch_size"],
+      eval_batch_size=params["eval_global_batch_size"],
+      params=params,
+      experimental_embedding_config_spec=embedding.EmbeddingConfigSpec(
+          feature_columns=feature_columns,
+          optimization_parameters=embedding.AdamParameters(
+              learning_rate=params["learning_rate"],
+              use_gradient_accumulation=params["use_gradient_accumulation"],
+              lazy_adam=params["lazy_adam"],
+              sum_inside_sqrt=params["adam_sum_inside_sqrt"],
+              beta1=params["beta1"],
+              beta2=params["beta2"],
+              epsilon=params["epsilon"])))
+
+
+def create_feature_columns(params):
+  """Prepares the list of feature columns from the parameters."""
+  # Create the 2 features columns
+  initializer = tf.random_normal_initializer(0., 0.01)
+  user_column = tf.feature_column.categorical_column_with_identity(
+      key="user_id", num_buckets=params["num_users"])
+  item_column = tf.feature_column.categorical_column_with_identity(
+      key="item_id", num_buckets=params["num_items"])
+
+  feature_columns = [
+      feature_column.embedding_column(
+          categorical_column=user_column,
+          dimension=params["mf_dim"]+params["mlp_dim"],
+          combiner=None,
+          initializer=initializer),
+      feature_column.embedding_column(
+          categorical_column=item_column,
+          dimension=params["mf_dim"]+params["mlp_dim"],
+          combiner=None,
+          initializer=initializer)]
+  return feature_columns
+
+
+def get_params_for_dataset(params):
+  """Creates a new params dict for the data pipeline."""
+
+  dataset_params = dict(params)
+  # Dataset needs to have a per core batch size for training and eval.
+  dataset_params["batch_size"] = (
+      params["global_batch_size"] // FLAGS.num_tpu_shards)
+  dataset_params["eval_batch_size"] = (
+      params["eval_global_batch_size"] // FLAGS.num_tpu_shards)
+
+  return dataset_params
 
 
 def main(_):
   """Train NCF model and evaluate its hit rate (HR) metric."""
-  tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
-      FLAGS.tpu,
-      zone=FLAGS.tpu_zone,
-      project=FLAGS.gcp_project)
-  master = tpu_cluster_resolver.master()
 
-  ncf_dataset, cleanup_fn = data_preprocessing.instantiate_pipeline(
-      dataset=FLAGS.dataset,
-      data_dir=FLAGS.data_dir,
-      # TODO(shizhiw): support multihost.
-      batch_size=FLAGS.batch_size,
-      eval_batch_size=FLAGS.eval_batch_size,
-      num_neg=FLAGS.num_neg,
-      num_cycles=_NUM_EPOCHS,
-      epochs_per_cycle=1,
-      match_mlperf=FLAGS.ml_perf,
-      use_subprocess=FLAGS.use_subprocess,
-      cache_id=FLAGS.cache_id)
+  params = create_params()
 
-  train_params, eval_params = create_params(ncf_dataset)
+  if FLAGS.seed is not None:
+    np.random.seed(FLAGS.seed)
 
-  eval_graph_spec = build_graph(
-      eval_params, ncf_dataset, tpu_embedding.INFERENCE)
+  if FLAGS.use_synthetic_data:
+    producer = data_pipeline.DummyConstructor()
+    num_users, num_items = data_preprocessing.DATASET_TO_NUM_USERS_AND_ITEMS[
+        FLAGS.dataset]
+    num_train_steps = rconst.SYNTHETIC_BATCHES_PER_EPOCH
+    num_eval_steps = rconst.SYNTHETIC_BATCHES_PER_EPOCH
+  else:
+    num_users, num_items, producer = data_preprocessing.instantiate_pipeline(
+        dataset=FLAGS.dataset, data_dir=FLAGS.data_dir,
+        epoch_dir=os.path.join(params["model_dir"], "epoch"),
+        params=get_params_for_dataset(params),
+        constructor_type=FLAGS.constructor_type,
+        deterministic=FLAGS.seed is not None)
 
-  for epoch in range(_NUM_EPOCHS):
-    tf.logging.info("Training {}...".format(epoch))
-    # build training graph each epoch as number of batches per epoch
-    # i.e. batch_count might change by 1 between epochs.
-    train_graph_spec = build_graph(
-        train_params, ncf_dataset, tpu_embedding.TRAINING)
+    num_train_steps = (producer.train_batches_per_epoch //
+                       params["batches_per_step"])
+    num_eval_steps = (producer.eval_batches_per_epoch //
+                      params["batches_per_step"])
+    assert not producer.train_batches_per_epoch % params["batches_per_step"]
+    assert not producer.eval_batches_per_epoch % params["batches_per_step"]
+  producer.start()
 
-    run_graph(master, train_graph_spec, epoch)
+  params["num_users"] = num_users
+  params["num_items"] = num_items
 
-    tf.logging.info("Evaluating {}...".format(epoch))
-    run_graph(master, eval_graph_spec, epoch)
+  feature_columns = create_feature_columns(params)
 
-  cleanup_fn()  # Cleanup data construction artifacts and subprocess.
+  model_fn = create_model_fn(feature_columns)
+  estimator = create_tpu_estimator(model_fn, feature_columns, params)
+
+  train_hooks = hooks_helper.get_train_hooks(
+      ["ProfilerHook"],
+      model_dir=FLAGS.model_dir,
+      batch_size=FLAGS.batch_size,  # for ExamplesPerSecondHook
+      tensors_to_log={"cross_entropy": "cross_entropy"}
+  )
+
+  for cycle_index in range(FLAGS.train_epochs):
+    tf.logging.info("Starting a training cycle: {}/{}".format(
+        cycle_index + 1, FLAGS.train_epochs))
+    train_input_fn = producer.make_input_fn(is_training=True)
+    estimator.train(input_fn=train_input_fn, hooks=train_hooks,
+                    steps=num_train_steps)
+    tf.logging.info("Beginning evaluation.")
+    eval_input_fn = producer.make_input_fn(is_training=False)
+    eval_results = estimator.evaluate(eval_input_fn, steps=num_eval_steps)
+    tf.logging.info("Evaluation complete.")
+
+    hr = float(eval_results[rconst.HR_KEY])
+    ndcg = float(eval_results[rconst.NDCG_KEY])
+    loss = float(eval_results["loss"])
+    tf.logging.info(
+        "Iteration {}: HR = {:.4f}, NDCG = {:.4f}, Loss = {:.4f}".format(
+            cycle_index + 1, hr, ndcg, loss))
+
+  producer.stop_loop()
+  producer.join()
 
 
-def create_params(ncf_dataset):
+def create_params():
   """Create params for the model."""
-  learning_rate = FLAGS.learning_rate
-  beta1 = FLAGS.beta1
-  beta2 = FLAGS.beta2
-  epsilon = FLAGS.epsilon
-  model_dir = FLAGS.model_dir
+
+  eval_divisor = (rconst.NUM_EVAL_NEGATIVES + 1) * FLAGS.num_tpu_shards
+  eval_batch_size = FLAGS.eval_batch_size or FLAGS.batch_size
+  eval_batch_size = ((eval_batch_size + eval_divisor - 1) //
+                     eval_divisor * eval_divisor)
 
   params = {
-      "learning_rate": learning_rate,
-      "num_users": ncf_dataset.num_users,  # 138493 for 20m, 6040 for 1m.
-      "num_items": ncf_dataset.num_items,  # 26744 for 20m
+      "adam_sum_inside_sqrt": FLAGS.adam_sum_inside_sqrt,
+      "batches_per_step": FLAGS.num_tpu_shards,
+      "beta1": FLAGS.beta1,
+      "beta2": FLAGS.beta2,
+      "epsilon": FLAGS.epsilon,
+      "eval_global_batch_size": eval_batch_size,
+      "gcp_project": FLAGS.gcp_project,
+      "iterations_per_loop": FLAGS.iterations_per_loop,
+      "lazy_adam": FLAGS.lazy_adam,
+      "learning_rate": FLAGS.learning_rate,
+      "match_mlperf": FLAGS.ml_perf,
       "mf_dim": FLAGS.num_factors,
-      "model_layers": [int(layer) for layer in FLAGS.layers],
-      "mf_regularization": FLAGS.mf_regularization,
+      "mf_regularization": FLAGS.mf_regularization,  # This param is not used.
+      "mlp_dim": int(FLAGS.layers[0])//2,
       "mlp_reg_layers": [float(reg) for reg in FLAGS.mlp_regularization],
+      "model_dir": FLAGS.model_dir,
+      "model_layers": [int(layer) for layer in FLAGS.layers],
+      "num_neg": FLAGS.num_neg,
+      "tpu": FLAGS.tpu,
+      "tpu_zone": FLAGS.tpu_zone,
+      "train_epochs": FLAGS.train_epochs,
+      "global_batch_size": FLAGS.batch_size,
+      "use_gradient_accumulation": FLAGS.use_gradient_accumulation,
       "use_tpu": True,
-      "beta1": beta1,
-      "beta2": beta2,
-      "epsilon": epsilon,
-      "model_dir": model_dir,
   }
 
-  train_params = copy.copy(params)
-  train_params["batch_size"] = FLAGS.batch_size
-  eval_params = copy.copy(params)
-  eval_params["batch_size"] = FLAGS.eval_batch_size
+  tf.logging.info("Params: {}".format(params))
 
-  return train_params, eval_params
+  return params
 
 
-def run_graph(master, graph_spec, epoch):
-  """Run graph_spec.graph with master."""
-  tf.logging.info("Running graph for epoch {}...".format(epoch))
-  with tf.Session(master, graph_spec.graph) as sess:
-    tf.logging.info("Initializing system for epoch {}...".format(epoch))
-    sess.run(tpu.initialize_system(
-        embedding_config=graph_spec.embedding.config_proto))
+def create_model_fn(feature_columns):
+  """Creates the model_fn to be used by the TPUEstimator."""
+  def _model_fn(features, labels, mode, params):
+    """Model Function for NeuMF estimator."""
+    logits = logits_fn(features, feature_columns, params)
 
-    tf.logging.info("Running before hook for epoch {}...".format(epoch))
-    graph_spec.hook_before(sess, epoch)
+    # Softmax with the first column of zeros is equivalent to sigmoid.
+    softmax_logits = tf.concat([tf.zeros(logits.shape, dtype=logits.dtype),
+                                logits], axis=1)
 
-    tf.logging.info("Running infeed for epoch {}...".format(epoch))
-    infeed_thread_fn = graph_spec.get_infeed_thread_fn(sess)
-    infeed_thread = threading.Thread(target=infeed_thread_fn)
-    tf.logging.info("Staring infeed thread...")
-    infeed_thread.start()
-
-    tf.logging.info("Running TPU loop for epoch {}...".format(epoch))
-    graph_spec.run_tpu_loop(sess, epoch)
-
-    tf.logging.info("Joining infeed thread...")
-    infeed_thread.join()
-
-    tf.logging.info("Running after hook for epoch {}...".format(epoch))
-    graph_spec.hook_after(sess, epoch)
-
-
-def build_graph(params, ncf_dataset, mode):
-  """Build graph_spec with graph and some useful handles."""
-  tf.logging.info("building graph for mode {}.".format(mode))
-
-  with tf.Graph().as_default() as graph:
-    embedding = get_embedding(params, mode)
-    tf.logging.info("tpu_embedding_config_proto: {}."
-                    .format(embedding.config_proto))
-    if mode == tpu_embedding.INFERENCE:
-      assert (params["batch_size"] % (embedding.num_cores *
-                                      (1 + rconst.NUM_EVAL_NEGATIVES))) == 0
-
-    input_fn, train_record_dir, batch_count = data_preprocessing.make_input_fn(
-        ncf_dataset=ncf_dataset, is_training=(mode == tpu_embedding.TRAINING))
-
-    get_infeed_thread_fn, infeed_queue = (
-        build_infeed(input_fn, params, batch_count, embedding, mode))
-
-    tpu_loop = build_tpu_loop(infeed_queue, params, batch_count, embedding,
-                              mode)
-
-    def run_tpu_loop(sess, epoch):
-      if mode == tpu_embedding.TRAINING:
-        sess.run(tpu_loop)
-      else:
-        total_values, count_values = (sess.run(tpu_loop))
-        hr = np.sum(total_values) / np.sum(count_values)
-        tf.logging.info("HR = {} after epoch {}.".format(hr, epoch))
-
-    hook_before, hook_after = build_hooks(
-        mode, embedding, params, train_record_dir)
-
-    return GraphSpec(graph, embedding, run_tpu_loop, get_infeed_thread_fn,
-                     hook_before, hook_after)
-
-
-def build_infeed(input_fn, params, batch_count, embedding, mode):
-  """Build infeed."""
-  if mode == tpu_embedding.TRAINING:
-    infeed_queue = tpu.InfeedQueue(
-        tuple_types=[tf.int32], tuple_shapes=[[params["batch_size"], 1]])
-    infeed_queue.set_number_of_shards(embedding.num_cores)
-  else:
-    infeed_queue = tpu.InfeedQueue(
-        tuple_types=[tf.float32], tuple_shapes=[[params["batch_size"], 1]])
-    infeed_queue.set_number_of_shards(embedding.num_cores)
-
-  def enqueue_ops_fn():
-    """Create enqueue ops."""
-    ds = input_fn(params)
-    iterator = ds.make_one_shot_iterator()
-    if mode == tpu_embedding.TRAINING:
-      features, labels = iterator.get_next()
-    else:
-      features = iterator.get_next()
-
-    # TODO(shizhiw): speed up input pipeline by avoiding splitting and
-    # sparse tensor.
-    # TPU embedding enqueue.
-    users = features[movielens.USER_COLUMN]
-    items = features[movielens.ITEM_COLUMN]
-
-    sparse_features_list = []
-    users_per_core_list = tf.split(users,
-                                   embedding.num_cores_per_host)
-    items_per_core_list = tf.split(items,
-                                   embedding.num_cores_per_host)
-    for j in range(embedding.num_cores_per_host):
-      users_sparse = tf.SparseTensor(
-          indices=[[i, 0] for i in range(
-              embedding.batch_size_per_core)],
-          values=users_per_core_list[j],
-          dense_shape=[embedding.batch_size_per_core, 1])
-      items_sparse = tf.SparseTensor(
-          indices=[[i, 0] for i in range(
-              embedding.batch_size_per_core)],
-          values=items_per_core_list[j],
-          dense_shape=[embedding.batch_size_per_core, 1])
-      sparse_features = {
-          "mf_user": users_sparse,
-          "mlp_user": users_sparse,
-          "mf_item": items_sparse,
-          "mlp_item": items_sparse,
-      }
-      sparse_features_list.append(sparse_features)
-    enqueue_ops = embedding.generate_enqueue_ops(
-        sparse_features_list)
-
-    # TPU dense enqueue.
-    if mode == tpu_embedding.TRAINING:
-      # Infeed does not support bool.
-      labels = tf.cast(labels, tf.int32)
-      enqueue_ops.extend(
-          infeed_queue.split_inputs_and_generate_enqueue_ops([labels]))
-    else:
+    if mode == tf.estimator.ModeKeys.EVAL:
       duplicate_mask = tf.cast(features[rconst.DUPLICATE_MASK], tf.float32)
-      enqueue_ops.extend(
-          infeed_queue.split_inputs_and_generate_enqueue_ops([duplicate_mask]))
+      cross_entropy, metric_fn, in_top_k, ndcg, metric_weights = (
+          neumf_model.compute_eval_loss_and_metrics_helper(
+              logits, softmax_logits, duplicate_mask, params["num_neg"],
+              params["match_mlperf"],
+              use_tpu_spec=params["use_tpu"]))
 
-    return enqueue_ops
+      return tf.contrib.tpu.TPUEstimatorSpec(
+          mode=mode,
+          loss=cross_entropy,
+          eval_metrics=(metric_fn, [in_top_k, ndcg, metric_weights]))
 
-  if len(embedding.hosts) != 1:
-    raise ValueError("len(embedding.hosts) should be 1, but got {}."
-                     .format(embedding.hosts))
-  # TODO(shizhiw): check enqueue op location in tpu_embedding.py as user
-  # might fail to specify device for enqueue ops.
-  with tf.device(embedding.hosts[0]):
-    wrapped_enqueue_ops = wrap_computation_in_while_loop(
-        enqueue_ops_fn, n=batch_count, parallel_iterations=1)
-
-  def get_infeed_thread_fn(sess):
-    def infeed_thread_fn():
-      tf.logging.info("Enqueueing...")
-      sess.run(wrapped_enqueue_ops)
-    return infeed_thread_fn
-
-  return get_infeed_thread_fn, infeed_queue
-
-
-def build_tpu_loop(infeed_queue, params, batch_count, embedding, mode):
-  """Build op to run loops on TPU."""
-  if mode == tpu_embedding.TRAINING:
-    def tpu_step_fn(labels):
-      """Create one step in training."""
-      logits = logits_fn(embedding, params)
-
-      if FLAGS.lazy_adam:
-        optimizer = tf.train.AdamOptimizer(
-            learning_rate=params["learning_rate"],
-            beta1=params["beta1"],
-            beta2=params["beta2"],
-            epsilon=params["epsilon"])
-      else:
-        optimizer = tf.contrib.opt.LazyAdamOptimizer(
-            learning_rate=params["learning_rate"],
-            beta1=params["beta1"],
-            beta2=params["beta2"],
-            epsilon=params["epsilon"])
+    elif mode == tf.estimator.ModeKeys.TRAIN:
+      labels = tf.cast(labels, tf.int32)
+      valid_pt_mask = features[rconst.VALID_POINT_MASK]
+      optimizer = tf.train.AdamOptimizer(
+          learning_rate=params["learning_rate"], beta1=params["beta1"],
+          beta2=params["beta2"], epsilon=params["epsilon"])
       optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
 
-      # Softmax with the first column of ones is equivalent to sigmoid.
-      softmax_logits = tf.concat(
-          [tf.ones(logits.shape, dtype=logits.dtype), logits], axis=1)
-
       loss = tf.losses.sparse_softmax_cross_entropy(
-          labels=labels, logits=softmax_logits)
+          labels=labels,
+          logits=softmax_logits,
+          weights=tf.cast(valid_pt_mask, tf.float32)
+      )
 
-      minimize_op = optimizer.minimize(loss)
-      with tf.control_dependencies([minimize_op]):
-        send_gradient_op = embedding.generate_send_gradients_op()
+      # This tensor is used by logging hooks.
+      tf.identity(loss, name="cross_entropy")
 
-      return send_gradient_op
+      global_step = tf.train.get_global_step()
+      tvars = tf.trainable_variables()
+      gradients = optimizer.compute_gradients(
+          loss, tvars, colocate_gradients_with_ops=True)
+      minimize_op = optimizer.apply_gradients(
+          gradients, global_step=global_step, name="train")
+      update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+      train_op = tf.group(minimize_op, update_ops)
 
-    def tpu_loop_fn():
-      return tpu.repeat(batch_count, tpu_step_fn, infeed_queue=infeed_queue)
+      return tf.contrib.tpu.TPUEstimatorSpec(
+          mode=mode, loss=loss, train_op=train_op)
 
-    tpu_loop = tpu.shard(tpu_loop_fn, num_shards=embedding.num_cores)
-    return tpu_loop
-  else:
-
-    def tpu_step_fn(total, count, duplicate_mask):
-      """One step in evaluation."""
-      logits = logits_fn(embedding, params)
-      in_top_k, _, metric_weights, _ = neumf_model.compute_top_k_and_ndcg(
-          logits, duplicate_mask, FLAGS.ml_perf)
-      metric_weights = tf.cast(metric_weights, tf.float32)
-      total += tf.reduce_sum(tf.multiply(in_top_k, metric_weights))
-      count += tf.reduce_sum(metric_weights)
-      return total, count
-
-    inputs = [tf.constant(0.), tf.constant(0.)]
-
-    def tpu_loop_fn():
-      return tpu.repeat(
-          batch_count, tpu_step_fn, inputs, infeed_queue=infeed_queue)
-
-    tpu_loop = tpu.shard(tpu_loop_fn, num_shards=embedding.num_cores)
-    return tpu_loop
+    else:
+      raise NotImplementedError
+  return _model_fn
 
 
-def build_hooks(mode, embedding, params, train_record_dir):
-  """Build `hook_before` and `hook_after` for `graph_spec`."""
-  saver = tf.train.Saver()
-  if mode == tpu_embedding.TRAINING:
-    def hook_before(sess, epoch):
-      if epoch == 0:
-        sess.run(tf.global_variables_initializer())
-      else:
-        saver.restore(sess,
-                      "{}/model.ckpt.{}".format(
-                          params["model_dir"], epoch-1))
-      sess.run(embedding.init_ops)
-
-    def hook_after(sess, epoch):
-      sess.run(embedding.retrieve_parameters_ops)
-      ckpt_path = saver.save(sess,
-                             "{}/model.ckpt.{}".format(
-                                 params["model_dir"], epoch))
-      tf.logging.info("Model saved in path: {}."
-                      .format(ckpt_path))
-      # must delete; otherwise the first epoch's data will always be used.
-      tf.gfile.DeleteRecursively(train_record_dir)
-  else:
-    def hook_before(sess, epoch):
-      saver.restore(sess,
-                    "{}/model.ckpt.{}".format(
-                        params["model_dir"], epoch))
-      sess.run(embedding.init_ops)
-
-    def hook_after(sess, epoch):
-      del sess, epoch
-
-  return hook_before, hook_after
-
-
-def get_embedding(params, mode):
-  """Create `TPUEmbedding` object."""
-  initializer = tf.random_normal_initializer(0., 0.01)
-  mlp_dim = params["model_layers"][0]//2
-  table_mf_user = tpu_embedding.TableConfig(
-      vocabulary_size=params["num_users"],
-      dimension=params["mf_dim"],
-      initializer=initializer, combiner="sum")
-  table_mlp_user = tpu_embedding.TableConfig(
-      vocabulary_size=params["num_users"],
-      dimension=mlp_dim,
-      initializer=initializer, combiner="sum")
-  table_mf_item = tpu_embedding.TableConfig(
-      vocabulary_size=params["num_items"],
-      dimension=params["mf_dim"],
-      initializer=initializer, combiner="sum")
-  table_mlp_item = tpu_embedding.TableConfig(
-      vocabulary_size=params["num_items"],
-      dimension=mlp_dim,
-      initializer=initializer, combiner="sum")
-  table_to_config_dict = {
-      "mf_user": table_mf_user,
-      "mlp_user": table_mlp_user,
-      "mf_item": table_mf_item,
-      "mlp_item": table_mlp_item,
-  }
-  feature_to_table_dict = {
-      "mf_user": "mf_user",
-      "mlp_user": "mlp_user",
-      "mf_item": "mf_item",
-      "mlp_item": "mlp_item",
-  }
-
-  learning_rate = params["learning_rate"]
-  if mode == tpu_embedding.TRAINING:
-    optimization_parameters = tpu_embedding.AdamParameters(
-        learning_rate, beta1=params["beta1"], beta2=params["beta2"],
-        epsilon=params["epsilon"],
-        lazy_adam=FLAGS.lazy_adam,
-        sum_inside_sqrt=FLAGS.adam_sum_inside_sqrt,
-        use_gradient_accumulation=FLAGS.use_gradient_accumulation,
-        pipeline_execution_with_tensor_core=(
-            FLAGS.pipeline_execution_with_tensor_core))
-  else:
-    optimization_parameters = None
-
-  embedding = tpu_embedding.TPUEmbedding(
-      table_to_config_dict,
-      feature_to_table_dict,
-      params["batch_size"],
-      num_hosts=1,
-      mode=mode,
-      optimization_parameters=optimization_parameters)
-
-  return embedding
-
-
-def logits_fn(embedding, params):
+def logits_fn(features, feature_columns, params):
   """Calculate logits."""
-  input_layer = embedding.get_activations()
+  cols_to_output_tensors = {}
+  tf.feature_column.input_layer(
+      features=features, feature_columns=feature_columns,
+      cols_to_output_tensors=cols_to_output_tensors)
 
-  # TODO(shizhiw): support one feature to multiple tables in tpu_embedding.py.
-  input_layer_mf_user = input_layer["mf_user"]
-  input_layer_mf_item = input_layer["mf_item"]
-  input_layer_mlp_user = input_layer["mlp_user"]
-  input_layer_mlp_item = input_layer["mlp_item"]
+  input_layer = {col.name: cols_to_output_tensors[col]
+                 for col in feature_columns}
+
+  input_layer_mf_user, input_layer_mlp_user = tf.split(
+      input_layer["user_id_embedding"], [params["mf_dim"], params["mlp_dim"]],
+      axis=1)
+  input_layer_mf_item, input_layer_mlp_item = tf.split(
+      input_layer["item_id_embedding"], [params["mf_dim"], params["mlp_dim"]],
+      axis=1)
 
   mf_user_input = tf.keras.layers.Input(tensor=input_layer_mf_user)
   mf_item_input = tf.keras.layers.Input(tensor=input_layer_mf_item)
@@ -468,172 +485,6 @@ def logits_fn(embedding, params):
   return logits
 
 
-def wrap_computation_in_while_loop(op_fn, n, parallel_iterations=10):
-  """Wraps the ops generated by `op_fn` in tf.while_loop."""
-
-  def computation(i):
-    ops = op_fn()
-    if not isinstance(ops, list):
-      ops = [ops]
-    with tf.control_dependencies(ops):
-      return i + 1
-
-  return tf.while_loop(
-      lambda i: tf.less(i, n),
-      computation, [tf.constant(0)],
-      parallel_iterations=parallel_iterations)
-
-
-def define_ncf_flags():
-  """Add flags for running ncf_main."""
-  flags.DEFINE_enum(
-      name="dataset", default="ml-20m",
-      enum_values=["ml-1m", "ml-20m"], case_sensitive=False,
-      help=flags_core.help_wrap(
-          "Dataset to be trained and evaluated."))
-
-  flags.DEFINE_string(
-      "data_dir", default=None,
-      help=("The directory where movielens data is stored."))
-
-  flags.DEFINE_integer(
-      "batch_size", default=2048*16, help="Batch size.")
-
-  flags.DEFINE_string(
-      "model_dir", default=None,
-      help=("The directory where the model and summaries are stored."))
-
-  flags.DEFINE_string(
-      "tpu", default=None,
-      help="The Cloud TPU to use for training. This should be either the name "
-      "used when creating the Cloud TPU, or a grpc://ip.address.of.tpu:8470 "
-      "url.")
-
-  flags.DEFINE_string(
-      "gcp_project", default=None,
-      help="Project name for the Cloud TPU-enabled project. If not specified, "
-      "we will attempt to automatically detect the GCE project from metadata.")
-
-  flags.DEFINE_string(
-      "tpu_zone", default=None,
-      help="GCE zone where the Cloud TPU is located in. If not specified, we "
-      "will attempt to automatically detect the zone from metadata.")
-
-  flags.DEFINE_boolean(
-      name="download_if_missing", default=True, help=flags_core.help_wrap(
-          "Download data to data_dir if it is not already present."))
-
-  flags.DEFINE_integer(
-      name="eval_batch_size",
-      default=80000,
-      help=flags_core.help_wrap(
-          "The batch size used for evaluation. This should generally be larger"
-          "than the training batch size as the lack of back propagation during"
-          "evaluation can allow for larger batch sizes to fit in memory. If not"
-          "specified, the training batch size (--batch_size) will be used."))
-
-  flags.DEFINE_integer(
-      name="num_factors", default=64,
-      help=flags_core.help_wrap("The Embedding size of MF model."))
-
-  flags.DEFINE_list(
-      name="layers", default=[256, 256, 128, 64],
-      help=flags_core.help_wrap(
-          "The sizes of hidden layers for MLP. Example "
-          "to specify different sizes of MLP layers: --layers=32,16,8,4"))
-
-  flags.DEFINE_float(
-      name="mf_regularization", default=0.,
-      help=flags_core.help_wrap(
-          "The regularization factor for MF embeddings. The factor is used by "
-          "regularizer which allows to apply penalties on layer parameters or "
-          "layer activity during optimization."))
-
-  flags.DEFINE_list(
-      name="mlp_regularization", default=["0.", "0.", "0.", "0."],
-      help=flags_core.help_wrap(
-          "The regularization factor for each MLP layer. See mf_regularization "
-          "help for more info about regularization factor."))
-
-  flags.DEFINE_integer(
-      name="num_neg", default=4,
-      help=flags_core.help_wrap(
-          "The Number of negative instances to pair with a positive instance."))
-
-  flags.DEFINE_float(
-      name="learning_rate", default=0.0005,
-      help=flags_core.help_wrap("The learning rate."))
-
-  flags.DEFINE_bool(
-      name="ml_perf", default=True,
-      help=flags_core.help_wrap(
-          "If set, changes the behavior of the model slightly to match the "
-          "MLPerf reference implementations here: \n"
-          "https://github.com/mlperf/reference/tree/master/recommendation/"
-          "pytorch\n"
-          "The two changes are:\n"
-          "1. When computing the HR and NDCG during evaluation, remove "
-          "duplicate user-item pairs before the computation. This results in "
-          "better HRs and NDCGs.\n"
-          "2. Use a different sorting algorithm when sorting the input data, "
-          "which performs better due to the fact the sorting algorithms are "
-          "not stable."))
-
-  flags.DEFINE_float(
-      name="beta1", default=0.9,
-      help=flags_core.help_wrap("AdamOptimizer parameter hyperparam beta1."))
-
-  flags.DEFINE_float(
-      name="beta2", default=0.999,
-      help=flags_core.help_wrap("AdamOptimizer parameter hyperparam beta2."))
-
-  flags.DEFINE_float(
-      name="epsilon", default=1e-08,
-      help=flags_core.help_wrap("AdamOptimizer parameter hyperparam epsilon."))
-
-  flags.DEFINE_bool(
-      name="use_gradient_accumulation", default=True,
-      help=flags_core.help_wrap(
-          "setting this to `True` makes embedding "
-          "gradients calculation more accurate but slower. Please see "
-          " `optimization_parameters.proto` for details."))
-
-  flags.DEFINE_bool(
-      name="pipeline_execution_with_tensor_core", default=False,
-      help=flags_core.help_wrap(
-          "setting this to `True` makes training "
-          "faster, but trained model will be different if step N and step N+1 "
-          "involve the same set of embedding ID. Please see "
-          "`tpu_embedding_configuration.proto` for details"))
-
-  flags.DEFINE_bool(
-      name="use_subprocess", default=True, help=flags_core.help_wrap(
-          "By default, ncf_main.py starts async data generation process as a "
-          "subprocess. If set to False, ncf_main.py will assume the async data "
-          "generation process has already been started by the user."))
-
-  flags.DEFINE_integer(name="cache_id", default=None, help=flags_core.help_wrap(
-      "Use a specified cache_id rather than using a timestamp. This is only "
-      "needed to synchronize across multiple workers. Generally this flag will "
-      "not need to be set."
-  ))
-
-  flags.DEFINE_bool(
-      name="lazy_adam", default=False, help=flags_core.help_wrap(
-          "By default, use Adam optimizer. If True, use Lazy Adam optimizer, "
-          "which will be faster but might need tuning for convergence."))
-
-  flags.DEFINE_bool(
-      name="adam_sum_inside_sqrt",
-      default=True,
-      help=flags_core.help_wrap(
-          "If True, Adam or lazy Adam updates on TPU embedding will be faster. "
-          "For details, see "
-          "tensorflow/core/protobuf/tpu/optimization_parameters.proto."))
-
-
 if __name__ == "__main__":
   tf.logging.set_verbosity(tf.logging.INFO)
-  define_ncf_flags()
-  FLAGS = flags.FLAGS
   absl_app.run(main)

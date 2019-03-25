@@ -46,7 +46,7 @@ flags.DEFINE_string(
 
 # Special flags for Resnet50.
 flags.DEFINE_bool(
-    'eval_top_5_accuracy', False,
+    'eval_top_5_accuracy', True,
     'Eval both top 1 and top 5 accuracy. Otherwise, only eval top 1 accuracy.')
 flags.DEFINE_integer('num_cores', 8, 'Number of TPU cores.')
 
@@ -158,11 +158,7 @@ def sparse_top_k_categorical_accuracy(y_true, y_pred, k=5):
 
   y_true = tf.cast(y_true, 'int32')
 
-  def host_computation(y_pred_on_host, y_true_on_host):
-    return tf.nn.in_top_k(y_pred_on_host, y_true_on_host, k)
-
-  in_top_k_on_device = tf.contrib.tpu.outside_compilation(
-      host_computation, y_pred, y_true)
+  in_top_k_on_device = tf.nn.in_top_k(y_pred, y_true, k)
   return K.mean(in_top_k_on_device, axis=-1)
 
 

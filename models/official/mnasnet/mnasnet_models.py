@@ -74,7 +74,8 @@ class MnasNetDecoder(object):
         'i%d' % block.input_filters,
         'o%d' % block.output_filters
     ]
-    if block.se_ratio > 0 and block.se_ratio <= 1:
+    if (block.se_ratio is not None and block.se_ratio > 0 and
+        block.se_ratio <= 1):
       args.append('se%s' % block.se_ratio)
     if block.id_skip is False:
       args.append('noskip')
@@ -134,7 +135,9 @@ def mnasnet_b1(depth_multiplier=None):
       num_classes=1000,
       depth_multiplier=depth_multiplier,
       depth_divisor=8,
-      min_depth=None)
+      min_depth=None,
+      stem_size=32,
+      use_keras=True)
   return decoder.decode(blocks_args), global_params
 
 
@@ -162,7 +165,40 @@ def mnasnet_a1(depth_multiplier=None):
       num_classes=1000,
       depth_multiplier=depth_multiplier,
       depth_divisor=8,
-      min_depth=None)
+      min_depth=None,
+      stem_size=32,
+      use_keras=True)
+  decoder = MnasNetDecoder()
+  return decoder.decode(blocks_args), global_params
+
+
+def mnasnet_small(depth_multiplier=None):
+  """Creates a mnasnet-a1 model.
+
+  Args:
+    depth_multiplier: multiplier to number of filters per layer.
+
+  Returns:
+    blocks_args: a list of BlocksArgs for internal MnasNet blocks.
+    global_params: GlobalParams, global parameters for the model.
+  """
+  blocks_args = [
+      'r1_k3_s11_e1_i16_o8', 'r1_k3_s22_e3_i8_o16',
+      'r2_k3_s22_e6_i16_o16', 'r4_k5_s22_e6_i16_o32_se0.25',
+      'r3_k3_s11_e6_i32_o32_se0.25', 'r3_k5_s22_e6_i32_o88_se0.25',
+      'r1_k3_s11_e6_i88_o144'
+  ]
+  global_params = mnasnet_model.GlobalParams(
+      batch_norm_momentum=0.99,
+      batch_norm_epsilon=1e-3,
+      dropout_rate=0,
+      data_format='channels_last',
+      num_classes=1000,
+      depth_multiplier=depth_multiplier,
+      depth_divisor=8,
+      min_depth=None,
+      stem_size=8,
+      use_keras=True)
   decoder = MnasNetDecoder()
   return decoder.decode(blocks_args), global_params
 
@@ -173,6 +209,8 @@ def get_model_params(model_name, override_params):
     blocks_args, global_params = mnasnet_a1()
   elif model_name == 'mnasnet-b1':
     blocks_args, global_params = mnasnet_b1()
+  elif model_name == 'mnasnet-small':
+    blocks_args, global_params = mnasnet_small()
   else:
     raise NotImplementedError('model name is not pre-defined: %s' % model_name)
 
@@ -202,7 +240,6 @@ def build_mnasnet_model(images, model_name, training, override_params=None):
   """
   assert isinstance(images, tf.Tensor)
   blocks_args, global_params = get_model_params(model_name, override_params)
-
   with tf.variable_scope(model_name):
     model = mnasnet_model.MnasNetModel(blocks_args, global_params)
     logits = model(images, training=training)

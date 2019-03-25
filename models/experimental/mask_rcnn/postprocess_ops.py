@@ -26,7 +26,6 @@ import box_utils
 def generate_detections_per_image_tpu(cls_outputs,
                                       box_outputs,
                                       anchor_boxes,
-                                      image_id,
                                       image_info,
                                       pre_nms_num_detections=1000,
                                       post_nms_num_detections=100,
@@ -44,7 +43,6 @@ def generate_detections_per_image_tpu(cls_outputs,
       anchors on all levels.
     anchor_boxes: a tensor with shape [N, 4], which stacks anchors on all
       feature levels. The N is the number of total anchors on all levels.
-    image_id: an integer number to specify the image id.
     image_info: a tensor of shape [5] which encodes the input image's [height,
       width, scale, original_height, original_width]
     pre_nms_num_detections: an integer that specifies the number of candidates
@@ -56,8 +54,9 @@ def generate_detections_per_image_tpu(cls_outputs,
       (dx, dy, dw, dh) for normalizing bbox regression targets.
 
   Returns:
-    detections: detection results in a tensor with each row representing
-      [image_id, ymin, xmin, ymax, xmax, score, class]
+    detections: Tuple of tensors corresponding to number of valid boxes,
+    box coordinates, object categories for each boxes, and box scores
+    -- respectively.
   """
   num_boxes, num_classes = cls_outputs.get_shape().as_list()
 
@@ -123,31 +122,20 @@ def generate_detections_per_image_tpu(cls_outputs,
       tf.to_float(post_nms_scores),
       k=post_nms_num_detections,
       sorted=True)
-
   post_nms_boxes = tf.gather(post_nms_boxes, sorted_indices)
   post_nms_classes = tf.gather(post_nms_classes, sorted_indices)
 
-  if isinstance(image_id, int):
-    image_id = tf.constant(image_id)
-  image_id = tf.reshape(image_id, [])
-  detections_result = tf.stack(
-      [
-          tf.to_float(tf.fill(tf.shape(post_nms_scores), image_id)),
-          post_nms_boxes[:, 0],
-          post_nms_boxes[:, 1],
-          post_nms_boxes[:, 2],
-          post_nms_boxes[:, 3],
-          post_nms_scores,
-          tf.to_float(post_nms_classes),
-      ],
-      axis=1)
-  return detections_result
+  valid_mask = tf.where(
+      tf.greater(post_nms_scores, 0), tf.ones_like(post_nms_scores),
+      tf.zeros_like(post_nms_scores))
+  num_valid_boxes = tf.reduce_sum(valid_mask, axis=-1)
+  box_classes = tf.to_float(post_nms_classes)
+  return num_valid_boxes, post_nms_boxes, box_classes, post_nms_scores
 
 
 def generate_detections_tpu(class_outputs,
                             box_outputs,
                             anchor_boxes,
-                            image_id,
                             image_info,
                             pre_nms_num_detections=1000,
                             post_nms_num_detections=100,
@@ -165,8 +153,6 @@ def generate_detections_tpu(class_outputs,
       of total anchors on all levels.
     anchor_boxes: a tensor with shape [batch_size, N, 4], which stacks anchors
       on all feature levels. The N is the number of total anchors on all levels.
-    image_id: a tensor with shape [batch_size] which specifies the image id of
-      each image in the batch.
     image_info: a tensor of shape [batch_size, 5] which encodes each image's
       [height, width, scale, original_height, original_width].
     pre_nms_num_detections: an integer that specifies the number of candidates
@@ -178,34 +164,32 @@ def generate_detections_tpu(class_outputs,
       (dx, dy, dw, dh) for normalizing bbox regression targets.
 
   Returns:
-    detections: a tensor of [batch_size, post_nms_num_detections, 7], which
-      stacks `post_nms_num_detections` number of detection results for each
-      image in the batch. Each detection is stored in the format of
-      [image_id, ymin, xmin, ymax, xmax, score, class] in the last dimension.
+    a tuple of tensors corresponding to number of valid boxes,
+    box coordinates, object categories for each boxes, and box scores stacked
+    in batch_size.
   """
   with tf.name_scope('generate_detections'):
     batch_size, _, _ = class_outputs.get_shape().as_list()
-    detections = []
     softmax_class_outputs = tf.nn.softmax(class_outputs)
+
+    num_valid_boxes, box_coordinates, box_classes, box_scores = ([], [], [], [])
     for i in range(batch_size):
-      detections.append(generate_detections_per_image_tpu(
-          softmax_class_outputs[i],
-          box_outputs[i],
-          anchor_boxes[i],
-          image_id[i],
-          image_info[i],
-          pre_nms_num_detections,
-          post_nms_num_detections,
-          nms_threshold,
-          bbox_reg_weights))
-    detections = tf.stack(detections, axis=0)
-    return detections
+      result = generate_detections_per_image_tpu(
+          softmax_class_outputs[i], box_outputs[i], anchor_boxes[i],
+          image_info[i], pre_nms_num_detections, post_nms_num_detections,
+          nms_threshold, bbox_reg_weights)
+
+      num_valid_boxes.append(result[0])
+      box_coordinates.append(result[1])
+      box_classes.append(result[2])
+      box_scores.append(result[3])
+
+    return num_valid_boxes, box_coordinates, box_classes, box_scores
 
 
 def generate_detections_gpu(class_outputs,
                             box_outputs,
                             anchor_boxes,
-                            image_id,
                             image_info,
                             pre_nms_num_detections=1000,
                             post_nms_num_detections=100,
@@ -223,8 +207,6 @@ def generate_detections_gpu(class_outputs,
       of total anchors on all levels.
     anchor_boxes: a tensor with shape [batch_size, N, 4], which stacks anchors
       on all feature levels. The N is the number of total anchors on all levels.
-    image_id: a tensor with shape [batch_size] which specifies the image id of
-      each image in the batch.
     image_info: a tensor of shape [batch_size, 5] which encodes each image's
       [height, width, scale, original_height, original_width].
     pre_nms_num_detections: an integer that specifies the number of candidates
@@ -236,10 +218,9 @@ def generate_detections_gpu(class_outputs,
       (dx, dy, dw, dh) for normalizing bbox regression targets.
 
   Returns:
-    detections: a tensor of [batch_size, post_nms_num_detections, 7], which
-      stacks `post_nms_num_detections` number of detection results for each
-      image in the batch. Each detection is stored in the format of
-      [image_id, ymin, xmin, ymax, xmax, score, class] in the last dimension.
+    a tuple of tensors corresponding to number of valid boxes,
+    box coordinates, object categories for each boxes, and box scores stacked
+    in batch_size.
   """
   with tf.name_scope('generate_detections'):
     batch_size, num_boxes, num_classes = class_outputs.get_shape().as_list()
@@ -279,26 +260,18 @@ def generate_detections_gpu(class_outputs,
         pre_nms_boxes, [batch_size, num_boxes, num_classes - 1, 4])
     pre_nms_scores = tf.reshape(
         scores, [batch_size, num_boxes, num_classes - 1])
-    post_nms_boxes, post_nms_scores, post_nms_classes, _ = (
-        tf.image.combined_non_max_suppression(
-            pre_nms_boxes,
-            pre_nms_scores,
-            max_output_size_per_class=pre_nms_num_detections,
-            max_total_size=post_nms_num_detections,
-            iou_threshold=nms_threshold,
-            score_threshold=0.0,
-            pad_per_class=False))
+    (post_nms_boxes, post_nms_scores, post_nms_classes,
+     post_nms_num_valid_boxes) = (
+         tf.image.combined_non_max_suppression(
+             pre_nms_boxes,
+             pre_nms_scores,
+             max_output_size_per_class=pre_nms_num_detections,
+             max_total_size=post_nms_num_detections,
+             iou_threshold=nms_threshold,
+             score_threshold=0.0,
+             pad_per_class=False))
     post_nms_classes = post_nms_classes + 1
     post_nms_boxes = box_utils.to_absolute_coordinates(
         post_nms_boxes, height, width)
-
-    image_ids = tf.tile(
-        tf.reshape(image_id, [batch_size, 1, 1]),
-        [1, post_nms_num_detections, 1])
-    detections = tf.concat([
-        tf.to_float(image_ids),
-        post_nms_boxes,
-        tf.expand_dims(post_nms_scores, axis=-1),
-        tf.to_float(tf.expand_dims(post_nms_classes, axis=-1)),
-    ], axis=-1)
-    return detections
+    return (post_nms_num_valid_boxes, post_nms_boxes,
+            tf.to_float(post_nms_classes), post_nms_scores)

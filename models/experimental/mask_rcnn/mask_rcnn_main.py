@@ -291,7 +291,7 @@ def run(config, train_input_fn=None, eval_input_fn=None):
             config.include_mask,
             config.val_json_file)
         evaluation.write_summary(
-            eval_results, summary_writer, config.total_steps)
+            eval_results, summary_writer, current_step)
 
         if current_step >= config.total_steps:
           tf.logging.info('Evaluation finished after training step %d' %
@@ -353,7 +353,13 @@ def run(config, train_input_fn=None, eval_input_fn=None):
           input_fn=train_input_fn, steps=config.num_steps_per_eval)
 
       tf.logging.info('Start evaluation cycle %d.' % cycle)
-      eval_results = evaluation(eval_estimator, config)
+      eval_results = evaluation.evaluate(
+          eval_estimator,
+          eval_input_fn,
+          config.eval_samples,
+          config.eval_batch_size,
+          config.include_mask,
+          config.val_json_file)
 
       current_step = int(cycle * config.num_steps_per_eval)
       evaluation.write_summary(eval_results, summary_writer, current_step)
