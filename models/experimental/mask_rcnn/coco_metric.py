@@ -37,13 +37,12 @@ class MaskCOCO(COCO):
   """COCO object for mask evaluation.
   """
 
-  def loadRes(self, detection_results, mask_results):
+  def loadRes(self, detection_results, include_mask):
     """Load result file and return a result api object.
 
     Args:
       detection_results: a dictionary containing predictions results.
-      mask_results: a list of RLE encoded binary instance masks. Length is
-        num_images * detections_per_image.
+      include_mask: a booelan, whether to include mask in detection results.
 
     Returns:
       res: result MaskCOCO api object
@@ -51,7 +50,7 @@ class MaskCOCO(COCO):
     res = MaskCOCO()
     res.dataset['images'] = [img for img in self.dataset['images']]
     print('Loading and preparing results...')
-    predictions = self.load_predictions(detection_results, mask_results)
+    predictions = self.load_predictions(detection_results, include_mask)
     assert isinstance(predictions, list), 'results in not an array of objects'
     if predictions:
       image_ids = [pred['image_id'] for pred in predictions]
@@ -83,14 +82,13 @@ class MaskCOCO(COCO):
     res.createIndex()
     return res
 
-  def load_predictions(self, detection_results, mask_results):
+  def load_predictions(self, detection_results, include_mask):
     """Create prediction dictionary list from detection and mask results.
 
     Args:
       detection_results: a dictionary containing numpy arrays which corresponds
         to prediction results.
-      mask_results: a list of RLE encoded binary instance masks. Length is
-        num_images * detections_per_image.
+      include_mask: a booelan, whether to include mask in detection results.
 
     Returns:
       a list of dictionary including different prediction results from the model
@@ -101,17 +99,18 @@ class MaskCOCO(COCO):
     current_index = 0
     for i, image_id in enumerate(detection_results['image_id']):
       box_coorindates_in_image = detection_results['box_coordinates'][i]
-      segments = generate_segmentation_from_masks(
-          detection_results['mask_outputs'][i],
-          box_coorindates_in_image,
-          int(detection_results['image_info'][i][3]),
-          int(detection_results['image_info'][i][4]))
 
-      # Convert the mask to uint8 and then to fortranarray for RLE encoder.
-      encoded_masks = [
-          maskUtils.encode(np.asfortranarray(instance_mask.astype(np.uint8)))
-          for instance_mask in segments
-      ]
+      if include_mask:
+        segments = generate_segmentation_from_masks(
+            detection_results['mask_outputs'][i], box_coorindates_in_image,
+            int(detection_results['image_info'][i][3]),
+            int(detection_results['image_info'][i][4]))
+
+        # Convert the mask to uint8 and then to fortranarray for RLE encoder.
+        encoded_masks = [
+            maskUtils.encode(np.asfortranarray(instance_mask.astype(np.uint8)))
+            for instance_mask in segments
+        ]
 
       for box_index in range(detection_results['num_valid_boxes'][i]):
         if current_index % 1000000 == 0:
@@ -125,8 +124,8 @@ class MaskCOCO(COCO):
             'category_id': int(detection_results['box_classes'][i][box_index]),
         }
 
-        if mask_results:
-          prediction['segmentation'] = encoded_masks
+        if include_mask:
+          prediction['segmentation'] = encoded_masks[box_index]
 
         predictions.append(prediction)
 
@@ -254,14 +253,11 @@ class EvaluationMetric(object):
     """Reset COCO API object."""
     if self.filename is None:
       self.coco_gt = MaskCOCO()
-    self.detections = []
-    self.masks = []
 
   def predict_metric_fn(self, predictions):
     """Generates COCO metrics."""
-    self.detections = predictions
-    image_ids = list(set(self.detections['image_id']))
-    coco_dt = self.coco_gt.loadRes(self.detections, self.masks)
+    image_ids = list(set(predictions['image_id']))
+    coco_dt = self.coco_gt.loadRes(predictions, self._include_mask)
     coco_eval = COCOeval(self.coco_gt, coco_dt, iouType='bbox')
     coco_eval.params.imgIds = image_ids
     coco_eval.evaluate()
@@ -283,9 +279,7 @@ class EvaluationMetric(object):
     else:
       metrics = coco_metrics
 
-    # clean self.detections after evaluation is done.
-    # this makes sure the next evaluation will start with an empty list of
-    # self.detections.
+    # clean up after evaluation is done.
     self._reset()
     metrics = metrics.astype(np.float32)
 

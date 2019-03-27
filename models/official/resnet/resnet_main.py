@@ -143,9 +143,6 @@ flags.DEFINE_integer('log_step_count_steps', 64, 'The number of steps at '
 
 # Inference configuration.
 flags.DEFINE_bool(
-    'inference_with_all_cores', False, 'Whether to round-robin'
-    'among all cores visible to the host for TPU inference.')
-flags.DEFINE_bool(
     'add_warmup_requests', False,
     'Whether to add warmup requests into the export saved model dir,'
     'especially for TPU inference.')
@@ -516,26 +513,14 @@ def main(unused_argv):
           per_host_input_for_training=tf.contrib.tpu.InputPipelineConfig
           .PER_HOST_V2))  # pylint: disable=line-too-long
 
-  if FLAGS.inference_with_all_cores:
-    resnet_classifier = tf.contrib.tpu.TPUEstimator(
-        use_tpu=params['use_tpu'],
-        model_fn=resnet_model_fn,
-        config=config,
-        params=params,
-        train_batch_size=params['train_batch_size'],
-        eval_batch_size=params['eval_batch_size'],
-        export_to_tpu=FLAGS.export_to_tpu,
-        experimental_exported_model_uses_all_cores=FLAGS
-        .inference_with_all_cores)
-  else:
-    resnet_classifier = tf.contrib.tpu.TPUEstimator(
-        use_tpu=params['use_tpu'],
-        model_fn=resnet_model_fn,
-        config=config,
-        params=params,
-        train_batch_size=params['train_batch_size'],
-        eval_batch_size=params['eval_batch_size'],
-        export_to_tpu=FLAGS.export_to_tpu)
+  resnet_classifier = tf.contrib.tpu.TPUEstimator(
+      use_tpu=params['use_tpu'],
+      model_fn=resnet_model_fn,
+      config=config,
+      params=params,
+      train_batch_size=params['train_batch_size'],
+      eval_batch_size=params['eval_batch_size'],
+      export_to_tpu=FLAGS.export_to_tpu)
 
   assert (params['precision'] == 'bfloat16' or
           params['precision'] == 'float32'), (

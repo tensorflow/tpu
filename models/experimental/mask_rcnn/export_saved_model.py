@@ -56,8 +56,6 @@ flags.DEFINE_integer('batch_size', 1, 'The batch size.')
 flags.DEFINE_string('input_type', 'image_bytes',
                     'One of `image_tensor`, `image_bytes` and `tf_example`')
 flags.DEFINE_boolean('use_tpu', False, 'Whether or not use TPU.')
-flags.DEFINE_boolean('inference_with_all_cores', False,
-                     'Whether or not use all cores for inference.')
 flags.DEFINE_bool(
     'add_warmup_requests', False,
     'Whether to add warmup requests into the export saved model dir,'
@@ -96,8 +94,7 @@ def main(_):
       train_batch_size=FLAGS.batch_size,
       predict_batch_size=FLAGS.batch_size,
       export_to_tpu=FLAGS.use_tpu,
-      export_to_cpu=True,
-      experimental_exported_model_uses_all_cores=FLAGS.inference_with_all_cores)
+      export_to_cpu=True)
 
   print(' - Exporting the model...')
   input_type = FLAGS.input_type

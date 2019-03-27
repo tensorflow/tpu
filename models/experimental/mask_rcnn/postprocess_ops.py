@@ -184,6 +184,10 @@ def generate_detections_tpu(class_outputs,
       box_classes.append(result[2])
       box_scores.append(result[3])
 
+    num_valid_boxes = tf.stack(num_valid_boxes)
+    box_coordinates = tf.stack(box_coordinates)
+    box_classes = tf.stack(box_classes)
+    box_scores = tf.stack(box_scores)
     return num_valid_boxes, box_coordinates, box_classes, box_scores
 
 
