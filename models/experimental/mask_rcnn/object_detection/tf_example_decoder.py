@@ -30,67 +30,45 @@ class TfExampleDecoder(object):
   def __init__(self, use_instance_mask=False):
     """Constructor sets keys_to_features and items_to_handlers."""
     self.keys_to_features = {
-        'image/encoded':
-            tf.FixedLenFeature((), tf.string, default_value=''),
-        'image/format':
-            tf.FixedLenFeature((), tf.string, default_value='jpeg'),
-        'image/filename':
-            tf.FixedLenFeature((), tf.string, default_value=''),
-        'image/key/sha256':
-            tf.FixedLenFeature((), tf.string, default_value=''),
-        'image/source_id':
-            tf.FixedLenFeature((), tf.string, default_value=''),
-        'image/height':
-            tf.FixedLenFeature((), tf.int64, 1),
-        'image/width':
-            tf.FixedLenFeature((), tf.int64, 1),
+        'image/encoded': tf.FixedLenFeature((), tf.string, default_value=''),
+        'image/format': tf.FixedLenFeature((), tf.string, default_value='jpeg'),
+        'image/filename': tf.FixedLenFeature((), tf.string, default_value=''),
+        'image/key/sha256': tf.FixedLenFeature((), tf.string, default_value=''),
+        'image/source_id': tf.FixedLenFeature((), tf.string, default_value=''),
+        'image/height': tf.FixedLenFeature((), tf.int64, 1),
+        'image/width': tf.FixedLenFeature((), tf.int64, 1),
         # Object boxes and classes.
-        'image/object/bbox/xmin':
-            tf.VarLenFeature(tf.float32),
-        'image/object/bbox/xmax':
-            tf.VarLenFeature(tf.float32),
-        'image/object/bbox/ymin':
-            tf.VarLenFeature(tf.float32),
-        'image/object/bbox/ymax':
-            tf.VarLenFeature(tf.float32),
-        'image/object/class/label':
-            tf.VarLenFeature(tf.int64),
-        'image/object/class/text':
-            tf.VarLenFeature(tf.string),
-        'image/object/area':
-            tf.VarLenFeature(tf.float32),
-        'image/object/is_crowd':
-            tf.VarLenFeature(tf.int64),
-        'image/object/difficult':
-            tf.VarLenFeature(tf.int64),
-        'image/object/group_of':
-            tf.VarLenFeature(tf.int64),
-        'image/object/weight':
-            tf.VarLenFeature(tf.float32),
-        'image/segmentation/object':
-            tf.VarLenFeature(tf.int64),
-        'image/segmentation/object/class':
-            tf.VarLenFeature(tf.int64),
-        'image/object/mask':
-            tf.VarLenFeature(tf.string),
-        'image/object/attribute/label':
-            tf.VarLenFeature(tf.int64),
+        'image/object/bbox/xmin': tf.VarLenFeature(tf.float32),
+        'image/object/bbox/xmax': tf.VarLenFeature(tf.float32),
+        'image/object/bbox/ymin': tf.VarLenFeature(tf.float32),
+        'image/object/bbox/ymax': tf.VarLenFeature(tf.float32),
+        'image/object/class/label': tf.VarLenFeature(tf.int64),
+        'image/object/class/text': tf.VarLenFeature(tf.string),
+        'image/object/area': tf.VarLenFeature(tf.float32),
+        'image/object/is_crowd': tf.VarLenFeature(tf.int64),
+        'image/object/difficult': tf.VarLenFeature(tf.int64),
+        'image/object/group_of': tf.VarLenFeature(tf.int64),
+        'image/object/weight': tf.VarLenFeature(tf.float32),
+        'image/segmentation/object': tf.VarLenFeature(tf.int64),
+        'image/segmentation/object/class': tf.VarLenFeature(tf.int64),
+        'image/object/mask': tf.VarLenFeature(tf.string),
+        'image/object/attribute/label': tf.VarLenFeature(tf.int64),
+        'image/object/polygon': tf.VarLenFeature(tf.float32),
     }
     self.items_to_handlers = {
-        'image': slim_example_decoder.Image(
-            image_key='image/encoded', format_key='image/format', channels=3),
-        'source_id': (
-            slim_example_decoder.Tensor('image/source_id')),
-        'key': (
-            slim_example_decoder.Tensor('image/key/sha256')),
-        'filename': (
-            slim_example_decoder.Tensor('image/filename')),
+        'image':
+            slim_example_decoder.Image(
+                image_key='image/encoded',
+                format_key='image/format',
+                channels=3),
+        'source_id': (slim_example_decoder.Tensor('image/source_id')),
+        'key': (slim_example_decoder.Tensor('image/key/sha256')),
+        'filename': (slim_example_decoder.Tensor('image/filename')),
         # Object boxes and classes.
-        'groundtruth_boxes': (
-            slim_example_decoder.BoundingBox(
-                ['ymin', 'xmin', 'ymax', 'xmax'], 'image/object/bbox/')),
-        'groundtruth_area': slim_example_decoder.Tensor(
-            'image/object/area'),
+        'groundtruth_boxes': (slim_example_decoder.BoundingBox(
+            ['ymin', 'xmin', 'ymax', 'xmax'], 'image/object/bbox/')),
+        'groundtruth_area':
+            slim_example_decoder.Tensor('image/object/area'),
         'groundtruth_is_crowd': (
             slim_example_decoder.Tensor('image/object/is_crowd')),
         'groundtruth_difficult': (
@@ -103,19 +81,21 @@ class TfExampleDecoder(object):
             slim_example_decoder.Tensor('image/object/class/label')),
         'groundtruth_attributes': (
             slim_example_decoder.Tensor('image/object/attribute/label')),
+        'groundtruth_polygons': (
+            slim_example_decoder.Tensor('image/object/polygon')),
     }
     if use_instance_mask:
       mask_decoder = slim_example_decoder.ItemHandlerCallback(
           ['image/object/mask', 'image/height', 'image/width'],
           self._decode_png_instance_masks)
-      self.items_to_handlers.update(
-          {
-              'groundtruth_instance_masks': mask_decoder,
-              'groundtruth_instance_class':
-                  slim_example_decoder.Tensor(
-                      'image/segmentation/object/class'),
-          }
-      )
+      self.items_to_handlers.update({
+          'groundtruth_instance_masks':
+              mask_decoder,
+          'groundtruth_instance_class':
+              slim_example_decoder.Tensor('image/segmentation/object/class'),
+          'groundtruth_polygons': (
+              slim_example_decoder.Tensor('image/object/polygon')),
+      })
 
   def _decode_png_instance_masks(self, keys_to_tensors):
     """Decode PNG instance segmentation masks and stack into dense tensor.
@@ -183,6 +163,7 @@ class TfExampleDecoder(object):
       groundtruth_instance_masks - 3D float32 tensor of
         shape [None, None, None] containing instance masks.
       groundtruth_attributes - 1D int64 tensor of shape [None]
+      groundtruth_polygons - 1D float tensor of shape [None]
     """
     serialized_example = tf.reshape(tf_example_string_tensor, shape=[])
     decoder = slim_example_decoder.TFExampleDecoder(self.keys_to_features,
@@ -196,60 +177,8 @@ class TfExampleDecoder(object):
     tensor_dict['image'].set_shape([None, None, 3])
     if 'groundtruth_instance_masks' not in tensor_dict:
       tensor_dict['groundtruth_instance_masks'] = None
+    if 'groundtruth_polygons' not in tensor_dict:
+      tensor_dict['groundtruth_polygons'] = None
 
     return tensor_dict
 
-
-class TfExampleSegmentationDecoder(object):
-  """Tensorflow Example proto decoder."""
-
-  def __init__(self):
-    """Constructor sets keys_to_features and items_to_handlers."""
-    self.keys_to_features = {
-        'image/encoded':
-            tf.FixedLenFeature((), tf.string, default_value=''),
-        'image/filename':
-            tf.FixedLenFeature((), tf.string, default_value=''),
-        'image/format':
-            tf.FixedLenFeature((), tf.string, default_value='jpeg'),
-        'image/height':
-            tf.FixedLenFeature((), tf.int64, default_value=0),
-        'image/width':
-            tf.FixedLenFeature((), tf.int64, default_value=0),
-        'image/segmentation/class/encoded':
-            tf.FixedLenFeature((), tf.string, default_value=''),
-        'image/segmentation/class/format':
-            tf.FixedLenFeature((), tf.string, default_value='png'),
-    }
-    self.items_to_handlers = {
-        'image': slim_example_decoder.Image(
-            image_key='image/encoded', format_key='image/format', channels=3),
-        'labels_class': slim_example_decoder.Image(
-            image_key='image/segmentation/class/encoded',
-            format_key='image/segmentation/class/format',
-            channels=1)
-    }
-
-  def decode(self, tf_example_string_tensor):
-    """Decodes serialized tensorflow example and returns a tensor dictionary.
-
-    Args:
-      tf_example_string_tensor: a string tensor holding a serialized tensorflow
-        example proto.
-
-    Returns:
-      A dictionary of the following tensors.
-      image - 3D uint8 tensor of shape [None, None, 3] containing image.
-      labels_class - 2D unit8 tensor of shape [None, None] containing
-        pixel-wise class labels.
-    """
-    serialized_example = tf.reshape(tf_example_string_tensor, shape=[])
-    decoder = slim_example_decoder.TFExampleDecoder(self.keys_to_features,
-                                                    self.items_to_handlers)
-    keys = sorted(decoder.list_items())
-    keys = ['image', 'labels_class']
-
-    tensors = decoder.decode(serialized_example, items=keys)
-    tensor_dict = dict(zip(keys, tensors))
-    tensor_dict['image'].set_shape([None, None, 3])
-    return tensor_dict

@@ -27,6 +27,7 @@ You can download their [pretrained checkpoints](https://github.com/tensorflow/mo
 python main.py \
 --mode='train' \
 --num_shards=8 \
+--train_split='train' \
 --alsologtostderr=true \
 --model_dir=${MODEL_DIR} \
 --dataset_dir=${DATASET_DIR} \
@@ -39,5 +40,5 @@ python main.py \
 --multi_grid=4 \
 --decoder_use_separable_conv=false
 ```
-You can use `mode=eval` for evaluation after training is completed. The model should train to close to 0.77 MIOU in around 9 hours.
+You can use `mode=eval` for evaluation after training is completed. The model should train to close to 0.74 MIOU in around 9 hours. If you have train_aug split available and use `--train_split=train_aug`, then MIOU should be close to 0.77.
 

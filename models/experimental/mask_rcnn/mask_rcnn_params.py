@@ -124,4 +124,7 @@ def default_config():
       eval_samples=5000,
       validation_file_pattern='',
       val_json_file='',
+      # If `val_json_file` is not provided, one can also read groundtruth
+      # from input by setting `include_groundtruth_in_features`=True.
+      include_groundtruth_in_features=False,
   )

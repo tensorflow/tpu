@@ -105,7 +105,9 @@ def remove_variables(variables, resnet_depth=50):
 
 def build_model_graph(features, labels, is_training, params):
   """Builds the forward model graph."""
-  model_outputs = {}
+  model_outputs = {'image_info': features['image_info']}
+  model_outputs['image_info'] = tf.identity(model_outputs['image_info'],
+                                            'ImageInfo')
 
   if params['transpose_input'] and is_training:
     features['images'] = tf.transpose(features['images'], [3, 0, 1, 2])
@@ -317,6 +319,22 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
   Returns:
     tpu_spec: the TPUEstimatorSpec to run training, evaluation, or prediction.
   """
+  if mode == tf.estimator.ModeKeys.TRAIN:
+    if 'features' not in features:
+      raise ValueError('"features" is missing in TRAIN input.')
+    if 'labels' not in features:
+      raise ValueError('"labels" is missing in TRAIN input.')
+    labels = features['labels']
+    features = features['features']
+  else:
+    if params['include_groundtruth_in_features'] and ('labels' in features):
+      # In include groundtruth for eval.
+      labels = features['labels']
+    else:
+      labels = None
+    if 'features' in features:
+      features = features['features']
+      # Otherwise, it is in export mode, the features is past in directly.
   if params['use_bfloat16']:
     with tf.contrib.tpu.bfloat16_scope():
       model_outputs = build_model_graph(
@@ -335,8 +353,11 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
   # First check if it is in PREDICT mode.
   if mode == tf.estimator.ModeKeys.PREDICT:
     predictions = {}
-    predictions.update(**model_outputs)
-    predictions['image_info'] = features['image_info']
+    if labels and params['include_groundtruth_in_features']:
+      # Labels can only be emebeded in predictions. The predition cannot output
+      # dictionary as a value.
+      predictions.update(labels)
+    predictions.update(model_outputs)
 
     if params['use_tpu']:
       return tf.contrib.tpu.TPUEstimatorSpec(mode=mode, predictions=predictions)

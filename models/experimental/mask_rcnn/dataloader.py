@@ -27,15 +27,67 @@ from object_detection import tf_example_decoder
 
 
 MAX_NUM_INSTANCES = 100
+MAX_NUM_POLYGON_LIST_LEN = 2600
+POLYGON_PAD_VALUE = -3
+POLYGON_SEPARATOR = -1
+MASK_SEPARATOR = -2
+
+
+def _prepare_labels_for_eval(data,
+                             target_num_instances=MAX_NUM_INSTANCES,
+                             target_polygon_list_len=MAX_NUM_POLYGON_LIST_LEN,
+                             use_instance_mask=False):
+  """Create labels dict for infeed from data of tf.Example."""
+  image = data['image']
+  height = tf.shape(image)[0]
+  width = tf.shape(image)[1]
+  boxes = data['groundtruth_boxes']
+  classes = data['groundtruth_classes']
+  classes = tf.cast(classes, dtype=tf.float32)
+  num_labels = tf.shape(classes)[0]
+  boxes = preprocess_ops.pad_to_fixed_size(boxes, -1, [target_num_instances, 4])
+  classes = preprocess_ops.pad_to_fixed_size(classes, -1,
+                                             [target_num_instances, 1])
+  is_crowd = data['groundtruth_is_crowd']
+  is_crowd = tf.cast(is_crowd, dtype=tf.float32)
+  is_crowd = preprocess_ops.pad_to_fixed_size(is_crowd, 0,
+                                              [target_num_instances, 1])
+  labels = {}
+  labels['width'] = width
+  labels['height'] = height
+  labels['groundtruth_boxes'] = boxes
+  labels['groundtruth_classes'] = classes
+  labels['num_groundtruth_labels'] = num_labels
+  labels['groundtruth_is_crowd'] = is_crowd
+
+  if use_instance_mask:
+    polygons = data['groundtruth_polygons']
+    polygons = preprocess_ops.pad_to_fixed_size(polygons, POLYGON_PAD_VALUE,
+                                                [target_polygon_list_len, 1])
+    labels['groundtruth_polygons'] = polygons
+    if 'groundtruth_area' in data:
+      groundtruth_area = data['groundtruth_area']
+      groundtruth_area = preprocess_ops.pad_to_fixed_size(
+          groundtruth_area, 0, [target_num_instances, 1])
+      labels['groundtruth_area'] = groundtruth_area
+
+  return labels
 
 
 class InputReader(object):
   """Input reader for dataset."""
 
-  def __init__(self, file_pattern, mode=tf.estimator.ModeKeys.TRAIN,
-               num_examples=0, use_fake_data=False, use_instance_mask=False):
+  def __init__(self,
+               file_pattern,
+               mode=tf.estimator.ModeKeys.TRAIN,
+               num_examples=0,
+               use_fake_data=False,
+               use_instance_mask=False,
+               max_num_instances=MAX_NUM_INSTANCES,
+               max_num_polygon_list_len=MAX_NUM_POLYGON_LIST_LEN):
     self._file_pattern = file_pattern
-    self._max_num_instances = MAX_NUM_INSTANCES
+    self._max_num_instances = max_num_instances
+    self._max_num_polygon_list_len = max_num_polygon_list_len
     self._mode = mode
     self._num_examples = num_examples
     self._use_fake_data = use_fake_data
@@ -49,10 +101,13 @@ class InputReader(object):
 
     return _prefetch_dataset
 
+  def _create_example_decoder(self):
+    return tf_example_decoder.TfExampleDecoder(
+        use_instance_mask=self._use_instance_mask)
+
   def _create_dataset_parser_fn(self, params):
     """Create parser for parsing input data (dictionary)."""
-    example_decoder = tf_example_decoder.TfExampleDecoder(
-        use_instance_mask=self._use_instance_mask)
+    example_decoder = self._create_example_decoder()
 
     def _dataset_parser(value):
       """Parse data to a fixed dimension input image and learning targets.
@@ -107,11 +162,20 @@ class InputReader(object):
           if params['use_bfloat16']:
             image = tf.cast(image, dtype=tf.bfloat16)
 
-          return {
+          features = {
               'images': image,
               'image_info': image_info,
               'source_ids': source_id,
           }
+          if params['include_groundtruth_in_features']:
+            labels = _prepare_labels_for_eval(
+                data,
+                target_num_instances=self._max_num_instances,
+                target_polygon_list_len=self._max_num_polygon_list_len,
+                use_instance_mask=params['include_mask'])
+            return {'features': features, 'labels': labels}
+          else:
+            return {'features': features}
 
         elif self._mode == tf.estimator.ModeKeys.TRAIN:
           instance_masks = None
@@ -210,7 +274,7 @@ class InputReader(object):
           labels['gt_classes'] = classes
           if self._use_instance_mask:
             labels['cropped_gt_masks'] = cropped_gt_masks
-          return (features, labels)
+          return {'features': features, 'labels': labels}
 
     return _dataset_parser
 
@@ -246,9 +310,12 @@ class InputReader(object):
     # (H, W, C, N).
     if (params['transpose_input'] and
         self._mode == tf.estimator.ModeKeys.TRAIN):
-      def _transpose_images(features, labels):
-        features['images'] = tf.transpose(features['images'], [1, 2, 3, 0])
-        return features, labels
+
+      def _transpose_images(features):
+        features['features']['images'] = tf.transpose(
+            features['features']['images'], [1, 2, 3, 0])
+        return features
+
       dataset = dataset.map(_transpose_images, num_parallel_calls=64)
 
     dataset = dataset.prefetch(tf.contrib.data.AUTOTUNE)
