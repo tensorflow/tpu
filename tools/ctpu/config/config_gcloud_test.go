@@ -16,6 +16,7 @@
 package config
 
 import (
+	"os"
 	"path"
 	"strings"
 	"testing"
@@ -30,6 +31,39 @@ func TestGcloudClean(t *testing.T) {
 	cfg, err := buildGcloudEnvConfig(cfgDir, true)
 	if err != nil {
 		t.Fatal(err.Error())
+	}
+
+	if cfg.ActiveConfiguration != "ctpu9" {
+		t.Error("Active configuration: " + cfg.ActiveConfiguration)
+	}
+	if cfg.account != "saeta@google.com" {
+		t.Error("Account: " + cfg.account)
+	}
+	if cfg.Project != "ctpu9-test-project" {
+		t.Error("Project: " + cfg.Project)
+	}
+	if cfg.Zone != "us-central1-c" {
+		t.Error("Zone: " + cfg.Zone)
+	}
+}
+
+func TestGcloudEnvConfigOverride(t *testing.T) {
+	cfgDir := testGcloudConfigDir("clean")
+	originalEnv, originalEnvOk := os.LookupEnv("CLOUDSDK_CONFIG")
+	defer func() {
+		// Attempt to set the original env back.
+		if originalEnvOk {
+			os.Setenv("CLOUDSDK_CONFIG", originalEnv)
+		}
+	}()
+
+	if err := os.Setenv("CLOUDSDK_CONFIG", cfgDir); err != nil {
+		t.Fatalf("Could not set the env: %#v", err)
+	}
+	cfg, err := gcloudConfig()
+
+	if err != nil {
+		t.Fatalf("Error creating config: %v", err)
 	}
 
 	if cfg.ActiveConfiguration != "ctpu9" {

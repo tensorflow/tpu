@@ -27,12 +27,13 @@ import (
 	"github.com/zieckey/goini"
 )
 
-// TODO(saeta): Add a GCE compatible environment.
-
 const appDefaultFile = "application_default_credentials.json"
 
 func gcloudConfig() (*Config, error) {
 	homedir := ""
+	if configDir, ok := os.LookupEnv("CLOUDSDK_CONFIG"); ok {
+		return buildGcloudEnvConfig(configDir, true)
+	}
 	user, err := user.Current()
 	if err != nil {
 		// Fallback to looking up in the environment as a final attempt.

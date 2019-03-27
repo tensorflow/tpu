@@ -11,3 +11,12 @@ Shell.
 
 _Note:_ This repository is a public mirror, pull requests will not be accepted.
 Please file an issue if you have a feature or bug request.
+
+## Running Models
+
+To run models in the `models` subdirectory, you may need to add the top-level
+`/models` folder to the Python path with the command:
+
+```
+export PYTHONPATH="$PYTHONPATH:/path/to/models"
+```
