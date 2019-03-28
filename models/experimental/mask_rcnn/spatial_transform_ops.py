@@ -107,12 +107,12 @@ def selective_crop_and_resize(features,
   box_grid_x = []
   box_grid_y = []
   for i in range(output_size):
-    box_grid_x.append(boxes[:, :, 1] +
-                      (i + 0.5) * boxes[:, :, 3] / output_size)
-    box_grid_y.append(boxes[:, :, 0] +
-                      (i + 0.5) * boxes[:, :, 2] / output_size)
-  box_grid_x = tf.stack(box_grid_x, axis=2)
-  box_grid_y = tf.stack(box_grid_y, axis=2)
+    box_grid_x.append(boxes[:, :, 1:2] +
+                      (i + 0.5) * boxes[:, :, 3:4] / output_size)
+    box_grid_y.append(boxes[:, :, 0:1] +
+                      (i + 0.5) * boxes[:, :, 2:3] / output_size)
+  box_grid_x = tf.concat(box_grid_x, axis=-1)
+  box_grid_y = tf.concat(box_grid_y, axis=-1)
 
   # Compute indices for gather operation.
   box_grid_y0 = tf.floor(box_grid_y)
@@ -120,12 +120,12 @@ def selective_crop_and_resize(features,
   box_grid_x0 = tf.maximum(0., box_grid_x0)
   box_grid_y0 = tf.maximum(0., box_grid_y0)
   box_gridx0x1 = tf.stack(
-      [tf.minimum(box_grid_x0, tf.expand_dims(boundaries[:, :, 1], -1)),
-       tf.minimum(box_grid_x0 + 1, tf.expand_dims(boundaries[:, :, 1], -1))],
+      [tf.minimum(box_grid_x0, boundaries[:, :, 1:2]),
+       tf.minimum(box_grid_x0 + 1, boundaries[:, :, 1:2])],
       axis=3)
   box_gridy0y1 = tf.stack(
-      [tf.minimum(box_grid_y0, tf.expand_dims(boundaries[:, :, 0], -1)),
-       tf.minimum(box_grid_y0 + 1, tf.expand_dims(boundaries[:, :, 0], -1))],
+      [tf.minimum(box_grid_y0, boundaries[:, :, 0:1]),
+       tf.minimum(box_grid_y0 + 1, boundaries[:, :, 0:1])],
       axis=3)
 
   x_indices = tf.cast(
@@ -139,22 +139,25 @@ def selective_crop_and_resize(features,
   level_dim_offset = max_feature_height * height_dim_offset
   batch_dim_offset = num_levels * level_dim_offset
   indices = tf.reshape(
-      tf.tile(tf.reshape(tf.range(batch_size) * batch_dim_offset,
-                         [batch_size, 1, 1, 1]),
-              [1, num_boxes, output_size * 2, output_size * 2]) +
-      tf.tile(tf.reshape(box_levels * level_dim_offset,
-                         [batch_size, num_boxes, 1, 1]),
-              [1, 1, output_size * 2, output_size * 2]) +
-      tf.tile(tf.reshape(y_indices * height_dim_offset,
-                         [batch_size, num_boxes, output_size * 2, 1]),
-              [1, 1, 1, output_size * 2]) +
-      tf.tile(tf.reshape(x_indices,
-                         [batch_size, num_boxes, 1, output_size * 2]),
-              [1, 1, output_size * 2, 1]), [-1])
-
+      (tf.reshape(tf.range(batch_size) * batch_dim_offset,
+                  [batch_size, 1, 1, 1]) *
+       tf.ones([1, num_boxes, output_size * 2, output_size * 2],
+               dtype=tf.int32)) +
+      (tf.reshape(box_levels * level_dim_offset,
+                  [batch_size, num_boxes, 1, 1]) *
+       tf.ones([1, 1, output_size * 2, output_size * 2], dtype=tf.int32)) +
+      (tf.reshape(y_indices * height_dim_offset,
+                  [batch_size, num_boxes, output_size * 2, 1]) *
+       tf.ones([1, 1, 1, output_size * 2], dtype=tf.int32)) +
+      (tf.reshape(x_indices,
+                  [batch_size, num_boxes, 1, output_size * 2]) *
+       tf.ones([1, 1, output_size * 2, 1], dtype=tf.int32)),
+      [-1])
   features = tf.reshape(features, [-1, num_filters])
+  features_per_box = tf.gather(features, indices)
+
   features_per_box = tf.reshape(
-      tf.gather(features, indices),
+      features_per_box,
       [batch_size, num_boxes, output_size * 2, output_size * 2, num_filters])
 
   # The RoIAlign feature f can be computed by bilinear interpolation of four
@@ -224,8 +227,8 @@ def multilevel_crop_and_resize(features, boxes, output_size=7):
     features_all = tf.stack(features_all, axis=1)
 
     # Assign boxes to the right level.
-    box_width = boxes[:, :, 3] - boxes[:, :, 1]
-    box_height = boxes[:, :, 2] - boxes[:, :, 0]
+    box_width = tf.squeeze(boxes[:, :, 3:4] - boxes[:, :, 1:2], axis=-1)
+    box_height = tf.squeeze(boxes[:, :, 2:3] - boxes[:, :, 0:1], axis=-1)
     areas_sqrt = tf.sqrt(box_height * box_width)
     levels = tf.cast(tf.floordiv(tf.log(tf.div(areas_sqrt, 224.0)),
                                  tf.log(2.0)) + 4.0, dtype=tf.int32)

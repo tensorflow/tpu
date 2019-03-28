@@ -26,7 +26,9 @@ import box_utils
 def _propose_rois_tpu(scores,
                       boxes,
                       anchor_boxes,
-                      image_info,
+                      height,
+                      width,
+                      scale,
                       rpn_pre_nms_topn,
                       rpn_post_nms_topn,
                       rpn_nms_threshold,
@@ -40,14 +42,9 @@ def _propose_rois_tpu(scores,
       in the encoded form.
     anchor_boxes: an Anchors object that contains the anchors with a shape of
       [batch_size, num_boxes, 4].
-    image_info: a tensor of shape [batch_size, 5] where the three columns
-      encode the input image's [height, width, scale,
-      original_height, original_width]. Height and width are for
-      the input to the network, not the original image; scale is the scale
-      factor used to scale the network input size to the original image size.
-      See dataloader.DetectionInputProcessor for details. The last two are
-      original height and width. See dataloader.DetectionInputProcessor for
-      details.
+    height: a tensor of shape [batch_size, 1, 1] representing the image height.
+    width: a tensor of shape [batch_size, 1, 1] representing the image width.
+    scale: a tensor of shape [batch_size, 1, 1] representing the image scale.
     rpn_pre_nms_topn: a integer number of top scoring RPN proposals to keep
       before applying NMS. This is *per FPN level* (not total).
     rpn_post_nms_topn: a integer number of top scoring RPN proposals to keep
@@ -79,26 +76,20 @@ def _propose_rois_tpu(scores,
   boxes = boxes_list[0]
   anchor_boxes = boxes_list[1]
 
-  height, width, scale = tf.split(
-      image_info[:, :3], num_or_size_splits=3, axis=-1)
-
   # Decode boxes w.r.t. anchors and transform to the absoluate coordinates.
   boxes = box_utils.decode_boxes(boxes, anchor_boxes, bbox_reg_weights)
 
   # Clip boxes that exceed the boundary.
-  boxes = box_utils.clip_boxes(
-      boxes,
-      tf.expand_dims(height, axis=-1),
-      tf.expand_dims(width, axis=-1))
+  boxes = box_utils.clip_boxes(boxes, height, width)
 
   # Filter boxes that one side is less than rpn_min_size threshold.
   boxes, scores = box_utils.filter_boxes(
       boxes,
       tf.expand_dims(scores, axis=-1),
       rpn_min_size,
-      tf.expand_dims(height, axis=-1),
-      tf.expand_dims(width, axis=-1),
-      tf.expand_dims(scale, axis=-1))
+      height,
+      width,
+      scale)
   scores = tf.squeeze(scores, axis=-1)
 
   post_nms_topk_limit = (topk_limit if topk_limit < rpn_post_nms_topn else
@@ -119,7 +110,9 @@ def _propose_rois_tpu(scores,
 def _propose_rois_gpu(scores,
                       boxes,
                       anchor_boxes,
-                      image_info,
+                      height,
+                      width,
+                      scale,
                       rpn_pre_nms_topn,
                       rpn_post_nms_topn,
                       rpn_nms_threshold,
@@ -133,14 +126,9 @@ def _propose_rois_gpu(scores,
       in the encoded form.
     anchor_boxes: an Anchors object that contains the anchors with a shape of
       [batch_size, num_boxes, 4].
-    image_info: a tensor of shape [batch_size, 5] where the three columns
-      encode the input image's [height, width, scale,
-      original_height, original_width]. Height and width are for
-      the input to the network, not the original image; scale is the scale
-      factor used to scale the network input size to the original image size.
-      See dataloader.DetectionInputProcessor for details. The last two are
-      original height and width. See dataloader.DetectionInputProcessor for
-      details.
+    height: a tensor of shape [batch_size, 1, 1] representing the image height.
+    width: a tensor of shape [batch_size, 1, 1] representing the image width.
+    scale: a tensor of shape [batch_size, 1, 1] representing the image scale.
     rpn_pre_nms_topn: a integer number of top scoring RPN proposals to keep
       before applying NMS. This is *per FPN level* (not total).
     rpn_post_nms_topn: a integer number of top scoring RPN proposals to keep
@@ -166,12 +154,6 @@ def _propose_rois_gpu(scores,
 
   topk_limit = (num_boxes if num_boxes < rpn_pre_nms_topn
                 else rpn_pre_nms_topn)
-
-  height, width, scale = tf.split(
-      image_info[:, :3], num_or_size_splits=3, axis=-1)
-  height = tf.expand_dims(height, axis=-1)
-  width = tf.expand_dims(width, axis=-1)
-  scale = tf.expand_dims(scale, axis=-1)
 
   boxes = box_utils.decode_boxes(boxes, anchor_boxes, bbox_reg_weights)
 
@@ -266,6 +248,11 @@ def multilevel_propose_rois(scores_outputs,
     scores = []
     rois = []
     anchor_boxes = all_anchors.get_unpacked_boxes()
+
+    height = tf.expand_dims(image_info[:, 0:1], axis=-1)
+    width = tf.expand_dims(image_info[:, 1:2], axis=-1)
+    scale = tf.expand_dims(image_info[:, 2:3], axis=-1)
+
     for level in levels:
       with tf.name_scope('level_%d' % level):
         batch_size, feature_h, feature_w, num_anchors_per_location = (
@@ -279,21 +266,37 @@ def multilevel_propose_rois(scores_outputs,
             box_outputs[level], [batch_size, num_boxes, 4])
         this_level_anchors = tf.cast(
             tf.reshape(
-                tf.tile(tf.expand_dims(anchor_boxes[level], axis=0),
-                        [batch_size, 1, 1, 1]),
+                tf.expand_dims(anchor_boxes[level], axis=0) *
+                tf.ones([batch_size, 1, 1, 1]),
                 [batch_size, num_boxes, 4]),
             dtype=this_level_scores.dtype)
 
         if use_tpu:
           this_level_scores, this_level_boxes = _propose_rois_tpu(
-              this_level_scores, this_level_boxes, this_level_anchors,
-              image_info, rpn_pre_nms_topn, rpn_post_nms_topn,
-              rpn_nms_threshold, rpn_min_size, bbox_reg_weights)
+              this_level_scores,
+              this_level_boxes,
+              this_level_anchors,
+              height,
+              width,
+              scale,
+              rpn_pre_nms_topn,
+              rpn_post_nms_topn,
+              rpn_nms_threshold,
+              rpn_min_size,
+              bbox_reg_weights)
         else:
           this_level_scores, this_level_boxes = _propose_rois_gpu(
-              this_level_scores, this_level_boxes, this_level_anchors,
-              image_info, rpn_pre_nms_topn, rpn_post_nms_topn,
-              rpn_nms_threshold, rpn_min_size, bbox_reg_weights)
+              this_level_scores,
+              this_level_boxes,
+              this_level_anchors,
+              height,
+              width,
+              scale,
+              rpn_pre_nms_topn,
+              rpn_post_nms_topn,
+              rpn_nms_threshold,
+              rpn_min_size,
+              bbox_reg_weights)
 
         scores.append(this_level_scores)
         rois.append(this_level_boxes)
@@ -310,6 +313,3 @@ def multilevel_propose_rois(scores_outputs,
           scores, k=post_nms_topk_limit, boxes_list=[rois])
       top_k_rois = top_k_rois[0]
     return top_k_scores, top_k_rois
-
-
-
