@@ -378,7 +378,7 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
 
     # Add the computed `top-k` values in addition to the raw boxes.
     add_metric_fn_inputs(params, cls_outputs, box_outputs, predictions)
-    return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions)
+    return tf.contrib.tpu.TPUEstimatorSpec(mode=mode, predictions=predictions)
 
   # Load pretrained model from checkpoint.
   if params['resnet_checkpoint'] and mode == tf.estimator.ModeKeys.TRAIN:
