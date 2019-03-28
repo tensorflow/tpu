@@ -145,7 +145,8 @@ def mask_head(roi_features,
     return (2 / (kernel_size[0] * kernel_size[1] * fan_out)) ** 0.5
 
   with tf.variable_scope('mask_head'):
-    _, num_rois, height, width, filters = roi_features.get_shape().as_list()
+    batch_size, num_rois, height, width, filters = (
+        roi_features.get_shape().as_list())
     net = tf.reshape(roi_features, [-1, height, width, filters])
 
     for i in range(4):
@@ -195,18 +196,31 @@ def mask_head(roi_features,
         [-1, num_rois, mrcnn_resolution, mrcnn_resolution, num_classes])
 
     with tf.name_scope('masks_post_processing'):
-      # TODO(pengchong): Figure out the way not to use the static inferred
-      # batch size.
-      batch_size, num_masks = class_indices.get_shape().as_list()
       mask_outputs = tf.transpose(mask_outputs, [0, 1, 4, 2, 3])
-      # Contructs indices for gather.
-      batch_indices = tf.tile(
-          tf.expand_dims(tf.range(batch_size), axis=1), [1, num_masks])
-      mask_indices = tf.tile(
-          tf.expand_dims(tf.range(num_masks), axis=0), [batch_size, 1])
-      gather_indices = tf.stack(
-          [batch_indices, mask_indices, class_indices], axis=2)
-      mask_outputs = tf.gather_nd(mask_outputs, gather_indices)
+      if batch_size == 1:
+        indices = tf.reshape(
+            tf.reshape(
+                tf.range(num_rois), [batch_size, num_rois, 1]) * num_classes +
+            tf.expand_dims(class_indices, axis=-1),
+            [batch_size, -1])
+        mask_outputs = tf.gather(
+            tf.reshape(mask_outputs,
+                       [batch_size, -1, mrcnn_resolution, mrcnn_resolution]),
+            indices, axis=1)
+        mask_outputs = tf.squeeze(mask_outputs, axis=1)
+        mask_outputs = tf.reshape(
+            mask_outputs,
+            [batch_size, num_rois, mrcnn_resolution, mrcnn_resolution])
+      else:
+        batch_indices = (
+            tf.expand_dims(tf.range(batch_size), axis=1) *
+            tf.ones([1, num_rois], dtype=tf.int32))
+        mask_indices = (
+            tf.expand_dims(tf.range(num_rois), axis=0) *
+            tf.ones([batch_size, 1], dtype=tf.int32))
+        gather_indices = tf.stack(
+            [batch_indices, mask_indices, class_indices], axis=2)
+        mask_outputs = tf.gather_nd(mask_outputs, gather_indices)
 
     return mask_outputs
 

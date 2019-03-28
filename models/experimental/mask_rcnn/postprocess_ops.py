@@ -236,8 +236,8 @@ def generate_detections_gpu(class_outputs,
         tf.reshape(box_outputs, [batch_size, num_boxes, num_classes, 4]),
         [0, 0, 1, 0], [-1, -1, -1, -1])
 
-    anchor_boxes = tf.tile(
-        tf.expand_dims(anchor_boxes, axis=2), [1, 1, num_classes - 1, 1])
+    anchor_boxes = (tf.expand_dims(anchor_boxes, axis=2) *
+                    tf.ones([1, 1, num_classes - 1, 1]))
 
     num_detections = num_boxes * (num_classes - 1)
 
@@ -250,11 +250,8 @@ def generate_detections_gpu(class_outputs,
         boxes, anchor_boxes, bbox_reg_weights)
 
     # Clip boxes
-    height, width, scale = tf.split(
-        image_info[:, :3], num_or_size_splits=3, axis=-1)
-    height = tf.expand_dims(height, axis=-1)
-    width = tf.expand_dims(width, axis=-1)
-    scale = tf.expand_dims(scale, axis=-1)
+    height = tf.expand_dims(image_info[:, 0:1], axis=-1)
+    width = tf.expand_dims(image_info[:, 1:2], axis=-1)
     boxes = box_utils.clip_boxes(boxes, height, width)
 
     # NMS
