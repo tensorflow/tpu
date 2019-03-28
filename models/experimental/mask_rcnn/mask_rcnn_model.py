@@ -106,8 +106,8 @@ def remove_variables(variables, resnet_depth=50):
 def build_model_graph(features, labels, is_training, params):
   """Builds the forward model graph."""
   model_outputs = {'image_info': features['image_info']}
-  model_outputs['image_info'] = tf.identity(model_outputs['image_info'],
-                                            'ImageInfo')
+  model_outputs['image_info'] = tf.identity(
+      model_outputs['image_info'], 'ImageInfo')
 
   if params['transpose_input'] and is_training:
     features['images'] = tf.transpose(features['images'], [3, 0, 1, 2])
@@ -205,22 +205,23 @@ def build_model_graph(features, labels, is_training, params):
           params['bbox_reg_weights'])
 
     model_outputs.update({
-        'image_id': tf.identity(features['source_ids'], 'ImageId'),
-        'num_valid_boxes': tf.identity(detections[0], 'NumValidBoxes'),
-        'box_coordinates': tf.identity(detections[1], 'BoxCoordinates'),
-        'box_classes': tf.identity(detections[2], 'BoxClasses'),
-        'box_scores': tf.identity(detections[3], 'BoxScores'),
+        'source_id': tf.identity(features['source_ids'], 'SourceId'),
+        'num_detections': tf.identity(detections[0], 'NumDetections'),
+        'detection_boxes': tf.identity(detections[1], 'DetectionBoxes'),
+        'detection_classes': tf.identity(detections[2], 'DetectionClasses'),
+        'detection_scores': tf.identity(detections[3], 'DetectionScores'),
     })
 
     if params['output_box_features']:
-      final_box_rois = model_outputs['box_coordinates']
+      final_box_rois = model_outputs['detection_boxes']
       final_roi_features = spatial_transform_ops.multilevel_crop_and_resize(
           fpn_feats, final_box_rois, output_size=7)
       _, _, final_box_features = heads.box_head(
           final_roi_features, num_classes=params['num_classes'],
           mlp_head_dim=params['fast_rcnn_mlp_head_dim'])
       model_outputs.update({
-          'box_features': tf.identity(final_box_features, 'BoxFeatures'),
+          'detection_features': (
+              tf.identity(final_box_features, 'DetectionFeatures')),
       })
   else:
     encoded_box_targets = training_ops.encode_box_targets(
@@ -241,8 +242,8 @@ def build_model_graph(features, labels, is_training, params):
 
   # Mask sampling
   if not is_training:
-    selected_box_rois = model_outputs['box_coordinates']
-    class_indices = tf.to_int32(model_outputs['box_classes'])
+    selected_box_rois = model_outputs['detection_boxes']
+    class_indices = tf.to_int32(model_outputs['detection_classes'])
   else:
     (selected_class_targets, selected_box_targets, selected_box_rois,
      proposal_to_label_map) = (
@@ -261,21 +262,20 @@ def build_model_graph(features, labels, is_training, params):
       num_classes=params['num_classes'],
       mrcnn_resolution=params['mrcnn_resolution'])
 
-  model_outputs.update({
-      'mask_outputs': mask_outputs,
-  })
-
   if is_training:
     mask_targets = training_ops.get_mask_targets(
         selected_box_rois, proposal_to_label_map, selected_box_targets,
         labels['cropped_gt_masks'], params['mrcnn_resolution'])
     model_outputs.update({
+        'mask_outputs': mask_outputs,
         'mask_targets': mask_targets,
         'selected_class_targets': selected_class_targets,
     })
   else:
-    model_outputs['mask_outputs'] = tf.identity(tf.nn.sigmoid(
-        model_outputs['mask_outputs']), 'Masks')
+    model_outputs.update({
+        'detection_masks': (
+            tf.identity(tf.nn.sigmoid(mask_outputs), 'DetectionMasks')),
+    })
 
   return model_outputs
 

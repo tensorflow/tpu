@@ -56,10 +56,9 @@ flags.DEFINE_integer('batch_size', 1, 'The batch size.')
 flags.DEFINE_string('input_type', 'image_bytes',
                     'One of `image_tensor`, `image_bytes` and `tf_example`')
 flags.DEFINE_boolean('use_tpu', False, 'Whether or not use TPU.')
-flags.DEFINE_bool(
-    'add_warmup_requests', False,
-    'Whether to add warmup requests into the export saved model dir,'
-    'especially for TPU inference.')
+flags.DEFINE_bool('add_warmup_requests', False,
+                  'Whether to add warmup requests into the export saved model '
+                  'dir, especially for TPU inference.')
 flags.DEFINE_string('model_name', 'mask-rcnn',
                     'Serving model name used for the model server.')
 
@@ -104,9 +103,10 @@ def main(_):
           serving_inputs.serving_input_fn,
           batch_size=FLAGS.batch_size,
           desired_image_size=config.image_size,
-          padding_stride=(2**config.max_level),
+          padding_stride=(2 ** config.max_level),
           input_type=input_type),
       checkpoint_path=FLAGS.checkpoint_path)
+
   if FLAGS.add_warmup_requests and input_type == 'image_bytes':
     inference_warmup.write_warmup_requests(
         export_path,
@@ -115,6 +115,7 @@ def main(_):
         batch_sizes=[FLAGS.batch_size],
         image_format='JPEG',
         input_signature=serving_inputs.INPUT_SIGNATURE)
+  print(' - Done! path: %s' % export_path)
 
 
 if __name__ == '__main__':

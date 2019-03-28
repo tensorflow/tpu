@@ -18,19 +18,18 @@ Implements the interface of COCO API and metric_fn in tf.TPUEstimator.
 
 COCO API: github.com/cocodataset/cocoapi/
 """
-
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 import atexit
 import copy
+import tempfile
 import numpy as np
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
 import pycocotools.mask as maskUtils
 import tensorflow as tf
 import cv2
-import tempfile
 
 
 class MaskCOCO(COCO):
@@ -95,14 +94,14 @@ class MaskCOCO(COCO):
         in numpy form.
     """
     predictions = []
-    num_detections = detection_results['box_scores'].size
+    num_detections = detection_results['detection_scores'].size
     current_index = 0
-    for i, image_id in enumerate(detection_results['image_id']):
-      box_coorindates_in_image = detection_results['box_coordinates'][i]
+    for i, image_id in enumerate(detection_results['source_id']):
+      box_coorindates_in_image = detection_results['detection_boxes'][i]
 
       if include_mask:
         segments = generate_segmentation_from_masks(
-            detection_results['mask_outputs'][i], box_coorindates_in_image,
+            detection_results['detection_masks'][i], box_coorindates_in_image,
             int(detection_results['image_info'][i][3]),
             int(detection_results['image_info'][i][4]))
 
@@ -112,16 +111,17 @@ class MaskCOCO(COCO):
             for instance_mask in segments
         ]
 
-      for box_index in range(detection_results['num_valid_boxes'][i]):
+      for box_index in range(detection_results['num_detections'][i]):
         if current_index % 1000000 == 0:
           print('{}/{}'.format(current_index, num_detections))
         current_index += 1
 
         prediction = {
             'image_id': int(image_id),
-            'bbox': detection_results['box_coordinates'][i][box_index].tolist(),
-            'score': detection_results['box_scores'][i][box_index],
-            'category_id': int(detection_results['box_classes'][i][box_index]),
+            'bbox': detection_results['detection_boxes'][i][box_index].tolist(),
+            'score': detection_results['detection_scores'][i][box_index],
+            'category_id': int(
+                detection_results['detection_classes'][i][box_index]),
         }
 
         if include_mask:
@@ -256,7 +256,7 @@ class EvaluationMetric(object):
 
   def predict_metric_fn(self, predictions):
     """Generates COCO metrics."""
-    image_ids = list(set(predictions['image_id']))
+    image_ids = list(set(predictions['source_id']))
     coco_dt = self.coco_gt.loadRes(predictions, self._include_mask)
     coco_eval = COCOeval(self.coco_gt, coco_dt, iouType='bbox')
     coco_eval.params.imgIds = image_ids

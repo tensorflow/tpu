@@ -78,8 +78,6 @@ def image_tensor_input(batch_size,
         placeholder,
         back_prop=False,
         dtype=(tf.float32, tf.float32))
-  images = tf.identity(images, 'Images')
-  images_info = tf.identity(images_info, 'ImageInfo')
   return placeholder, {'images': images, 'image_info': images_info}
 
 
@@ -107,8 +105,6 @@ def image_bytes_input(batch_size,
         placeholder,
         back_prop=False,
         dtype=(tf.float32, tf.float32))
-  images = tf.identity(images, 'Images')
-  images_info = tf.identity(images_info, 'ImageInfo')
   return placeholder, {'images': images, 'image_info': images_info}
 
 
@@ -136,8 +132,6 @@ def tf_example_input(batch_size,
         placeholder,
         back_prop=False,
         dtype=(tf.float32, tf.float32))
-  images = tf.identity(images, 'Images')
-  images_info = tf.identity(images_info, 'ImageInfo')
   return placeholder, {'images': images, 'image_info': images_info}
 
 
