@@ -39,6 +39,7 @@ import resnet
 import roi_ops
 import spatial_transform_ops
 import training_ops
+from mnasnet import mnasnet_models
 
 
 def create_optimizer(learning_rate, params):
@@ -66,7 +67,7 @@ def create_optimizer(learning_rate, params):
   return optimizer
 
 
-def remove_variables(variables, resnet_depth=50):
+def remove_variables(variables, prefix):
   """Removes low-level variables from the input.
 
   Removing low-level parameters (e.g., initial convolution layer) from training
@@ -77,7 +78,7 @@ def remove_variables(variables, resnet_depth=50):
 
   Args:
     variables: all the variables in training
-    resnet_depth: the depth of ResNet model
+    prefix: prefix of backbone
 
   Returns:
     var_list: a list containing variables for training
@@ -86,7 +87,6 @@ def remove_variables(variables, resnet_depth=50):
   # Freeze at conv2 based on reference model.
   # Reference: https://github.com/facebookresearch/Detectron/blob/master/detectron/core/config.py#L194  # pylint: disable=line-too-long
   remove_list = []
-  prefix = 'resnet{}/'.format(resnet_depth)
   remove_list.append(prefix + 'conv2d/')
   remove_list.append(prefix + 'batch_normalization/')
   for i in range(1, 11):
@@ -121,13 +121,30 @@ def build_model_graph(features, labels, is_training, params):
                                 params['anchor_scale'],
                                 (image_height, image_width))
 
-  with tf.variable_scope('resnet%s' % params['resnet_depth']):
-    resnet_fn = resnet.resnet_v1(
-        params['resnet_depth'],
-        num_batch_norm_group=params['num_batch_norm_group'])
-    backbone_feats = resnet_fn(
-        features['images'],
-        (params['is_training_bn'] and is_training))
+  if 'resnet' in params['backbone']:
+    with tf.variable_scope(params['backbone']):
+      resnet_fn = resnet.resnet_v1(
+          params['backbone'],
+          num_batch_norm_group=params['num_batch_norm_group'])
+      backbone_feats = resnet_fn(
+          features['images'],
+          (params['is_training_bn'] and is_training))
+  elif 'mnasnet' in params['backbone']:
+    with tf.variable_scope(params['backbone']):
+      _, endpoints = mnasnet_models.build_mnasnet_base(
+          features['images'],
+          params['backbone'],
+          training=(params['is_training_bn'] and is_training),
+          override_params={'use_keras': False})
+
+      backbone_feats = {
+          2: endpoints['reduction_2'],
+          3: endpoints['reduction_3'],
+          4: endpoints['reduction_4'],
+          5: endpoints['reduction_5'],
+      }
+  else:
+    raise ValueError('Not a valid backbone option: %s' % params['backbone'])
 
   fpn_feats = fpn.fpn(
       backbone_feats, params['min_level'], params['max_level'])
@@ -388,9 +405,9 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
         model_outputs['selected_class_targets'], params)
   else:
     mask_loss = 0.
-  if variable_filter_fn:
+  if variable_filter_fn and ('resnet' in params['backbone']):
     var_list = variable_filter_fn(tf.trainable_variables(),
-                                  params['resnet_depth'])
+                                  params['backbone'] + '/')
   else:
     var_list = tf.trainable_variables()
   l2_regularization_loss = params['l2_weight_decay'] * tf.add_n([
@@ -422,22 +439,21 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
 
       scaffold_fn = warm_start_scaffold_fn
 
-    elif params['resnet_checkpoint']:
+    elif params['checkpoint']:
 
-      def resnet_scaffold_fn():
+      def backbone_scaffold_fn():
         """Loads pretrained model through scaffold function."""
         # Exclude all variable of optimizer.
-        prefix = 'resnet%s/' % params['resnet_depth']
         vars_to_load = _build_assigment_map(
             optimizer,
-            prefix=prefix,
+            prefix=params['backbone'] + '/',
             skip_variables_regex=params['skip_checkpoint_variables'])
-        tf.train.init_from_checkpoint(params['resnet_checkpoint'], vars_to_load)
+        tf.train.init_from_checkpoint(params['checkpoint'], vars_to_load)
         if not vars_to_load:
           raise ValueError('Variables to load is empty.')
         return tf.train.Scaffold()
 
-      scaffold_fn = resnet_scaffold_fn
+      scaffold_fn = backbone_scaffold_fn
 
     # Batch norm requires update_ops to be added as a train_op dependency.
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)

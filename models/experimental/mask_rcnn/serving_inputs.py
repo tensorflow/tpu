@@ -19,9 +19,6 @@ import tensorflow as tf
 import preprocess_ops
 
 
-INPUT_SIGNATURE = 'input'
-
-
 def parse_tf_example(tf_example_string):
   """Parse the serialized tf.Example and decode it to the image tensor."""
   decoder = tf.contrib.slim.tfexample_decoder.TFExampleDecoder({
@@ -138,7 +135,8 @@ def tf_example_input(batch_size,
 def serving_input_fn(batch_size,
                      desired_image_size,
                      padding_stride,
-                     input_type):
+                     input_type,
+                     input_name='input'):
   """Input function for SavedModels and TF serving.
 
   Returns a `tf.estimator.export.ServingInputReceiver` for a SavedModel.
@@ -151,27 +149,28 @@ def serving_input_fn(batch_size,
       padded to the multiple of this number.
     input_type: a string of 'image_tensor', 'image_bytes' or 'tf_example',
       specifying which type of input will be used in serving.
+    input_name: a string to specify the name of the input signature.
   """
   if input_type == 'image_tensor':
     placeholder, features = image_tensor_input(
         batch_size, desired_image_size, padding_stride)
     return tf.estimator.export.ServingInputReceiver(
         features=features, receiver_tensors={
-            INPUT_SIGNATURE: placeholder,
+            input_name: placeholder,
         })
   elif input_type == 'image_bytes':
     placeholder, features = image_bytes_input(
         batch_size, desired_image_size, padding_stride)
     return tf.estimator.export.ServingInputReceiver(
         features=features, receiver_tensors={
-            INPUT_SIGNATURE: placeholder,
+            input_name: placeholder,
         })
   elif input_type == 'tf_example':
     placeholder, features = tf_example_input(
         batch_size, desired_image_size, padding_stride)
     return tf.estimator.export.ServingInputReceiver(
         features=features, receiver_tensors={
-            INPUT_SIGNATURE: placeholder,
+            input_name: placeholder,
         })
   else:
     raise NotImplementedError('Unknown input type!')

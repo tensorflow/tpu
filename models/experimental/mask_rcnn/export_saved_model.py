@@ -23,8 +23,9 @@ import sys
 sys.path.insert(0, '../../common')
 ```
 
-If an error in parsing yaml file is encountered, removing `train_scale_max` and
-`train_scale_min` in the yaml file might fix it.
+If an error in parsing yaml config file is encountered, please check the config
+and `mask_rcnn_params.py` to make sure the hyperparameters are compatible.
+Remove the incompatible hyperparameters if necessary.
 """
 # pylint: enable=line-too-long
 
@@ -55,6 +56,7 @@ flags.DEFINE_integer('iterations_per_loop', 1, 'The iterations per loop.')
 flags.DEFINE_integer('batch_size', 1, 'The batch size.')
 flags.DEFINE_string('input_type', 'image_bytes',
                     'One of `image_tensor`, `image_bytes` and `tf_example`')
+flags.DEFINE_string('input_name', 'input', 'The name of the input node.')
 flags.DEFINE_boolean('use_tpu', False, 'Whether or not use TPU.')
 flags.DEFINE_bool('add_warmup_requests', False,
                   'Whether to add warmup requests into the export saved model '
@@ -104,7 +106,8 @@ def main(_):
           batch_size=FLAGS.batch_size,
           desired_image_size=config.image_size,
           padding_stride=(2 ** config.max_level),
-          input_type=input_type),
+          input_type=input_type,
+          input_name=FLAGS.input_name),
       checkpoint_path=FLAGS.checkpoint_path)
 
   if FLAGS.add_warmup_requests and input_type == 'image_bytes':
@@ -114,7 +117,7 @@ def main(_):
         config.image_size,
         batch_sizes=[FLAGS.batch_size],
         image_format='JPEG',
-        input_signature=serving_inputs.INPUT_SIGNATURE)
+        input_signature=FLAGS.input_name)
   print(' - Done! path: %s' % export_path)
 
 
