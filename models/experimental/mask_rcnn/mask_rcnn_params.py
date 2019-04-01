@@ -67,7 +67,6 @@ def default_config():
       num_scales=1,
       aspect_ratios=[[1.0, 1.0], [1.4, 0.7], [0.7, 1.4]],
       anchor_scale=8.0,
-      resnet_depth=50,
       # Number of groups to normalize in the distributed batch normalization.
       # Replicas will evenly split into groups. If positive, use tpu specifc
       # batch norm implemenation which calculates mean and variance accorss all
@@ -93,7 +92,11 @@ def default_config():
       learning_rate_steps=[15000, 20000],
       total_steps=22500,
       training_file_pattern='',
-      resnet_checkpoint='',
+      # ['resnet18', 'resnet34', 'resnet50', 'resnet101', 'resnet152',
+      # 'resnet200'] for resnet backbone.
+      # ['mnasnet-a1', 'mnasnet-b1', 'mnasnet-small'] for mnasnet backbone.
+      backbone='resnet50',
+      checkpoint='',
       # Optional string filepath to a checkpoint to warm-start from. By default
       # all variables are warm-started, and it is assumed that vocabularies and
       # `tf.Tensor` names are unchanged. One can use the

@@ -466,23 +466,23 @@ def resnet_v1_generator(block_fn,
   return model
 
 
-def resnet_v1(resnet_depth,
+def resnet_v1(resnet_model,
               data_format='channels_last',
               num_batch_norm_group=None):
   """Returns the ResNet model for a given size and number of output classes."""
   model_params = {
-      18: {'block': residual_block, 'layers': [2, 2, 2, 2]},
-      34: {'block': residual_block, 'layers': [3, 4, 6, 3]},
-      50: {'block': bottleneck_block, 'layers': [3, 4, 6, 3]},
-      101: {'block': bottleneck_block, 'layers': [3, 4, 23, 3]},
-      152: {'block': bottleneck_block, 'layers': [3, 8, 36, 3]},
-      200: {'block': bottleneck_block, 'layers': [3, 24, 36, 3]}
+      'resnet18': {'block': residual_block, 'layers': [2, 2, 2, 2]},
+      'resnet34': {'block': residual_block, 'layers': [3, 4, 6, 3]},
+      'resnet50': {'block': bottleneck_block, 'layers': [3, 4, 6, 3]},
+      'resnet101': {'block': bottleneck_block, 'layers': [3, 4, 23, 3]},
+      'resnet152': {'block': bottleneck_block, 'layers': [3, 8, 36, 3]},
+      'resnet200': {'block': bottleneck_block, 'layers': [3, 24, 36, 3]}
   }
 
-  if resnet_depth not in model_params:
-    raise ValueError('Not a valid resnet_depth:', resnet_depth)
+  if resnet_model not in model_params:
+    raise ValueError('Not a valid resnet_model: %s' % resnet_model)
 
-  params = model_params[resnet_depth]
+  params = model_params[resnet_model]
   return resnet_v1_generator(
       params['block'],
       params['layers'],
