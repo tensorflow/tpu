@@ -39,9 +39,9 @@ import resnet
 import roi_ops
 import spatial_transform_ops
 import training_ops
-import os
+import sys
 sys.path.insert(0, 'tpu/models/official/mnasnet')
-from mnasnet import mnasnet_models
+import mnasnet_models
 
 
 def create_optimizer(learning_rate, params):
