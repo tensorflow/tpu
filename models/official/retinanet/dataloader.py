@@ -22,6 +22,7 @@ T.-Y. Lin, P. Goyal, R. Girshick, K. He,  and P. Dollar
 Focal Loss for Dense Object Detection. arXiv:1708.02002
 """
 
+import time
 import tensorflow as tf
 
 import anchors
@@ -334,7 +335,9 @@ class InputReader(object):
 
     batch_size = params['batch_size']
     dataset = tf.data.Dataset.list_files(
-        self._file_pattern, shuffle=self._is_training)
+        self._file_pattern,
+        shuffle=self._is_training,
+        seed=tf.random.set_random_seed(int(time.time() * 1e9)))
     if self._is_training:
       dataset = dataset.repeat()
 

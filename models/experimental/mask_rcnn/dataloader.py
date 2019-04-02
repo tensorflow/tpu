@@ -22,15 +22,14 @@ positive examples to normalize the loss during training.
 import tensorflow as tf
 
 import anchors
+import coco_utils
 import preprocess_ops
 from object_detection import tf_example_decoder
 
 
 MAX_NUM_INSTANCES = 100
 MAX_NUM_POLYGON_LIST_LEN = 2600
-POLYGON_PAD_VALUE = -3
-POLYGON_SEPARATOR = -1
-MASK_SEPARATOR = -2
+POLYGON_PAD_VALUE = coco_utils.POLYGON_PAD_VALUE
 
 
 def _prepare_labels_for_eval(data,

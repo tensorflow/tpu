@@ -20,6 +20,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import json
 import os
 
 from absl import app
@@ -98,6 +99,23 @@ flags.DEFINE_string('mode', 'train',
 flags.DEFINE_bool('eval_after_training', False, 'Run one eval after the '
                   'training finishes.')
 
+# For using distribution strategies
+flags.DEFINE_string(
+    'distribution_strategy',
+    default=None,
+    help='Can set to "mirrored" or "collective" for CPU/GPU.'
+    '--use_tpu must be False.')
+flags.DEFINE_integer('num_gpus_per_worker', 0,
+                     'Number of GPUs per worker.')
+flags.DEFINE_string(
+    'worker_hosts',
+    default=None,
+    help='Comma-separated list of worker ip:port pairs for running '
+    'multi-worker models with distribution strategy.  The user would '
+    'start the program on each host with identical value for this flag.')
+flags.DEFINE_integer('task_index', -1,
+                     'If multi-worker training, the task_index of this worker.')
+
 # For Eval mode
 flags.DEFINE_integer('min_eval_interval', 180,
                      'Minimum seconds between evaluations.')
@@ -129,10 +147,14 @@ def main(argv):
   del argv  # Unused.
 
   if FLAGS.use_tpu:
-    tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
-        FLAGS.tpu, zone=FLAGS.tpu_zone, project=FLAGS.gcp_project)
-    tpu_grpc_url = tpu_cluster_resolver.get_master()
-    tf.Session.reset(tpu_grpc_url)
+    if FLAGS.distribution_strategy is None:
+      tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
+          FLAGS.tpu, zone=FLAGS.tpu_zone, project=FLAGS.gcp_project)
+      tpu_grpc_url = tpu_cluster_resolver.get_master()
+      tf.Session.reset(tpu_grpc_url)
+    else:
+      raise RuntimeError(
+          'Distribution strategy must be None when --use_tpu is True.')
   else:
     tpu_cluster_resolver = None
 
@@ -146,6 +168,10 @@ def main(argv):
                          'for evaluation.')
     if FLAGS.val_json_file is None:
       raise RuntimeError('You must specify --val_json_file for evaluation.')
+  if FLAGS.mode == 'train_and_eval':
+    if FLAGS.distribution_strategy is not None:
+      raise RuntimeError('You must use --distribution_strategy=None for '
+                         'train_and_eval.')
 
   # Parse hparams
   hparams = retinanet_model.default_hparams()
@@ -205,84 +231,170 @@ def main(argv):
     input_partition_dims = None
     num_shards = FLAGS.num_cores
 
-  params = dict(
-      hparams.values(),
-      num_shards=num_shards,
-      num_examples_per_epoch=FLAGS.num_examples_per_epoch,
-      use_tpu=FLAGS.use_tpu,
-      resnet_checkpoint=FLAGS.resnet_checkpoint,
-      val_json_file=FLAGS.val_json_file,
-      mode=FLAGS.mode,
-  )
   config_proto = tf.ConfigProto(
       allow_soft_placement=True, log_device_placement=False)
   if FLAGS.use_xla and not FLAGS.use_tpu:
     config_proto.graph_options.optimizer_options.global_jit_level = (
         tf.OptimizerOptions.ON_1)
 
-  tpu_config = tf.contrib.tpu.TPUConfig(
-      FLAGS.iterations_per_loop,
-      num_shards=num_shards,
-      num_cores_per_replica=num_cores_per_replica,
-      input_partition_dims=input_partition_dims,
-      per_host_input_for_training=tf.contrib.tpu.InputPipelineConfig
-      .PER_HOST_V2)
+  if FLAGS.distribution_strategy is None:
+    # Uses TPUEstimator.
+    params = dict(
+        hparams.values(),
+        num_shards=num_shards,
+        num_examples_per_epoch=FLAGS.num_examples_per_epoch,
+        use_tpu=FLAGS.use_tpu,
+        resnet_checkpoint=FLAGS.resnet_checkpoint,
+        val_json_file=FLAGS.val_json_file,
+        mode=FLAGS.mode,
+    )
+    tpu_config = tf.contrib.tpu.TPUConfig(
+        FLAGS.iterations_per_loop,
+        num_shards=num_shards,
+        num_cores_per_replica=num_cores_per_replica,
+        input_partition_dims=input_partition_dims,
+        per_host_input_for_training=tf.contrib.tpu.InputPipelineConfig
+        .PER_HOST_V2)
 
-  run_config = tf.contrib.tpu.RunConfig(
-      cluster=tpu_cluster_resolver,
-      evaluation_master=FLAGS.eval_master,
-      model_dir=FLAGS.model_dir,
-      log_step_count_steps=FLAGS.iterations_per_loop,
-      session_config=config_proto,
-      tpu_config=tpu_config,
-  )
+    run_config = tf.contrib.tpu.RunConfig(
+        cluster=tpu_cluster_resolver,
+        evaluation_master=FLAGS.eval_master,
+        model_dir=FLAGS.model_dir,
+        log_step_count_steps=FLAGS.iterations_per_loop,
+        session_config=config_proto,
+        tpu_config=tpu_config,
+    )
+  else:
+    if FLAGS.num_gpus_per_worker < 0:
+      raise ValueError('`num_gpus_per_worker` cannot be negative.')
 
-  # TPU Estimator
+    def _per_device_batch_size(batch_size, num_gpus):
+      """Calculate per GPU batch for Estimator.
+
+      Args:
+        batch_size: Global batch size to be divided among devices.
+        num_gpus: How many GPUs are used per worker.
+      Returns:
+        Batch size per device.
+      Raises:
+        ValueError: if batch_size is not divisible by number of devices
+      """
+      if num_gpus <= 1:
+        return batch_size
+
+      remainder = batch_size % num_gpus
+      if remainder:
+        raise ValueError(
+            'Batch size must be a multiple of the number GPUs per worker.')
+      return int(batch_size / num_gpus)
+
+    # Uses Estimator.
+    params = dict(
+        hparams.values(),
+        num_examples_per_epoch=FLAGS.num_examples_per_epoch,
+        use_tpu=FLAGS.use_tpu,
+        resnet_checkpoint=FLAGS.resnet_checkpoint,
+        val_json_file=FLAGS.val_json_file,
+        mode=FLAGS.mode,
+        use_bfloat16=False,
+        batch_size=_per_device_batch_size(
+            FLAGS.train_batch_size, FLAGS.num_gpus_per_worker),
+    )
+
+    if FLAGS.distribution_strategy == 'mirrored':
+      if FLAGS.num_gpus_per_worker == 0:
+        devices = ['device:CPU:0']
+      else:
+        devices = [
+            'device:GPU:{}'.format(i) for i in range(FLAGS.num_gpus_per_worker)]
+      mirrored_strategy = tf.distribute.MirroredStrategy(devices=devices)
+      run_config = tf.estimator.RunConfig(train_distribute=mirrored_strategy)
+    elif FLAGS.distribution_strategy == 'collective':
+      if FLAGS.worker_hosts is None:
+        worker_hosts = json.loads(os.environ['TF_CONFIG'])['cluster']['worker']
+      else:
+        # Set TF_CONFIG environment variable
+        worker_hosts = FLAGS.worker_hosts.split(',')
+        os.environ['TF_CONFIG'] = json.dumps({
+            'cluster': {
+                'worker': worker_hosts
+            },
+            'task': {'type': 'worker', 'index': FLAGS.task_index}
+        })
+      multiworker_strategy = tf.contrib.distribute.CollectiveAllReduceStrategy(
+          num_gpus_per_worker=FLAGS.num_gpus_per_worker)
+      run_config = tf.estimator.RunConfig(train_distribute=multiworker_strategy)
+    else:
+      raise ValueError('Unrecognized distribution strategy.')
+
+  # TPUEstimator/Estimator
   if FLAGS.mode == 'train':
     tf.logging.info(params)
-    train_estimator = tf.contrib.tpu.TPUEstimator(
-        model_fn=retinanet_model.retinanet_model_fn,
-        use_tpu=FLAGS.use_tpu,
-        train_batch_size=FLAGS.train_batch_size,
-        config=run_config,
-        params=params)
-    train_estimator.train(
-        input_fn=dataloader.InputReader(
-            FLAGS.training_file_pattern, is_training=True),
-        max_steps=int((FLAGS.num_epochs * FLAGS.num_examples_per_epoch) /
-                      FLAGS.train_batch_size))
-
-    # Run evaluation after training finishes.
-    eval_params = dict(
-        params,
-        use_tpu=False,
-        input_rand_hflip=False,
-        resnet_checkpoint=None,
-        is_training_bn=False,
-        use_bfloat16=False,
-    )
-    eval_estimator = tf.contrib.tpu.TPUEstimator(
-        model_fn=retinanet_model.retinanet_model_fn,
-        use_tpu=False,
-        train_batch_size=FLAGS.train_batch_size,
-        eval_batch_size=FLAGS.eval_batch_size,
-        config=run_config,
-        params=eval_params)
-    if FLAGS.eval_after_training:
-
-      if FLAGS.val_json_file is None:
-        raise RuntimeError('You must specify --val_json_file for evaluation.')
-
-      eval_results = eval_estimator.evaluate(
+    if FLAGS.distribution_strategy is None:
+      train_estimator = tf.contrib.tpu.TPUEstimator(
+          model_fn=retinanet_model.tpu_retinanet_model_fn,
+          use_tpu=FLAGS.use_tpu,
+          train_batch_size=FLAGS.train_batch_size,
+          config=run_config,
+          params=params)
+      train_estimator.train(
           input_fn=dataloader.InputReader(
-              FLAGS.validation_file_pattern, is_training=False),
-          steps=FLAGS.eval_samples // FLAGS.eval_batch_size)
-      tf.logging.info('Eval results: %s' % eval_results)
-    if FLAGS.model_dir:
-      eval_estimator.export_saved_model(
-          export_dir_base=FLAGS.model_dir,
-          serving_input_receiver_fn=lambda: serving_input_fn(hparams.image_size)
+              FLAGS.training_file_pattern, is_training=True),
+          max_steps=int((FLAGS.num_epochs * FLAGS.num_examples_per_epoch) /
+                        FLAGS.train_batch_size))
+
+      # Run evaluation after training finishes.
+      eval_params = dict(
+          params,
+          use_tpu=False,
+          input_rand_hflip=False,
+          resnet_checkpoint=None,
+          is_training_bn=False,
+          use_bfloat16=False,
       )
+      eval_estimator = tf.contrib.tpu.TPUEstimator(
+          model_fn=retinanet_model.tpu_retinanet_model_fn,
+          use_tpu=False,
+          train_batch_size=FLAGS.train_batch_size,
+          eval_batch_size=FLAGS.eval_batch_size,
+          config=run_config,
+          params=eval_params)
+      if FLAGS.eval_after_training:
+
+        if FLAGS.val_json_file is None:
+          raise RuntimeError('You must specify --val_json_file for evaluation.')
+
+        eval_results = eval_estimator.evaluate(
+            input_fn=dataloader.InputReader(
+                FLAGS.validation_file_pattern, is_training=False),
+            steps=FLAGS.eval_samples // FLAGS.eval_batch_size)
+        tf.logging.info('Eval results: %s' % eval_results)
+      if FLAGS.model_dir:
+        eval_estimator.export_saved_model(
+            export_dir_base=FLAGS.model_dir,
+            serving_input_receiver_fn=(
+                lambda: serving_input_fn(hparams.image_size))
+        )
+    else:
+      train_estimator = tf.estimator.Estimator(
+          model_fn=retinanet_model.est_retinanet_model_fn,
+          model_dir=FLAGS.model_dir,
+          config=run_config,
+          params=params)
+      if FLAGS.distribution_strategy == 'mirrored':
+        train_estimator.train(
+            input_fn=dataloader.InputReader(
+                FLAGS.training_file_pattern, is_training=True),
+            max_steps=int((FLAGS.num_epochs * FLAGS.num_examples_per_epoch) /
+                          FLAGS.train_batch_size))
+      elif FLAGS.distribution_strategy == 'collective':
+        train_spec = tf.estimator.TrainSpec(
+            input_fn=dataloader.InputReader(
+                FLAGS.training_file_pattern, is_training=True),
+            max_steps=int((FLAGS.num_epochs * FLAGS.num_examples_per_epoch) /
+                          (len(worker_hosts) * FLAGS.train_batch_size)))
+        eval_spec = tf.estimator.EvalSpec(input_fn=tf.data.Dataset)
+        tf.estimator.train_and_evaluate(train_estimator, train_spec, eval_spec)
 
   elif FLAGS.mode == 'eval':
     # Eval only runs on CPU or GPU host with batch_size = 1.
@@ -297,14 +409,36 @@ def main(argv):
         is_training_bn=False,
         use_bfloat16=False,
     )
-
-    eval_estimator = tf.contrib.tpu.TPUEstimator(
-        model_fn=retinanet_model.retinanet_model_fn,
-        use_tpu=False,
-        train_batch_size=FLAGS.train_batch_size,
-        eval_batch_size=FLAGS.eval_batch_size,
-        config=run_config,
-        params=eval_params)
+    if FLAGS.distribution_strategy is None:
+      # Uses TPUEstimator.
+      eval_estimator = tf.contrib.tpu.TPUEstimator(
+          model_fn=retinanet_model.tpu_retinanet_model_fn,
+          use_tpu=False,
+          train_batch_size=FLAGS.train_batch_size,
+          eval_batch_size=FLAGS.eval_batch_size,
+          config=run_config,
+          params=eval_params)
+    else:
+      # Uses Estimator.
+      if FLAGS.distribution_strategy == 'collective':
+        raise ValueError(
+            '--distribution_strategy=collective is not supported for eval.')
+      elif FLAGS.distribution_strategy == 'mirrored':
+        if FLAGS.num_gpus_per_worker == 0:
+          devices = ['device:CPU:0']
+        else:
+          devices = [
+              'device:GPU:{}'.format(i) for i in range(
+                  FLAGS.num_gpus_per_worker)]
+        mirrored_strategy = tf.distribute.MirroredStrategy(devices=devices)
+        run_config = tf.estimator.RunConfig(eval_distribute=mirrored_strategy)
+        eval_estimator = tf.estimator.Estimator(
+            model_fn=retinanet_model.est_retinanet_model_fn,
+            model_dir=FLAGS.model_dir,
+            config=run_config,
+            params=params)
+      else:
+        raise ValueError('Unrecognized distribution strategy.')
 
     def terminate_eval():
       tf.logging.info('Terminating eval after %d seconds of no checkpoints' %
@@ -348,10 +482,14 @@ def main(argv):
             'Checkpoint %s no longer exists, skipping checkpoint' % ckpt)
 
   elif FLAGS.mode == 'train_and_eval':
+    if FLAGS.distribution_strategy is not None:
+      raise ValueError(
+          'Distribution strategy is not implemented for --mode=train_and_eval.')
+
     for cycle in range(FLAGS.num_epochs):
       tf.logging.info('Starting training cycle, epoch: %d.' % cycle)
       train_estimator = tf.contrib.tpu.TPUEstimator(
-          model_fn=retinanet_model.retinanet_model_fn,
+          model_fn=retinanet_model.tpu_retinanet_model_fn,
           use_tpu=FLAGS.use_tpu,
           train_batch_size=FLAGS.train_batch_size,
           config=run_config,
@@ -372,7 +510,7 @@ def main(argv):
       )
 
       eval_estimator = tf.contrib.tpu.TPUEstimator(
-          model_fn=retinanet_model.retinanet_model_fn,
+          model_fn=retinanet_model.tpu_retinanet_model_fn,
           use_tpu=False,
           train_batch_size=FLAGS.train_batch_size,
           eval_batch_size=FLAGS.eval_batch_size,

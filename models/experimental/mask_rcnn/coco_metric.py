@@ -36,12 +36,40 @@ class MaskCOCO(COCO):
   """COCO object for mask evaluation.
   """
 
-  def loadRes(self, detection_results, include_mask):
+  def reset(self, dataset):
+    """Reset the dataset and groundtruth data index in this object.
+
+    Args:
+      dataset: dict of groundtruth data. It should has similar structure as the
+        COCO groundtruth JSON file. Must contains three keys: {'images',
+          'annotations', 'categories'}.
+        'images': list of image information dictionary. Required keys: 'id',
+          'width' and 'height'.
+        'annotations': list of dict. Bounding boxes and segmentations related
+          information. Required keys: {'id', 'image_id', 'category_id', 'bbox',
+            'iscrowd', 'area', 'segmentation'}.
+        'categories': list of dict of the category information.
+          Required key: 'id'.
+        Refer to http://cocodataset.org/#format-data for more details.
+
+    Raises:
+      AttributeError: If the dataset is empty or not a dict.
+    """
+    assert dataset, 'Groundtruth should not be empty.'
+    assert isinstance(dataset,
+                      dict), 'annotation file format {} not supported'.format(
+                          type(dataset))
+    self.anns, self.cats, self.imgs = dict(), dict(), dict()
+    self.dataset = copy.deepcopy(dataset)
+    self.createIndex()
+
+  def loadRes(self, detection_results, include_mask, is_image_mask=False):
     """Load result file and return a result api object.
 
     Args:
       detection_results: a dictionary containing predictions results.
-      include_mask: a booelan, whether to include mask in detection results.
+      include_mask: a boolean, whether to include mask in detection results.
+      is_image_mask: a boolean, where the predict mask is a whole image mask.
 
     Returns:
       res: result MaskCOCO api object
@@ -49,7 +77,10 @@ class MaskCOCO(COCO):
     res = MaskCOCO()
     res.dataset['images'] = [img for img in self.dataset['images']]
     print('Loading and preparing results...')
-    predictions = self.load_predictions(detection_results, include_mask)
+    predictions = self.load_predictions(
+        detection_results,
+        include_mask=include_mask,
+        is_image_mask=is_image_mask)
     assert isinstance(predictions, list), 'results in not an array of objects'
     if predictions:
       image_ids = [pred['image_id'] for pred in predictions]
@@ -81,13 +112,17 @@ class MaskCOCO(COCO):
     res.createIndex()
     return res
 
-  def load_predictions(self, detection_results, include_mask):
+  def load_predictions(self,
+                       detection_results,
+                       include_mask,
+                       is_image_mask=False):
     """Create prediction dictionary list from detection and mask results.
 
     Args:
       detection_results: a dictionary containing numpy arrays which corresponds
         to prediction results.
-      include_mask: a booelan, whether to include mask in detection results.
+      include_mask: a boolean, whether to include mask in detection results.
+      is_image_mask: a boolean, where the predict mask is a whole image mask.
 
     Returns:
       a list of dictionary including different prediction results from the model
@@ -97,13 +132,15 @@ class MaskCOCO(COCO):
     num_detections = detection_results['detection_scores'].size
     current_index = 0
     for i, image_id in enumerate(detection_results['source_id']):
-      box_coorindates_in_image = detection_results['detection_boxes'][i]
 
       if include_mask:
+        box_coorindates_in_image = detection_results['detection_boxes'][i]
         segments = generate_segmentation_from_masks(
-            detection_results['detection_masks'][i], box_coorindates_in_image,
+            detection_results['detection_masks'][i],
+            box_coorindates_in_image,
             int(detection_results['image_info'][i][3]),
-            int(detection_results['image_info'][i][4]))
+            int(detection_results['image_info'][i][4]),
+            is_image_mask=is_image_mask)
 
         # Convert the mask to uint8 and then to fortranarray for RLE encoder.
         encoded_masks = [
@@ -135,7 +172,8 @@ class MaskCOCO(COCO):
 def generate_segmentation_from_masks(masks,
                                      detected_boxes,
                                      image_height,
-                                     image_width):
+                                     image_width,
+                                     is_image_mask=False):
   """Generates segmentation result from instance masks.
 
   Args:
@@ -145,6 +183,8 @@ def generate_segmentation_from_masks(masks,
       bounding boxes.
     image_height: an integer representing the height of the image.
     image_width: an integer representing the width of the image.
+    is_image_mask: bool. True: input masks are whole-image masks. False: input
+      masks are bounding-box level masks.
 
   Returns:
     segms: a numpy array of shape [N, image_height, image_width] representing
@@ -178,35 +218,39 @@ def generate_segmentation_from_masks(masks,
   # prior to resizing back to the original image resolution. This prevents
   # "top hat" artifacts. We therefore need to expand the reference boxes by an
   # appropriate factor.
-  mask_size = masks.shape[2]
-  scale = (mask_size + 2.0) / mask_size
+  _, mask_height, mask_width = masks.shape
+  scale = max((mask_width + 2.0) / mask_width,
+              (mask_height + 2.0) / mask_height)
 
   ref_boxes = expand_boxes(detected_boxes, scale)
   ref_boxes = ref_boxes.astype(np.int32)
-  padded_mask = np.zeros((mask_size + 2, mask_size + 2), dtype=np.float32)
+  padded_mask = np.zeros((mask_height + 2, mask_width + 2), dtype=np.float32)
   segms = []
   for mask_ind, mask in enumerate(masks):
-    padded_mask[1:-1, 1:-1] = mask[:, :]
-
-    ref_box = ref_boxes[mask_ind, :]
-    w = ref_box[2] - ref_box[0] + 1
-    h = ref_box[3] - ref_box[1] + 1
-    w = np.maximum(w, 1)
-    h = np.maximum(h, 1)
-
-    mask = cv2.resize(padded_mask, (w, h))
-    mask = np.array(mask > 0.5, dtype=np.uint8)
     im_mask = np.zeros((image_height, image_width), dtype=np.uint8)
+    if is_image_mask:
+      # Process whole-image masks.
+      im_mask[:, :] = mask[:, :]
+    else:
+      # Process mask inside bounding boxes.
+      padded_mask[1:-1, 1:-1] = mask[:, :]
 
-    x_0 = max(ref_box[0], 0)
-    x_1 = min(ref_box[2] + 1, image_width)
-    y_0 = max(ref_box[1], 0)
-    y_1 = min(ref_box[3] + 1, image_height)
+      ref_box = ref_boxes[mask_ind, :]
+      w = ref_box[2] - ref_box[0] + 1
+      h = ref_box[3] - ref_box[1] + 1
+      w = np.maximum(w, 1)
+      h = np.maximum(h, 1)
 
-    im_mask[y_0:y_1, x_0:x_1] = mask[
-        (y_0 - ref_box[1]):(y_1 - ref_box[1]),
-        (x_0 - ref_box[0]):(x_1 - ref_box[0])
-    ]
+      mask = cv2.resize(padded_mask, (w, h))
+      mask = np.array(mask > 0.5, dtype=np.uint8)
+
+      x_0 = max(ref_box[0], 0)
+      x_1 = min(ref_box[2] + 1, image_width)
+      y_0 = max(ref_box[1], 0)
+      y_1 = min(ref_box[3] + 1, image_height)
+
+      im_mask[y_0:y_1, x_0:x_1] = mask[(y_0 - ref_box[1]):(y_1 - ref_box[1]), (
+          x_0 - ref_box[0]):(x_1 - ref_box[0])]
     segms.append(im_mask)
 
   segms = np.array(segms)
@@ -251,13 +295,19 @@ class EvaluationMetric(object):
 
   def _reset(self):
     """Reset COCO API object."""
-    if self.filename is None:
+    if self.filename is None and not hasattr(self, 'coco_gt'):
       self.coco_gt = MaskCOCO()
 
-  def predict_metric_fn(self, predictions):
+  def predict_metric_fn(self,
+                        predictions,
+                        is_predict_image_mask=False,
+                        groundtruth_data=None):
     """Generates COCO metrics."""
     image_ids = list(set(predictions['source_id']))
-    coco_dt = self.coco_gt.loadRes(predictions, self._include_mask)
+    if groundtruth_data is not None:
+      self.coco_gt.reset(groundtruth_data)
+    coco_dt = self.coco_gt.loadRes(
+        predictions, self._include_mask, is_image_mask=is_predict_image_mask)
     coco_eval = COCOeval(self.coco_gt, coco_dt, iouType='bbox')
     coco_eval.params.imgIds = image_ids
     coco_eval.evaluate()
