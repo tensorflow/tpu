@@ -326,7 +326,8 @@ def coco_metric_fn(batch_size, anchor_labeler, filename=None, **kwargs):
   return coco_metrics
 
 
-def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
+def _model_fn(features, labels, mode, params, model, use_tpu_estimator_spec,
+              variable_filter_fn=None):
   """Model defination for the RetinaNet model based on ResNet.
 
   Args:
@@ -335,10 +336,11 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
     labels: the input labels in a dictionary. The labels include class targets
       and box targets which are dense label maps. The labels are generated from
       get_input_fn function in data/dataloader.py
-    mode: the mode of TPUEstimator including TRAIN, EVAL, and PREDICT.
+    mode: the mode of TPUEstimator/Estimator including TRAIN, EVAL, and PREDICT.
     params: the dictionary defines hyperparameters of model. The default
       settings are in default_hparams function in this file.
     model: the RetinaNet model outputs class logits and box regression outputs.
+    use_tpu_estimator_spec: Whether to use TPUEstimatorSpec or EstimatorSpec.
     variable_filter_fn: the filter function that takes trainable_variables and
       returns the variable list after applying the filter rule.
 
@@ -369,6 +371,8 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
 
   # First check if it is in PREDICT mode.
   if mode == tf.estimator.ModeKeys.PREDICT:
+    # Include all prediction values in the default graph.
+    features = tf.identity(features, 'Image')
     predictions = {
         'image': features,
     }
@@ -468,22 +472,43 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
     add_metric_fn_inputs(params, cls_outputs, box_outputs, metric_fn_inputs)
     eval_metrics = (metric_fn, metric_fn_inputs)
 
-  return tf.contrib.tpu.TPUEstimatorSpec(
-      mode=mode,
-      loss=total_loss,
-      train_op=train_op,
-      eval_metrics=eval_metrics,
-      scaffold_fn=scaffold_fn)
+  if use_tpu_estimator_spec:
+    return tf.contrib.tpu.TPUEstimatorSpec(
+        mode=mode,
+        loss=total_loss,
+        train_op=train_op,
+        eval_metrics=eval_metrics,
+        scaffold_fn=scaffold_fn)
+  else:
+    return tf.estimator.EstimatorSpec(
+        mode=mode,
+        loss=total_loss,
+        # TODO(rostam): Fix bug to get scaffold working.
+        # scaffold=scaffold_fn(),
+        train_op=train_op)
 
 
-def retinanet_model_fn(features, labels, mode, params):
-  """RetinaNet model."""
+def tpu_retinanet_model_fn(features, labels, mode, params):
+  """RetinaNet model for TPUEstimator."""
   return _model_fn(
       features,
       labels,
       mode,
       params,
       model=retinanet_architecture.retinanet,
+      use_tpu_estimator_spec=True,
+      variable_filter_fn=retinanet_architecture.remove_variables)
+
+
+def est_retinanet_model_fn(features, labels, mode, params):
+  """RetinaNet model for Estimator."""
+  return _model_fn(
+      features,
+      labels,
+      mode,
+      params,
+      model=retinanet_architecture.retinanet,
+      use_tpu_estimator_spec=False,
       variable_filter_fn=retinanet_architecture.remove_variables)
 
 

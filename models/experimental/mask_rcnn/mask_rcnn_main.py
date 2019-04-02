@@ -411,8 +411,9 @@ def main(argv):
     if not config.validation_file_pattern:
       raise RuntimeError('You must specify `validation_file_pattern` '
                          'for evaluation.')
-    if not config.val_json_file:
-      raise RuntimeError('You must specify `val_json_file` for evaluation.')
+    if not config.val_json_file and not config.include_groundtruth_in_features:
+      raise RuntimeError('You must specify `val_json_file` or '
+                         'include_groundtruth_in_features=True for evaluation.')
 
   if FLAGS.mode in ('train', 'train_and_eval'):
     train_input_fn = dataloader.InputReader(

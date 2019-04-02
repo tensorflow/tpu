@@ -39,6 +39,8 @@ import resnet
 import roi_ops
 import spatial_transform_ops
 import training_ops
+import os
+sys.path.insert(0, 'tpu/models/official/mnasnet')
 from mnasnet import mnasnet_models
 
 

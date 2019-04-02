@@ -23,6 +23,7 @@ import six
 import tensorflow as tf
 
 import coco_metric
+import coco_utils
 
 
 def process_prediction_for_eval(prediction):
@@ -60,8 +61,9 @@ def compute_coco_eval_metric(predictor,
   Returns:
     eval_results: the aggregated COCO metric eval results.
   """
-  # TODO(pengchong): remove assertion once we support eval without json.
-  assert annotation_json_file is not None
+  if not annotation_json_file:
+    annotation_json_file = None
+  use_groundtruth_from_json = (annotation_json_file is not None)
 
   predictions = dict()
   batch_idx = 0
@@ -86,9 +88,18 @@ def compute_coco_eval_metric(predictor,
   for k, v in six.iteritems(predictions):
     predictions[k] = np.concatenate(predictions[k], axis=0)
 
-  eval_metric = coco_metric.EvaluationMetric(
-      annotation_json_file, include_mask=include_mask)
-  eval_results = eval_metric.predict_metric_fn(predictions)
+  if use_groundtruth_from_json:
+    eval_metric = coco_metric.EvaluationMetric(
+        annotation_json_file, include_mask=include_mask)
+    eval_results = eval_metric.predict_metric_fn(predictions)
+  else:
+    images, annotations = coco_utils.extract_coco_groundtruth(
+        predictions, include_mask)
+    dataset = coco_utils.create_coco_format_dataset(images, annotations)
+    eval_metric = coco_metric.EvaluationMetric(
+        filename=None, include_mask=include_mask)
+    eval_results = eval_metric.predict_metric_fn(
+        predictions, groundtruth_data=dataset)
   tf.logging.info('Eval results: %s' % eval_results)
   return eval_results
 
