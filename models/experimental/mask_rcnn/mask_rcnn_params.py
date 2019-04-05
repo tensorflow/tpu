@@ -61,6 +61,9 @@ def default_config():
       test_rpn_pre_nms_topn=1000,
       test_rpn_post_nms_topn=1000,
       test_rpn_nms_thresh=0.7,
+      # Whether or not tf.combined_non_max_suppression is used. Note that this
+      # op is only available on CPU/GPU, and for tf version greater than 1.13.
+      use_batched_nms=False,
       # model architecture
       min_level=2,
       max_level=6,

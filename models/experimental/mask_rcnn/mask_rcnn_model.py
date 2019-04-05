@@ -173,7 +173,7 @@ def build_model_graph(features, labels, is_training, params):
       params['rpn_nms_threshold'],
       params['rpn_min_size'],
       bbox_reg_weights=None,
-      use_tpu=params['use_tpu'])
+      use_batched_nms=(not params['use_tpu'] and params['use_batched_nms']))
   rpn_box_rois = tf.to_float(rpn_box_rois)
   if is_training:
     rpn_box_rois = tf.stop_gradient(rpn_box_rois)
@@ -202,26 +202,19 @@ def build_model_graph(features, labels, is_training, params):
       mlp_head_dim=params['fast_rcnn_mlp_head_dim'])
 
   if not is_training:
-    if params['use_tpu']:
-      detections = postprocess_ops.generate_detections_tpu(
-          class_outputs,
-          box_outputs,
-          rpn_box_rois,
-          features['image_info'],
-          params['test_rpn_post_nms_topn'],
-          params['test_detections_per_image'],
-          params['test_nms'],
-          params['bbox_reg_weights'])
+    if not params['use_tpu'] and params['use_batched_nms']:
+      generate_detections_fn = postprocess_ops.generate_detections_gpu
     else:
-      detections = postprocess_ops.generate_detections_gpu(
-          class_outputs,
-          box_outputs,
-          rpn_box_rois,
-          features['image_info'],
-          params['test_rpn_post_nms_topn'],
-          params['test_detections_per_image'],
-          params['test_nms'],
-          params['bbox_reg_weights'])
+      generate_detections_fn = postprocess_ops.generate_detections_tpu
+    detections = generate_detections_fn(
+        class_outputs,
+        box_outputs,
+        rpn_box_rois,
+        features['image_info'],
+        params['test_rpn_post_nms_topn'],
+        params['test_detections_per_image'],
+        params['test_nms'],
+        params['bbox_reg_weights'])
 
     model_outputs.update({
         'source_id': tf.identity(features['source_ids'], 'SourceId'),

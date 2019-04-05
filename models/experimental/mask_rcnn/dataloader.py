@@ -147,6 +147,10 @@ class InputReader(object):
       """
       with tf.name_scope('parser'):
         data = example_decoder.decode(value)
+        data['groundtruth_is_crowd'] = tf.cond(
+            tf.greater(tf.size(data['groundtruth_is_crowd']), 0),
+            lambda: data['groundtruth_is_crowd'],
+            lambda: tf.zeros_like(data['groundtruth_classes'], dtype=tf.bool))
         image = data['image']
         image = tf.image.convert_image_dtype(image, dtype=tf.float32)
         source_id = data['source_id']
