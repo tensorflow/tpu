@@ -204,7 +204,7 @@ def multilevel_propose_rois(scores_outputs,
                             rpn_nms_threshold,
                             rpn_min_size,
                             bbox_reg_weights,
-                            use_tpu=True):
+                            use_batched_nms=False):
   """Proposes RoIs given a group of candidates from different FPN levels.
 
   Args:
@@ -233,8 +233,8 @@ def multilevel_propose_rois(scores_outputs,
       origingal image scale; not scale used during training or inference).
     bbox_reg_weights: None or a list of four integer specifying the weights used
       when decoding the box.
-    use_tpu: whether use TPU or GPU implementation. If True, use TPU optimized
-      implementation. If False, use GPU optimized implementation.
+    use_batched_nms: whether use batched nms. The batched nms will use
+      tf.combined_non_max_suppression, which is only available for CPU/GPU.
 
   Returns:
     scores: a tensor with a shape of [batch_size, rpn_post_nms_topn, 1]
@@ -271,32 +271,22 @@ def multilevel_propose_rois(scores_outputs,
                 [batch_size, num_boxes, 4]),
             dtype=this_level_scores.dtype)
 
-        if use_tpu:
-          this_level_scores, this_level_boxes = _propose_rois_tpu(
-              this_level_scores,
-              this_level_boxes,
-              this_level_anchors,
-              height,
-              width,
-              scale,
-              rpn_pre_nms_topn,
-              rpn_post_nms_topn,
-              rpn_nms_threshold,
-              rpn_min_size,
-              bbox_reg_weights)
+        if use_batched_nms:
+          propose_rois_fn = _propose_rois_gpu
         else:
-          this_level_scores, this_level_boxes = _propose_rois_gpu(
-              this_level_scores,
-              this_level_boxes,
-              this_level_anchors,
-              height,
-              width,
-              scale,
-              rpn_pre_nms_topn,
-              rpn_post_nms_topn,
-              rpn_nms_threshold,
-              rpn_min_size,
-              bbox_reg_weights)
+          propose_rois_fn = _propose_rois_tpu
+        this_level_scores, this_level_boxes = propose_rois_fn(
+            this_level_scores,
+            this_level_boxes,
+            this_level_anchors,
+            height,
+            width,
+            scale,
+            rpn_pre_nms_topn,
+            rpn_post_nms_topn,
+            rpn_nms_threshold,
+            rpn_min_size,
+            bbox_reg_weights)
 
         scores.append(this_level_scores)
         rois.append(this_level_boxes)
