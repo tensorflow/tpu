@@ -1,0 +1,62 @@
+# Train Mask-RCNN with Coco dataset using Cloud TPU and Google Kubernetes Engine.
+#
+# [Training Data]
+#   Download and preprocess the COCO dataset using https://github.com/tensorflow/tpu/blob/r1.13/tools/datasets/download_and_preprocess_coco_k8s.yaml
+#   if you don't already have the data.
+#
+# [Instructions]
+#   1. Follow the instructions on https://cloud.google.com/tpu/docs/kubernetes-engine-setup
+#      to create a Kubernetes Engine cluster.
+#   2. Change the environment variable MODEL_BUCKET in the Job spec to the
+#      Google Cloud Storage location where you want to store the output model.
+#   3. Run `kubectl create -f mask_rcnn_k8s.yaml`.
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mask-rcnn-gke-tpu
+spec:
+  template:
+    metadata:
+      annotations:
+        # The Cloud TPUs that will be created for this Job must support
+        # TensorFlow 1.13. This version MUST match the TensorFlow version that
+        # your model is built on.
+        tf-version.cloud-tpus.google.com: "1.13"
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: mask-rcnn-gke-tpu
+        # The official TensorFlow 1.13 TPU model image built from https://github.com/tensorflow/tpu/blob/r1.13/tools/docker/Dockerfile.
+        image: gcr.io/tensorflow/tpu-models:r1.13
+        command:
+        - /bin/sh
+        - -c
+        - >
+            DEBIAN_FRONTEND=noninteractive apt-get update &&
+            DEBIAN_FRONTEND=noninteractive apt-get install -y python-dev python-tk libsm6 libxrender1 libxrender-dev libgtk2.0-dev libxext6 libglib2.0 &&
+            pip install Cython matplotlib opencv-python-headless &&
+            pip install 'git+https://github.com/cocodataset/cocoapi#egg=pycocotools&subdirectory=PythonAPI' &&
+            python /tensorflow_tpu_models/models/experimental/mask_rcnn/mask_rcnn_main.py
+            --model_dir=${MODEL_BUCKET}
+            --config=resnet_checkpoint=${RESNET_CHECKPOINT},resnet_depth=50,use_bfloat16=true,train_batch_size=64,eval_batch_size=8,training_file_pattern=${DATA_BUCKET}/train-*,validation_file_pattern=${DATA_BUCKET}/val-*,val_json_file=${DATA_BUCKET}/instances_val2017.json,total_steps=22500
+        env:
+          # The Google Cloud Storage location where the fake ImageNet dataset is
+          # stored.
+        - name: DATA_BUCKET
+          value: "gs://<my-data-bucket>"
+        - name: MODEL_BUCKET
+          value: "gs://<my-model-bucket>/mask_rcnn"
+        - name: RESNET_CHECKPOINT
+          value: "gs://cloud-tpu-artifacts/resnet/resnet-nhwc-2018-02-07/model.ckpt-112603"
+
+
+          # Point PYTHONPATH to the top level models folder
+        - name: PYTHONPATH
+          value: "/tensorflow_tpu_models/models"
+        resources:
+          limits:
+            # Request a single v2-8 Cloud TPU device to train the model.
+            # A single v2-8 Cloud TPU device consists of 4 chips, each of which
+            # has 2 cores, so there are 8 cores in total.
+            cloud-tpus.google.com/v3: 8
