@@ -12,24 +12,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Inputs for serving/inference."""
+"""Input and model functions for serving/inference."""
 
+import six
 import tensorflow as tf
 
+import box_utils
+import heads
+import mask_rcnn_model
 import preprocess_ops
+import spatial_transform_ops
 
 
 def parse_tf_example(tf_example_string):
   """Parse the serialized tf.Example and decode it to the image tensor."""
-  decoder = tf.contrib.slim.tfexample_decoder.TFExampleDecoder({
-      'image/encoded': tf.FixedLenFeature((), tf.string, default_value=''),
-      'image/format': tf.FixedLenFeature((), tf.string, default_value='jpeg'),
-  }, {
-      'image': tf.contrib.slim.tfexample_decoder.Image(
-          image_key='image/encoded', format_key='image/format', channels=3),
-  })
-  decoded_tensors = decoder.decode(tf_example_string)
-  return decoded_tensors[0]
+  decoded_tensors = tf.parse_single_example(
+      serialized=tf_example_string,
+      features={
+          'image/encoded':
+              tf.FixedLenFeature((), tf.string, default_value=''),
+      })
+  image_bytes = decoded_tensors['image/encoded']
+  return image_bytes
 
 
 def decode_image(image_bytes):
@@ -114,7 +118,8 @@ def tf_example_input(batch_size,
   def _prepare(tf_example_string):
     return preprocess_image(
         convert_image(
-            parse_tf_example(tf_example_string)),
+            decode_image(
+                parse_tf_example(tf_example_string))),
         desired_image_size,
         padding_stride)
 
@@ -174,3 +179,137 @@ def serving_input_fn(batch_size,
         })
   else:
     raise NotImplementedError('Unknown input type!')
+
+
+def serving_model_graph_builder(output_source_id,
+                                output_image_info,
+                                output_box_features,
+                                output_normalized_coordinates):
+  """Serving model graph builder.
+
+  Args:
+    output_source_id: bool, whether output the source_id node.
+    output_image_info: bool, whether output the image_info node.
+    output_box_features: bool, whether output the box feature node.
+    output_normalized_coordinates: bool, whether box outputs are in the
+      normalized coordinates.
+
+  Returns:
+    a function that builds the model graph for serving.
+  """
+
+  def _serving_model_graph(features, params):
+    """Build the model graph for serving."""
+    model_outputs = mask_rcnn_model.build_model_graph(
+        features, labels=None, is_training=False, params=params)
+
+    if output_source_id:
+      model_outputs.update({
+          'source_id': features['source_id'],
+      })
+
+    if output_image_info:
+      model_outputs.update({
+          'image_info': features['image_info'],
+      })
+
+    final_boxes = model_outputs['detection_boxes']
+    if output_box_features:
+      final_box_rois = model_outputs['detection_boxes']
+      final_roi_features = spatial_transform_ops.multilevel_crop_and_resize(
+          model_outputs['fpn_feats'], final_box_rois, output_size=7)
+      _, _, final_box_features = heads.box_head(
+          final_roi_features, num_classes=params['num_classes'],
+          mlp_head_dim=params['fast_rcnn_mlp_head_dim'])
+      model_outputs.update({
+          'detection_features': final_box_features,
+      })
+
+    if output_normalized_coordinates:
+      model_outputs['detection_boxes'] = box_utils.to_normalized_coordinates(
+          final_boxes,
+          tf.expand_dims(features['image_info'][:, 0], axis=-1),
+          tf.expand_dims(features['image_info'][:, 1], axis=-1))
+
+    return model_outputs
+
+  def _serving_model_graph_wrapper(features, params):
+    """Builds the model graph with outputs casted to bfloat16 if nessarary."""
+    if params['use_bfloat16']:
+      with tf.contrib.tpu.bfloat16_scope():
+        model_outputs = _serving_model_graph(features, params)
+        def _cast_outputs_to_float(d):
+          for k, v in sorted(six.iteritems(d)):
+            if isinstance(v, dict):
+              _cast_outputs_to_float(v)
+            else:
+              d[k] = tf.cast(v, tf.float32)
+        _cast_outputs_to_float(model_outputs)
+    else:
+      model_outputs = _serving_model_graph(features, params)
+    return model_outputs
+
+  return _serving_model_graph_wrapper
+
+
+def serving_model_fn_builder(output_source_id,
+                             output_image_info,
+                             output_box_features,
+                             output_normalized_coordinates):
+  """Serving model_fn builder.
+
+  Args:
+    output_source_id: bool, whether output the source_id node.
+    output_image_info: bool, whether output the image_info node.
+    output_box_features: bool, whether output the box feature node.
+    output_normalized_coordinates: bool, whether box outputs are in the
+      normalized coordinates.
+
+  Returns:
+    a function that returns (TPU)EstimatorSpec for PREDICT mode.
+  """
+  def _serving_model_fn(features, labels, mode, params):
+    """Builds the serving model_fn."""
+    del labels  # unused.
+    if mode != tf.estimator.ModeKeys.PREDICT:
+      raise ValueError('To build the serving model_fn, set '
+                       'mode = `tf.estimator.ModeKeys.PREDICT`')
+
+    serving_model_graph = serving_model_graph_builder(
+        output_source_id,
+        output_image_info,
+        output_box_features,
+        output_normalized_coordinates)
+    model_outputs = serving_model_graph(features, params)
+
+    predictions = {
+        'num_detections': tf.identity(
+            model_outputs['num_detections'], 'NumDetections'),
+        'detection_boxes': tf.identity(
+            model_outputs['detection_boxes'], 'DetectionBoxes'),
+        'detection_classes': tf.identity(
+            model_outputs['detection_classes'], 'DetectionClasses'),
+        'detection_scores': tf.identity(
+            model_outputs['detection_scores'], 'DetectionScores'),
+    }
+    if params['include_mask']:
+      predictions.update({
+          'detection_masks': tf.identity(
+              model_outputs['detection_masks'], 'DetectionMasks')
+      })
+
+    if output_source_id:
+      predictions['source_id'] = tf.identity(
+          model_outputs['source_id'], 'SourceId')
+    if output_image_info:
+      predictions['image_info'] = tf.identity(
+          model_outputs['image_info'], 'ImageInfo')
+    if output_box_features:
+      predictions['detection_features'] = tf.identity(
+          model_outputs['detection_features'], 'DetectionFeatures')
+
+    if params['use_tpu']:
+      return tf.contrib.tpu.TPUEstimatorSpec(mode=mode, predictions=predictions)
+    return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions)
+
+  return _serving_model_fn

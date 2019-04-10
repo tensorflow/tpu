@@ -107,9 +107,7 @@ def remove_variables(variables, prefix):
 
 def build_model_graph(features, labels, is_training, params):
   """Builds the forward model graph."""
-  model_outputs = {'image_info': features['image_info']}
-  model_outputs['image_info'] = tf.identity(
-      model_outputs['image_info'], 'ImageInfo')
+  model_outputs = {}
 
   if params['transpose_input'] and is_training:
     features['images'] = tf.transpose(features['images'], [3, 0, 1, 2])
@@ -150,6 +148,9 @@ def build_model_graph(features, labels, is_training, params):
 
   fpn_feats = fpn.fpn(
       backbone_feats, params['min_level'], params['max_level'])
+  model_outputs.update({
+      'fpn_features': fpn_feats,
+  })
 
   rpn_score_outputs, rpn_box_outputs = heads.rpn_head(
       fpn_feats,
@@ -217,24 +218,11 @@ def build_model_graph(features, labels, is_training, params):
         params['bbox_reg_weights'])
 
     model_outputs.update({
-        'source_id': tf.identity(features['source_ids'], 'SourceId'),
-        'num_detections': tf.identity(detections[0], 'NumDetections'),
-        'detection_boxes': tf.identity(detections[1], 'DetectionBoxes'),
-        'detection_classes': tf.identity(detections[2], 'DetectionClasses'),
-        'detection_scores': tf.identity(detections[3], 'DetectionScores'),
+        'num_detections': detections[0],
+        'detection_boxes': detections[1],
+        'detection_classes': detections[2],
+        'detection_scores': detections[3],
     })
-
-    if params['output_box_features']:
-      final_box_rois = model_outputs['detection_boxes']
-      final_roi_features = spatial_transform_ops.multilevel_crop_and_resize(
-          fpn_feats, final_box_rois, output_size=7)
-      _, _, final_box_features = heads.box_head(
-          final_roi_features, num_classes=params['num_classes'],
-          mlp_head_dim=params['fast_rcnn_mlp_head_dim'])
-      model_outputs.update({
-          'detection_features': (
-              tf.identity(final_box_features, 'DetectionFeatures')),
-      })
   else:
     encoded_box_targets = training_ops.encode_box_targets(
         rpn_box_rois, box_targets, class_targets, params['bbox_reg_weights'])
@@ -285,8 +273,7 @@ def build_model_graph(features, labels, is_training, params):
     })
   else:
     model_outputs.update({
-        'detection_masks': (
-            tf.identity(tf.nn.sigmoid(mask_outputs), 'DetectionMasks')),
+        'detection_masks': tf.nn.sigmoid(mask_outputs),
     })
 
   return model_outputs
@@ -331,14 +318,7 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
   Returns:
     tpu_spec: the TPUEstimatorSpec to run training, evaluation, or prediction.
   """
-  if mode == tf.estimator.ModeKeys.TRAIN:
-    if 'features' not in features:
-      raise ValueError('"features" is missing in TRAIN input.')
-    if 'labels' not in features:
-      raise ValueError('"labels" is missing in TRAIN input.')
-    labels = features['labels']
-    features = features['features']
-  else:
+  if mode == tf.estimator.ModeKeys.PREDICT:
     if params['include_groundtruth_in_features'] and ('labels' in features):
       # In include groundtruth for eval.
       labels = features['labels']
@@ -347,10 +327,15 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
     if 'features' in features:
       features = features['features']
       # Otherwise, it is in export mode, the features is past in directly.
+
   if params['use_bfloat16']:
     with tf.contrib.tpu.bfloat16_scope():
       model_outputs = build_model_graph(
           features, labels, mode == tf.estimator.ModeKeys.TRAIN, params)
+      model_outputs.update({
+          'source_id': features['source_ids'],
+          'image_info': features['image_info'],
+      })
       def cast_outputs_to_float(d):
         for k, v in sorted(six.iteritems(d)):
           if isinstance(v, dict):
@@ -361,6 +346,10 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
   else:
     model_outputs = build_model_graph(
         features, labels, mode == tf.estimator.ModeKeys.TRAIN, params)
+    model_outputs.update({
+        'source_id': features['source_ids'],
+        'image_info': features['image_info'],
+    })
 
   # First check if it is in PREDICT mode.
   if mode == tf.estimator.ModeKeys.PREDICT:
@@ -369,6 +358,7 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
       # Labels can only be emebeded in predictions. The predition cannot output
       # dictionary as a value.
       predictions.update(labels)
+    model_outputs.pop('fpn_features', None)
     predictions.update(model_outputs)
 
     if params['use_tpu']:

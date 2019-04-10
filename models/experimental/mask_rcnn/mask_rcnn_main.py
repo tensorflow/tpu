@@ -12,14 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Training script for Mask-RCNN.
-"""
+"""Training script for Mask-RCNN."""
 
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import functools
 import os
 from absl import flags
 import numpy as np
@@ -30,7 +28,6 @@ import evaluation
 import mask_rcnn_model
 import mask_rcnn_params
 import params_io
-import serving_inputs
 
 # Cloud TPU Cluster Resolvers
 flags.DEFINE_string(
@@ -239,7 +236,6 @@ def run(config, train_input_fn=None, eval_input_fn=None):
           config.val_json_file)
       evaluation.write_summary(
           eval_results, summary_writer, config.total_steps)
-
       summary_writer.close()
     return eval_results
 
@@ -306,16 +302,6 @@ def run(config, train_input_fn=None, eval_input_fn=None):
         tf.logging.info('Checkpoint %s no longer exists, skipping checkpoint' %
                         ckpt)
     summary_writer.close()
-
-    # Export saved model.
-    eval_estimator.export_saved_model(
-        export_dir_base=FLAGS.model_dir,
-        serving_input_receiver_fn=functools.partial(
-            serving_inputs.serving_input_fn,
-            batch_size=1,
-            desired_image_size=config.image_size,
-            padding_stride=(2 ** config.max_level),
-            input_type='image_bytes'))
     return eval_results
 
   elif FLAGS.mode == 'train_and_eval':
@@ -377,16 +363,6 @@ def run(config, train_input_fn=None, eval_input_fn=None):
     evaluation.write_summary(
         eval_results, summary_writer, config.total_steps)
     summary_writer.close()
-
-    # Export saved model.
-    eval_estimator.export_saved_model(
-        export_dir_base=FLAGS.model_dir,
-        serving_input_receiver_fn=functools.partial(
-            serving_inputs.serving_input_fn,
-            batch_size=1,
-            desired_image_size=config.image_size,
-            padding_stride=(2 ** config.max_level),
-            input_type='image_bytes'))
     return eval_results
 
   else:

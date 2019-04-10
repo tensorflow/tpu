@@ -38,31 +38,31 @@ from absl import flags
 import tensorflow as tf
 
 from common import inference_warmup
-import mask_rcnn_model
 import mask_rcnn_params
 import params_io
-import serving_inputs
+import serving
 from tensorflow.contrib.tpu.python.tpu import tpu_config
 
 
 FLAGS = flags.FLAGS
 
+# pylint: disable=line-too-long
 flags.DEFINE_string('export_dir', None, 'The export directory.')
 flags.DEFINE_string('checkpoint_path', None, 'Checkpoint path.')
-
-flags.DEFINE_string('config', '', 'The config.')
+flags.DEFINE_string('config', '', 'The model config.')
 flags.DEFINE_string('model_dir', None, 'The model directory.')
 flags.DEFINE_integer('iterations_per_loop', 1, 'The iterations per loop.')
 flags.DEFINE_integer('batch_size', 1, 'The batch size.')
-flags.DEFINE_string('input_type', 'image_bytes',
-                    'One of `image_tensor`, `image_bytes` and `tf_example`')
+flags.DEFINE_string('input_type', 'image_bytes', 'One of `image_tensor`, `image_bytes` and `tf_example`')
 flags.DEFINE_string('input_name', 'input', 'The name of the input node.')
 flags.DEFINE_boolean('use_tpu', False, 'Whether or not use TPU.')
-flags.DEFINE_bool('add_warmup_requests', False,
-                  'Whether to add warmup requests into the export saved model '
-                  'dir, especially for TPU inference.')
-flags.DEFINE_string('model_name', 'mask-rcnn',
-                    'Serving model name used for the model server.')
+flags.DEFINE_boolean('add_warmup_requests', False, 'Whether to add warmup requests into the export saved model dir, especially for TPU inference.')
+flags.DEFINE_string('model_name', 'mask-rcnn', 'Serving model name used for the model server.')
+flags.DEFINE_boolean('output_source_id', False, 'Whether or not output source_id node.')
+flags.DEFINE_boolean('output_image_info', True, 'Whether or not output image_info node.')
+flags.DEFINE_boolean('output_box_features', False, 'Whether or not output box_features node.')
+flags.DEFINE_boolean('output_normalized_coordinates', False, 'Whether or not output boxes in normalized coordinates.')
+# pylint: enable=line-too-long
 
 flags.mark_flag_as_required('export_dir')
 flags.mark_flag_as_required('checkpoint_path')
@@ -83,7 +83,11 @@ def main(_):
 
   print(' - Setting up TPUEstimator...')
   estimator = tf.contrib.tpu.TPUEstimator(
-      model_fn=mask_rcnn_model.mask_rcnn_model_fn,
+      model_fn=serving.serving_model_fn_builder(
+          FLAGS.output_source_id,
+          FLAGS.output_image_info,
+          FLAGS.output_box_features,
+          FLAGS.output_normalized_coordinates),
       model_dir=FLAGS.model_dir,
       config=tpu_config.RunConfig(
           tpu_config=tpu_config.TPUConfig(
@@ -102,7 +106,7 @@ def main(_):
   export_path = estimator.export_saved_model(
       export_dir_base=FLAGS.export_dir,
       serving_input_receiver_fn=functools.partial(
-          serving_inputs.serving_input_fn,
+          serving.serving_input_fn,
           batch_size=FLAGS.batch_size,
           desired_image_size=config.image_size,
           padding_stride=(2 ** config.max_level),
