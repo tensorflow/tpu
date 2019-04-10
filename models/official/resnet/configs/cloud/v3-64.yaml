@@ -1,0 +1,7 @@
+# DISCLAIMER: These parameters have not been optimized
+train_steps: 14232
+train_batch_size: 8192
+eval_batch_size: 1024
+iterations_per_loop: 14232
+skip_host_call: True
+num_cores: 64

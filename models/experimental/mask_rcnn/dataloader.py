@@ -277,7 +277,7 @@ class InputReader(object):
           labels['gt_classes'] = classes
           if self._use_instance_mask:
             labels['cropped_gt_masks'] = cropped_gt_masks
-          return {'features': features, 'labels': labels}
+          return features, labels
 
     return _dataset_parser
 
@@ -314,10 +314,9 @@ class InputReader(object):
     if (params['transpose_input'] and
         self._mode == tf.estimator.ModeKeys.TRAIN):
 
-      def _transpose_images(features):
-        features['features']['images'] = tf.transpose(
-            features['features']['images'], [1, 2, 3, 0])
-        return features
+      def _transpose_images(features, labels):
+        features['images'] = tf.transpose(features['images'], [1, 2, 3, 0])
+        return features, labels
 
       dataset = dataset.map(_transpose_images, num_parallel_calls=64)
 
