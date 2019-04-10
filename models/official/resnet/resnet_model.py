@@ -215,8 +215,7 @@ def residual_block(inputs, filters, is_training, strides,
 
   Args:
     inputs: `Tensor` of size `[batch, channels, height, width]`.
-    filters: `int` number of filters for the first two convolutions. Note that
-        the third and final convolution will use 4 times as many filters.
+    filters: `int` number of filters for the two convolutions.
     is_training: `bool` for whether the model is in training.
     strides: `int` block stride. If greater than 1, this block will ultimately
         downsample the input.
