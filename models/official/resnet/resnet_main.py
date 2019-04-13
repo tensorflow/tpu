@@ -29,62 +29,95 @@ import tensorflow as tf
 
 from common import inference_warmup
 from common import tpu_profiler_hook
+from hyperparameters import common_hparams_flags
+from hyperparameters import common_tpu_flags
+from hyperparameters import hyperparameters
 from official.resnet import imagenet_input
 from official.resnet import lars_util
 from official.resnet import resnet_model
-from official.resnet import resnet_params
 from tensorflow.contrib import summary
 from tensorflow.contrib.tpu.python.tpu import async_checkpoint
 from tensorflow.contrib.training.python.training import evaluation
 from tensorflow.core.protobuf import rewriter_config_pb2
 from tensorflow.python.estimator import estimator
 
+common_tpu_flags.define_common_tpu_flags()
+common_hparams_flags.define_common_hparams_flags()
+
 FLAGS = flags.FLAGS
 
 FAKE_DATA_DIR = 'gs://cloud-tpu-test-datasets/fake_imagenet'
 
 flags.DEFINE_string(
-    'param_file',
+    'hparams_file',
     default=None,
-    help=('Base set of model parameters to use with this model. To see '
-          'documentation on the parameters, see the docstring in resnet_params.'
+    help=('Set of model parameters to override the default mparams.'
          ))
 
 flags.DEFINE_multi_string(
-    'param_overrides',
+    'hparams',
     default=None,
-    help=('Model parameter overrides for this model. For example, if '
-          'experimenting with larger numbers of train_steps, a possible value '
-          'is --param_overrides=train_steps=28152. If you have a collection of '
-          'parameters that make sense to use together repeatedly, consider '
-          'extending resnet_params.param_sets_table.'))
-
-# Cloud TPU Cluster Resolvers
-flags.DEFINE_string(
-    'tpu', default=None,
-    help='The Cloud TPU to use for training. This should be either the name '
-    'used when creating the Cloud TPU, or a grpc://ip.address.of.tpu:8470 url.')
+    help=('This is used to override only the model hyperparameters. It should '
+          'not be used to override the other parameters like the tpu specific '
+          'flags etc. For example, if experimenting with larger numbers of '
+          'train_steps, a possible value is '
+          '--param_overrides=train_steps=28152.'))
 
 flags.DEFINE_string(
-    'gcp_project', default=None,
-    help='Project name for the Cloud TPU-enabled project. If not specified, we '
-    'will attempt to automatically detect the GCE project from metadata.')
+    'default_hparams_file',
+    default=None,
+    help=('Default set of model parameters to use with this model. Look the at '
+          'configs/default.yaml for this.'
+         ))
+
+flags.DEFINE_integer(
+    'resnet_depth', default=None,
+    help=('Depth of ResNet model to use. Must be one of {18, 34, 50, 101, 152,'
+          ' 200}. ResNet-18 and 34 use the pre-activation residual blocks'
+          ' without bottleneck layers. The other models use pre-activation'
+          ' bottleneck layers. Deeper models require more training time and'
+          ' more memory and may require reducing --train_batch_size to prevent'
+          ' running out of memory.'))
+
+flags.DEFINE_integer(
+    'num_train_images', default=None, help='Size of training data set.')
+
+flags.DEFINE_integer(
+    'num_eval_images', default=None, help='Size of evaluation data set.')
+
+flags.DEFINE_integer(
+    'num_label_classes', default=None, help='Number of classes, at least 2')
 
 flags.DEFINE_string(
-    'tpu_zone', default=None,
-    help='GCE zone where the Cloud TPU is located in. If not specified, we '
-    'will attempt to automatically detect the GCE project from metadata.')
+    'data_format', default=None,
+    help=('A flag to override the data format used in the model. The value'
+          ' is either channels_first or channels_last. To run the network on'
+          ' CPU or TPU, channels_last should be used. For GPU, channels_first'
+          ' will improve performance.'))
 
-# Model specific flags
-flags.DEFINE_string(
-    'data_dir', default=FAKE_DATA_DIR,
-    help=('The directory where the ImageNet input data is stored. Please see'
-          ' the README.md for the expected data format.'))
+flags.DEFINE_bool(
+    'transpose_input', default=None,
+    help='Use TPU double transpose optimization')
+
+flags.DEFINE_bool(
+    'use_cache', default=None, help=('Enable cache for training input.'))
+
+flags.DEFINE_integer('image_size', None, 'The input image size.')
 
 flags.DEFINE_string(
-    'model_dir', default=None,
-    help=('The directory where the model and training/evaluation summaries are'
-          ' stored.'))
+    'dropblock_groups', None,
+    help=('A string containing comma separated integers indicating ResNet '
+          'block groups to apply DropBlock. `3,4` means to apply DropBlock to '
+          'block groups 3 and 4. Use an empty string to not apply DropBlock to '
+          'any block group.'))
+flags.DEFINE_float(
+    'dropblock_keep_prob', default=None,
+    help=('keep_prob parameter of DropBlock. Will not be used if '
+          'dropblock_groups is empty.'))
+flags.DEFINE_integer(
+    'dropblock_size', default=None,
+    help=('size parameter of DropBlock. Will not be used if dropblock_groups '
+          'is empty.'))
 
 flags.DEFINE_integer(
     'profile_every_n_steps', default=0,
@@ -105,6 +138,16 @@ flags.DEFINE_integer(
     'eval_timeout',
     default=None,
     help='Maximum seconds between checkpoints before evaluation terminates.')
+
+flags.DEFINE_integer(
+    'num_parallel_calls', default=None,
+    help=('Number of parallel threads in CPU for the input pipeline.'
+          ' Recommended value is the number of cores per CPU host.'))
+
+flags.DEFINE_integer(
+    'num_cores', default=None,
+    help=('Number of TPU cores in total. For a single TPU device, this is 8'
+          ' because each TPU has 4 chips each with 2 cores.'))
 
 flags.DEFINE_string(
     'bigtable_project', None,
@@ -137,6 +180,32 @@ flags.DEFINE_bool(
     'export_to_tpu', default=False,
     help=('Whether to export additional metagraph with "serve, tpu" tags'
           ' in addition to "serve" only metagraph.'))
+
+flags.DEFINE_float(
+    'base_learning_rate', default=None,
+    help=('Base learning rate when train batch size is 256.'))
+
+flags.DEFINE_float(
+    'momentum', default=None,
+    help=('Momentum parameter used in the MomentumOptimizer.'))
+
+flags.DEFINE_float(
+    'weight_decay', default=None,
+    help=('Weight decay coefficiant for l2 regularization.'))
+
+flags.DEFINE_float(
+    'label_smoothing', default=None,
+    help=('Label smoothing parameter used in the softmax_cross_entropy'))
+
+flags.DEFINE_bool('enable_lars',
+                  default=None,
+                  help=('Enable LARS optimizer for large batch training.'))
+
+flags.DEFINE_float('poly_rate', default=None,
+                   help=('Set LARS/Poly learning rate.'))
+
+flags.DEFINE_bool(
+    'use_async_checkpointing', default=None, help=('Enable async checkpoint'))
 
 flags.DEFINE_integer('log_step_count_steps', 64, 'The number of steps at '
                      'which the global step information is logged.')
@@ -487,10 +556,15 @@ def _select_tables_from_flags():
 
 
 def main(unused_argv):
-  params = resnet_params.from_file(FLAGS.param_file)
-  params = resnet_params.override(params, FLAGS.param_overrides)
-  resnet_params.log_hparams_to_model_dir(params, FLAGS.model_dir)
-  tf.logging.info('Model params: {}'.format(params))
+  default_hparams_file = FLAGS.default_hparams_file
+  if default_hparams_file is None:
+    default_hparams_file = os.path.join(os.path.dirname(__file__),
+                                        './configs/default.yaml')
+
+  params = hyperparameters.get_hyperparameters(default_hparams_file,
+                                               FLAGS.hparams_file,
+                                               FLAGS,
+                                               FLAGS.hparams)
 
   tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
       FLAGS.tpu if (FLAGS.tpu or params['use_tpu']) else '',
