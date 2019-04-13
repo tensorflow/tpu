@@ -119,40 +119,46 @@ def selective_crop_and_resize(features,
   box_grid_x0 = tf.floor(box_grid_x)
   box_grid_x0 = tf.maximum(0., box_grid_x0)
   box_grid_y0 = tf.maximum(0., box_grid_y0)
-  box_gridx0x1 = tf.stack(
-      [tf.minimum(box_grid_x0, boundaries[:, :, 1:2]),
-       tf.minimum(box_grid_x0 + 1, boundaries[:, :, 1:2])],
-      axis=3)
-  box_gridy0y1 = tf.stack(
-      [tf.minimum(box_grid_y0, boundaries[:, :, 0:1]),
-       tf.minimum(box_grid_y0 + 1, boundaries[:, :, 0:1])],
-      axis=3)
+  box_gridx0x1 = tf.stack([
+      tf.minimum(box_grid_x0, boundaries[:, :, 1:2]),
+      tf.minimum(box_grid_x0 + 1, boundaries[:, :, 1:2])
+  ],
+                          axis=3)
+  box_gridy0y1 = tf.stack([
+      tf.minimum(box_grid_y0, boundaries[:, :, 0:1]),
+      tf.minimum(box_grid_y0 + 1, boundaries[:, :, 0:1])
+  ],
+                          axis=3)
 
   x_indices = tf.cast(
-      tf.reshape(box_gridx0x1,
-                 [batch_size, num_boxes, output_size * 2]), dtype=tf.int32)
+      tf.reshape(box_gridx0x1, [batch_size, num_boxes, output_size * 2]),
+      dtype=tf.int32)
   y_indices = tf.cast(
-      tf.reshape(box_gridy0y1,
-                 [batch_size, num_boxes, output_size * 2]), dtype=tf.int32)
+      tf.reshape(box_gridy0y1, [batch_size, num_boxes, output_size * 2]),
+      dtype=tf.int32)
 
   height_dim_offset = max_feature_width
   level_dim_offset = max_feature_height * height_dim_offset
   batch_dim_offset = num_levels * level_dim_offset
-  indices = tf.reshape(
-      (tf.reshape(tf.range(batch_size) * batch_dim_offset,
-                  [batch_size, 1, 1, 1]) *
-       tf.ones([1, num_boxes, output_size * 2, output_size * 2],
-               dtype=tf.int32)) +
-      (tf.reshape(box_levels * level_dim_offset,
-                  [batch_size, num_boxes, 1, 1]) *
-       tf.ones([1, 1, output_size * 2, output_size * 2], dtype=tf.int32)) +
-      (tf.reshape(y_indices * height_dim_offset,
-                  [batch_size, num_boxes, output_size * 2, 1]) *
-       tf.ones([1, 1, 1, output_size * 2], dtype=tf.int32)) +
-      (tf.reshape(x_indices,
-                  [batch_size, num_boxes, 1, output_size * 2]) *
-       tf.ones([1, 1, output_size * 2, 1], dtype=tf.int32)),
-      [-1])
+
+  batch_dim_indices = (
+      tf.reshape(
+          tf.range(batch_size) * batch_dim_offset, [batch_size, 1, 1, 1]) *
+      tf.ones([1, num_boxes, output_size * 2, output_size * 2], dtype=tf.int32))
+  box_level_indices = (
+      tf.reshape(box_levels * level_dim_offset, [batch_size, num_boxes, 1, 1]) *
+      tf.ones([1, 1, output_size * 2, output_size * 2], dtype=tf.int32))
+  height_indices = (
+      tf.reshape(y_indices * height_dim_offset,
+                 [batch_size, num_boxes, output_size * 2, 1]) *
+      tf.ones([1, 1, 1, output_size * 2], dtype=tf.int32))
+  width_indices = (
+      tf.reshape(x_indices, [batch_size, num_boxes, 1, output_size * 2]) *
+      tf.ones([1, 1, output_size * 2, 1], dtype=tf.int32))
+  indices = (
+      batch_dim_indices + box_level_indices + height_indices + width_indices)
+  indices = tf.reshape(indices, [-1])
+
   features = tf.reshape(features, [-1, num_filters])
   features_per_box = tf.gather(features, indices)
 
@@ -170,10 +176,10 @@ def selective_crop_and_resize(features,
   lx = box_grid_x - box_grid_x0
   hy = 1.0 - ly
   hx = 1.0 - lx
-  kernel_x = tf.reshape(tf.stack([hx, lx], axis=3),
-                        [batch_size, num_boxes, 1, output_size*2])
-  kernel_y = tf.reshape(tf.stack([hy, ly], axis=3),
-                        [batch_size, num_boxes, output_size*2, 1])
+  kernel_x = tf.reshape(
+      tf.stack([hx, lx], axis=3), [batch_size, num_boxes, 1, output_size * 2])
+  kernel_y = tf.reshape(
+      tf.stack([hy, ly], axis=3), [batch_size, num_boxes, output_size * 2, 1])
   # Use implicit broadcast to generate the interpolation kernel. The
   # multiplier `4` is for avg pooling.
   interpolation_kernel = kernel_y * kernel_x * 4
@@ -184,9 +190,9 @@ def selective_crop_and_resize(features,
       dtype=features_per_box.dtype)
   features_per_box = tf.reshape(
       features_per_box,
-      [batch_size * num_boxes, output_size*2, output_size*2, num_filters])
-  features_per_box = tf.nn.avg_pool(
-      features_per_box, [1, 2, 2, 1], [1, 2, 2, 1], 'VALID')
+      [batch_size * num_boxes, output_size * 2, output_size * 2, num_filters])
+  features_per_box = tf.nn.avg_pool(features_per_box, [1, 2, 2, 1],
+                                    [1, 2, 2, 1], 'VALID')
   features_per_box = tf.reshape(
       features_per_box,
       [batch_size, num_boxes, output_size, output_size, num_filters])
