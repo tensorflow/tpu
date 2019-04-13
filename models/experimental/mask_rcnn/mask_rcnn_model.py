@@ -571,12 +571,15 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
     train_op = None
     scaffold_fn = None
 
-  return tf.contrib.tpu.TPUEstimatorSpec(
-      mode=mode,
-      loss=total_loss,
-      train_op=train_op,
-      host_call=host_call,
-      scaffold_fn=scaffold_fn)
+  if params['use_tpu']:
+    return tf.contrib.tpu.TPUEstimatorSpec(
+        mode=mode,
+        loss=total_loss,
+        train_op=train_op,
+        host_call=host_call,
+        scaffold_fn=scaffold_fn)
+  return tf.estimator.EstimatorSpec(
+      mode=mode, loss=total_loss, train_op=train_op)
 
 
 def mask_rcnn_model_fn(features, labels, mode, params):

@@ -424,8 +424,8 @@ def _model_fn(features, labels, mode, params, model, use_tpu_estimator_spec,
         tf.trainable_variables(),
         params['resnet_depth']) if variable_filter_fn else None
 
-    with tf.control_dependencies(update_ops):
-      train_op = optimizer.minimize(total_loss, global_step, var_list=var_list)
+    minimize_op = optimizer.minimize(total_loss, global_step, var_list=var_list)
+    train_op = tf.group(minimize_op, update_ops)
 
   else:
     train_op = None
