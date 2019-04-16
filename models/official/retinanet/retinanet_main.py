@@ -82,6 +82,8 @@ flags.DEFINE_integer('train_batch_size', 64, 'training batch size')
 flags.DEFINE_integer('eval_batch_size', 1, 'evaluation batch size')
 flags.DEFINE_integer('eval_samples', 5000, 'The number of samples for '
                      'evaluation.')
+flags.DEFINE_integer('num_steps_per_eval', 500, 'The number of steps between '
+                     'evaluation.')
 flags.DEFINE_integer('iterations_per_loop', 100,
                      'Number of iterations per TPU training loop')
 flags.DEFINE_string(
@@ -143,6 +145,17 @@ def serving_input_fn(image_size):
       images, {'image_bytes': image_bytes_list})
 
 
+def write_summary(eval_results, summary_writer, current_step):
+  """Write out eval results for the checkpoint."""
+  with tf.Graph().as_default():
+    summaries = []
+    for metric in eval_results:
+      summaries.append(
+          tf.Summary.Value(tag=metric, simple_value=eval_results[metric]))
+    tf_summary = tf.Summary(value=list(summaries))
+    summary_writer.add_summary(tf_summary, current_step)
+
+
 def main(argv):
   del argv  # Unused.
 
@@ -158,6 +171,8 @@ def main(argv):
   else:
     tpu_cluster_resolver = None
 
+  if FLAGS.mode not in ['train', 'eval', 'train_and_eval']:
+    raise ValueError('Unrecognize --mode: %s' % FLAGS.mode)
   # Check data path
   if FLAGS.mode in ('train',
                     'train_and_eval') and FLAGS.training_file_pattern is None:
@@ -330,6 +345,8 @@ def main(argv):
   # TPUEstimator/Estimator
   if FLAGS.mode == 'train':
     tf.logging.info(params)
+    total_steps = int((FLAGS.num_epochs * FLAGS.num_examples_per_epoch) /
+                      FLAGS.train_batch_size)
     if FLAGS.distribution_strategy is None:
       train_estimator = tf.contrib.tpu.TPUEstimator(
           model_fn=retinanet_model.tpu_retinanet_model_fn,
@@ -340,8 +357,7 @@ def main(argv):
       train_estimator.train(
           input_fn=dataloader.InputReader(
               FLAGS.training_file_pattern, is_training=True),
-          max_steps=int((FLAGS.num_epochs * FLAGS.num_examples_per_epoch) /
-                        FLAGS.train_batch_size))
+          max_steps=total_steps)
 
       # Run evaluation after training finishes.
       eval_params = dict(
@@ -369,6 +385,11 @@ def main(argv):
                 FLAGS.validation_file_pattern, is_training=False),
             steps=FLAGS.eval_samples // FLAGS.eval_batch_size)
         tf.logging.info('Eval results: %s' % eval_results)
+        output_dir = os.path.join(FLAGS.model_dir, 'train_eval')
+        tf.gfile.MakeDirs(output_dir)
+        summary_writer = tf.summary.FileWriter(output_dir)
+
+        write_summary(eval_results, summary_writer, total_steps)
       if FLAGS.model_dir:
         eval_estimator.export_saved_model(
             export_dir_base=FLAGS.model_dir,
@@ -385,14 +406,12 @@ def main(argv):
         train_estimator.train(
             input_fn=dataloader.InputReader(
                 FLAGS.training_file_pattern, is_training=True),
-            max_steps=int((FLAGS.num_epochs * FLAGS.num_examples_per_epoch) /
-                          FLAGS.train_batch_size))
+            max_steps=total_steps)
       elif FLAGS.distribution_strategy == 'collective':
         train_spec = tf.estimator.TrainSpec(
             input_fn=dataloader.InputReader(
                 FLAGS.training_file_pattern, is_training=True),
-            max_steps=int((FLAGS.num_epochs * FLAGS.num_examples_per_epoch) /
-                          (len(worker_hosts) * FLAGS.train_batch_size)))
+            max_steps=total_steps)
         eval_spec = tf.estimator.EvalSpec(input_fn=tf.data.Dataset)
         tf.estimator.train_and_evaluate(train_estimator, train_spec, eval_spec)
 
@@ -445,6 +464,9 @@ def main(argv):
                       FLAGS.eval_timeout)
       return True
 
+    output_dir = os.path.join(FLAGS.model_dir, 'eval')
+    tf.gfile.MakeDirs(output_dir)
+    summary_writer = tf.summary.FileWriter(output_dir)
     # Run evaluation when there's a new checkpoint
     for ckpt in tf.contrib.training.checkpoints_iterator(
         FLAGS.model_dir,
@@ -464,6 +486,7 @@ def main(argv):
         current_step = int(os.path.basename(ckpt).split('-')[1])
         total_step = int((FLAGS.num_epochs * FLAGS.num_examples_per_epoch) /
                          FLAGS.train_batch_size)
+        write_summary(eval_results, summary_writer, current_step)
         if current_step >= total_step:
           tf.logging.info(
               'Evaluation finished after training step %d' % current_step)
@@ -486,7 +509,12 @@ def main(argv):
       raise ValueError(
           'Distribution strategy is not implemented for --mode=train_and_eval.')
 
-    for cycle in range(FLAGS.num_epochs):
+    output_dir = os.path.join(FLAGS.model_dir, 'train_and_eval')
+    tf.gfile.MakeDirs(output_dir)
+    summary_writer = tf.summary.FileWriter(output_dir)
+    num_cycles = int(FLAGS.num_epochs * FLAGS.num_examples_per_epoch /
+                     FLAGS.num_steps_per_eval)
+    for cycle in range(num_cycles):
       tf.logging.info('Starting training cycle, epoch: %d.' % cycle)
       train_estimator = tf.contrib.tpu.TPUEstimator(
           model_fn=retinanet_model.tpu_retinanet_model_fn,
@@ -497,7 +525,7 @@ def main(argv):
       train_estimator.train(
           input_fn=dataloader.InputReader(
               FLAGS.training_file_pattern, is_training=True),
-          steps=int(FLAGS.num_examples_per_epoch / FLAGS.train_batch_size))
+          steps=FLAGS.num_steps_per_eval)
 
       tf.logging.info('Starting evaluation cycle, epoch: %d.' % cycle)
       # Run evaluation after every epoch.
@@ -521,6 +549,8 @@ def main(argv):
               FLAGS.validation_file_pattern, is_training=False),
           steps=FLAGS.eval_samples // FLAGS.eval_batch_size)
       tf.logging.info('Evaluation results: %s' % eval_results)
+      current_step = int(cycle * FLAGS.num_steps_per_eval)
+      write_summary(eval_results, summary_writer, current_step)
     eval_estimator.export_saved_model(
         export_dir_base=FLAGS.model_dir,
         serving_input_receiver_fn=lambda: serving_input_fn(hparams.image_size))
