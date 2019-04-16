@@ -382,6 +382,8 @@ def _model_fn(features, labels, mode, params, model, use_tpu_estimator_spec,
 
     # Add the computed `top-k` values in addition to the raw boxes.
     add_metric_fn_inputs(params, cls_outputs, box_outputs, predictions)
+    for k, v in predictions.items():
+      predictions = tf.identity(v, k)
     return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions)
 
   # Load pretrained model from checkpoint.
