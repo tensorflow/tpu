@@ -218,7 +218,7 @@ def create_tpu_estimator(model_fn, feature_columns, params):
       train_batch_size=params["global_batch_size"],
       eval_batch_size=params["eval_global_batch_size"],
       params=params,
-      experimental_embedding_config_spec=embedding.EmbeddingConfigSpec(
+      embedding_config_spec=embedding.EmbeddingConfigSpec(
           feature_columns=feature_columns,
           optimization_parameters=embedding.AdamParameters(
               learning_rate=params["learning_rate"],
