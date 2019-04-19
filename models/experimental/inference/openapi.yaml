@@ -1,0 +1,274 @@
+# Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+---
+swagger: '2.0'
+info:
+  title: <ENDPOINT_NAME>-<MODEL_NAME>-<MY_PROJECT_ID>
+  version: 0.0.1
+host: <ENDPOINT_NAME>.endpoints.<MY_PROJECT_ID>.cloud.goog
+schemes:
+- http
+- https
+consumes:
+- application/json
+produces:
+- application/json
+paths:
+  "/v1/models/<MODEL_NAME>:predict":
+    post:
+      summary: Predict -- provides access to loaded TensorFlow model.
+      operationId: Predict-REST
+      responses:
+        '200':
+          description: ''
+          schema:
+            "$ref": "#/definitions/servingPredictResponse"
+      parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          "$ref": "#/definitions/predictRequest"
+      tags:
+      - PredictionService
+definitions:
+  TensorShapeProtoDim:
+    type: object
+    properties:
+      size:
+        type: string
+        format: int64
+        description: |-
+          Size of the tensor in that dimension.
+      name:
+        type: string
+        description: Optional name of the tensor dimension.
+    description: One dimension of the tensor.
+  predictRequest:
+    type: object
+    properties:
+      signature_name:
+        type: string
+        description: signature for inference
+      inputs:
+        type: array
+        items:
+          "$ref": "#/definitions/encodedImage"
+    description: |-
+      PredictRequest specifies which TensorFlow model to run.
+  encodedImage:
+    type: object
+    additionalProperties:
+      type: string
+  servingPredictResponse:
+    type: object
+    properties:
+      outputs:
+        type: object
+        additionalProperties:
+          "$ref": "#/definitions/tensorflowTensorProto"
+        description: Output tensors.
+    description: Response for PredictRequest on successful run.
+  tensorflowDataType:
+    type: string
+    enum:
+    - DT_INVALID
+    - DT_FLOAT
+    - DT_DOUBLE
+    - DT_INT32
+    - DT_UINT8
+    - DT_INT16
+    - DT_INT8
+    - DT_STRING
+    - DT_COMPLEX64
+    - DT_INT64
+    - DT_BOOL
+    - DT_QINT8
+    - DT_QUINT8
+    - DT_QINT32
+    - DT_BFLOAT16
+    - DT_QINT16
+    - DT_QUINT16
+    - DT_UINT16
+    - DT_COMPLEX128
+    - DT_HALF
+    - DT_RESOURCE
+    - DT_FLOAT_REF
+    - DT_DOUBLE_REF
+    - DT_INT32_REF
+    - DT_UINT8_REF
+    - DT_INT16_REF
+    - DT_INT8_REF
+    - DT_STRING_REF
+    - DT_COMPLEX64_REF
+    - DT_INT64_REF
+    - DT_BOOL_REF
+    - DT_QINT8_REF
+    - DT_QUINT8_REF
+    - DT_QINT32_REF
+    - DT_BFLOAT16_REF
+    - DT_QINT16_REF
+    - DT_QUINT16_REF
+    - DT_UINT16_REF
+    - DT_COMPLEX128_REF
+    - DT_HALF_REF
+    - DT_RESOURCE_REF
+    default: DT_INVALID
+    description: |-
+      - DT_INVALID: Not a legal value for DataType.  Used to indicate a DataType field
+      has not been set.
+       - DT_FLOAT: Data types that all computation devices are expected to be
+      capable to support.
+       - DT_FLOAT_REF: Only for parameters.
+    title: LINT.IfChange
+  tensorflowResourceHandle:
+    type: object
+    properties:
+      device:
+        type: string
+        description: Unique name for the device containing the resource.
+      container:
+        type: string
+        description: Container in which this resource is placed.
+      name:
+        type: string
+        description: Unique name of this resource.
+      hash_code:
+        type: string
+        format: uint64
+        description: |-
+          Hash code for the type of the resource. Is only valid in the same device
+          and in the same execution.
+      maybe_type_name:
+        type: string
+        description: |-
+          For debug-only, the name of the type pointed to by this handle, if
+          available.
+    description: |-
+      Protocol buffer representing a handle to a tensorflow resource.
+  tensorflowTensorProto:
+    type: object
+    properties:
+      dtype:
+        "$ref": "#/definitions/tensorflowDataType"
+      tensor_shape:
+        "$ref": "#/definitions/tensorflowTensorShapeProto"
+        description: 'Shape of the tensor.'
+      version_number:
+        type: integer
+        format: int32
+        description: |-
+          Version number.
+      tensor_content:
+        type: string
+        format: byte
+        description: |-
+          Serialized raw tensor content from either Tensor::AsProtoTensorContent or
+          memcpy in tensorflow::grpc::EncodeTensorToByteBuffer.
+      half_val:
+        type: array
+        items:
+          type: integer
+          format: int32
+        description: |-
+          DT_HALF. Note that since protobuf has no int16 type, we'll have some
+          pointless zero padding for each value here.
+      float_val:
+        type: array
+        items:
+          type: number
+          format: float
+        description: DT_FLOAT.
+      double_val:
+        type: array
+        items:
+          type: number
+          format: double
+        description: DT_DOUBLE.
+      int_val:
+        type: array
+        items:
+          type: integer
+          format: int32
+        description: DT_INT32, DT_INT16, DT_INT8, DT_UINT8.
+      string_val:
+        type: array
+        items:
+          type: string
+          format: byte
+        title: DT_STRING
+      scomplex_val:
+        type: array
+        items:
+          type: number
+          format: float
+        description: |-
+          DT_COMPLEX64. scomplex_val(2*i) and scomplex_val(2*i+1) are real
+          and imaginary parts of i-th single precision complex.
+      int64_val:
+        type: array
+        items:
+          type: string
+          format: int64
+        title: DT_INT64
+      bool_val:
+        type: array
+        items:
+          type: boolean
+          format: boolean
+        title: DT_BOOL
+      dcomplex_val:
+        type: array
+        items:
+          type: number
+          format: double
+        description: |-
+          DT_COMPLEX128. dcomplex_val(2*i) and dcomplex_val(2*i+1) are real
+          and imaginary parts of i-th double precision complex.
+      resource_handle_val:
+        type: array
+        items:
+          "$ref": "#/definitions/tensorflowResourceHandle"
+        title: DT_RESOURCE
+    description: Protocol buffer representing a tensor.
+  tensorflowTensorShapeProto:
+    type: object
+    properties:
+      dim:
+        type: array
+        items:
+          "$ref": "#/definitions/TensorShapeProtoDim"
+        description: |-
+          Dimensions of the tensor, such as {"input", 30}, {"output", 40}
+          for a 30 x 40 2D tensor.  If an entry has size -1, this
+          corresponds to a dimension of unknown size. The names are
+          optional.
+
+          The order of entries in "dim" matters: It indicates the layout of the
+          values in the tensor in-memory representation.
+
+          The first entry in "dim" is the outermost dimension used to layout the
+          values, the last entry is the innermost dimension.  This matches the
+          in-memory layout of RowMajor Eigen tensors.
+
+          If "dim.size()" > 0, "unknown_rank" must be false.
+      unknown_rank:
+        type: boolean
+        format: boolean
+        description: |-
+          If true, the number of dimensions in the shape is unknown.
+
+          If true, "dim.size()" must be 0.
+    description: Dimensions of a tensor.

@@ -62,6 +62,7 @@ flags.DEFINE_boolean('output_source_id', False, 'Whether or not output source_id
 flags.DEFINE_boolean('output_image_info', True, 'Whether or not output image_info node.')
 flags.DEFINE_boolean('output_box_features', False, 'Whether or not output box_features node.')
 flags.DEFINE_boolean('output_normalized_coordinates', False, 'Whether or not output boxes in normalized coordinates.')
+flags.DEFINE_boolean('cast_num_detections_to_float', False, 'Whether or not cast the number of detections to float type.')
 # pylint: enable=line-too-long
 
 flags.mark_flag_as_required('export_dir')
@@ -87,7 +88,8 @@ def main(_):
           FLAGS.output_source_id,
           FLAGS.output_image_info,
           FLAGS.output_box_features,
-          FLAGS.output_normalized_coordinates),
+          FLAGS.output_normalized_coordinates,
+          FLAGS.cast_num_detections_to_float),
       model_dir=FLAGS.model_dir,
       config=tpu_config.RunConfig(
           tpu_config=tpu_config.TPUConfig(

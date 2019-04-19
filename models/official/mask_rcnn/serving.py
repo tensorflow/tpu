@@ -184,7 +184,8 @@ def serving_input_fn(batch_size,
 def serving_model_graph_builder(output_source_id,
                                 output_image_info,
                                 output_box_features,
-                                output_normalized_coordinates):
+                                output_normalized_coordinates,
+                                cast_num_detections_to_float):
   """Serving model graph builder.
 
   Args:
@@ -193,6 +194,8 @@ def serving_model_graph_builder(output_source_id,
     output_box_features: bool, whether output the box feature node.
     output_normalized_coordinates: bool, whether box outputs are in the
       normalized coordinates.
+    cast_num_detections_to_float: bool, whether to cast the number of
+      detections to float type.
 
   Returns:
     a function that builds the model graph for serving.
@@ -202,6 +205,10 @@ def serving_model_graph_builder(output_source_id,
     """Build the model graph for serving."""
     model_outputs = mask_rcnn_model.build_model_graph(
         features, labels=None, is_training=False, params=params)
+
+    if cast_num_detections_to_float:
+      model_outputs['num_detections'] = tf.cast(
+          model_outputs['num_detections'], dtype=tf.float32)
 
     if output_source_id:
       model_outputs.update({
@@ -255,7 +262,8 @@ def serving_model_graph_builder(output_source_id,
 def serving_model_fn_builder(output_source_id,
                              output_image_info,
                              output_box_features,
-                             output_normalized_coordinates):
+                             output_normalized_coordinates,
+                             cast_num_detections_to_float):
   """Serving model_fn builder.
 
   Args:
@@ -264,6 +272,8 @@ def serving_model_fn_builder(output_source_id,
     output_box_features: bool, whether output the box feature node.
     output_normalized_coordinates: bool, whether box outputs are in the
       normalized coordinates.
+    cast_num_detections_to_float: bool, whether to cast the number of
+      detections to float type.
 
   Returns:
     a function that returns (TPU)EstimatorSpec for PREDICT mode.
@@ -279,7 +289,8 @@ def serving_model_fn_builder(output_source_id,
         output_source_id,
         output_image_info,
         output_box_features,
-        output_normalized_coordinates)
+        output_normalized_coordinates,
+        cast_num_detections_to_float)
     model_outputs = serving_model_graph(features, params)
 
     predictions = {

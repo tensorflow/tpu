@@ -127,13 +127,10 @@ def model_fn(features, labels, mode):
   cross_entropy = tf.losses.sparse_softmax_cross_entropy(
       labels=labels, logits=logits)
 
-  # We need to scale the regularization loss manually as losses other than in
-  # tf.losses and tf.keras.losses don't scale automatically.
   loss = cross_entropy + _WEIGHT_DECAY * tf.add_n([
       tf.nn.l2_loss(v)
       for v in tf.trainable_variables()
-      if 'batch_normalization' not in v.name
-  ]) / tf.distribute.get_strategy().num_replicas_in_sync
+      if 'batch_normalization' not in v.name])
 
   if mode == tf.estimator.ModeKeys.EVAL:
     predictions = tf.argmax(logits, axis=1)

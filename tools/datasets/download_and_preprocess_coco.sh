@@ -37,6 +37,8 @@ sudo apt install -y protobuf-compiler python-pil python-lxml\
 
 pip install Cython git+https://github.com/cocodataset/cocoapi#subdirectory=PythonAPI
 
+pip install --upgrade tensorflow
+
 echo "Cloning Tensorflow models directory (for conversion utilities)"
 if [ ! -e tf-models ]; then
   git clone http://github.com/tensorflow/models tf-models
@@ -58,6 +60,8 @@ function download_and_unzip() {
   local BASE_URL=${1}
   local FILENAME=${2}
 
+  cd ${SCRATCH_DIR}
+
   if [ ! -f ${FILENAME} ]; then
     echo "Downloading ${FILENAME} to $(pwd)"
     wget -nd -c "${BASE_URL}/${FILENAME}"
@@ -66,63 +70,101 @@ function download_and_unzip() {
   fi
   echo "Unzipping ${FILENAME}"
   ${UNZIP} ${FILENAME}
+  cd "${CURRENT_DIR}"
 }
 
-cd ${SCRATCH_DIR}
-
-# Download the images.
-BASE_IMAGE_URL="http://images.cocodataset.org/zips"
-
-TRAIN_IMAGE_FILE="train2017.zip"
-download_and_unzip ${BASE_IMAGE_URL} ${TRAIN_IMAGE_FILE}
-TRAIN_IMAGE_DIR="${SCRATCH_DIR}/train2017"
-
-VAL_IMAGE_FILE="val2017.zip"
-download_and_unzip ${BASE_IMAGE_URL} ${VAL_IMAGE_FILE}
-VAL_IMAGE_DIR="${SCRATCH_DIR}/val2017"
-
-TEST_IMAGE_FILE="test2017.zip"
-download_and_unzip ${BASE_IMAGE_URL} ${TEST_IMAGE_FILE}
-TEST_IMAGE_DIR="${SCRATCH_DIR}/test2017"
-
-# Download the annotations.
-BASE_INSTANCES_URL="http://images.cocodataset.org/annotations"
+# Download all annotations.
+BASE_ANNOTATION_URL="http://images.cocodataset.org/annotations"
 INSTANCES_FILE="annotations_trainval2017.zip"
-download_and_unzip ${BASE_INSTANCES_URL} ${INSTANCES_FILE}
-
-TRAIN_OBJ_ANNOTATIONS_FILE="${SCRATCH_DIR}/annotations/instances_train2017.json"
-VAL_OBJ_ANNOTATIONS_FILE="${SCRATCH_DIR}/annotations/instances_val2017.json"
-
-TRAIN_CAPTION_ANNOTATIONS_FILE="${SCRATCH_DIR}/annotations/captions_train2017.json"
-VAL_CAPTION_ANNOTATIONS_FILE="${SCRATCH_DIR}/annotations/captions_val2017.json"
-
-# Download the test image info.
-BASE_IMAGE_INFO_URL="http://images.cocodataset.org/annotations"
+download_and_unzip ${BASE_ANNOTATION_URL} ${INSTANCES_FILE}
 IMAGE_INFO_FILE="image_info_test2017.zip"
-download_and_unzip ${BASE_IMAGE_INFO_URL} ${IMAGE_INFO_FILE}
-
-TESTDEV_ANNOTATIONS_FILE="${SCRATCH_DIR}/annotations/image_info_test-dev2017.json"
-
-# # Build TFRecords of the image data.
-cd "${CURRENT_DIR}"
+download_and_unzip ${BASE_ANNOTATION_URL} ${IMAGE_INFO_FILE}
+UNLABELED_IMAGE_INFO_FILE="image_info_unlabeled2017.zip"
+download_and_unzip ${BASE_ANNOTATION_URL} ${UNLABELED_IMAGE_INFO_FILE}
 
 # Setup packages
 touch tf-models/__init__.py
 touch tf-models/research/__init__.py
 
-# Run our conversion
-SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
+function create_train_dataset() {
+  SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
+  BASE_IMAGE_URL="http://images.cocodataset.org/zips"
+  TRAIN_IMAGE_FILE="train2017.zip"
+  download_and_unzip ${BASE_IMAGE_URL} ${TRAIN_IMAGE_FILE}
+  TRAIN_IMAGE_DIR="${SCRATCH_DIR}/train2017"
+  TRAIN_OBJ_ANNOTATIONS_FILE="${SCRATCH_DIR}/annotations/instances_train2017.json"
+  TRAIN_CAPTION_ANNOTATIONS_FILE="${SCRATCH_DIR}/annotations/captions_train2017.json"
+  PYTHONPATH="tf-models:tf-models/research" python $SCRIPT_DIR/create_coco_tf_record.py \
+    --logtostderr \
+    --include_masks \
+    --image_dir="${TRAIN_IMAGE_DIR}" \
+    --object_annotations_file="${TRAIN_OBJ_ANNOTATIONS_FILE}" \
+    --caption_annotations_file="${TRAIN_CAPTION_ANNOTATIONS_FILE}" \
+    --output_file_prefix="${OUTPUT_DIR}/train" \
+    --num_shards=256
+}
 
-PYTHONPATH="tf-models:tf-models/research" python $SCRIPT_DIR/create_coco_tf_record.py \
-  --logtostderr \
-  --include_masks \
-  --train_image_dir="${TRAIN_IMAGE_DIR}" \
-  --val_image_dir="${VAL_IMAGE_DIR}" \
-  --test_image_dir="${TEST_IMAGE_DIR}" \
-  --train_object_annotations_file="${TRAIN_OBJ_ANNOTATIONS_FILE}" \
-  --val_object_annotations_file="${VAL_OBJ_ANNOTATIONS_FILE}" \
-  --train_caption_annotations_file="${TRAIN_CAPTION_ANNOTATIONS_FILE}" \
-  --val_caption_annotations_file="${VAL_CAPTION_ANNOTATIONS_FILE}" \
-  --testdev_annotations_file="${TESTDEV_ANNOTATIONS_FILE}" \
-  --output_dir="${OUTPUT_DIR}"
+function create_val_dataset() {
+  SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
+  BASE_IMAGE_URL="http://images.cocodataset.org/zips"
+  VAL_IMAGE_FILE="val2017.zip"
+  download_and_unzip ${BASE_IMAGE_URL} ${VAL_IMAGE_FILE}
+  VAL_IMAGE_DIR="${SCRATCH_DIR}/val2017"
+  VAL_OBJ_ANNOTATIONS_FILE="${SCRATCH_DIR}/annotations/instances_val2017.json"
+  VAL_CAPTION_ANNOTATIONS_FILE="${SCRATCH_DIR}/annotations/captions_val2017.json"
+  PYTHONPATH="tf-models:tf-models/research" python $SCRIPT_DIR/create_coco_tf_record.py \
+    --logtostderr \
+    --include_masks \
+    --image_dir="${VAL_IMAGE_DIR}" \
+    --object_annotations_file="${VAL_OBJ_ANNOTATIONS_FILE}" \
+    --caption_annotations_file="${VAL_CAPTION_ANNOTATIONS_FILE}" \
+    --output_file_prefix="${OUTPUT_DIR}/val" \
+    --num_shards=32
+}
 
+function create_testdev_and_test_dataset() {
+  SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
+  BASE_IMAGE_URL="http://images.cocodataset.org/zips"
+  TEST_IMAGE_FILE="test2017.zip"
+  download_and_unzip ${BASE_IMAGE_URL} ${TEST_IMAGE_FILE}
+  TEST_IMAGE_DIR="${SCRATCH_DIR}/test2017"
+  TEST_IMAGE_INFO_FILE="${SCRATCH_DIR}/annotations/image_info_test2017.json"
+  PYTHONPATH="tf-models:tf-models/research" python $SCRIPT_DIR/create_coco_tf_record.py \
+    --logtostderr \
+    --include_masks \
+    --image_dir="${TEST_IMAGE_DIR}" \
+    --image_info_file="${TEST_IMAGE_INFO_FILE}" \
+    --output_file_prefix="${OUTPUT_DIR}/test" \
+    --num_shards=256
+
+  TEST_DEV_IMAGE_INFO_FILE="${SCRATCH_DIR}/annotations/image_info_test-dev2017.json"
+  PYTHONPATH="tf-models:tf-models/research" python $SCRIPT_DIR/create_coco_tf_record.py \
+    --logtostderr \
+    --include_masks \
+    --image_dir="${TEST_IMAGE_DIR}" \
+    --image_info_file="${TEST_DEV_IMAGE_INFO_FILE}" \
+    --output_file_prefix="${OUTPUT_DIR}/test-dev" \
+    --num_shards=256
+}
+
+function create_unlabeled_dataset() {
+  SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
+  BASE_IMAGE_URL="http://images.cocodataset.org/zips"
+  UNLABELED_IMAGE_FILE="unlabeled2017.zip"
+  download_and_unzip ${BASE_IMAGE_URL} ${UNLABELED_IMAGE_FILE}
+  UNLABELED_IMAGE_DIR="${SCRATCH_DIR}/unlabeled2017"
+  UNLABELED_IMAGE_INFO_FILE="${SCRATCH_DIR}/annotations/image_info_unlabeled2017.json"
+  PYTHONPATH="tf-models:tf-models/research" python $SCRIPT_DIR/create_coco_tf_record.py \
+    --logtostderr \
+    --include_masks \
+    --image_dir="${UNLABELED_IMAGE_DIR}" \
+    --image_info_file="${UNLABELED_IMAGE_INFO_FILE}" \
+    --output_file_prefix="${OUTPUT_DIR}/unlabeled" \
+    --num_shards=256
+}
+
+## Finally create tf record files.
+create_train_dataset
+create_val_dataset
+create_testdev_and_test_dataset
+create_unlabeled_dataset
