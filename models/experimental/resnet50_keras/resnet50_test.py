@@ -29,7 +29,7 @@ import resnet_model
 from tensorflow.python.keras import backend as K  # pylint: disable=g-direct-tensorflow-import
 from tensorflow.python.keras.optimizer_v2 import gradient_descent  # pylint: disable=g-direct-tensorflow-import
 
-
+NUM_REPLICAS = 2
 NUM_CLASSES = 1000
 IMAGE_SHAPE = (224, 224, 3)
 BASE_LEARNING_RATE = 0.4
@@ -119,7 +119,7 @@ class Resnet50Test(absltest.TestCase):
     tf.set_random_seed(0)
 
     def input_fn():
-      batch_size = 1024
+      batch_size = 128 * NUM_REPLICAS
       images = np.random.randn(batch_size, *IMAGE_SHAPE).astype(np.float32)
       labels = np.random.randint(
           0, NUM_CLASSES, size=batch_size).astype(np.float32)
@@ -167,11 +167,11 @@ class Resnet50Test(absltest.TestCase):
 
     weights = model.get_weights()
     golden_weights = [
-        (-0.0091566, 0.944489),
+        (-0.000503229, 0.00108613),
         (0.0, 0.0),
         (0.0, 0.0),
-        (-0.000772487, 1.4831e-05),
-        (110.196, 611.292),
+        (-2.33946e-06, 3.93077e-08),
+        (0.157237, 0.000115255),
     ]
     try:
       for w, gw in zip(weights, golden_weights):

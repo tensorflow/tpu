@@ -30,6 +30,8 @@ from object_detection import preprocessor
 from object_detection import tf_example_decoder
 
 MAX_NUM_INSTANCES = 100
+# Represents the number of bytes in the read buffer.
+BUFFER_SIZE = None
 
 
 class InputProcessor(object):
@@ -343,12 +345,26 @@ class InputReader(object):
 
     # Prefetch data from files.
     def _prefetch_dataset(filename):
-      dataset = tf.data.TFRecordDataset(filename).prefetch(1)
+      dataset = tf.data.TFRecordDataset(
+          filename, buffer_size=BUFFER_SIZE).prefetch(1)
       return dataset
 
     dataset = dataset.apply(
         tf.contrib.data.parallel_interleave(
             _prefetch_dataset, cycle_length=32, sloppy=self._is_training))
+
+    if params.get('dataset_private_threadpool_size', None):
+      options = tf.data.Options()
+      options.experimental_threading.private_threadpool_size = params[
+          'dataset_private_threadpool_size']
+      dataset = dataset.with_options(options)
+
+    if params.get('dataset_max_intra_op_parallelism', None):
+      options = tf.data.Options()
+      options.experimental_threading.max_intra_op_parallelism = params[
+          'dataset_max_intra_op_parallelism']
+      dataset = dataset.with_options(options)
+
     if self._is_training:
       dataset = dataset.shuffle(64)
 

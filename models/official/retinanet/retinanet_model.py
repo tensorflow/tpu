@@ -419,8 +419,12 @@ def _model_fn(features, labels, mode, params, model, use_tpu_estimator_spec,
         learning_rate, momentum=params['momentum'])
     if params['use_tpu']:
       optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
+    else:
+      if params['auto_mixed_precision']:
+        optimizer = tf.train.experimental.enable_mixed_precision_graph_rewrite(
+            optimizer)
 
-    # Batch norm requires update_ops to be added as a train_op dependency.
+    # Batch norm requires `update_ops` to be executed alongside `train_op`.
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
     var_list = variable_filter_fn(
         tf.trainable_variables(),
