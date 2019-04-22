@@ -1,3 +1,7 @@
+# Try it
+
+Try to run our pre-trained COCO Mask R-CNN using [Colab](https://colab.sandbox.google.com/github/tensorflow/tpu/blob/master/models/official/mask_rcnn/mask_rcnn_demo.ipynb).
+
 # Installing extra packages
 
 Mask R-CNN requires a few extra packages.  We can install them now:
