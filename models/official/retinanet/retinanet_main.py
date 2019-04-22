@@ -30,6 +30,15 @@ import tensorflow as tf
 
 import dataloader
 import retinanet_model
+from tensorflow.core.protobuf import rewriter_config_pb2  # pylint: disable=g-direct-tensorflow-import
+from tensorflow.python.client import device_lib  # pylint: disable=g-direct-tensorflow-import
+from tensorflow.python.eager import profiler  # pylint: disable=g-direct-tensorflow-import
+
+_COLLECTIVE_COMMUNICATION_OPTIONS = {
+    None: tf.distribute.experimental.CollectiveCommunication.AUTO,
+    'ring': tf.distribute.experimental.CollectiveCommunication.RING,
+    'nccl': tf.distribute.experimental.CollectiveCommunication.NCCL,
+}
 
 # Cloud TPU Cluster Resolvers
 flags.DEFINE_string(
@@ -78,7 +87,10 @@ flags.DEFINE_integer(
 flags.DEFINE_multi_integer(
     'input_partition_dims', [1, 4, 2, 1],
     'A list that describes the partition dims for all the tensors.')
-flags.DEFINE_integer('train_batch_size', 64, 'training batch size')
+flags.DEFINE_integer(
+    'train_batch_size', 64,
+    'training batch size. When using distribution strategies, this is the '
+    'batch size per VM.')
 flags.DEFINE_integer('eval_batch_size', 1, 'evaluation batch size')
 flags.DEFINE_integer('eval_samples', 5000, 'The number of samples for '
                      'evaluation.')
@@ -97,18 +109,25 @@ flags.DEFINE_integer('num_examples_per_epoch', 120000,
                      'Number of examples in one epoch')
 flags.DEFINE_integer('num_epochs', 15, 'Number of epochs for training')
 flags.DEFINE_string('mode', 'train',
-                    'Mode to run: train or eval (default: train)')
+                    'Mode to run. If mode is train, it runs the training. '
+                    'If mode is eval, it runs model evaluation. '
+                    'If mode is train_and_evaluate, it runs the training and '
+                    'concurrently runs evaluation for every checkpoint.')
 flags.DEFINE_bool('eval_after_training', False, 'Run one eval after the '
                   'training finishes.')
+flags.DEFINE_bool('start_profiler_server', False, 'Start the profiler server.')
+flags.DEFINE_integer(
+    'profiler_port_number', 6009,
+    'Number of port that profiler server receives profiling request.')
 
 # For using distribution strategies
 flags.DEFINE_string(
     'distribution_strategy',
     default=None,
-    help='Can set to "mirrored" or "collective" for CPU/GPU.'
-    '--use_tpu must be False.')
-flags.DEFINE_integer('num_gpus_per_worker', 0,
-                     'Number of GPUs per worker.')
+    help='Can set to "mirrored" or "multi_worker_mirrored" to use '
+    '`Estimator` with CPU(s)/GPU(s). --use_tpu must be False.')
+flags.DEFINE_integer('num_gpus', 0,
+                     'Number of GPUs to use with `MirroredStrategy`.')
 flags.DEFINE_string(
     'worker_hosts',
     default=None,
@@ -117,6 +136,27 @@ flags.DEFINE_string(
     'start the program on each host with identical value for this flag.')
 flags.DEFINE_integer('task_index', -1,
                      'If multi-worker training, the task_index of this worker.')
+flags.DEFINE_string(
+    'all_reduce_alg',
+    default=None,
+    help='Specify which algorithm to use when performing all-reduce. '
+    'See tf.contrib.distribute.AllReduceCrossDeviceOps for available '
+    'algorithms when used with mirrored strategy, and '
+    'tf.distribute.experimental.CollectiveCommunication when used with '
+    'multi-worker strategy. If None, `DistributionStrategy` will choose '
+    'based on device topology.')
+flags.DEFINE_integer(
+    'dataset_private_threadpool_size', default=8,
+    help='If set, the dataset will use a private threadpool of the given size. '
+    'A good value is 1 per NVIDIA V100 GPU device. If set to `None`, '
+    'there will be no private threads for dataset.')
+flags.DEFINE_integer(
+    'dataset_max_intra_op_parallelism', default=1,
+    help='If set, it overrides the maximum degree of intra-op parallelism. '
+    'Set to 1 to disable intra-op parallelism to optimize for throughput '
+    'instead of latency. 0 means the system picks an appropriate number.')
+flags.DEFINE_bool('auto_mixed_precision', False,
+                  'Use automatic mixed precision.')
 
 # For Eval mode
 flags.DEFINE_integer('min_eval_interval', 180,
@@ -159,6 +199,10 @@ def write_summary(eval_results, summary_writer, current_step):
 def main(argv):
   del argv  # Unused.
 
+  if FLAGS.start_profiler_server:
+    # Starts profiler. It will perform profiling when receive profiling request.
+    profiler.start_profiler_server(FLAGS.profiler_port_number)
+
   if FLAGS.use_tpu:
     if FLAGS.distribution_strategy is None:
       tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
@@ -173,6 +217,7 @@ def main(argv):
 
   if FLAGS.mode not in ['train', 'eval', 'train_and_eval']:
     raise ValueError('Unrecognize --mode: %s' % FLAGS.mode)
+
   # Check data path
   if FLAGS.mode in ('train',
                     'train_and_eval') and FLAGS.training_file_pattern is None:
@@ -251,6 +296,9 @@ def main(argv):
   if FLAGS.use_xla and not FLAGS.use_tpu:
     config_proto.graph_options.optimizer_options.global_jit_level = (
         tf.OptimizerOptions.ON_1)
+  if FLAGS.auto_mixed_precision and FLAGS.distribution_strategy:
+    config_proto.graph_options.rewrite_options.auto_mixed_precision = (
+        rewriter_config_pb2.RewriterConfig.ON)
 
   if FLAGS.distribution_strategy is None:
     # Uses TPUEstimator.
@@ -280,8 +328,8 @@ def main(argv):
         tpu_config=tpu_config,
     )
   else:
-    if FLAGS.num_gpus_per_worker < 0:
-      raise ValueError('`num_gpus_per_worker` cannot be negative.')
+    if FLAGS.num_gpus < 0:
+      raise ValueError('`num_gpus` cannot be negative.')
 
     def _per_device_batch_size(batch_size, num_gpus):
       """Calculate per GPU batch for Estimator.
@@ -312,21 +360,54 @@ def main(argv):
         val_json_file=FLAGS.val_json_file,
         mode=FLAGS.mode,
         use_bfloat16=False,
-        batch_size=_per_device_batch_size(
-            FLAGS.train_batch_size, FLAGS.num_gpus_per_worker),
+        auto_mixed_precision=FLAGS.auto_mixed_precision,
+        dataset_max_intra_op_parallelism=FLAGS.dataset_max_intra_op_parallelism,
+        dataset_private_threadpool_size=FLAGS.dataset_private_threadpool_size,
     )
 
     if FLAGS.distribution_strategy == 'mirrored':
-      if FLAGS.num_gpus_per_worker == 0:
+      params['batch_size'] = _per_device_batch_size(
+          FLAGS.train_batch_size, FLAGS.num_gpus)
+
+      if FLAGS.num_gpus == 0:
         devices = ['device:CPU:0']
       else:
         devices = [
-            'device:GPU:{}'.format(i) for i in range(FLAGS.num_gpus_per_worker)]
-      mirrored_strategy = tf.distribute.MirroredStrategy(devices=devices)
-      run_config = tf.estimator.RunConfig(train_distribute=mirrored_strategy)
-    elif FLAGS.distribution_strategy == 'collective':
+            'device:GPU:{}'.format(i) for i in range(FLAGS.num_gpus)]
+
+      if FLAGS.all_reduce_alg:
+        dist_strat = tf.distribute.MirroredStrategy(
+            devices=devices,
+            cross_device_ops=tf.contrib.distribute.AllReduceCrossDeviceOps(
+                FLAGS.all_reduce_alg, num_packs=2))
+      else:
+        dist_strat = tf.distribute.MirroredStrategy(devices=devices)
+
+      run_config = tf.estimator.RunConfig(
+          session_config=config_proto,
+          train_distribute=dist_strat,
+          eval_distribute=dist_strat)
+
+    elif FLAGS.distribution_strategy == 'multi_worker_mirrored':
+      local_device_protos = device_lib.list_local_devices()
+      params['batch_size'] = _per_device_batch_size(
+          FLAGS.train_batch_size,
+          sum([1 for d in local_device_protos if d.device_type == 'GPU']))
+
       if FLAGS.worker_hosts is None:
-        worker_hosts = json.loads(os.environ['TF_CONFIG'])['cluster']['worker']
+        tf_config_json = json.loads(os.environ.get('TF_CONFIG', '{}'))
+        # Replaces master with chief.
+        if tf_config_json:
+          if 'master' in tf_config_json['cluster']:
+            tf_config_json['cluster']['chief'] = tf_config_json['cluster'].pop(
+                'master')
+            if tf_config_json['task']['type'] == 'master':
+              tf_config_json['task']['type'] = 'chief'
+            os.environ['TF_CONFIG'] = json.dumps(tf_config_json)
+
+        tf_config_json = json.loads(os.environ['TF_CONFIG'])
+        worker_hosts = tf_config_json['cluster']['worker']
+        worker_hosts.extend(tf_config_json['cluster'].get('chief', []))
       else:
         # Set TF_CONFIG environment variable
         worker_hosts = FLAGS.worker_hosts.split(',')
@@ -336,18 +417,22 @@ def main(argv):
             },
             'task': {'type': 'worker', 'index': FLAGS.task_index}
         })
-      multiworker_strategy = tf.contrib.distribute.CollectiveAllReduceStrategy(
-          num_gpus_per_worker=FLAGS.num_gpus_per_worker)
-      run_config = tf.estimator.RunConfig(train_distribute=multiworker_strategy)
+
+      dist_strat = tf.distribute.experimental.MultiWorkerMirroredStrategy(
+          communication=_COLLECTIVE_COMMUNICATION_OPTIONS[
+              FLAGS.all_reduce_alg])
+      run_config = tf.estimator.RunConfig(
+          session_config=config_proto,
+          train_distribute=dist_strat)
+
     else:
       raise ValueError('Unrecognized distribution strategy.')
 
-  # TPUEstimator/Estimator
   if FLAGS.mode == 'train':
     tf.logging.info(params)
-    total_steps = int((FLAGS.num_epochs * FLAGS.num_examples_per_epoch) /
-                      FLAGS.train_batch_size)
     if FLAGS.distribution_strategy is None:
+      total_steps = int((FLAGS.num_epochs * FLAGS.num_examples_per_epoch) /
+                        FLAGS.train_batch_size)
       train_estimator = tf.contrib.tpu.TPUEstimator(
           model_fn=retinanet_model.tpu_retinanet_model_fn,
           use_tpu=FLAGS.use_tpu,
@@ -403,17 +488,25 @@ def main(argv):
           config=run_config,
           params=params)
       if FLAGS.distribution_strategy == 'mirrored':
+        total_steps = int((FLAGS.num_epochs * FLAGS.num_examples_per_epoch) /
+                          FLAGS.train_batch_size)
+        tf.logging.info('Starting `MirroredStrategy` training...')
         train_estimator.train(
             input_fn=dataloader.InputReader(
                 FLAGS.training_file_pattern, is_training=True),
             max_steps=total_steps)
-      elif FLAGS.distribution_strategy == 'collective':
+      elif FLAGS.distribution_strategy == 'multi_worker_mirrored':
+        total_steps = int((FLAGS.num_epochs * FLAGS.num_examples_per_epoch) /
+                          (len(worker_hosts) * FLAGS.train_batch_size))
         train_spec = tf.estimator.TrainSpec(
             input_fn=dataloader.InputReader(
                 FLAGS.training_file_pattern, is_training=True),
             max_steps=total_steps)
         eval_spec = tf.estimator.EvalSpec(input_fn=tf.data.Dataset)
+        tf.logging.info('Starting `MultiWorkerMirroredStrategy` training...')
         tf.estimator.train_and_evaluate(train_estimator, train_spec, eval_spec)
+      else:
+        raise ValueError('Unrecognized distribution strategy.')
 
   elif FLAGS.mode == 'eval':
     # Eval only runs on CPU or GPU host with batch_size = 1.
@@ -439,18 +532,11 @@ def main(argv):
           params=eval_params)
     else:
       # Uses Estimator.
-      if FLAGS.distribution_strategy == 'collective':
+      if FLAGS.distribution_strategy == 'multi_worker_mirrored':
         raise ValueError(
-            '--distribution_strategy=collective is not supported for eval.')
+            '--distribution_strategy=multi_worker_mirrored is not supported '
+            'for eval.')
       elif FLAGS.distribution_strategy == 'mirrored':
-        if FLAGS.num_gpus_per_worker == 0:
-          devices = ['device:CPU:0']
-        else:
-          devices = [
-              'device:GPU:{}'.format(i) for i in range(
-                  FLAGS.num_gpus_per_worker)]
-        mirrored_strategy = tf.distribute.MirroredStrategy(devices=devices)
-        run_config = tf.estimator.RunConfig(eval_distribute=mirrored_strategy)
         eval_estimator = tf.estimator.Estimator(
             model_fn=retinanet_model.est_retinanet_model_fn,
             model_dir=FLAGS.model_dir,
