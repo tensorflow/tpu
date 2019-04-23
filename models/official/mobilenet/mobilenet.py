@@ -33,10 +33,9 @@ import inception_preprocessing
 import mobilenet_model as mobilenet_v1
 import vgg_preprocessing
 
-from google3.third_party.cloud_tpu.models.hyperparameters import common_hparams_flags
-from google3.third_party.cloud_tpu.models.hyperparameters import common_tpu_flags
-from google3.third_party.cloud_tpu.models.hyperparameters import hyperparameters
-
+from hyperparameters import common_hparams_flags
+from hyperparameters import common_tpu_flags
+from hyperparameters import hyperparameters
 from tensorflow.contrib.framework.python.ops import arg_scope
 from tensorflow.contrib.training.python.training import evaluation
 
