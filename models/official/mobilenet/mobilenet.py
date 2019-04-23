@@ -66,6 +66,12 @@ flags.DEFINE_string(
          ))
 
 flags.DEFINE_integer(
+    'num_train_images', default=None, help='Size of training data set.')
+
+flags.DEFINE_integer(
+    'num_eval_images', default=None, help='Size of evaluation data set.')
+
+flags.DEFINE_integer(
     'num_shards', 8,
     'Number of shards (workers).')
 

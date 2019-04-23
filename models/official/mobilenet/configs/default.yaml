@@ -20,7 +20,6 @@ clear_update_collections: True
 transpose_enabled: False
 width: 224
 height: 224
-post_quantize: True
 num_train_images: 1281167
 num_eval_images: 50000
 use_annotated_bbox: False
