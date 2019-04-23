@@ -64,6 +64,12 @@ flags.DEFINE_string(
           'configs/default.yaml for this.'
          ))
 
+flags.DEFINE_integer(
+    'num_train_images', default=None, help='Size of training data set.')
+
+flags.DEFINE_integer(
+    'num_eval_images', default=None, help='Size of evaluation data set.')
+
 flags.DEFINE_string(
     'export_dir',
     default=None,
