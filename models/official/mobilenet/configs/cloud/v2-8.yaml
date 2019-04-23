@@ -1,0 +1,6 @@
+train_batch_size: 1024
+train_steps: 8000000
+eval_batch_size: 1024
+iterations_per_loop: 100
+num_shards: 8
+train_steps_per_eval: 2000

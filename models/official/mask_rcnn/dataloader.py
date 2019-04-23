@@ -281,12 +281,15 @@ class InputReader(object):
 
     return _dataset_parser
 
-  def __call__(self, params):
+  def __call__(self, params, input_context=None):
     dataset_parser_fn = self._create_dataset_parser_fn(params)
     dataset_fn = self._create_dataset_fn()
     batch_size = params['batch_size'] if 'batch_size' in params else 1
     dataset = tf.data.Dataset.list_files(
         self._file_pattern, shuffle=(self._mode == tf.estimator.ModeKeys.TRAIN))
+    if input_context is not None:
+      dataset = dataset.shard(input_context.num_input_pipelines,
+                              input_context.input_pipeline_id)
     if self._mode == tf.estimator.ModeKeys.TRAIN:
       dataset = dataset.repeat()
 

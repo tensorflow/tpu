@@ -66,13 +66,14 @@ class DistributedExecuter(object):
     NotImplementedError('Must be implmented in subclass')
 
   @abc.abstractmethod
-  def build_mask_rcnn_estimator(self, params, run_config):
+  def build_mask_rcnn_estimator(self, params, run_config, mode):
     """Creates TPUEstimator/Estimator instance.
 
     Arguments:
       params: A dictionay to pass to Estimator `model_fn`.
       run_config: RunConfig instance specifying distribution strategy
         configurations.
+      mode: Mode -- one of 'train` or `eval`.
 
     Returns:
       TFEstimator or TPUEstimator instance.
@@ -100,7 +101,8 @@ class DistributedExecuter(object):
     run_config = self.build_strategy_configuration()
     params = self.build_model_parameters('train', run_config)
     tf.logging.info(params)
-    train_estimator = self.build_mask_rcnn_estimator(params, run_config)
+    train_estimator = self.build_mask_rcnn_estimator(params, run_config,
+                                                     'train')
     if params['use_tpu']:
       train_estimator.train(
           input_fn=train_input_fn, max_steps=self._model_config.total_steps)
@@ -121,7 +123,8 @@ class DistributedExecuter(object):
                        'evaluation after training.')
 
     eval_params = self.build_model_parameters('eval', run_config)
-    eval_estimator = self.build_mask_rcnn_estimator(eval_params, run_config)
+    eval_estimator = self.build_mask_rcnn_estimator(eval_params, run_config,
+                                                    'eval')
     eval_results = evaluation.evaluate(eval_estimator, eval_input_fn,
                                        self._model_config.eval_samples,
                                        self._model_config.eval_batch_size,
@@ -148,7 +151,8 @@ class DistributedExecuter(object):
     summary_writer = tf.summary.FileWriter(output_dir)
     run_config = self.build_strategy_configuration()
     eval_params = self.build_model_parameters('eval', run_config)
-    eval_estimator = self.build_mask_rcnn_estimator(eval_params, run_config)
+    eval_estimator = self.build_mask_rcnn_estimator(eval_params, run_config,
+                                                    'eval')
 
     def _terminate_eval():
       tf.logging.info('Terminating eval after %d seconds of '
@@ -199,8 +203,10 @@ class DistributedExecuter(object):
     run_config = self.build_strategy_configuration()
     train_params = self.build_model_parameters('train', run_config)
     eval_params = self.build_model_parameters('eval', run_config)
-    train_estimator = self.build_mask_rcnn_estimator(train_params, run_config)
-    eval_estimator = self.build_mask_rcnn_estimator(eval_params, run_config)
+    train_estimator = self.build_mask_rcnn_estimator(train_params, run_config,
+                                                     'train')
+    eval_estimator = self.build_mask_rcnn_estimator(eval_params, run_config,
+                                                    'eval')
 
     num_cycles = int(self._model_config.total_steps /
                      self._model_config.num_steps_per_eval)
@@ -347,7 +353,7 @@ class TPUEstimatorExecuter(DistributedExecuter):
           transpose_input=False)
     return params
 
-  def build_mask_rcnn_estimator(self, params, run_config):
+  def build_mask_rcnn_estimator(self, params, run_config, unused_mode):
     estimator = tf.contrib.tpu.TPUEstimator(
         model_fn=self._model_fn,
         use_tpu=params['use_tpu'],
@@ -361,6 +367,11 @@ class TPUEstimatorExecuter(DistributedExecuter):
 
 class MultiWorkerExecuter(DistributedExecuter):
   """Interface that runs Mask RCNN model using MultiWorkerMirroredStrategy."""
+
+  @staticmethod
+  def is_eval_task():
+    return tf.contrib.cluster_resolver.TFConfigClusterResolver(
+    ).task_type == 'evaluator'
 
   def build_strategy_configuration(self):
     """Retrieves model configuration for MultiWorkerMirroredStrategy."""
@@ -390,23 +401,46 @@ class MultiWorkerExecuter(DistributedExecuter):
   def build_model_parameters(self, mode, unused_config):
     """Builds model parameter to run in MultiWorkerMirroredStrategy."""
 
-    assert mode == 'train', ('MultiWorkerMirroredStrategy for Mask RCNN model '
-                             'only supports training for now.')
+    assert mode in ('train', 'eval')
+    batch_size = (
+        self._model_config.train_batch_size
+        if mode == 'train' else self._model_config.eval_batch_size)
     params = dict(
         self._model_config.values(),
         use_tpu=False,
         mode=mode,
         model_dir=self._flags.model_dir,
-        transpose_input=self._flags.transpose_input,
-        batch_size=self._model_config.train_batch_size,
+        # For MultiWorkerMirroredStrategy, we use CPU for evaluation and
+        # CPU only supports channel-last data format. As so, we do not
+        # transpose input by default to make data format consistent.
+        transpose_input=False,
+        batch_size=batch_size,
         use_bfloat16=False)
     return params
 
-  def build_mask_rcnn_estimator(self, params, run_config):
+  def build_mask_rcnn_estimator(self, params, run_config, mode):
     """Returns Mask Rcnn model running on MultiWorkerMirroredStrategy."""
+    assert mode in ('train', 'eval')
+    if mode == 'train':
+      return tf.estimator.Estimator(
+          model_fn=self._model_fn,
+          model_dir=self._flags.model_dir,
+          config=run_config,
+          params=params)
 
+    # Evaluation on multi-worker mirrored strategy is done in CPU for now
+    # as only `train_and_evaluate` is supported and eval pipeline for
+    # Mask RCNN model is uses `predict` API.
+    cpu_run_config = tf.estimator.RunConfig(model_dir=self._flags.model_dir)
     return tf.estimator.Estimator(
         model_fn=self._model_fn,
         model_dir=self._flags.model_dir,
-        config=run_config,
+        config=cpu_run_config,
         params=params)
+
+  def train_and_eval(self, train_input_fn, eval_input_fn):
+    if self.is_eval_task():
+      assert eval_input_fn is not None
+      self.eval(eval_input_fn)
+    else:
+      self.train(train_input_fn)
