@@ -30,32 +30,37 @@ import tensorflow as tf
 import supervised_images
 import mobilenet_model as mobilenet_v1
 
+from hyperparameters import common_hparams_flags
+from hyperparameters import common_tpu_flags
+from hyperparameters import hyperparameters
 from tensorflow.contrib.framework.python.ops import arg_scope
 from tensorflow.contrib.training.python.training import evaluation
 
+common_tpu_flags.define_common_tpu_flags()
+common_hparams_flags.define_common_hparams_flags()
 
-# Cloud TPU Cluster Resolvers
+# Model specific parameters
 flags.DEFINE_string(
-    'tpu', default=None,
-    help='The Cloud TPU to use for training. This should be either the name '
-    'used when creating the Cloud TPU, or a grpc://ip.address.of.tpu:8470 url.')
-flags.DEFINE_string(
-    'gcp_project', default=None,
-    help='Project name for the Cloud TPU-enabled project. If not specified, we '
-    'will attempt to automatically detect the GCE project from metadata.')
-flags.DEFINE_string(
-    'tpu_zone', default=None,
-    help='GCE zone where the Cloud TPU is located in. If not specified, we '
-    'will attempt to automatically detect the GCE project from metadata.')
+    'hparams_file',
+    default=None,
+    help=('Set of model parameters to override the default mparams.'
+         ))
 
-# Model specific paramenters
-flags.DEFINE_string(
-    'data_dir', '',
-    'Directory where input data is stored')
+flags.DEFINE_multi_string(
+    'hparams',
+    default=None,
+    help=('This is used to override only the model hyperparameters. It should '
+          'not be used to override the other parameters like the tpu specific '
+          'flags etc. For example, if experimenting with larger numbers of '
+          'train_steps, a possible value is '
+          '--param_overrides=train_steps=9000000.'))
 
 flags.DEFINE_string(
-    'model_dir', None,
-    'Directory where model output is stored')
+    'default_hparams_file',
+    default=None,
+    help=('Default set of model parameters to use with this model. Look at '
+          'configs/default.yaml for this.'
+         ))
 
 flags.DEFINE_string(
     'export_dir',
@@ -67,24 +72,8 @@ flags.DEFINE_integer(
     'Number of shards (workers).')
 
 flags.DEFINE_integer(
-    'iterations', 100,
-    'Number of iterations per TPU training loop.')
-
-flags.DEFINE_integer(
-    'train_batch_size', 1024,
-    'Global (not per-shard) batch size for training')
-
-flags.DEFINE_integer(
     'eval_total_size', 0,
     'Total batch size for evaluation, use the entire validation set if 0')
-
-flags.DEFINE_integer(
-    'eval_batch_size', 1024,
-    'Global (not per-shard) batch size for evaluation')
-
-flags.DEFINE_integer(
-    'train_steps', 8000000,
-    'Number of steps use for training.')
 
 flags.DEFINE_integer(
     'train_steps_per_eval', 2000,
@@ -102,10 +91,6 @@ flags.DEFINE_integer(
     'eval_timeout', None,
     'Evaluation timeout: Maximum number of seconds that '
     'may elapse while no new checkpoints are observed')
-
-flags.DEFINE_bool(
-    'use_tpu', True,
-    'Use TPUs rather than plain CPUs')
 
 flags.DEFINE_boolean(
     'per_host_input_for_training', True,
@@ -178,10 +163,6 @@ flags.DEFINE_bool(
 
 FLAGS = flags.FLAGS
 
-# Dataset constants
-_NUM_TRAIN_IMAGES = 1281167
-_NUM_EVAL_IMAGES = 50000
-
 # Random cropping constants
 _RESIZE_SIDE_MIN = 256
 _RESIZE_SIDE_MAX = 512
@@ -221,7 +202,7 @@ def image_serving_input_fn():
 
 def model_fn(features, labels, mode, params):
   """Mobilenet v1 model using Estimator API."""
-  num_classes = FLAGS.num_classes
+  num_classes = params['num_classes']
   training_active = (mode == tf.estimator.ModeKeys.TRAIN)
   eval_active = (mode == tf.estimator.ModeKeys.EVAL)
 
@@ -231,21 +212,21 @@ def model_fn(features, labels, mode, params):
   features = supervised_images.tensor_transform_fn(
       features, params['input_perm'])
 
-  if FLAGS.clear_update_collections:
+  if params['clear_update_collections']:
     # updates_collections must be set to None in order to use fused batchnorm
     with arg_scope(mobilenet_v1.mobilenet_v1_arg_scope()):
       logits, end_points = mobilenet_v1.mobilenet_v1(
           features,
           num_classes,
           is_training=training_active,
-          depth_multiplier=FLAGS.depth_multiplier)
+          depth_multiplier=params['depth_multiplier'])
   else:
     with arg_scope(mobilenet_v1.mobilenet_v1_arg_scope()):
       logits, end_points = mobilenet_v1.mobilenet_v1(
           features,
           num_classes,
           is_training=training_active,
-          depth_multiplier=FLAGS.depth_multiplier)
+          depth_multiplier=params['depth_multiplier'])
 
   predictions = {
       'classes': tf.argmax(input=logits, axis=1),
@@ -261,17 +242,17 @@ def model_fn(features, labels, mode, params):
         })
 
   if mode == tf.estimator.ModeKeys.EVAL and FLAGS.display_tensors and (
-      not FLAGS.use_tpu):
+      not params['use_tpu']):
     with tf.control_dependencies([
         tf.Print(
             predictions['classes'], [predictions['classes']],
-            summarize=FLAGS.eval_batch_size,
+            summarize=params['eval_batch_size'],
             message='prediction: ')
     ]):
       labels = tf.Print(
-          labels, [labels], summarize=FLAGS.eval_batch_size, message='label: ')
+          labels, [labels], summarize=params['eval_batch_size'], message='label: ')
 
-  one_hot_labels = tf.one_hot(labels, FLAGS.num_classes, dtype=tf.int32)
+  one_hot_labels = tf.one_hot(labels, params['num_classes'], dtype=tf.int32)
 
   tf.losses.softmax_cross_entropy(
       onehot_labels=one_hot_labels,
@@ -280,34 +261,34 @@ def model_fn(features, labels, mode, params):
       label_smoothing=0.1)
   loss = tf.losses.get_total_loss(add_regularization_losses=True)
 
-  initial_learning_rate = FLAGS.learning_rate * FLAGS.train_batch_size / 256
+  initial_learning_rate = params['learning_rate'] * params['train_batch_size'] / 256
   final_learning_rate = 0.0001 * initial_learning_rate
 
   train_op = None
   if training_active:
-    batches_per_epoch = _NUM_TRAIN_IMAGES // FLAGS.train_batch_size
+    batches_per_epoch = params['num_train_images'] // params['train_batch_size']
     global_step = tf.train.get_or_create_global_step()
 
     learning_rate = tf.train.exponential_decay(
         learning_rate=initial_learning_rate,
         global_step=global_step,
-        decay_steps=FLAGS.learning_rate_decay_epochs * batches_per_epoch,
-        decay_rate=FLAGS.learning_rate_decay,
+        decay_steps=params['learning_rate_decay_epochs'] * batches_per_epoch,
+        decay_rate=params['learning_rate_decay'],
         staircase=True)
 
     # Set a minimum boundary for the learning rate.
     learning_rate = tf.maximum(
         learning_rate, final_learning_rate, name='learning_rate')
 
-    if FLAGS.optimizer == 'sgd':
+    if params['optimizer'] == 'sgd':
       tf.logging.info('Using SGD optimizer')
       optimizer = tf.train.GradientDescentOptimizer(
           learning_rate=learning_rate)
-    elif FLAGS.optimizer == 'momentum':
+    elif params['optimizer'] == 'momentum':
       tf.logging.info('Using Momentum optimizer')
       optimizer = tf.train.MomentumOptimizer(
           learning_rate=learning_rate, momentum=0.9)
-    elif FLAGS.optimizer == 'RMS':
+    elif params['optimizer'] == 'RMS':
       tf.logging.info('Using RMS optimizer')
       optimizer = tf.train.RMSPropOptimizer(
           learning_rate,
@@ -315,15 +296,15 @@ def model_fn(features, labels, mode, params):
           momentum=RMSPROP_MOMENTUM,
           epsilon=RMSPROP_EPSILON)
     else:
-      tf.logging.fatal('Unknown optimizer:', FLAGS.optimizer)
+      tf.logging.fatal('Unknown optimizer:', params['optimizer'])
 
-    if FLAGS.use_tpu:
+    if params['use_tpu']:
       optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
 
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
     with tf.control_dependencies(update_ops):
       train_op = optimizer.minimize(loss, global_step=global_step)
-    if FLAGS.moving_average:
+    if params['moving_average']:
       ema = tf.train.ExponentialMovingAverage(
           decay=MOVING_AVERAGE_DECAY, num_updates=global_step)
       variables_to_average = (tf.trainable_variables() +
@@ -338,7 +319,7 @@ def model_fn(features, labels, mode, params):
           input=predictions, axis=1))
       return {'accuracy': accuracy}
 
-    if FLAGS.use_logits:
+    if params['use_logits']:
       eval_predictions = logits
     else:
       eval_predictions = end_points['Predictions']
@@ -370,19 +351,27 @@ class LoadEMAHook(tf.train.SessionRunHook):
 def main(unused_argv):
   del unused_argv  # Unused
 
-  tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
-            FLAGS.tpu,
-            zone=FLAGS.tpu_zone,
-            project=FLAGS.gcp_project)
+  default_hparams_file = FLAGS.default_hparams_file
+  if default_hparams_file is None:
+    default_hparams_file = os.path.join(os.path.dirname(__file__),
+                                        './configs/default.yaml')
 
-  batch_size_per_shard = FLAGS.train_batch_size // FLAGS.num_shards
-  params = {
-      'input_perm': [0, 1, 2, 3],
-      'output_perm': [0, 1, 2, 3],
-  }
+  params = hyperparameters.get_hyperparameters(default_hparams_file,
+                                               FLAGS.hparams_file,
+                                               FLAGS,
+                                               FLAGS.hparams)
+
+  tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
+      FLAGS.tpu if (FLAGS.tpu or params['use_tpu']) else '',
+      zone=FLAGS.tpu_zone,
+      project=FLAGS.gcp_project)
+
+  batch_size_per_shard = params['train_batch_size'] // params['num_shards']
+  params['input_perm'] = [0, 1, 2, 3]
+  params['output_perm'] = [0, 1, 2, 3]
 
   batch_axis = 0
-  if FLAGS.transpose_enabled:
+  if params['transpose_enabled']:
     if batch_size_per_shard >= 64:
       params['input_perm'] = [3, 0, 1, 2]
       params['output_perm'] = [1, 2, 3, 0]
@@ -392,19 +381,19 @@ def main(unused_argv):
       params['output_perm'] = [1, 2, 0, 3]
       batch_axis = 2
 
-  if FLAGS.eval_total_size > 0:
-    eval_size = FLAGS.eval_total_size
+  if params['eval_total_size'] > 0:
+    eval_size = params['eval_total_size']
   else:
-    eval_size = _NUM_EVAL_IMAGES
-  eval_steps = eval_size // FLAGS.eval_batch_size
+    eval_size = params['num_eval_images']
+  eval_steps = eval_size // params['eval_batch_size']
 
   iterations = (eval_steps if FLAGS.mode == 'eval' else
-                FLAGS.iterations)
+                params['iterations_per_loop'])
 
   eval_batch_size = (None if FLAGS.mode == 'train' else
-                     FLAGS.eval_batch_size)
+                     params['eval_batch_size'])
 
-  per_host_input_for_training = (FLAGS.num_shards <= 8 if
+  per_host_input_for_training = (params['num_shards'] <= 8 if
                                  FLAGS.mode == 'train' else True)
 
   run_config = tf.contrib.tpu.RunConfig(
@@ -417,15 +406,15 @@ def main(unused_argv):
           log_device_placement=FLAGS.log_device_placement),
       tpu_config=tf.contrib.tpu.TPUConfig(
           iterations_per_loop=iterations,
-          num_shards=FLAGS.num_shards,
+          num_shards=params['num_shards'],
           per_host_input_for_training=per_host_input_for_training))
 
   inception_classifier = tf.contrib.tpu.TPUEstimator(
       model_fn=model_fn,
-      use_tpu=FLAGS.use_tpu,
+      use_tpu=params['use_tpu'],
       config=run_config,
       params=params,
-      train_batch_size=FLAGS.train_batch_size,
+      train_batch_size=params['train_batch_size'],
       eval_batch_size=eval_batch_size,
       batch_axis=(batch_axis, 0))
 
@@ -438,7 +427,7 @@ def main(unused_argv):
       is_training=False,
       data_dir=FLAGS.data_dir)
 
-  if FLAGS.moving_average:
+  if params['moving_average']:
     eval_hooks = [LoadEMAHook(FLAGS.model_dir)]
   else:
     eval_hooks = []
@@ -452,7 +441,7 @@ def main(unused_argv):
     def get_next_checkpoint():
       return evaluation.checkpoints_iterator(
           FLAGS.model_dir,
-          min_interval_secs=FLAGS.min_eval_interval,
+          min_interval_secs=params['min_eval_interval'],
           timeout=FLAGS.eval_timeout,
           timeout_fn=terminate_eval)
 
@@ -470,10 +459,10 @@ def main(unused_argv):
         tf.logging.info('Checkpoint %s no longer exists ... skipping')
 
   elif FLAGS.mode == 'train_and_eval':
-    for cycle in range(FLAGS.train_steps // FLAGS.train_steps_per_eval):
+    for cycle in range(params['train_steps'] // params['train_steps_per_eval']):
       tf.logging.info('Starting training cycle %d.' % cycle)
       inception_classifier.train(
-          input_fn=imagenet_train.input_fn, steps=FLAGS.train_steps_per_eval)
+          input_fn=imagenet_train.input_fn, steps=params['train_steps_per_eval'])
 
       tf.logging.info('Starting evaluation cycle %d .' % cycle)
       eval_results = inception_classifier.evaluate(
@@ -483,7 +472,7 @@ def main(unused_argv):
   else:
     tf.logging.info('Starting training ...')
     inception_classifier.train(
-        input_fn=imagenet_train.input_fn, steps=FLAGS.train_steps)
+        input_fn=imagenet_train.input_fn, steps=params['train_steps'])
 
   if FLAGS.export_dir is not None:
     tf.logging.info('Starting to export model.')
