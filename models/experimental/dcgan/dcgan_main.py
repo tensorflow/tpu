@@ -106,10 +106,10 @@ def main(argv):
       zone=FLAGS.tpu_zone,
       project=FLAGS.gcp_project)
 
-  config = tf.contrib.tpu.RunConfig(
+  config = tf.compat.v1.estimator.tpu.RunConfig(
       cluster=tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
-      tpu_config=tf.contrib.tpu.TPUConfig(
+      tpu_config=tf.compat.v1.estimator.tpu.TPUConfig(
           num_shards=FLAGS.num_shards,
           iterations_per_loop=FLAGS.iterations_per_loop))
 

@@ -155,8 +155,15 @@ def selective_crop_and_resize(features,
   width_indices = (
       tf.reshape(x_indices, [batch_size, num_boxes, 1, output_size * 2]) *
       tf.ones([1, 1, output_size * 2, 1], dtype=tf.int32))
-  indices = (
-      batch_dim_indices + box_level_indices + height_indices + width_indices)
+
+  # Temporary variables with int32 dtype is not supported for GPU's. To make
+  # model_fn implementation be GPU friendly, we add casting to int64 here.
+  indices = tf.add_n([
+      tf.cast(batch_dim_indices, tf.int64),
+      tf.cast(box_level_indices, tf.int64),
+      tf.cast(height_indices, tf.int64),
+      tf.cast(width_indices, tf.int64)
+  ])
   indices = tf.reshape(indices, [-1])
 
   features = tf.reshape(features, [-1, num_filters])
