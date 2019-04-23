@@ -23,6 +23,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import os
 from absl import app
 from absl import flags
 import tensorflow as tf
@@ -66,6 +67,12 @@ flags.DEFINE_string(
     'export_dir',
     default=None,
     help=('The directory where the exported SavedModel will be stored.'))
+
+flags.DEFINE_integer(
+    'num_train_images', default=None, help='Size of training data set.')
+
+flags.DEFINE_integer(
+    'num_eval_images', default=None, help='Size of evaluation data set.')
 
 flags.DEFINE_integer(
     'num_shards', 8,
