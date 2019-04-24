@@ -18,9 +18,5 @@ learning_rate_decay_epochs: 3
 use_logits: True
 clear_update_collections: True
 transpose_enabled: False
-width: 224
-height: 224
 num_train_images: 1281167
 num_eval_images: 50000
-use_annotated_bbox: False
-preprocessing: 'inception'

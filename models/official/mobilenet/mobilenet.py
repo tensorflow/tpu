@@ -253,19 +253,19 @@ def preprocess_raw_bytes(image_bytes, is_training=False, bbox=None):
   image = tf.image.decode_jpeg(image_bytes, channels=3)
   image = tf.image.convert_image_dtype(image, dtype=tf.float32)
 
-  if params['preprocessing'] == 'vgg':
+  if FLAGS.preprocessing == 'vgg':
     image = vgg_preprocessing.preprocess_image(
         image=image,
-        output_height=params['height'],
-        output_width=params['width'],
+        output_height=FLAGS.height,
+        output_width=FLAGS.width,
         is_training=is_training,
         resize_side_min=_RESIZE_SIDE_MIN,
         resize_side_max=_RESIZE_SIDE_MAX)
-  elif params['preprocessing'] == 'inception':
+  elif FLAGS.preprocessing == 'inception':
     image = inception_preprocessing.preprocess_image(
         image=image,
-        output_height=params['height'],
-        output_width=params['width'],
+        output_height=FLAGS.height,
+        output_width=FLAGS.width,
         is_training=is_training,
         bbox=bbox)
   else:
@@ -322,7 +322,7 @@ class InputPipeline(object):
     features = tf.parse_single_example(serialized_proto, keys_to_features)
 
     bbox = None
-    if params['use_annotated_bbox']:
+    if FLAGS.use_annotated_bbox:
       xmin = tf.expand_dims(features['image/object/bbox/xmin'].values, 0)
       ymin = tf.expand_dims(features['image/object/bbox/ymin'].values, 0)
       xmax = tf.expand_dims(features['image/object/bbox/xmax'].values, 0)
@@ -392,14 +392,14 @@ class InputPipeline(object):
       dataset = dataset.prefetch(2)  # Prefetch overlaps in-feed with training
 
       images, labels = dataset.make_one_shot_iterator().get_next()
-      images.set_shape([batch_size, params['height'], params['width'], 3])
+      images.set_shape([batch_size, FLAGS.height, FLAGS.width, 3])
     else:
       images = tf.random_uniform(
-          [batch_size, params['height'], params['width'], 3], minval=-1, maxval=1)
+          [batch_size, FLAGS.height, FLAGS.width, 3], minval=-1, maxval=1)
       labels = tf.random_uniform(
           [batch_size], minval=0, maxval=999, dtype=tf.int32)
 
-    images = tensor_transform_fn(images, params['output_perm'])
+    images = tensor_transform_fn(images, params['output_perm'], params['transpose_enabled'])
     return images, labels
 
 
@@ -411,7 +411,6 @@ def image_serving_input_fn():
   Returns:
     A ServingInputReceiver capable of serving MobileNet predictions.
   """
-
   image_bytes_list = tf.placeholder(
       shape=[None],
       dtype=tf.string,
@@ -422,7 +421,7 @@ def image_serving_input_fn():
       images, {'image_bytes': image_bytes_list})
 
 
-def tensor_transform_fn(data, perm):
+def tensor_transform_fn(data, perm, transpose_enabled):
   """Transpose function.
 
   This function is used to transpose an image tensor on the host and then
@@ -436,11 +435,12 @@ def tensor_transform_fn(data, perm):
   Args:
     data: Tensor to be transposed
     perm: Permutation of the dimensions of a
+    transposed_enabled: Whether to apply the transpose
 
   Returns:
     Transposed tensor
   """
-  if params['transpose_enabled']:
+  if transpose_enabled:
     return tf.transpose(data, perm)
   return data
 
@@ -454,7 +454,7 @@ def model_fn(features, labels, mode, params):
   if isinstance(features, dict):
     features = features['feature']
 
-  features = tensor_transform_fn(features, params['input_perm'])
+  features = tensor_transform_fn(features, params['input_perm'], params['transpose_enabled'])
 
   if params['clear_update_collections']:
     # updates_collections must be set to None in order to use fused batchnorm
@@ -666,10 +666,12 @@ def main(unused_argv):
   # preprocessing) between training and evaluation.
   imagenet_train = InputPipeline(
       is_training=True,
-      data_dir=FLAGS.data_dir)
+      data_dir=FLAGS.data_dir,
+      params=params)
   imagenet_eval = InputPipeline(
       is_training=False,
-      data_dir=FLAGS.data_dir)
+      data_dir=FLAGS.data_dir,
+      params=params)
 
   if params['moving_average']:
     eval_hooks = [LoadEMAHook(FLAGS.model_dir)]
