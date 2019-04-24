@@ -666,12 +666,10 @@ def main(unused_argv):
   # preprocessing) between training and evaluation.
   imagenet_train = InputPipeline(
       is_training=True,
-      data_dir=FLAGS.data_dir,
-      params=params)
+      data_dir=FLAGS.data_dir)
   imagenet_eval = InputPipeline(
       is_training=False,
-      data_dir=FLAGS.data_dir,
-      params=params)
+      data_dir=FLAGS.data_dir)
 
   if params['moving_average']:
     eval_hooks = [LoadEMAHook(FLAGS.model_dir)]
