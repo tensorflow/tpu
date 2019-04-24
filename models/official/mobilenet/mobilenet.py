@@ -72,15 +72,15 @@ flags.DEFINE_integer(
     'num_eval_images', default=None, help='Size of evaluation data set.')
 
 flags.DEFINE_integer(
-    'num_shards', 8,
+    'num_shards', None,
     'Number of shards (workers).')
 
 flags.DEFINE_integer(
-    'eval_total_size', 0,
+    'eval_total_size', None,
     'Total batch size for evaluation, use the entire validation set if 0')
 
 flags.DEFINE_integer(
-    'train_steps_per_eval', 2000,
+    'train_steps_per_eval', None,
     'Number of training steps to run between evaluations.')
 
 flags.DEFINE_string(
@@ -88,7 +88,7 @@ flags.DEFINE_string(
     'Mode to run: train, eval, train_and_eval')
 
 flags.DEFINE_integer(
-    'min_eval_interval', 180,
+    'min_eval_interval', None,
     'Minimum number of seconds between evaluations')
 
 flags.DEFINE_integer(
@@ -105,19 +105,19 @@ flags.DEFINE_string(
     'One of "fake","real"')
 
 flags.DEFINE_float(
-    'learning_rate', 0.165,
+    'learning_rate', None,
     'Learning rate.')
 
 flags.DEFINE_float(
-    'depth_multiplier', 1.0,
+    'depth_multiplier', None,
     'Depth Multiplier on Inception')
 
 flags.DEFINE_string(
-    'optimizer', 'RMS',
+    'optimizer', None,
     'Optimizer (one of sgd, RMS, momentum)')
 
 flags.DEFINE_integer(
-    'num_classes', 1001,
+    'num_classes', None,
     'Number of classes to distinguish')
 
 flags.DEFINE_integer(
@@ -129,11 +129,11 @@ flags.DEFINE_integer(
     'Height of input image')
 
 flags.DEFINE_bool(
-    'transpose_enabled', False,
+    'transpose_enabled', None,
     'Boolean to enable/disable explicit I/O transpose')
 
 flags.DEFINE_bool(
-    'use_fused_batchnorm', True,
+    'use_fused_batchnorm', None,
     'Enable fused batchrnom')
 
 flags.DEFINE_bool(
@@ -150,7 +150,7 @@ flags.DEFINE_integer(
     'should be checkpointed. Set to 0 to disable.')
 
 flags.DEFINE_bool(
-    'moving_average', True,
+    'moving_average', None,
     'Whether to enable moving average computation on variables')
 
 flags.DEFINE_string(
@@ -163,15 +163,15 @@ flags.DEFINE_bool(
     'else use full image size')
 
 flags.DEFINE_float(
-    'learning_rate_decay', 0.94,
+    'learning_rate_decay', None,
     'Exponential decay rate used in learning rate adjustment')
 
 flags.DEFINE_integer(
-    'learning_rate_decay_epochs', 3,
+    'learning_rate_decay_epochs', None,
     'Exponential decay epochs used in learning rate adjustment')
 
 flags.DEFINE_bool(
-    'use_logits', True,
+    'use_logits', None,
     'Use logits if true, else use predictions')
 
 flags.DEFINE_bool(
@@ -179,7 +179,7 @@ flags.DEFINE_bool(
     'Whether to dump prediction tensors for comparison')
 
 flags.DEFINE_bool(
-    'clear_update_collections', True,
+    'clear_update_collections', None,
     'Set batchnorm update_collections to None if true, else use default value')
 
 # Dataset specific paramenters
