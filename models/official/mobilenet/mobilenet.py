@@ -21,7 +21,7 @@ the original model definition.
 
 from __future__ import absolute_import
 from __future__ import division
-from __future__ import print_functiop
+from __future__ import print_function
 
 import functools
 
@@ -119,12 +119,6 @@ flags.DEFINE_string(
 flags.DEFINE_integer(
     'num_classes', 1001,
     'Number of classes to distinguish')
-
-flags.DEFINE_integer(
-    'num_train_images', default=None, help='Size of training data set.')
-
-flags.DEFINE_integer(
-    'num_eval_images', default=None, help='Size of evaluation data set.')
 
 flags.DEFINE_integer(
     'width', 224,
@@ -567,7 +561,7 @@ def main(unused_argv):
       zone=FLAGS.tpu_zone,
       project=FLAGS.gcp_project)
 
-  batch_size_per_shard = FLAGS.train_batch_size // FLAGS.num_shards
+  batch_size_per_shard = params['train_batch_size'] // params['num_shards']
   params['input_perm'] = [0, 1, 2, 3]
   params['output_perm'] = [0, 1, 2, 3]
 
