@@ -119,6 +119,14 @@ func (i *TPUInstance) IsPreemptible() bool {
 	return false
 }
 
+// IsReserved returns true if the Cloud TPU is a reserved Cloud TPU, false otherwise.
+func (i *TPUInstance) IsReserved() bool {
+	if i.SchedulingConfig != nil {
+		return i.SchedulingConfig.Reserved
+	}
+	return false
+}
+
 // NodeName returns the flock name (the human-usable name) of the Cloud TPU
 func (i *TPUInstance) NodeName() string {
 	parts := strings.Split(i.Name, "/")
@@ -311,7 +319,7 @@ func (g *TPUCP) cidrBlockSize(hardwareType string) (ones uint, err error) {
 }
 
 // CreateInstance creates the Cloud TPU with an API call to the TPU control plane.
-func (g *TPUCP) CreateInstance(ctx context.Context, version string, preemptible bool, hardwareType, network string) (LongRunningOperation, error) {
+func (g *TPUCP) CreateInstance(ctx context.Context, version string, preemptible, reserved bool, hardwareType, network string) (LongRunningOperation, error) {
 	routeItems := make([]*compute.Route, 0)
 	err := g.compute.Routes.List(g.config.Project).Pages(ctx, func(routeList *compute.RouteList) error {
 		routeItems = append(routeItems, routeList.Items...)
@@ -335,7 +343,7 @@ func (g *TPUCP) CreateInstance(ctx context.Context, version string, preemptible 
 		CidrBlock:         cidrBlock,
 		Description:       "A Cloud TPU created with the ctpu tool.",
 		TensorflowVersion: version,
-		SchedulingConfig:  &tpu.SchedulingConfig{Preemptible: preemptible},
+		SchedulingConfig:  &tpu.SchedulingConfig{Preemptible: preemptible, Reserved: reserved},
 		Network:           network,
 	}
 	req := g.nodes.Create(g.parentPath(), &node)

@@ -95,8 +95,8 @@ class _Hyperparameters(object):
     params_log = ''
 
     for k in self._params:
-      params_log += k + ': ' + str(self._params[k])
-      params_log += ' [' + self._params_source[k] + ']\n'
+      params_log += k + ': \t' + str(self._params[k])
+      params_log += ' \t[' + self._params_source[k] + ']\n'
     tf.logging.info('\nModel hyperparameters [source]:\n%s', params_log)
 
 
