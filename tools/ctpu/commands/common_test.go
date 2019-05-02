@@ -172,7 +172,7 @@ func (cp *testTPUCP) ListLocations() ([]*tpu.Location, error) {
 	return cp.tpuLocations, nil
 }
 
-func (cp *testTPUCP) CreateInstance(ctx context.Context, version string, preemptible bool, hardwareType, network string) (ctrl.LongRunningOperation, error) {
+func (cp *testTPUCP) CreateInstance(ctx context.Context, version string, preemptible, reserved bool, hardwareType, network string) (ctrl.LongRunningOperation, error) {
 	cp.OperationsPerformed = append(cp.OperationsPerformed, fmt.Sprintf("CREATE-%s", version))
 	cp.instance = cp.postCreateInstance
 	cp.postCreateInstance = nil

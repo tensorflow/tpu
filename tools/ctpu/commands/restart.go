@@ -33,7 +33,7 @@ type RestartTPUCP interface {
 	// CreateInstance requests the creation of the instance.
 	//
 	// CreateInstance is implemented by TPUCP.CreateInstance and is expected to match.
-	CreateInstance(ctx context.Context, version string, preemptible bool, hardwareType, network string) (ctrl.LongRunningOperation, error)
+	CreateInstance(ctx context.Context, version string, preemptible, reserved bool, hardwareType, network string) (ctrl.LongRunningOperation, error)
 	// DeleteInstance requests the deletion of the instance.
 	DeleteInstance() (ctrl.LongRunningOperation, error)
 }
@@ -84,6 +84,7 @@ func (r *restartCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...i
 	}
 	version := instance.TensorflowVersion
 	preemptible := instance.IsPreemptible()
+	reserved := instance.IsReserved()
 	tpuHardware := instance.AcceleratorType
 	if version == "" {
 		log.Printf("Your Cloud TPU (name: %q, zone: %q) does not appear to have a version. Aborting restart.", r.cfg.FlockName, r.cfg.Zone)
@@ -112,7 +113,7 @@ func (r *restartCmd) Execute(ctx context.Context, flags *flag.FlagSet, args ...i
 		return subcommands.ExitFailure
 	}
 	log.Printf("Re-creating your Cloud TPU instance...")
-	op, err = r.tpu.CreateInstance(ctx, version, preemptible, tpuHardware, instance.Network)
+	op, err = r.tpu.CreateInstance(ctx, version, preemptible, reserved, tpuHardware, instance.Network)
 	if err != nil {
 		log.Print(err)
 		return subcommands.ExitFailure

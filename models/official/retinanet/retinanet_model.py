@@ -372,18 +372,13 @@ def _model_fn(features, labels, mode, params, model, use_tpu_estimator_spec,
   # First check if it is in PREDICT mode.
   if mode == tf.estimator.ModeKeys.PREDICT:
     # Include all prediction values in the default graph.
-    features = tf.identity(features, 'Image')
-    predictions = {
-        'image': features,
-    }
+    predictions = {}
     for level in levels:
       predictions['cls_outputs_%d' % level] = cls_outputs[level]
       predictions['box_outputs_%d' % level] = box_outputs[level]
 
     # Add the computed `top-k` values in addition to the raw boxes.
     add_metric_fn_inputs(params, cls_outputs, box_outputs, predictions)
-    for k, v in predictions.items():
-      predictions = tf.identity(v, k)
     return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions)
 
   # Load pretrained model from checkpoint.

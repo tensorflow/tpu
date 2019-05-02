@@ -56,7 +56,7 @@ func (r *restartTestTPUCP) Instance() (*ctrl.TPUInstance, error) {
 	return r.instance, r.instanceErr
 }
 
-func (r *restartTestTPUCP) CreateInstance(ctx context.Context, version string, preemptible bool, hardwareType, network string) (ctrl.LongRunningOperation, error) {
+func (r *restartTestTPUCP) CreateInstance(ctx context.Context, version string, preemptible, reserved bool, hardwareType, network string) (ctrl.LongRunningOperation, error) {
 	r.t.Helper()
 	if r.calledCreate {
 		r.t.Errorf("Already called CreateInstance")

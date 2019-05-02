@@ -38,7 +38,7 @@ type UpTPUCP interface {
 	// OptionallyRetrieveInstance retrieves the instance, but can optionally not enable the TPU API.
 	OptionallyRetrieveInstance(bool) (*ctrl.TPUInstance, bool, error)
 	// CreateInstance requests the creation of the instance.
-	CreateInstance(ctx context.Context, version string, preemptible bool, hardwareType, network string) (ctrl.LongRunningOperation, error)
+	CreateInstance(ctx context.Context, version string, preemptible, reserved bool, hardwareType, network string) (ctrl.LongRunningOperation, error)
 	// ListVersions retrieves the list of available TensorFlow versions.
 	ListVersions() ([]*tpu.TensorFlowVersion, error)
 }
@@ -104,6 +104,7 @@ type upCmd struct {
 
 	// TPU parameters
 	preemptibleTPU bool
+	reservedTPU    bool
 	tpuHardware    string
 }
 
@@ -149,6 +150,7 @@ func (c *upCmd) SetFlags(f *flag.FlagSet) {
 	f.BoolVar(&c.preemptibleVM, "preemptible-vm", false, "Create a preemptible Compute Engine VM, instead of a normal (non-preemptible) VM. A preemptible VM costs less per hour, but the Compute Engine service can terminate the instance at any time.")
 
 	f.BoolVar(&c.preemptibleTPU, "preemptible", false, "Create a preemptible Cloud TPU, instead of a normal (non-preemptible) Cloud TPU. A preemptible Cloud TPU costs less per hour, but the Cloud TPU service can stop/terminate the node at any time.")
+	f.BoolVar(&c.reservedTPU, "reserved", false, "Create a reserved Cloud TPU, instead of a on demand Cloud TPU. Reserved Cloud TPU's are available on a contract basis, currently available for TPU Pod's.")
 	f.StringVar(&c.tpuHardware, "tpu-size", "v2-8", "Configure the size and hardware version of the Cloud TPU. To see the list of available TPU hardware sizes, run `ctpu tpu-sizes`.")
 	f.StringVar(&c.network, "gcp-network", "default", "Specify the network the Cloud TPU and associated VM should be created in.")
 }
@@ -306,7 +308,7 @@ func (c *upCmd) upTPU(ctx context.Context) (*ctrl.TPUInstance, error) {
 	if tpu == nil {
 		log.Printf("Creating TPU %s (this may take a few minutes)...\n", c.cfg.FlockName)
 		if !c.dryRun {
-			op, err := c.tpu.CreateInstance(ctx, c.tfVersion, c.preemptibleTPU, c.tpuHardware, c.network)
+			op, err := c.tpu.CreateInstance(ctx, c.tfVersion, c.preemptibleTPU, c.reservedTPU, c.tpuHardware, c.network)
 			if err != nil {
 				log.Print(err)
 				return nil, err
@@ -425,7 +427,8 @@ func (c *upCmd) confirmExecution(tpuAPIEnabled bool) (bool, error) {
 		fmt.Printf(`  Cloud TPU:
       Size:             %s
       Preemptible:      %v
-`, c.tpuHardware, c.preemptibleTPU)
+      Reserved:         %v
+`, c.tpuHardware, c.preemptibleTPU, c.reservedTPU)
 	}
 	fmt.Println()
 	return askForConfirmation("OK to create your Cloud TPU resources with the above configuration?")
