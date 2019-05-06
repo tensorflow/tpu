@@ -158,7 +158,8 @@ def main(argv):
         mode=tf.estimator.ModeKeys.TRAIN,
         use_fake_data=FLAGS.use_fake_data,
         use_instance_mask=config.include_mask)
-  if FLAGS.mode in ('eval', 'train_and_eval'):
+  if (FLAGS.mode in ('eval', 'train_and_eval') or
+      (FLAGS.mode == 'train' and FLAGS.eval_after_training)):
     eval_input_fn = dataloader.InputReader(
         config.validation_file_pattern,
         mode=tf.estimator.ModeKeys.PREDICT,

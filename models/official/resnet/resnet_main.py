@@ -65,7 +65,7 @@ flags.DEFINE_multi_string(
 
 flags.DEFINE_string(
     'default_hparams_file',
-    default=None,
+    default=os.path.join(os.path.dirname(__file__), './configs/default.yaml'),
     help=('Default set of model parameters to use with this model. Look the at '
           'configs/default.yaml for this.'
          ))
@@ -553,12 +553,7 @@ def _select_tables_from_flags():
 
 
 def main(unused_argv):
-  default_hparams_file = FLAGS.default_hparams_file
-  if default_hparams_file is None:
-    default_hparams_file = os.path.join(os.path.dirname(__file__),
-                                        './configs/default.yaml')
-
-  params = hyperparameters.get_hyperparameters(default_hparams_file,
+  params = hyperparameters.get_hyperparameters(FLAGS.default_hparams_file,
                                                FLAGS.hparams_file,
                                                FLAGS,
                                                FLAGS.hparams)
