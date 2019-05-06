@@ -197,6 +197,29 @@ flags.DEFINE_bool(
 flags.DEFINE_bool(
     'post_quantize', default=True, help=('Enable post quantization.'))
 
+flags.DEFINE_bool(
+    'quantized_training',
+    default=False,
+    help=('Enable quantized training as it is required for Edge TPU.'
+          'This should be used for fine-tuning rather than pre-training.'))
+
+flags.DEFINE_integer(
+    'quantization_delay_epochs',
+    default=0,
+    help=('The number of epochs after which weights and activations are'
+          ' quantized during training.'))
+
+flags.DEFINE_bool(
+    'export_moving_average',
+    default=False,
+    help=('Replace variables with corresponding moving average variables in '
+          'saved model export.'))
+
+flags.DEFINE_string(
+    'init_checkpoint',
+    default=None,
+    help=('Initial checkpoint from a pre-trained MnasNet model.'))
+
 flags.DEFINE_float(
     'base_learning_rate',
     default=0.016,
@@ -263,6 +286,49 @@ LR_SCHEDULE = [  # (multiplier, epoch to start) tuples
 # range of [0, 1]
 MEAN_RGB = [0.485 * 255, 0.456 * 255, 0.406 * 255]
 STDDEV_RGB = [0.229 * 255, 0.224 * 255, 0.225 * 255]
+
+
+def get_pretrained_variables_to_restore(checkpoint_path,
+                                        load_moving_average=False):
+  """Gets veriables_to_restore mapping from pretrained checkpoint.
+
+  Args:
+    checkpoint_path: String. Path of checkpoint.
+    load_moving_average: Boolean, whether load moving average variables to
+      replace variables.
+
+  Returns:
+    Mapping of variables to restore.
+  """
+  checkpoint_reader = tf.train.load_checkpoint(checkpoint_path)
+  variable_shape_map = checkpoint_reader.get_variable_to_shape_map()
+
+  variables_to_restore = {}
+  for v in tf.global_variables():
+    # Skip variables if they are in excluded scopes.
+    is_excluded = False
+    for scope in ['global_step', 'ExponentialMovingAverage']:
+      if scope in v.op.name:
+        is_excluded = True
+        break
+    if is_excluded:
+      tf.logging.info('Exclude [%s] from loading from checkpoint.', v.op.name)
+      continue
+    variable_name_ckpt = v.op.name
+    if load_moving_average:
+      # To load moving average variables into non-moving version for
+      # fine-tuning, maps variables here manually.
+      variable_name_ckpt = v.op.name + '/ExponentialMovingAverage'
+      if variable_name_ckpt not in variable_shape_map:
+        tf.logging.info(
+            'Skip init [%s] from [%s] as it is not in the checkpoint',
+            v.op.name, variable_name_ckpt)
+        continue
+
+    variables_to_restore[variable_name_ckpt] = v
+    tf.logging.info('Init variable [%s] from [%s] in ckpt', v.op.name,
+                    variable_name_ckpt)
+  return variables_to_restore
 
 
 def mnasnet_model_fn(features, labels, mode, params):
@@ -338,17 +404,43 @@ def mnasnet_model_fn(features, labels, mode, params):
         training=is_training,
         override_params=override_params)
 
+  if params['quantized_training']:
+    if is_training:
+      tf.logging.info('Adding fake quantization ops for training.')
+      tf.contrib.quantize.create_training_graph(
+          quant_delay=int(params['steps_per_epoch'] *
+                          FLAGS.quantization_delay_epochs))
+    else:
+      tf.logging.info('Adding fake quantization ops for evaluation.')
+      tf.contrib.quantize.create_eval_graph()
+
   if mode == tf.estimator.ModeKeys.PREDICT:
+    scaffold_fn = None
+    if FLAGS.export_moving_average:
+      restore_checkpoint = tf.train.latest_checkpoint(FLAGS.model_dir)
+      variables_to_restore = get_pretrained_variables_to_restore(
+          restore_checkpoint, load_moving_average=True)
+      tf.logging.info('Restoring from the latest checkpoint: %s',
+                      restore_checkpoint)
+      tf.logging.info(str(variables_to_restore))
+
+      def restore_scaffold():
+        saver = tf.train.Saver(variables_to_restore)
+        return tf.train.Scaffold(saver=saver)
+
+      scaffold_fn = restore_scaffold
+
     predictions = {
         'classes': tf.argmax(logits, axis=1),
         'probabilities': tf.nn.softmax(logits, name='softmax_tensor')
     }
-    return tf.estimator.EstimatorSpec(
+    return tf.contrib.tpu.TPUEstimatorSpec(
         mode=mode,
         predictions=predictions,
         export_outputs={
             'classify': tf.estimator.export.PredictOutput(predictions)
-        })
+        },
+        scaffold_fn=scaffold_fn)
 
   # If necessary, in the model_fn, use params['batch_size'] instead the batch
   # size flags (--train_batch_size or --eval_batch_size).
@@ -380,7 +472,6 @@ def mnasnet_model_fn(features, labels, mode, params):
     ema_vars = list(set(ema_vars))
 
   host_call = None
-  restore_vars_dict = None
   if is_training:
     # Compute the current epoch and associated learning rate from global_step.
     current_epoch = (
@@ -459,9 +550,6 @@ def mnasnet_model_fn(features, labels, mode, params):
 
   else:
     train_op = None
-    if has_moving_average_decay:
-      # Load moving average variables for eval.
-      restore_vars_dict = ema.variables_to_restore(ema_vars)
 
   eval_metrics = None
   if mode == tf.estimator.ModeKeys.EVAL:
@@ -502,9 +590,34 @@ def mnasnet_model_fn(features, labels, mode, params):
   num_params = np.sum([np.prod(v.shape) for v in tf.trainable_variables()])
   tf.logging.info('number of trainable parameters: {}'.format(num_params))
 
-  def _scaffold_fn():
-    saver = tf.train.Saver(restore_vars_dict)
-    return tf.train.Scaffold(saver=saver)
+  # Prepares scaffold_fn if needed.
+  scaffold_fn = None
+  if is_training and FLAGS.init_checkpoint:
+    variables_to_restore = get_pretrained_variables_to_restore(
+        FLAGS.init_checkpoint, has_moving_average_decay)
+    tf.logging.info('Initializing from pretrained checkpoint: %s',
+                    FLAGS.init_checkpoint)
+    if FLAGS.use_tpu:
+
+      def init_scaffold():
+        tf.train.init_from_checkpoint(FLAGS.init_checkpoint,
+                                      variables_to_restore)
+        return tf.train.Scaffold()
+
+      scaffold_fn = init_scaffold
+    else:
+      tf.train.init_from_checkpoint(FLAGS.init_checkpoint, variables_to_restore)
+
+  restore_vars_dict = None
+  if not is_training and has_moving_average_decay:
+    # Load moving average variables for eval.
+    restore_vars_dict = ema.variables_to_restore(ema_vars)
+
+    def eval_scaffold():
+      saver = tf.train.Saver(restore_vars_dict)
+      return tf.train.Scaffold(saver=saver)
+
+    scaffold_fn = eval_scaffold
 
   return tf.contrib.tpu.TPUEstimatorSpec(
       mode=mode,
@@ -512,7 +625,7 @@ def mnasnet_model_fn(features, labels, mode, params):
       train_op=train_op,
       host_call=host_call,
       eval_metrics=eval_metrics,
-      scaffold_fn=_scaffold_fn if has_moving_average_decay else None)
+      scaffold_fn=scaffold_fn)
 
 
 def _verify_non_empty_string(value, field_name):
@@ -640,7 +753,8 @@ def main(unused_argv):
   # Initializes model parameters.
   params = dict(
       steps_per_epoch=FLAGS.num_train_images / FLAGS.train_batch_size,
-      use_bfloat16=FLAGS.use_bfloat16)
+      use_bfloat16=FLAGS.use_bfloat16,
+      quantized_training=FLAGS.quantized_training)
   mnasnet_est = tf.contrib.tpu.TPUEstimator(
       use_tpu=FLAGS.use_tpu,
       model_fn=mnasnet_model_fn,
