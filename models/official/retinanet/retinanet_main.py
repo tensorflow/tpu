@@ -28,6 +28,7 @@ from absl import flags
 import numpy as np
 import tensorflow as tf
 
+from common import inference_warmup
 import dataloader
 import retinanet_model
 from tensorflow.core.protobuf import rewriter_config_pb2  # pylint: disable=g-direct-tensorflow-import
@@ -165,10 +166,18 @@ flags.DEFINE_integer(
     'eval_timeout', None,
     'Maximum seconds between checkpoints before evaluation terminates.')
 
+flags.DEFINE_boolean('add_warmup_requests',
+                     True, 'Whether to add warmup requests to the export dir.')
+flags.DEFINE_string('model_name', 'retinanet',
+                    'Serving model name used for the model server.')
+flags.DEFINE_integer('inference_batch_size', 1,
+                     'Inference batch size for each core.')
+
+
 FLAGS = flags.FLAGS
 
 
-def serving_input_fn(image_size):
+def build_serving_input_fn(image_size, batch_size):
   """Input function for SavedModels and TF serving."""
 
   def _decode_and_crop(img_bytes):
@@ -177,12 +186,16 @@ def serving_input_fn(image_size):
     img = tf.image.convert_image_dtype(img, tf.float32)
     return img
 
-  image_bytes_list = tf.placeholder(shape=[None], dtype=tf.string)
-  images = tf.map_fn(
-      _decode_and_crop, image_bytes_list, back_prop=False, dtype=tf.float32)
-  images = tf.reshape(images, [-1, image_size, image_size, 3])
-  return tf.estimator.export.TensorServingInputReceiver(
-      images, {'image_bytes': image_bytes_list})
+  def serving_input_fn():
+    image_bytes_list = tf.placeholder(shape=[None], dtype=tf.string)
+    images = tf.map_fn(
+        _decode_and_crop, image_bytes_list, back_prop=False, dtype=tf.float32)
+    # Get static dimension for cpu.
+    images = tf.reshape(images, [batch_size, image_size, image_size, 3])
+    return tf.estimator.export.TensorServingInputReceiver(
+        features=images, receiver_tensors=image_bytes_list)
+
+  return serving_input_fn
 
 
 def write_summary(eval_results, summary_writer, current_step):
@@ -475,12 +488,6 @@ def main(argv):
         summary_writer = tf.summary.FileWriter(output_dir)
 
         write_summary(eval_results, summary_writer, total_steps)
-      if FLAGS.model_dir:
-        eval_estimator.export_saved_model(
-            export_dir_base=FLAGS.model_dir,
-            serving_input_receiver_fn=(
-                lambda: serving_input_fn(hparams.image_size))
-        )
     else:
       train_estimator = tf.estimator.Estimator(
           model_fn=retinanet_model.est_retinanet_model_fn,
@@ -577,10 +584,6 @@ def main(argv):
           tf.logging.info(
               'Evaluation finished after training step %d' % current_step)
           break
-        eval_estimator.export_saved_model(
-            export_dir_base=FLAGS.model_dir,
-            serving_input_receiver_fn=
-            lambda: serving_input_fn(hparams.image_size))
 
       except tf.errors.NotFoundError:
         # Since the coordinator is on a different job than the TPU worker,
@@ -637,12 +640,37 @@ def main(argv):
       tf.logging.info('Evaluation results: %s' % eval_results)
       current_step = int(cycle * FLAGS.num_steps_per_eval)
       write_summary(eval_results, summary_writer, current_step)
-    eval_estimator.export_saved_model(
-        export_dir_base=FLAGS.model_dir,
-        serving_input_receiver_fn=lambda: serving_input_fn(hparams.image_size))
 
   else:
     tf.logging.info('Mode not found.')
+
+  if FLAGS.model_dir:
+    tf.logging.info('Exporting saved model.')
+    eval_params = dict(
+        params,
+        use_tpu=True,
+        input_rand_hflip=False,
+        resnet_checkpoint=None,
+        is_training_bn=False,
+        use_bfloat16=False,
+    )
+    eval_estimator = tf.contrib.tpu.TPUEstimator(
+        model_fn=retinanet_model.tpu_retinanet_model_fn,
+        use_tpu=True,
+        train_batch_size=FLAGS.train_batch_size,
+        predict_batch_size=FLAGS.inference_batch_size,
+        config=run_config,
+        params=eval_params)
+    export_path = eval_estimator.export_saved_model(
+        export_dir_base=FLAGS.model_dir,
+        serving_input_receiver_fn=build_serving_input_fn(
+            hparams.image_size, FLAGS.inference_batch_size))
+    if FLAGS.add_warmup_requests:
+      inference_warmup.write_warmup_requests(
+          export_path,
+          FLAGS.model_name,
+          hparams.image_size,
+          batch_sizes=[FLAGS.inference_batch_size])
 
 
 if __name__ == '__main__':

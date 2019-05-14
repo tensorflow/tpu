@@ -147,7 +147,7 @@ Cloud TPU. With the default flags on everything, the model should train to
 above 75% accuracy for MnasNet-A1 model.
 
 You can launch TensorBoard (e.g. `tensorboard -logdir=$MODEL_DIR`) to view loss
-curves and other metadata regarding your training run.
+curves and other metadata regarding your training run. Please follow [tensorboard-setup](https://cloud.google.com/tpu/docs/tensorboard-setup) for detailed steps.
 
 > Note: if you launch TensorBoard on your GCE VM, be sure to configure either
 > [SSH port forwarding][ssh-port-fwd] or [SOCKS proxy over SSH][socks-proxy] to

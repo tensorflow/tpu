@@ -18,13 +18,12 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import unittest
 import numpy as np
 import tensorflow as tf
 from official.resnet import resnet_model
 
 
-class ResnetModelTest(unittest.TestCase):
+class ResnetModelTest(tf.test.TestCase):
 
   def test_load_resnet18(self):
     network = resnet_model.resnet_v1(resnet_depth=18,
@@ -39,4 +38,4 @@ class ResnetModelTest(unittest.TestCase):
                  feed_dict={input_bhw3: np.random.randn(1, 28, 28, 3)})
 
 if __name__ == '__main__':
-  unittest.main()
+  tf.test.main()

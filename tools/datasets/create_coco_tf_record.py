@@ -50,7 +50,7 @@ flags.DEFINE_boolean('include_masks', False,
 flags.DEFINE_string('image_dir', '', 'Directory containing images.')
 flags.DEFINE_string('image_info_file', '', 'File containing image information. '
                     'Tf Examples in the output files correspond to the image '
-                    'info entries in this file. If this file is not provided ',
+                    'info entries in this file. If this file is not provided '
                     'object_annotations_file is used if present. Otherwise, '
                     'caption_annotations_file is used to get image info.')
 flags.DEFINE_string('object_annotations_file', '', 'File containing object '

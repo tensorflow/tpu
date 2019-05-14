@@ -557,7 +557,6 @@ def main(unused_argv):
                                                FLAGS.hparams_file,
                                                FLAGS,
                                                FLAGS.hparams)
-
   tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
       FLAGS.tpu if (FLAGS.tpu or params['use_tpu']) else '',
       zone=FLAGS.tpu_zone,
@@ -566,7 +565,7 @@ def main(unused_argv):
   if params['use_async_checkpointing']:
     save_checkpoints_steps = None
   else:
-    save_checkpoints_steps = max(100, params['iterations_per_loop'])
+    save_checkpoints_steps = max(5000, params['iterations_per_loop'])
   config = tf.contrib.tpu.RunConfig(
       cluster=tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
@@ -677,7 +676,7 @@ def main(unused_argv):
         hooks.append(
             async_checkpoint.AsyncCheckpointSaverHook(
                 checkpoint_dir=FLAGS.model_dir,
-                save_steps=max(100, params['iterations_per_loop'])))
+                save_steps=max(5000, params['iterations_per_loop'])))
       if FLAGS.profile_every_n_steps > 0:
         hooks.append(
             tpu_profiler_hook.TPUProfilerHook(

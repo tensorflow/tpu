@@ -203,6 +203,37 @@ def mnasnet_small(depth_multiplier=None):
   return decoder.decode(blocks_args), global_params
 
 
+def mnasnet_d1(depth_multiplier=None):
+  """Creates a jointly searched mnasnet backbone for mnas-fpn.
+
+  Args:
+    depth_multiplier: multiplier to number of filters per layer.
+
+  Returns:
+    blocks_args: a list of BlocksArgs for internal MnasNet blocks.
+    global_params: GlobalParams, global parameters for the model.
+  """
+  blocks_args = [
+      'r1_k3_s11_e9_i32_o24', 'r3_k3_s22_e9_i24_o36',
+      'r5_k3_s22_e9_i36_o48', 'r4_k5_s22_e9_i48_o96',
+      'r5_k7_s11_e3_i96_o96', 'r3_k3_s22_e9_i96_o80',
+      'r1_k7_s11_e6_i80_o320_noskip'
+  ]
+  global_params = mnasnet_model.GlobalParams(
+      batch_norm_momentum=0.99,
+      batch_norm_epsilon=1e-3,
+      dropout_rate=0.2,
+      data_format='channels_last',
+      num_classes=1000,
+      depth_multiplier=depth_multiplier,
+      depth_divisor=8,
+      min_depth=None,
+      stem_size=32,
+      use_keras=False)
+  decoder = MnasNetDecoder()
+  return decoder.decode(blocks_args), global_params
+
+
 def get_model_params(model_name, override_params):
   """Get the block args and global params for a given model."""
   if model_name == 'mnasnet-a1':
@@ -211,6 +242,8 @@ def get_model_params(model_name, override_params):
     blocks_args, global_params = mnasnet_b1()
   elif model_name == 'mnasnet-small':
     blocks_args, global_params = mnasnet_small()
+  elif model_name == 'mnasnet-d1':
+    blocks_args, global_params = mnasnet_d1()
   else:
     raise NotImplementedError('model name is not pre-defined: %s' % model_name)
 
