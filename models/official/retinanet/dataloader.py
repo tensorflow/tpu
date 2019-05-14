@@ -237,9 +237,10 @@ def pad_to_fixed_size(data, pad_value, output_shape):
 class InputReader(object):
   """Input reader for dataset."""
 
-  def __init__(self, file_pattern, is_training):
+  def __init__(self, file_pattern, is_training, num_examples=0):
     self._file_pattern = file_pattern
     self._is_training = is_training
+    self._num_examples = num_examples
     self._max_num_instances = MAX_NUM_INSTANCES
 
   def __call__(self, params):
@@ -286,6 +287,10 @@ class InputReader(object):
       """
       with tf.name_scope('parser'):
         data = example_decoder.decode(value)
+        data['groundtruth_is_crowd'] = tf.cond(
+            tf.greater(tf.size(data['groundtruth_is_crowd']), 0),
+            lambda: data['groundtruth_is_crowd'],
+            lambda: tf.zeros_like(data['groundtruth_classes'], dtype=tf.bool))
         source_id = data['source_id']
         image = data['image']
         boxes = data['groundtruth_boxes']
@@ -397,6 +402,8 @@ class InputReader(object):
 
     dataset = dataset.map(_process_example)
     dataset = dataset.prefetch(tf.contrib.data.AUTOTUNE)
+    if self._num_examples > 0:
+      dataset = dataset.take(self._num_examples)
     return dataset
 
 

@@ -183,11 +183,10 @@ class ImageNetTFExampleInput(object):
     dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
 
     if self.is_training:
-      # Use a private thread pool and limit intra-op parallelism. Enable
-      # non-determinism only for training.
+      # Use tf.data's experimental_slack option to reduce CPU contention at the
+      # start of a step. Enable non-determinism only for training.
       options = tf.data.Options()
-      options.experimental_threading.max_intra_op_parallelism = 1
-      options.experimental_threading.private_threadpool_size = 16
+      options.experimental_slack = True
       options.experimental_deterministic = False
       dataset = dataset.with_options(options)
 

@@ -30,7 +30,9 @@ import tensorflow as tf
 
 import anchors
 import coco_metric
+import postprocess
 import retinanet_architecture
+
 
 _DEFAULT_BATCH_SIZE = 64
 _WEIGHT_DECAY = 1e-4
@@ -326,6 +328,27 @@ def coco_metric_fn(batch_size, anchor_labeler, filename=None, **kwargs):
   return coco_metrics
 
 
+def _predict_postprocess(cls_outputs, box_outputs, params):
+  """Post processes prediction outputs."""
+  predict_anchors = anchors.Anchors(
+      params['min_level'], params['max_level'], params['num_scales'],
+      params['aspect_ratios'], params['anchor_scale'], params['image_size'])
+  cls_outputs, box_outputs, anchor_boxes = postprocess.reshape_outputs(
+      cls_outputs, box_outputs, predict_anchors.boxes, params['min_level'],
+      params['max_level'], params['num_classes'])
+  boxes, scores, classes, num_detections = postprocess.generate_detections(
+      cls_outputs, box_outputs, anchor_boxes)
+
+  predictions = {
+      'detection_boxes': boxes,
+      'detection_classes': classes,
+      'detection_scores': scores,
+      'num_detections': num_detections,
+  }
+
+  return predictions
+
+
 def _model_fn(features, labels, mode, params, model, use_tpu_estimator_spec,
               variable_filter_fn=None):
   """Model defination for the RetinaNet model based on ResNet.
@@ -335,7 +358,7 @@ def _model_fn(features, labels, mode, params, model, use_tpu_estimator_spec,
       The height and width are fixed and equal.
     labels: the input labels in a dictionary. The labels include class targets
       and box targets which are dense label maps. The labels are generated from
-      get_input_fn function in data/dataloader.py
+      get_input_fn function in dataloader.py
     mode: the mode of TPUEstimator/Estimator including TRAIN, EVAL, and PREDICT.
     params: the dictionary defines hyperparameters of model. The default
       settings are in default_hparams function in this file.
@@ -371,15 +394,15 @@ def _model_fn(features, labels, mode, params, model, use_tpu_estimator_spec,
 
   # First check if it is in PREDICT mode.
   if mode == tf.estimator.ModeKeys.PREDICT:
-    # Include all prediction values in the default graph.
-    predictions = {}
-    for level in levels:
-      predictions['cls_outputs_%d' % level] = cls_outputs[level]
-      predictions['box_outputs_%d' % level] = box_outputs[level]
+    # Postprocess on host; memory layout for NMS on TPU is very inefficient.
+    def _predict_postprocess_wrapper(args):
+      return _predict_postprocess(args[0], args[1], args[2])
 
-    # Add the computed `top-k` values in addition to the raw boxes.
-    add_metric_fn_inputs(params, cls_outputs, box_outputs, predictions)
-    return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions)
+    predictions = tf.contrib.tpu.outside_compilation(
+        _predict_postprocess_wrapper, (cls_outputs, box_outputs, params))
+
+    return tf.contrib.tpu.TPUEstimatorSpec(mode=tf.estimator.ModeKeys.PREDICT,
+                                           predictions=predictions)
 
   # Load pretrained model from checkpoint.
   if params['resnet_checkpoint'] and mode == tf.estimator.ModeKeys.TRAIN:
@@ -433,7 +456,6 @@ def _model_fn(features, labels, mode, params, model, use_tpu_estimator_spec,
 
   eval_metrics = None
   if mode == tf.estimator.ModeKeys.EVAL:
-
     def metric_fn(**kwargs):
       """Returns a dictionary that has the evaluation metrics."""
       batch_size = params['batch_size']
