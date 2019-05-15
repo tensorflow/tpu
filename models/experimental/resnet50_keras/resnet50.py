@@ -24,6 +24,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import math
+
 from absl import app
 from absl import flags
 from absl import logging
@@ -31,10 +33,7 @@ import numpy as np
 import tensorflow as tf
 
 import imagenet_input
-import model_saving_utils
 import resnet_model
-from tensorflow.python.keras import backend as K
-from tensorflow.python.keras.optimizer_v2 import gradient_descent
 
 # Common flags for TPU models.
 flags.DEFINE_string('tpu', None, 'Name of the TPU to use.')
@@ -49,7 +48,6 @@ flags.DEFINE_bool(
     'eval_top_5_accuracy', True,
     'Eval both top 1 and top 5 accuracy. Otherwise, only eval top 1 accuracy.')
 flags.DEFINE_integer('num_cores', 8, 'Number of TPU cores.')
-
 
 # Imagenet training and test data sets.
 NUM_CLASSES = 1000
@@ -141,7 +139,7 @@ class LearningRateBatchScheduler(tf.keras.callbacks.Callback):
     if not isinstance(lr, (float, np.float32, np.float64)):
       raise ValueError('The output of the "schedule" function should be float.')
     if lr != self.prev_lr:
-      K.set_value(self.model.optimizer.lr, lr)
+      tf.keras.backend.set_value(self.model.optimizer.lr, lr)
       self.prev_lr = lr
       logging.debug('Epoch %05d Batch %05d: LearningRateBatchScheduler change '
                     'learning rate to %s.', self.epochs, batch, lr)
@@ -152,14 +150,16 @@ def sparse_top_k_categorical_accuracy(y_true, y_pred, k=5):
   y_pred_rank = tf.convert_to_tensor(y_pred).get_shape().ndims
   y_true_rank = tf.convert_to_tensor(y_true).get_shape().ndims
   # If the shape of y_true is (num_samples, 1), squeeze to (num_samples,)
-  if (y_true_rank is not None) and (y_pred_rank is not None) and (len(
-      K.int_shape(y_true)) == len(K.int_shape(y_pred))):
+  if ((y_true_rank is not None) and
+      (y_pred_rank is not None) and
+      (len(tf.keras.backend.int_shape(y_true)) ==
+       len(tf.keras.backend.int_shape(y_pred)))):
     y_true = tf.squeeze(y_true, [-1])
 
   y_true = tf.cast(y_true, 'int32')
 
   in_top_k_on_device = tf.nn.in_top_k(y_pred, y_true, k)
-  return K.mean(in_top_k_on_device, axis=-1)
+  return tf.keras.backend.mean(in_top_k_on_device, axis=-1)
 
 
 def main(unused_argv):
@@ -169,7 +169,8 @@ def main(unused_argv):
 
   training_steps_per_epoch = FLAGS.steps_per_epoch or (
       int(APPROX_IMAGENET_TRAINING_IMAGES // batch_size))
-  validation_steps = int(IMAGENET_VALIDATION_IMAGES // batch_size)
+  validation_steps = int(
+      math.ceil(1.0 * IMAGENET_VALIDATION_IMAGES / batch_size))
 
   model_dir = FLAGS.model_dir if FLAGS.model_dir else DEFAULT_MODEL_DIR
   logging.info('Saving tensorboard summaries at %s', model_dir)
@@ -195,7 +196,7 @@ def main(unused_argv):
       metrics.append(sparse_top_k_categorical_accuracy)
 
     model.compile(
-        optimizer=gradient_descent.SGD(
+        optimizer=tf.keras.optimizers.SGD(
             learning_rate=BASE_LEARNING_RATE, momentum=0.9, nesterov=True),
         loss='sparse_categorical_crossentropy',
         metrics=metrics)
@@ -221,10 +222,7 @@ def main(unused_argv):
       callbacks=training_callbacks,
       validation_data=imagenet_eval.input_fn(),
       validation_steps=validation_steps,
-      validation_freq=[30, 60, 90])
-
-  model_saving_utils.save_model(model, model_dir, WEIGHTS_TXT)
-
+      validation_freq=5)
 
 if __name__ == '__main__':
   tf.logging.set_verbosity(tf.logging.INFO)

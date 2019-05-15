@@ -145,7 +145,7 @@ class ImageNetInput(object):
             self.dataset_parser,
             batch_size=self.batch_size,
             num_parallel_batches=2,
-            drop_remainder=True))
+            drop_remainder=False))
 
     # Prefetch overlaps in-feed with training
     dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
