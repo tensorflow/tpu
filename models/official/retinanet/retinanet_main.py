@@ -180,20 +180,48 @@ FLAGS = flags.FLAGS
 def build_serving_input_fn(image_size, batch_size):
   """Input function for SavedModels and TF serving."""
 
-  def _decode_and_crop(img_bytes):
+  def _preprocess_image(img_bytes):
+    """Decodes to jpeg, resizes, and pads the img_bytes input."""
+
+    # Decode, resize, and pad without changing the aspect ratio.
     img = tf.image.decode_jpeg(img_bytes)
-    img = tf.image.resize_image_with_crop_or_pad(img, image_size, image_size)
+    img_shape = tf.shape(img)
     img = tf.image.convert_image_dtype(img, tf.float32)
-    return img
+    img_height = tf.cast(img_shape[0], dtype=tf.float32)
+    img_width = tf.cast(img_shape[1], dtype=tf.float32)
+    height_scale, width_scale = image_size / img_height, image_size / img_width
+
+    # Use same scale for x,y to maintain aspect ratio.
+    scale = tf.minimum(height_scale, width_scale)
+    scaled_height = tf.math.floor(scale * img_height)
+    scaled_width = tf.math.floor(scale * img_width)
+
+    img = tf.image.resize_images(img, [scaled_height, scaled_width],
+                                 method=tf.image.ResizeMethod.BILINEAR)
+    img = tf.image.pad_to_bounding_box(img, 0, 0, image_size, image_size)
+
+    img_info = tf.stack([
+        tf.cast(scaled_height, dtype=tf.float32),
+        tf.cast(scaled_width, dtype=tf.float32),
+        # Client side to multiply this factor by bbox coordinates.
+        1.0 / scale,
+        img_height,
+        img_width])
+    return img, img_info
 
   def serving_input_fn():
     image_bytes_list = tf.placeholder(shape=[None], dtype=tf.string)
-    images = tf.map_fn(
-        _decode_and_crop, image_bytes_list, back_prop=False, dtype=tf.float32)
+    images, images_info = tf.map_fn(
+        _preprocess_image, image_bytes_list, back_prop=False,
+        dtype=(tf.float32, tf.float32))
     # Get static dimension for cpu.
     images = tf.reshape(images, [batch_size, image_size, image_size, 3])
-    return tf.estimator.export.TensorServingInputReceiver(
-        features=images, receiver_tensors=image_bytes_list)
+    return tf.estimator.export.ServingInputReceiver(
+        features={
+            'inputs': images,
+            'image_info': images_info
+        },
+        receiver_tensors=image_bytes_list)
 
   return serving_input_fn
 
@@ -661,10 +689,12 @@ def main(argv):
         predict_batch_size=FLAGS.inference_batch_size,
         config=run_config,
         params=eval_params)
+
     export_path = eval_estimator.export_saved_model(
         export_dir_base=FLAGS.model_dir,
         serving_input_receiver_fn=build_serving_input_fn(
-            hparams.image_size, FLAGS.inference_batch_size))
+            hparams.image_size,
+            FLAGS.inference_batch_size))
     if FLAGS.add_warmup_requests:
       inference_warmup.write_warmup_requests(
           export_path,

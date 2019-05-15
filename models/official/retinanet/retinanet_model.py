@@ -371,6 +371,13 @@ def _model_fn(features, labels, mode, params, model, use_tpu_estimator_spec,
     tpu_spec: the TPUEstimatorSpec to run training, evaluation, or prediction.
   """
 
+  # In predict mode features is a dict with input as value of the 'inputs'.
+  image_info = None
+  if (mode == tf.estimator.ModeKeys.PREDICT
+      and isinstance(features, dict) and 'inputs' in features):
+    image_info = features['image_info']
+    features = features['inputs']
+
   def _model_outputs():
     return model(
         features,
@@ -400,6 +407,12 @@ def _model_fn(features, labels, mode, params, model, use_tpu_estimator_spec,
 
     predictions = tf.contrib.tpu.outside_compilation(
         _predict_postprocess_wrapper, (cls_outputs, box_outputs, params))
+
+    # Include resizing information on prediction output to help bbox drawing.
+    if image_info is not None:
+      predictions.update({
+          'image_info': tf.identity(image_info, 'ImageInfo'),
+      })
 
     return tf.contrib.tpu.TPUEstimatorSpec(mode=tf.estimator.ModeKeys.PREDICT,
                                            predictions=predictions)
