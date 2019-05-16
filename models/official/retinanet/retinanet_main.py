@@ -1,3 +1,4 @@
+
 # Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -105,24 +106,59 @@ flags.DEFINE_integer(
     'eval_timeout', None,
     'Maximum seconds between checkpoints before evaluation terminates.')
 
+flags.DEFINE_integer('inference_batch_size', 1,
+                     'Inference batch size for each core.')
+
 FLAGS = flags.FLAGS
 
 
-def serving_input_fn(image_size):
+def build_serving_input_fn(image_size, batch_size):
   """Input function for SavedModels and TF serving."""
 
-  def _decode_and_crop(img_bytes):
-    img = tf.image.decode_jpeg(img_bytes)
-    img = tf.image.resize_image_with_crop_or_pad(img, image_size, image_size)
-    img = tf.image.convert_image_dtype(img, tf.float32)
-    return img
+  def _preprocess_image(img_bytes):
+    """Decodes to jpeg, resizes, and pads the img_bytes input."""
 
-  image_bytes_list = tf.placeholder(shape=[None], dtype=tf.string)
-  images = tf.map_fn(
-      _decode_and_crop, image_bytes_list, back_prop=False, dtype=tf.float32)
-  images = tf.reshape(images, [-1, image_size, image_size, 3])
-  return tf.estimator.export.TensorServingInputReceiver(
-      images, {'image_bytes': image_bytes_list})
+    # Decode, resize, and pad without changing the aspect ratio.
+    img = tf.image.decode_jpeg(img_bytes)
+    img_shape = tf.shape(img)
+    img = tf.image.convert_image_dtype(img, tf.float32)
+    img_height = tf.cast(img_shape[0], dtype=tf.float32)
+    img_width = tf.cast(img_shape[1], dtype=tf.float32)
+    height_scale, width_scale = image_size / img_height, image_size / img_width
+
+    # Use same scale for x,y to maintain aspect ratio.
+    scale = tf.minimum(height_scale, width_scale)
+    scaled_height = tf.math.floor(scale * img_height)
+    scaled_width = tf.math.floor(scale * img_width)
+
+    img = tf.image.resize_images(img, [scaled_height, scaled_width],
+                                 method=tf.image.ResizeMethod.BILINEAR)
+    img = tf.image.pad_to_bounding_box(img, 0, 0, image_size, image_size)
+
+    img_info = tf.stack([
+        tf.cast(scaled_height, dtype=tf.float32),
+        tf.cast(scaled_width, dtype=tf.float32),
+        # Client side to multiply this factor by bbox coordinates.
+        1.0 / scale,
+        img_height,
+        img_width])
+    return img, img_info
+
+  def serving_input_fn():
+    image_bytes_list = tf.placeholder(shape=[None], dtype=tf.string)
+    images, images_info = tf.map_fn(
+        _preprocess_image, image_bytes_list, back_prop=False,
+        dtype=(tf.float32, tf.float32))
+    # Get static dimension for cpu.
+    images = tf.reshape(images, [batch_size, image_size, image_size, 3])
+    return tf.estimator.export.ServingInputReceiver(
+        features={
+            'inputs': images,
+            'image_info': images_info
+        },
+        receiver_tensors=image_bytes_list)
+
+  return serving_input_fn
 
 
 def main(argv):
@@ -274,11 +310,6 @@ def main(argv):
               FLAGS.validation_file_pattern, is_training=False),
           steps=FLAGS.eval_samples // FLAGS.eval_batch_size)
       tf.logging.info('Eval results: %s' % eval_results)
-    if FLAGS.model_dir:
-      eval_estimator.export_saved_model(
-          export_dir_base=FLAGS.model_dir,
-          serving_input_receiver_fn=lambda: serving_input_fn(hparams.image_size)
-      )
 
   elif FLAGS.mode == 'eval':
     # Eval only runs on CPU or GPU host with batch_size = 1.
@@ -330,10 +361,6 @@ def main(argv):
           tf.logging.info(
               'Evaluation finished after training step %d' % current_step)
           break
-        eval_estimator.export_saved_model(
-            export_dir_base=FLAGS.model_dir,
-            serving_input_receiver_fn=
-            lambda: serving_input_fn(hparams.image_size))
 
       except tf.errors.NotFoundError:
         # Since the coordinator is on a different job than the TPU worker,
@@ -379,12 +406,32 @@ def main(argv):
               FLAGS.validation_file_pattern, is_training=False),
           steps=FLAGS.eval_samples // FLAGS.eval_batch_size)
       tf.logging.info('Evaluation results: %s' % eval_results)
-    eval_estimator.export_saved_model(
-        export_dir_base=FLAGS.model_dir,
-        serving_input_receiver_fn=lambda: serving_input_fn(hparams.image_size))
 
   else:
     tf.logging.info('Mode not found.')
+
+  if FLAGS.model_dir:
+    tf.logging.info('Exporting saved model.')
+    eval_params = dict(
+        params,
+        use_tpu=True,
+        input_rand_hflip=False,
+        resnet_checkpoint=None,
+        is_training_bn=False,
+        use_bfloat16=False,
+    )
+    eval_estimator = tf.contrib.tpu.TPUEstimator(
+        model_fn=retinanet_model.retinanet_model_fn,
+        use_tpu=True,
+        train_batch_size=FLAGS.train_batch_size,
+        predict_batch_size=FLAGS.inference_batch_size,
+        config=run_config,
+        params=eval_params)
+    export_path = eval_estimator.export_saved_model(
+        export_dir_base=FLAGS.model_dir,
+        serving_input_receiver_fn=build_serving_input_fn(
+            hparams.image_size, FLAGS.inference_batch_size))
+
 
 
 if __name__ == '__main__':
