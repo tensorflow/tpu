@@ -91,6 +91,13 @@ class DistributedExecuter(object):
       params_io.save_hparams_to_yaml(self._model_config,
                                      model_dir + '/params.yaml')
 
+  def _write_summary(self, summary_writer, eval_results, predictions,
+                     current_step):
+    if not self._model_config.visualize_images_summary:
+      predictions = None
+    evaluation.write_summary(
+        eval_results, summary_writer, current_step, predictions=predictions)
+
   def train(self,
             train_input_fn,
             run_eval_after_train=False,
@@ -125,18 +132,17 @@ class DistributedExecuter(object):
     eval_params = self.build_model_parameters('eval', run_config)
     eval_estimator = self.build_mask_rcnn_estimator(eval_params, run_config,
                                                     'eval')
-    eval_results = evaluation.evaluate(eval_estimator, eval_input_fn,
-                                       self._model_config.eval_samples,
-                                       self._model_config.eval_batch_size,
-                                       self._model_config.include_mask,
-                                       self._model_config.val_json_file)
+    eval_results, predictions = evaluation.evaluate(
+        eval_estimator, eval_input_fn, self._model_config.eval_samples,
+        self._model_config.eval_batch_size, self._model_config.include_mask,
+        self._model_config.val_json_file)
 
     output_dir = os.path.join(self._flags.model_dir, 'eval')
     tf.gfile.MakeDirs(output_dir)
     # Summary writer writes out eval metrics.
     summary_writer = tf.summary.FileWriter(output_dir)
-    evaluation.write_summary(eval_results, summary_writer,
-                             self._model_config.total_steps)
+    self._write_summary(summary_writer, eval_results, predictions,
+                        self._model_config.total_steps)
     summary_writer.close()
 
     return eval_results
@@ -171,12 +177,12 @@ class DistributedExecuter(object):
 
       tf.logging.info('Starting to evaluate.')
       try:
-        eval_results = evaluation.evaluate(eval_estimator, eval_input_fn,
-                                           self._model_config.eval_samples,
-                                           self._model_config.eval_batch_size,
-                                           self._model_config.include_mask,
-                                           self._model_config.val_json_file)
-        evaluation.write_summary(eval_results, summary_writer, current_step)
+        eval_results, predictions = evaluation.evaluate(
+            eval_estimator, eval_input_fn, self._model_config.eval_samples,
+            self._model_config.eval_batch_size, self._model_config.include_mask,
+            self._model_config.val_json_file)
+        self._write_summary(summary_writer, eval_results, predictions,
+                            current_step)
 
         if current_step >= self._model_config.total_steps:
           tf.logging.info('Evaluation finished after training step %d' %
@@ -216,25 +222,24 @@ class DistributedExecuter(object):
           input_fn=train_input_fn, steps=self._model_config.num_steps_per_eval)
 
       tf.logging.info('Start evaluation cycle %d.' % cycle)
-      eval_results = evaluation.evaluate(eval_estimator, eval_input_fn,
-                                         self._model_config.eval_samples,
-                                         self._model_config.eval_batch_size,
-                                         self._model_config.include_mask,
-                                         self._model_config.val_json_file)
+      eval_results, predictions = evaluation.evaluate(
+          eval_estimator, eval_input_fn, self._model_config.eval_samples,
+          self._model_config.eval_batch_size, self._model_config.include_mask,
+          self._model_config.val_json_file)
 
       current_step = int(cycle * self._model_config.num_steps_per_eval)
-      evaluation.write_summary(eval_results, summary_writer, current_step)
+      self._write_summary(summary_writer, eval_results, predictions,
+                          current_step)
 
     tf.logging.info('Starting training cycle %d.' % num_cycles)
     train_estimator.train(
         input_fn=train_input_fn, max_steps=self._model_config.total_steps)
-    eval_results = evaluation.evaluate(eval_estimator, eval_input_fn,
-                                       self._model_config.eval_samples,
-                                       self._model_config.eval_batch_size,
-                                       self._model_config.include_mask,
-                                       self._model_config.val_json_file)
-    evaluation.write_summary(eval_results, summary_writer,
-                             self._model_config.total_steps)
+    eval_results, predictions = evaluation.evaluate(
+        eval_estimator, eval_input_fn, self._model_config.eval_samples,
+        self._model_config.eval_batch_size, self._model_config.include_mask,
+        self._model_config.val_json_file)
+    self._write_summary(summary_writer, eval_results, predictions,
+                        self._model_config.total_steps)
     summary_writer.close()
     return eval_results
 

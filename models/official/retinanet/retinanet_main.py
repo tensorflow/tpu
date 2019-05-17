@@ -75,8 +75,13 @@ flags.DEFINE_string(
     'resnet_checkpoint', '',
     'Location of the ResNet50 checkpoint to use for model '
     'initialization.')
-flags.DEFINE_string('hparams', '',
-                    'Comma separated k=v pairs of hyperparameters.')
+flags.DEFINE_string(
+    'hparams', '', 'Comma separated k=v pairs of hyperparameters.'
+    'Value can be overwrited by --config_file.')
+flags.DEFINE_string(
+    'config_file', '', 'Path to the JSON file of hyperparameters. '
+    'It has the highest priority, will overwrite values from '
+    '--hparams.')
 flags.DEFINE_integer(
     'num_cores', default=8, help='Number of TPU cores for training')
 flags.DEFINE_bool('use_spatial_partition', False, 'Use spatial partition.')
@@ -276,7 +281,14 @@ def main(argv):
 
   # Parse hparams
   hparams = retinanet_model.default_hparams()
+  config_file = FLAGS.config_file
+  hparams.num_epochs = FLAGS.num_epochs
   hparams.parse(FLAGS.hparams)
+  if config_file and tf.gfile.Exists(config_file):
+    # load params from file.
+    with tf.gfile.Open(config_file, 'r') as f:
+      values_map = json.load(f)
+      hparams.override_from_dict(values_map)
 
   # The following is for spatial partitioning. `features` has one tensor while
   # `labels` had 4 + (`max_level` - `min_level` + 1) * 2 tensors. The input
@@ -470,6 +482,12 @@ def main(argv):
       raise ValueError('Unrecognized distribution strategy.')
 
   if FLAGS.mode == 'train':
+    if FLAGS.model_dir is not None:
+      if not tf.gfile.Exists(FLAGS.model_dir):
+        tf.gfile.MakeDirs(FLAGS.model_dir)
+      with tf.gfile.Open(os.path.join(FLAGS.model_dir, 'hparams.json'),
+                         'w') as f:
+        json.dump(hparams.values(), f, sort_keys=True, indent=2)
     tf.logging.info(params)
     if FLAGS.distribution_strategy is None:
       total_steps = int((FLAGS.num_epochs * FLAGS.num_examples_per_epoch) /
