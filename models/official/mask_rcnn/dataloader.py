@@ -153,6 +153,7 @@ class InputReader(object):
             lambda: tf.zeros_like(data['groundtruth_classes'], dtype=tf.bool))
         image = data['image']
         image = tf.image.convert_image_dtype(image, dtype=tf.float32)
+        orig_image = image
         source_id = data['source_id']
         source_id = tf.where(tf.equal(source_id, tf.constant('')), '-1',
                              source_id)
@@ -170,6 +171,10 @@ class InputReader(object):
               'image_info': image_info,
               'source_ids': source_id,
           }
+          if params['visualize_images_summary']:
+            resized_image = tf.image.resize_images(orig_image,
+                                                   params['image_size'])
+            features['orig_images'] = resized_image
           if params['include_groundtruth_in_features']:
             labels = _prepare_labels_for_eval(
                 data,

@@ -350,6 +350,8 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
         'source_id': features['source_ids'],
         'image_info': features['image_info'],
     })
+  if mode == tf.estimator.ModeKeys.PREDICT and 'orig_images' in features:
+    model_outputs['orig_images'] = features['orig_images']
 
   # First check if it is in PREDICT mode.
   if mode == tf.estimator.ModeKeys.PREDICT:

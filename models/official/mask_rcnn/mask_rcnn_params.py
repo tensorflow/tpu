@@ -133,4 +133,6 @@ def default_config():
       # If `val_json_file` is not provided, one can also read groundtruth
       # from input by setting `include_groundtruth_in_features`=True.
       include_groundtruth_in_features=False,
+      # Visualizes images and detection boxes on TensorBoard.
+      visualize_images_summary=False,
   )
