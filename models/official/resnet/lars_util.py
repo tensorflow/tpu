@@ -41,18 +41,19 @@ def poly_rate_schedule(current_epoch,
     A scaled `Tensor` for current learning rate.
   """
 
-  if params['train_batch_size'] <= 16384:
+  batch_size = params['train_batch_size']
+
+  if batch_size < 2000:
+    tf.logging.warn('LARS is not recommended for batch sizes smaller than 2000')
+  if batch_size < 16384:
+    plr = 10.0
+    w_epochs = 5
+  elif batch_size < 32768:
     plr = 25.0
     w_epochs = 5
-  elif params['train_batch_size'] == 32768:
-    plr = 34.0
-    w_epochs = 12
-  elif params['train_batch_size'] == 65536:
-    plr = 35.0
-    w_epochs = 34
   else:
-    plr = 41.0
-    w_epochs = 16
+    plr = 32.0
+    w_epochs = 14
 
   # Override default poly learning rate and warmup epochs
   if params['poly_rate'] > 0.0:

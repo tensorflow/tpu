@@ -177,6 +177,11 @@ flags.DEFINE_bool(
     'transpose_input', default=True,
     help='Use TPU double transpose optimization')
 
+flags.DEFINE_bool(
+    'use_bfloat16',
+    default=False,
+    help=('Whether to use bfloat16 as activation for training.'))
+
 flags.DEFINE_string(
     'export_dir',
     default=None,
@@ -299,11 +304,20 @@ def model_fn(features, labels, mode, params):
   if FLAGS.width_coefficient:
     override_params['width_coefficient'] = FLAGS.width_coefficient
 
-  logits, _ = efficientnet_builder.build_model(
-      features,
-      model_name=FLAGS.model_name,
-      training=is_training,
-      override_params=override_params)
+  if params['use_bfloat16']:
+    with tf.contrib.tpu.bfloat16_scope():
+      logits, _ = efficientnet_builder.build_model(
+          features,
+          model_name=FLAGS.model_name,
+          training=is_training,
+          override_params=override_params)
+      logits = tf.cast(logits, tf.float32)
+  else:
+    logits, _ = efficientnet_builder.build_model(
+        features,
+        model_name=FLAGS.model_name,
+        training=is_training,
+        override_params=override_params)
 
   if mode == tf.estimator.ModeKeys.PREDICT:
     predictions = {
@@ -585,7 +599,9 @@ def main(unused_argv):
           per_host_input_for_training=tf.contrib.tpu.InputPipelineConfig
           .PER_HOST_V2))  # pylint: disable=line-too-long
   # Initializes model parameters.
-  params = dict(steps_per_epoch=FLAGS.num_train_images / FLAGS.train_batch_size)
+  params = dict(
+      steps_per_epoch=FLAGS.num_train_images / FLAGS.train_batch_size,
+      use_bfloat16=FLAGS.use_bfloat16)
   est = tf.contrib.tpu.TPUEstimator(
       use_tpu=FLAGS.use_tpu,
       model_fn=model_fn,
@@ -602,7 +618,7 @@ def main(unused_argv):
     select_train, select_eval = _select_tables_from_flags()
     imagenet_train, imagenet_eval = [imagenet_input.ImageNetBigtableInput(
         is_training=is_training,
-        use_bfloat16=False,
+        use_bfloat16=FLAGS.use_bfloat16,
         transpose_input=FLAGS.transpose_input,
         selection=selection) for (is_training, selection) in
                                      [(True, select_train),
@@ -620,7 +636,7 @@ def main(unused_argv):
             cache=FLAGS.use_cache and is_training,
             image_size=input_image_size,
             num_parallel_calls=FLAGS.num_parallel_calls,
-            use_bfloat16=False) for is_training in [True, False]
+            use_bfloat16=FLAGS.use_bfloat16) for is_training in [True, False]
     ]
 
   if FLAGS.mode == 'eval':
