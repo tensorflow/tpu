@@ -163,7 +163,7 @@ class MBConvBlock(object):
     filters = self._block_args.input_filters * self._block_args.expand_ratio
     if self._block_args.expand_ratio != 1:
       # Expansion phase:
-      self._expand_conv = tf.keras.layers.Conv2D(
+      self._expand_conv = tf.layers.Conv2D(
           filters,
           kernel_size=[1, 1],
           strides=[1, 1],
@@ -177,7 +177,7 @@ class MBConvBlock(object):
 
     kernel_size = self._block_args.kernel_size
     # Depth-wise convolution phase:
-    self._depthwise_conv = tf.keras.layers.DepthwiseConv2D(
+    self._depthwise_conv = utils.DepthwiseConv2D(
         [kernel_size, kernel_size],
         strides=self._block_args.strides,
         depthwise_initializer=conv_kernel_initializer,
@@ -192,14 +192,14 @@ class MBConvBlock(object):
       num_reduced_filters = max(
           1, int(self._block_args.input_filters * self._block_args.se_ratio))
       # Squeeze and Excitation layer.
-      self._se_reduce = tf.keras.layers.Conv2D(
+      self._se_reduce = tf.layers.Conv2D(
           num_reduced_filters,
           kernel_size=[1, 1],
           strides=[1, 1],
           kernel_initializer=conv_kernel_initializer,
           padding='same',
           use_bias=True)
-      self._se_expand = tf.keras.layers.Conv2D(
+      self._se_expand = tf.layers.Conv2D(
           filters,
           kernel_size=[1, 1],
           strides=[1, 1],
@@ -209,7 +209,7 @@ class MBConvBlock(object):
 
     # Output phase:
     filters = self._block_args.output_filters
-    self._project_conv = tf.keras.layers.Conv2D(
+    self._project_conv = tf.layers.Conv2D(
         filters,
         kernel_size=[1, 1],
         strides=[1, 1],
@@ -332,7 +332,7 @@ class Model(tf.keras.Model):
       channel_axis = -1
 
     # Stem part.
-    self._conv_stem = tf.keras.layers.Conv2D(
+    self._conv_stem = tf.layers.Conv2D(
         filters=round_filters(32, self._global_params),
         kernel_size=[3, 3],
         strides=[2, 2],
@@ -345,7 +345,7 @@ class Model(tf.keras.Model):
         epsilon=batch_norm_epsilon)
 
     # Head part.
-    self._conv_head = tf.keras.layers.Conv2D(
+    self._conv_head = tf.layers.Conv2D(
         filters=1280,
         kernel_size=[1, 1],
         strides=[1, 1],
@@ -359,7 +359,7 @@ class Model(tf.keras.Model):
 
     self._avg_pooling = tf.keras.layers.GlobalAveragePooling2D(
         data_format=self._global_params.data_format)
-    self._fc = tf.keras.layers.Dense(
+    self._fc = tf.layers.Dense(
         self._global_params.num_classes,
         kernel_initializer=dense_kernel_initializer)
 
