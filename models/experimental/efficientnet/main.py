@@ -238,11 +238,6 @@ flags.DEFINE_float(
 flags.DEFINE_bool(
     'use_async_checkpointing', default=False, help=('Enable async checkpoint'))
 
-# Learning rate schedule
-LR_SCHEDULE = [    # (multiplier, epoch to start) tuples
-    (1.0, 5), (0.1, 30), (0.01, 60), (0.001, 80)
-]
-
 # The input tensor is in the range of [0, 255], we need to scale them to the
 # range of [0, 1]
 MEAN_RGB = [0.485 * 255, 0.456 * 255, 0.406 * 255]
@@ -304,20 +299,20 @@ def model_fn(features, labels, mode, params):
   if FLAGS.width_coefficient:
     override_params['width_coefficient'] = FLAGS.width_coefficient
 
-  if params['use_bfloat16']:
-    with tf.contrib.tpu.bfloat16_scope():
-      logits, _ = efficientnet_builder.build_model(
-          features,
-          model_name=FLAGS.model_name,
-          training=is_training,
-          override_params=override_params)
-      logits = tf.cast(logits, tf.float32)
-  else:
+  def build_model():
     logits, _ = efficientnet_builder.build_model(
         features,
         model_name=FLAGS.model_name,
         training=is_training,
-        override_params=override_params)
+        override_params=override_params,
+        model_dir=FLAGS.model_dir)
+    return logits
+
+  if params['use_bfloat16']:
+    with tf.contrib.tpu.bfloat16_scope():
+      logits = tf.cast(build_model(), tf.float32)
+  else:
+    logits = build_model()
 
   if mode == tf.estimator.ModeKeys.PREDICT:
     predictions = {
@@ -386,7 +381,7 @@ def model_fn(features, labels, mode, params):
         train_op = ema.apply(ema_vars)
 
     if not FLAGS.skip_host_call:
-      def host_call_fn(gs, loss, lr, ce):
+      def host_call_fn(gs, lr, ce):
         """Training host call. Creates scalar summaries for training metrics.
 
         This function is executed on the CPU and should not directly reference
@@ -400,7 +395,6 @@ def model_fn(features, labels, mode, params):
 
         Args:
           gs: `Tensor with shape `[batch]` for the global_step
-          loss: `Tensor` with shape `[batch]` for the training loss.
           lr: `Tensor` with shape `[batch]` for the learning_rate.
           ce: `Tensor` with shape `[batch]` for the current_epoch.
 
@@ -415,7 +409,6 @@ def model_fn(features, labels, mode, params):
         with tf.contrib.summary.create_file_writer(
             FLAGS.model_dir, max_queue=FLAGS.iterations_per_loop).as_default():
           with tf.contrib.summary.always_record_summaries():
-            tf.contrib.summary.scalar('loss', loss[0], step=gs)
             tf.contrib.summary.scalar('learning_rate', lr[0], step=gs)
             tf.contrib.summary.scalar('current_epoch', ce[0], step=gs)
 
@@ -427,11 +420,10 @@ def model_fn(features, labels, mode, params):
       # dimension. These Tensors are implicitly concatenated to
       # [params['batch_size']].
       gs_t = tf.reshape(global_step, [1])
-      loss_t = tf.reshape(loss, [1])
       lr_t = tf.reshape(learning_rate, [1])
       ce_t = tf.reshape(current_epoch, [1])
 
-      host_call = (host_call_fn, [gs_t, loss_t, lr_t, ce_t])
+      host_call = (host_call_fn, [gs_t, lr_t, ce_t])
 
   else:
     train_op = None
@@ -571,7 +563,7 @@ def main(unused_argv):
   input_image_size = FLAGS.input_image_size
   if not input_image_size:
     if FLAGS.model_name.startswith('efficientnet'):
-      _, _, input_image_size = efficientnet_builder.efficientnet_params(
+      _, _, input_image_size, _ = efficientnet_builder.efficientnet_params(
           FLAGS.model_name)
     else:
       raise ValueError('input_image_size must be set expect for EfficientNet.')

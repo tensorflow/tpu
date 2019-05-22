@@ -113,7 +113,10 @@ class TpuBatchNormalization(tf.layers.BatchNormalization):
         inputs, reduction_axes, keep_dims=keep_dims)
 
     num_shards = tpu_function.get_tpu_context().number_of_shards or 1
-    num_shards_per_group = max(1, num_shards // 32)  # group for > 4x4.
+    if num_shards <= 8:  # Skip cross_replica for 2x2 or smaller slices.
+      num_shards_per_group = 1
+    else:
+      num_shards_per_group = max(8, num_shards // 4)
     tf.logging.info('TpuBatchNormalization with num_shards_per_group %s',
                     num_shards_per_group)
     if num_shards_per_group > 1:
