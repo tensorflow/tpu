@@ -72,7 +72,8 @@ class EvalCkptDriver(object):
     self.batch_size = batch_size
     self.num_classes = 1000
     # Model Scaling parameters
-    _, _, self.image_size = efficientnet_builder.efficientnet_params(model_name)
+    _, _, self.image_size, _ = efficientnet_builder.efficientnet_params(
+        model_name)
 
   def restore_model(self, sess, ckpt_dir):
     """Restore variables from checkpoint dir."""
@@ -133,6 +134,8 @@ class EvalCkptDriver(object):
         idx = np.argsort(out_probs)[::-1]
         prediction_idx.append(idx[:5])
         prediction_prob.append([out_probs[pid] for pid in idx[:5]])
+
+      # Return the top 5 predictions (idx and prob) for each image.
       return prediction_idx, prediction_prob
 
 
@@ -144,6 +147,10 @@ def eval_example_images(model_name, ckpt_dir, image_files, labels_map_file):
     ckpt_dir: str. Checkpoint directory path.
     image_files: List[str]. A list of image file paths.
     labels_map_file: str. The labels map file path.
+
+  Returns:
+    A tuple (pred_idx, and pred_prob), where pred_idx is the top 5 prediction
+    index and pred_prob is the top 5 prediction probability.
   """
   eval_ckpt_driver = EvalCkptDriver(model_name)
   classes = json.loads(tf.gfile.Open(labels_map_file).read())
@@ -154,6 +161,7 @@ def eval_example_images(model_name, ckpt_dir, image_files, labels_map_file):
     for j, idx in enumerate(pred_idx[i]):
       print('  -> top_{} ({:4.2f}%): {}  '.format(
           j, pred_prob[i][j] * 100, classes[str(idx)]))
+  return pred_idx, pred_prob
 
 
 def eval_imagenet(model_name,
@@ -169,6 +177,9 @@ def eval_imagenet(model_name,
     imagenet_eval_glob: str. File path glob for all eval images.
     imagenet_eval_label: str. File path for eval label.
     num_images: int. Number of images to eval: -1 means eval the whole dataset.
+
+  Returns:
+    A tuple (top1, top5) for top1 and top5 accuracy.
   """
   eval_ckpt_driver = EvalCkptDriver(model_name)
   imagenet_val_labels = [int(i) for i in tf.gfile.GFile(imagenet_eval_label)]
@@ -187,8 +198,9 @@ def eval_imagenet(model_name,
       print('Step {}: top1_acc = {:4.2f}%  top5_acc = {:4.2f}%'.format(
           i, 100 * top1_cnt / (i + 1), 100 * top5_cnt / (i + 1)))
       sys.stdout.flush()
-  print('Final: top1_acc = {:4.2f}%  top5_acc = {:4.2f}%'.format(
-      100 * top1_cnt / num_images, 100 * top5_cnt / num_images))
+  top1, top5 = 100 * top1_cnt / num_images, 100 * top5_cnt / num_images
+  print('Final: top1_acc = {:4.2f}%  top5_acc = {:4.2f}%'.format(top1, top5))
+  return top1, top5
 
 
 def main(unused_argv):
