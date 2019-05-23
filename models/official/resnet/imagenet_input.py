@@ -108,9 +108,8 @@ class ImageNetTFExampleInput(object):
         image_size=self.image_size,
         use_bfloat16=self.use_bfloat16)
 
-    # Subtract one so that labels are in [0, 1000).
     label = tf.cast(
-        tf.reshape(parsed['image/class/label'], shape=[]), dtype=tf.int32) - 1
+        tf.reshape(parsed['image/class/label'], shape=[]), dtype=tf.int32)
 
     return image, label
 

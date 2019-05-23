@@ -328,7 +328,7 @@ def coco_metric_fn(batch_size, anchor_labeler, filename=None, **kwargs):
   return coco_metrics
 
 
-def _predict_postprocess(cls_outputs, box_outputs, params):
+def _predict_postprocess(cls_outputs, box_outputs, labels, params):
   """Post processes prediction outputs."""
   predict_anchors = anchors.Anchors(
       params['min_level'], params['max_level'], params['num_scales'],
@@ -345,6 +345,13 @@ def _predict_postprocess(cls_outputs, box_outputs, params):
       'detection_scores': scores,
       'num_detections': num_detections,
   }
+
+  if labels is not None:
+    predictions.update({
+        'image_info': labels['image_info'],
+        'source_id': labels['source_ids'],
+        'groundtruth_data': labels['groundtruth_data'],
+    })
 
   return predictions
 
@@ -376,6 +383,9 @@ def _model_fn(features, labels, mode, params, model, use_tpu_estimator_spec,
   if (mode == tf.estimator.ModeKeys.PREDICT
       and isinstance(features, dict) and 'inputs' in features):
     image_info = features['image_info']
+    labels = None
+    if 'labels' in features:
+      labels = features['labels']
     features = features['inputs']
 
   def _model_outputs():
@@ -403,10 +413,11 @@ def _model_fn(features, labels, mode, params, model, use_tpu_estimator_spec,
   if mode == tf.estimator.ModeKeys.PREDICT:
     # Postprocess on host; memory layout for NMS on TPU is very inefficient.
     def _predict_postprocess_wrapper(args):
-      return _predict_postprocess(args[0], args[1], args[2])
+      return _predict_postprocess(*args)
 
     predictions = tf.contrib.tpu.outside_compilation(
-        _predict_postprocess_wrapper, (cls_outputs, box_outputs, params))
+        _predict_postprocess_wrapper,
+        (cls_outputs, box_outputs, labels, params))
 
     # Include resizing information on prediction output to help bbox drawing.
     if image_info is not None:
@@ -567,6 +578,10 @@ def default_hparams():
       resnet_depth=50,
       # is batchnorm training mode
       is_training_bn=True,
+      # Placeholder of number of epoches, default is 2x schedule.
+      # Reference:
+      # https://github.com/facebookresearch/Detectron/blob/master/MODEL_ZOO.md#training-schedules
+      num_epochs=24,
       # optimization
       momentum=0.9,
       learning_rate=0.08,

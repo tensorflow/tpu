@@ -11,7 +11,7 @@ num_cores: 8
 enable_lars: False
 transpose_input: True
 precision: 'bfloat16'
-num_label_classes: 1000
+num_label_classes: 1001
 use_cache: True
 use_async_checkpointing: False
 image_size: 224
