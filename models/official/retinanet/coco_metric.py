@@ -70,6 +70,48 @@ class EvaluationMetric(object):
     self.annotation_id = 1
     self.category_ids = []
 
+  def merge_predictions(self, predictions):
+    """Merges fields in prediction (type: dict) to single matrix."""
+    for k, v in predictions.items():
+      tf.logging.info('debug prediction %s %s', k, v.shape)
+    batch_size = predictions['source_id'].shape[0]
+    source_ids = np.expand_dims(
+        np.expand_dims(predictions['source_id'], axis=1), axis=2)
+    detection_scores = np.expand_dims(predictions['detection_scores'], axis=2)
+    detection_classes = np.expand_dims(predictions['detection_classes'], axis=2)
+    source_ids = np.broadcast_to(
+        np.reshape(predictions['source_id'], [batch_size, 1, 1]),
+        detection_classes.shape)
+    flatten_predictions = np.concatenate([
+        source_ids,
+        predictions['detection_boxes'],
+        detection_scores,
+        detection_classes,
+    ],
+                                         axis=-1)
+    flatten_predictions = np.reshape(flatten_predictions,
+                                     [-1, flatten_predictions.shape[-1]])
+    tf.logging.info('debug flatten_predictions %s', flatten_predictions.shape)
+    return flatten_predictions
+
+  def predict_metric_fn(self, predictions):
+    """Generates COCO metrics."""
+    image_ids = list(set(predictions['source_id']))
+    flatten_predictions = self.merge_predictions(predictions)
+    coco_dt = self.coco_gt.loadRes(flatten_predictions)
+    coco_eval = COCOeval(self.coco_gt, coco_dt, iouType='bbox')
+    coco_eval.params.imgIds = image_ids
+    coco_eval.evaluate()
+    coco_eval.accumulate()
+    coco_eval.summarize()
+    metrics = coco_eval.stats
+
+    # clean up after evaluation is done.
+    self._reset()
+    metrics_values = metrics.astype(np.float32).tolist()
+    metrics_dict = dict(zip(self.metric_names, metrics_values))
+    return metrics_dict
+
   def estimator_metric_fn(self, detections, groundtruth_data):
     """Constructs the metric function for tf.TPUEstimator.
 

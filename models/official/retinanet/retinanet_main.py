@@ -30,6 +30,7 @@ import tensorflow as tf
 
 from common import inference_warmup
 import dataloader
+import evaluation
 import retinanet_model
 from tensorflow.core.protobuf import rewriter_config_pb2  # pylint: disable=g-direct-tensorflow-import
 from tensorflow.python.client import device_lib  # pylint: disable=g-direct-tensorflow-import
@@ -231,17 +232,6 @@ def build_serving_input_fn(image_size, batch_size):
   return serving_input_fn
 
 
-def write_summary(eval_results, summary_writer, current_step):
-  """Write out eval results for the checkpoint."""
-  with tf.Graph().as_default():
-    summaries = []
-    for metric in eval_results:
-      summaries.append(
-          tf.Summary.Value(tag=metric, simple_value=eval_results[metric]))
-    tf_summary = tf.Summary(value=list(summaries))
-    summary_writer.add_summary(tf_summary, current_step)
-
-
 def main(argv):
   del argv  # Unused.
 
@@ -283,12 +273,12 @@ def main(argv):
   hparams = retinanet_model.default_hparams()
   config_file = FLAGS.config_file
   hparams.num_epochs = FLAGS.num_epochs
-  hparams.parse(FLAGS.hparams)
   if config_file and tf.gfile.Exists(config_file):
     # load params from file.
     with tf.gfile.Open(config_file, 'r') as f:
       values_map = json.load(f)
       hparams.override_from_dict(values_map)
+  hparams.parse(FLAGS.hparams)
 
   # The following is for spatial partitioning. `features` has one tensor while
   # `labels` had 4 + (`max_level` - `min_level` + 1) * 2 tensors. The input
@@ -506,17 +496,16 @@ def main(argv):
       # Run evaluation after training finishes.
       eval_params = dict(
           params,
-          use_tpu=False,
           input_rand_hflip=False,
           resnet_checkpoint=None,
           is_training_bn=False,
-          use_bfloat16=False,
       )
       eval_estimator = tf.contrib.tpu.TPUEstimator(
           model_fn=retinanet_model.tpu_retinanet_model_fn,
-          use_tpu=False,
+          use_tpu=FLAGS.use_tpu,
           train_batch_size=FLAGS.train_batch_size,
           eval_batch_size=FLAGS.eval_batch_size,
+          predict_batch_size=FLAGS.eval_batch_size,
           config=run_config,
           params=eval_params)
       if FLAGS.eval_after_training:
@@ -524,16 +513,19 @@ def main(argv):
         if FLAGS.val_json_file is None:
           raise RuntimeError('You must specify --val_json_file for evaluation.')
 
-        eval_results = eval_estimator.evaluate(
+        eval_results = evaluation.evaluate(
+            eval_estimator,
             input_fn=dataloader.InputReader(
                 FLAGS.validation_file_pattern, is_training=False),
-            steps=FLAGS.eval_samples // FLAGS.eval_batch_size)
+            num_eval_samples=FLAGS.eval_samples,
+            eval_batch_size=FLAGS.eval_batch_size,
+            validation_json_file=FLAGS.val_json_file)
         tf.logging.info('Eval results: %s' % eval_results)
         output_dir = os.path.join(FLAGS.model_dir, 'train_eval')
         tf.gfile.MakeDirs(output_dir)
         summary_writer = tf.summary.FileWriter(output_dir)
 
-        write_summary(eval_results, summary_writer, total_steps)
+        evaluation.write_summary(eval_results, summary_writer, total_steps)
     else:
       train_estimator = tf.estimator.Estimator(
           model_fn=retinanet_model.est_retinanet_model_fn,
@@ -566,21 +558,22 @@ def main(argv):
     # Override the default options: disable randomization in the input pipeline
     # and don't run on the TPU.
     # Also, disable use_bfloat16 for eval on CPU/GPU.
+    if FLAGS.val_json_file is None:
+      raise RuntimeError('You must specify --val_json_file for evaluation.')
     eval_params = dict(
         params,
-        use_tpu=False,
         input_rand_hflip=False,
         resnet_checkpoint=None,
         is_training_bn=False,
-        use_bfloat16=False,
     )
     if FLAGS.distribution_strategy is None:
       # Uses TPUEstimator.
       eval_estimator = tf.contrib.tpu.TPUEstimator(
           model_fn=retinanet_model.tpu_retinanet_model_fn,
-          use_tpu=False,
+          use_tpu=FLAGS.use_tpu,
           train_batch_size=FLAGS.train_batch_size,
           eval_batch_size=FLAGS.eval_batch_size,
+          predict_batch_size=FLAGS.eval_batch_size,
           config=run_config,
           params=eval_params)
     else:
@@ -615,17 +608,20 @@ def main(argv):
 
       tf.logging.info('Starting to evaluate.')
       try:
-        eval_results = eval_estimator.evaluate(
+        eval_results = evaluation.evaluate(
+            eval_estimator,
             input_fn=dataloader.InputReader(
                 FLAGS.validation_file_pattern, is_training=False),
-            steps=FLAGS.eval_samples // FLAGS.eval_batch_size)
+            num_eval_samples=FLAGS.eval_samples,
+            eval_batch_size=FLAGS.eval_batch_size,
+            validation_json_file=FLAGS.val_json_file)
         tf.logging.info('Eval results: %s' % eval_results)
 
         # Terminate eval job when final checkpoint is reached
         current_step = int(os.path.basename(ckpt).split('-')[1])
         total_step = int((FLAGS.num_epochs * FLAGS.num_examples_per_epoch) /
                          FLAGS.train_batch_size)
-        write_summary(eval_results, summary_writer, current_step)
+        evaluation.write_summary(eval_results, summary_writer, current_step)
         if current_step >= total_step:
           tf.logging.info(
               'Evaluation finished after training step %d' % current_step)
@@ -643,6 +639,8 @@ def main(argv):
     if FLAGS.distribution_strategy is not None:
       raise ValueError(
           'Distribution strategy is not implemented for --mode=train_and_eval.')
+    if FLAGS.val_json_file is None:
+      raise RuntimeError('You must specify --val_json_file for evaluation.')
 
     output_dir = os.path.join(FLAGS.model_dir, 'train_and_eval')
     tf.gfile.MakeDirs(output_dir)
@@ -666,7 +664,6 @@ def main(argv):
       # Run evaluation after every epoch.
       eval_params = dict(
           params,
-          use_tpu=False,
           input_rand_hflip=False,
           resnet_checkpoint=None,
           is_training_bn=False,
@@ -674,18 +671,21 @@ def main(argv):
 
       eval_estimator = tf.contrib.tpu.TPUEstimator(
           model_fn=retinanet_model.tpu_retinanet_model_fn,
-          use_tpu=False,
+          use_tpu=FLAGS.use_tpu,
           train_batch_size=FLAGS.train_batch_size,
           eval_batch_size=FLAGS.eval_batch_size,
           config=run_config,
           params=eval_params)
-      eval_results = eval_estimator.evaluate(
+      eval_results = evaluation.evaluate(
+          eval_estimator,
           input_fn=dataloader.InputReader(
               FLAGS.validation_file_pattern, is_training=False),
-          steps=FLAGS.eval_samples // FLAGS.eval_batch_size)
+          num_eval_samples=FLAGS.eval_samples,
+          eval_batch_size=FLAGS.eval_batch_size,
+          validation_json_file=FLAGS.val_json_file)
       tf.logging.info('Evaluation results: %s' % eval_results)
       current_step = int(cycle * FLAGS.num_steps_per_eval)
-      write_summary(eval_results, summary_writer, current_step)
+      evaluation.write_summary(eval_results, summary_writer, current_step)
 
   else:
     tf.logging.info('Mode not found.')
