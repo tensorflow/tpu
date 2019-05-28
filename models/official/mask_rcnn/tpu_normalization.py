@@ -23,7 +23,6 @@ import tensorflow as tf
 
 from tensorflow.contrib.tpu.python.ops import tpu_ops
 from tensorflow.contrib.tpu.python.tpu import tpu_function
-from tensorflow.python.keras import layers as keras_layers
 from tensorflow.python.ops import math_ops
 
 
@@ -44,7 +43,7 @@ def cross_replica_average(t, num_groups=1):
       num_shards_per_group, t.dtype)
 
 
-class BatchNormalization(keras_layers.BatchNormalization, tf.layers.Layer):
+class BatchNormalization(tf.layers.BatchNormalization):
   """Batch Normalization layer that supports cross replica computation on TPU.
 
   This class extends the keras.BatchNormalization implementation by supporting
@@ -63,6 +62,7 @@ class BatchNormalization(keras_layers.BatchNormalization, tf.layers.Layer):
   """
 
   def __init__(self, fused=None, cross_replica_average_fn=None, **kwargs):
+    kwargs['fused'] = fused
     super(BatchNormalization, self).__init__(**kwargs)
     self.cross_replica_average_fn = cross_replica_average_fn
 
@@ -71,12 +71,18 @@ class BatchNormalization(keras_layers.BatchNormalization, tf.layers.Layer):
                        ' cross_replica_average_fn')
 
   def _moments(self, inputs, reduction_axes, keep_dims):
-    mean, variance = super(BatchNormalization, self)._moments(
+    shard_mean, shard_variance = super(BatchNormalization, self)._moments(
         inputs, reduction_axes, keep_dims=keep_dims)
     if self.cross_replica_average_fn:
-      mean = self.cross_replica_average_fn(mean)
-      variance = self.cross_replica_average_fn(variance)
-    return (mean, variance)
+      # Uses the definition of Var[X] = E[X^2] - E[X]^2.
+      shard_square_of_mean = tf.math.square(shard_mean)
+      shard_mean_of_square = shard_variance + shard_square_of_mean
+      group_mean = self.cross_replica_average_fn(shard_mean)
+      group_mean_of_square = self.cross_replica_average_fn(shard_mean_of_square)
+      group_variance = group_mean_of_square - tf.math.square(group_mean)
+      return (group_mean, group_variance)
+    else:
+      return (shard_mean, shard_variance)
 
 
 def cross_replica_batch_normalization(inputs,
