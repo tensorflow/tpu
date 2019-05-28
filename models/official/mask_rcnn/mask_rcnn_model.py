@@ -295,7 +295,7 @@ def _build_assigment_map(optimizer, prefix=None, skip_variables_regex=None):
       if skip_variables_regex and re.match(skip_variables_regex,
                                            var_name[len(prefix):]):
         continue
-      assignment_map[var_name[len(prefix):]] = var_name
+      assignment_map[var_name[len(prefix):]] = var
   return assignment_map
 
 

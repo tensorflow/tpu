@@ -33,6 +33,7 @@ import numpy as np
 import tensorflow as tf
 
 import imagenet_input
+import model_saving_utils
 import resnet_model
 
 # Common flags for TPU models.
@@ -223,6 +224,8 @@ def main(unused_argv):
       validation_data=imagenet_eval.input_fn(),
       validation_steps=validation_steps,
       validation_freq=5)
+
+  model_saving_utils.save_model(model, model_dir, WEIGHTS_TXT)
 
 if __name__ == '__main__':
   tf.logging.set_verbosity(tf.logging.INFO)

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Training script for Mask-RCNN.
+"""Main function to train various object detection models.
 """
 
 from __future__ import absolute_import
