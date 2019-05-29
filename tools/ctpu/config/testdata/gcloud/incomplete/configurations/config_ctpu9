@@ -1,6 +1,0 @@
-[core]
-account = saeta@google.com
-
-[compute]
-zone = us-central1-c
-

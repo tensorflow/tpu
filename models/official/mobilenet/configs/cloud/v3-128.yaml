@@ -1,7 +1,0 @@
-# DISCLAIMER: These parameters have not been optimized
-train_batch_size: 16384
-train_steps: 500000
-eval_batch_size: 1024
-iterations_per_loop: 100
-num_shards: 128
-train_steps_per_eval: 2000
