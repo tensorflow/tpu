@@ -66,3 +66,15 @@ def define_common_hparams_flags():
       'precision', default=None,
       help=('Precision to use; one of: {bfloat16, float32}'))
 
+  flags.DEFINE_string(
+      'config_file', default=None,
+      help=('a YAML file which specifies overrides.'))
+
+  flags.DEFINE_multi_string(
+      'params_override', default=None,
+      help=('This is used to override only the model hyperparameters. It should'
+            ' not be used to override the other parameters like the tpu '
+            'specific flags etc. For example, if experimenting with larger '
+            'numbers of train_steps, a possible value is '
+            '--hparams=train_steps=28152. Override Order: default_model_params'
+            ' --> Params from config_file --> Params in params_override'))

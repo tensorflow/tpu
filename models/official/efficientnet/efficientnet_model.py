@@ -16,7 +16,7 @@
 
 [1] Mingxing Tan, Quoc V. Le
   EfficientNet: Rethinking Model Scaling for Convolutional Neural Networks.
-  ICML'19, arXiv:??
+  ICML'19, https://arxiv.org/abs/1905.11946
 """
 
 from __future__ import absolute_import

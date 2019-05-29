@@ -1,6 +1,7 @@
 # EfficientNets
 
 [1] Mingxing Tan and Quoc V. Le.  EfficientNet: Rethinking Model Scaling for Convolutional Neural Networks. ICML 2019.
+   Arxiv link: https://arxiv.org/abs/1905.11946.
 
 
 ## 1. About EfficientNet Models
@@ -38,7 +39,7 @@ We have provided a list of EfficientNet checkpoints for [EfficientNet-B0](https:
     $ tar zxf ${MODEL}.tar.gz
     $ wget https://upload.wikimedia.org/wikipedia/commons/f/fe/Giant_Panda_in_Beijing_Zoo_1.JPG -O panda.jpg
     $ wget https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/eval_data/labels_map.txt
-    $ python eval_ckpt_main --model_name=$MODEL --ckpt_dir=$MODEL --example_img=panda.jpg --labels_map_file=labels_map.txt
+    $ python eval_ckpt_main.py --model_name=$MODEL --ckpt_dir=$MODEL --example_img=panda.jpg --labels_map_file=labels_map.txt
 
 Please refer to the following colab for more instructions on how to obtain and use those checkpoints.
 
