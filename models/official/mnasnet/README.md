@@ -4,17 +4,21 @@
 
 References: [MnasNet: Platform-Aware Neural Architecture Search for Mobile](https://arxiv.org/pdf/1807.11626.pdf) by Mingxing Tan, et. al.
 
-We provide two AutoML models in [`mnasnet_models.py`](mnasnet_models.py) :
+We provide a few standard-size and small-size AutoML models in [`mnasnet_models.py`](mnasnet_models.py) including:
 
-  * <b>mnasnet-a1</b> has ~75.2% top-1 ImageNet accuracy  with squeeze-and-excitation in search space.
+  * <b>mnasnet-a1</b> has ~75.2% top-1 ImageNet accuracy  with 3.9M parameters and 312M Multiply-Adds.
+  * <b>mnasnet-small</b> has ~66% top-1 ImageNet accuracy with 2.0M parameters and 68M Multiply-Adds.
 
-  * <b>mnasnet-b1</b> has ~74.4% top-1 ImageNet accuracy without squeeze-and-excitation.
+The standard size MnasNet-A1 inference has 1.8x faster throughput (55% lower latency) than the
+corresponding MobileNetV2 model.
+
+![MnasNet-A1 and MobileNetV2](g3doc/mnasnet_vs_mobilenetv2_2.png)
 
 Comparing to [MobileNetV2](https://arxiv.org/pdf/1801.04381.pdf),
 MnasNet-A1 model has clear better performance in accuracy when they are at the
 same latency level.
 
-![MnasNet-A1 and MobileNetV2](g3doc/mnasnet_vs_mobilenetv2.png)
+![MnasNet-A1 and MobileNetV2 Details](g3doc/mnasnet_vs_mobilenetv2.png)
 
 
 Here are the details of Mnasnet-A1 on ImageNet:
@@ -63,6 +67,8 @@ To run this model, you will need:
 * A GCS bucket to store your training checkpoints (the "model directory")
 * (Optional): The ImageNet training and validation data preprocessed into
   TFRecord format, and stored in GCS.
+
+**Please make sure your TensorFlow version >= 1.13 for both GCE VM and Cloud TPU.**
 
 ### Formatting the data
 
@@ -141,7 +147,7 @@ Cloud TPU. With the default flags on everything, the model should train to
 above 75% accuracy for MnasNet-A1 model.
 
 You can launch TensorBoard (e.g. `tensorboard -logdir=$MODEL_DIR`) to view loss
-curves and other metadata regarding your training run.
+curves and other metadata regarding your training run. Please follow [tensorboard-setup](https://cloud.google.com/tpu/docs/tensorboard-setup) for detailed steps.
 
 > Note: if you launch TensorBoard on your GCE VM, be sure to configure either
 > [SSH port forwarding][ssh-port-fwd] or [SOCKS proxy over SSH][socks-proxy] to
@@ -167,7 +173,7 @@ For more detailed information, read the documentation within each file.
 * [`mnasnet_model.py`](mnasnet_model.py): Modeling library which constructs the
   network via modular MnasBlock.
 * [`mnasnet_models.py`](mnasnet_models.py): A script that defines benchmark
-MnasNet architectures (e.g. MnasNet-A1, MnasNet-B1) through decoding string
+MnasNet architectures (e.g. MnasNet-A1, MnasNet-small) through decoding string
 representation of the network.
 * [`preprocessing.py`](preprocessing.py): Useful utilities for
   preprocessing and augmenting ImageNet data for MnasNet training.
@@ -185,7 +191,7 @@ model checkpoint.
 
 ### Using different MnasNet configurations
 
-The default MnasNet-A1/-B1 model has been carefully tested with the default
+The default MnasNet models have been carefully tested with the default
 flags but [`mnasnet_model.py`](mnasnet_model.py) offers a generic MnasNetBlock
 implementation. Thus, user is able to define model configuration through the
 string annotation in [`mnasnet_models.py`](mnasnet_models.py) to define new
