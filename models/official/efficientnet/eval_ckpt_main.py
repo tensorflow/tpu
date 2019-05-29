@@ -204,6 +204,7 @@ def eval_imagenet(model_name,
 
 
 def main(unused_argv):
+  tf.logging.set_verbosity(tf.logging.ERROR)
   if FLAGS.runmode == 'examples':
     # Run inference for an example image.
     eval_example_images(FLAGS.model_name, FLAGS.ckpt_dir, [FLAGS.example_img],
