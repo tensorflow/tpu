@@ -161,7 +161,7 @@ class EvaluationMetric(object):
 
   def _reset(self):
     """Reset COCO API object."""
-    if self.filename is None:
+    if not self.filename:
       self.coco_gt = MaskCOCO()
     self.detections = []
     self.masks = []
@@ -181,7 +181,7 @@ class EvaluationMetric(object):
       coco_metric: float numpy array with shape [24] representing the
         coco-style evaluation metrics (box and mask).
     """
-    if self.filename is None:
+    if not self.filename:
       self.coco_gt.dataset = self.dataset
       self.coco_gt.createIndex()
 
@@ -272,7 +272,7 @@ class EvaluationMetric(object):
                              for instance_mask in predictions['masks'][i]]
         self.masks.append(encoded_mask_list)
 
-      if self.filename is None:
+      if not self.filename:
         # Appends groundtruth annotations to create COCO dataset object.
         # Adds images.
         image_id = groundtruths['source_id'][i]

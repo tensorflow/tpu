@@ -30,7 +30,7 @@ from dataloader import input_reader
 from dataloader import mode_keys as ModeKeys
 from executor import tpu_executor
 from modeling import model_builder
-from utils import params_dict
+from hyperparameters import params_dict
 
 
 flags.DEFINE_string(
@@ -120,8 +120,7 @@ def main(argv):
     if FLAGS.eval_after_training:
       executor.evaluate(
           eval_input_fn,
-          params.eval.eval_samples // params.predict.predict_batch_size,
-          params.train.total_steps)
+          params.eval.eval_samples // params.predict.predict_batch_size)
 
   elif FLAGS.mode == 'eval':
     def terminate_eval():
@@ -141,8 +140,7 @@ def main(argv):
       try:
         executor.evaluate(
             eval_input_fn,
-            params.eval.eval_samples // params.predict.predict_batch_size,
-            current_step)
+            params.eval.eval_samples // params.predict.predict_batch_size, ckpt)
 
         if current_step >= params.train.total_steps:
           tf.logging.info('Evaluation finished after training step %d' %
@@ -161,12 +159,10 @@ def main(argv):
     num_cycles = int(params.train.total_steps / params.eval.num_steps_per_eval)
     for cycle in range(num_cycles):
       tf.logging.info('Start training cycle %d.' % cycle)
-      current_step = (cycle + 1) * params.eval.num_steps_per_eval
       executor.train(train_input_fn, params.eval.num_steps_per_eval)
       executor.evaluate(
           eval_input_fn,
-          params.eval.eval_samples // params.predict.predict_batch_size,
-          current_step)
+          params.eval.eval_samples // params.predict.predict_batch_size)
   else:
     tf.logging.info('Mode not found.')
 

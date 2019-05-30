@@ -21,7 +21,7 @@ from dataloader import mode_keys
 from modeling import factory
 from utils import box_utils
 from utils import input_utils
-from utils import params_dict
+from hyperparameters import params_dict
 
 
 def parse_tf_example(tf_example_string):

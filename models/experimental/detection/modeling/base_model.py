@@ -210,7 +210,7 @@ class Model(object):
       tf.train.init_from_checkpoint(self._checkpoint,
                                     {'/': self._checkpoint_prefix,})
       return tf.train.Scaffold()
-    return scaffold_fn if self._checkpoint is not None else None
+    return scaffold_fn if self._checkpoint else None
 
   def summarize(self):
     """Returns summary ops for logging."""

@@ -31,7 +31,7 @@ import tensorflow as tf
 
 from config import retinanet_config
 from modeling import serving
-from utils import params_dict
+from hyperparameters import params_dict
 from tensorflow.contrib.tpu.python.tpu import tpu_config
 
 FLAGS = flags.FLAGS
