@@ -77,10 +77,26 @@ class TpuExecutor(object):
     """Training the model with training data and labels in input_fn."""
     self._estimator.train(input_fn=input_fn, max_steps=steps)
 
-  def evaluate(self, input_fn, eval_steps, current_step):
-    """Evaluating the model with data and labels in input_fn."""
-    predictor = self._estimator.predict(input_fn=input_fn,
-                                        yield_single_examples=False)
+  def evaluate(self, input_fn, eval_steps, checkpoint_path=None):
+    """Evaluating the model with data and labels in input_fn.
+
+    Args:
+      input_fn: Eval `input function` for tf.Estimator.
+      eval_steps: Int -  the number of steps to evaluate.
+      checkpoint_path: String - the checkpoint path to evaluate. If it is None,
+        the latest checkpoint will be inferred from `model_dir` of `Estimator`.
+
+    Returns:
+      A dictionary as evaluation metrics.
+    """
+
+    if not checkpoint_path:
+      checkpoint_path = self._estimator.latest_checkpoint()
+    current_step = int(os.path.basename(checkpoint_path).split('-')[1])
+    predictor = self._estimator.predict(
+        input_fn=input_fn,
+        checkpoint_path=checkpoint_path,
+        yield_single_examples=False)
     losses = collections.defaultdict(lambda: 0.0)
     for _ in range(eval_steps):
       outputs = predictor.next()
