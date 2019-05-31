@@ -86,8 +86,7 @@ def main(argv):
       use_tpu=FLAGS.use_tpu,
       train_batch_size=FLAGS.batch_size,
       predict_batch_size=FLAGS.batch_size,
-      export_to_tpu=FLAGS.use_tpu,
-      export_to_cpu=True)
+      export_to_tpu=FLAGS.use_tpu)
 
   print(' - Exporting the model...')
   input_type = FLAGS.input_type
