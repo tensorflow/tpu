@@ -82,6 +82,32 @@ def image_tensor_input(batch_size,
   return placeholder, {'images': images, 'image_info': images_info}
 
 
+def raw_image_tensor_input(batch_size,
+                           image_size,
+                           padding_stride):
+  """Raw float32 image tensor input, no resize is preformed."""
+  image_height, image_width = image_size
+  if (image_height % padding_stride != 0 or
+      image_width % padding_stride != 0):
+    raise ValueError('Image size is not compatible with the stride.')
+
+  placeholder = tf.placeholder(
+      dtype=tf.float32,
+      shape=(batch_size, image_height, image_width, 3))
+
+  image_info_per_image = [
+      image_height, image_width, 1.0, image_height, image_width]
+  if batch_size == 1:
+    images_info = tf.constant([image_info_per_image], dtype=tf.float32)
+  else:
+    images_info = tf.constant(
+        [image_info_per_image for _ in range(batch_size)],
+        dtype=tf.float32)
+
+  images = placeholder
+  return placeholder, {'images': images, 'image_info': images_info}
+
+
 def image_bytes_input(batch_size,
                       desired_image_size,
                       padding_stride):
@@ -158,6 +184,13 @@ def serving_input_fn(batch_size,
   """
   if input_type == 'image_tensor':
     placeholder, features = image_tensor_input(
+        batch_size, desired_image_size, padding_stride)
+    return tf.estimator.export.ServingInputReceiver(
+        features=features, receiver_tensors={
+            input_name: placeholder,
+        })
+  elif input_type == 'raw_image_tensor':
+    placeholder, features = raw_image_tensor_input(
         batch_size, desired_image_size, padding_stride)
     return tf.estimator.export.ServingInputReceiver(
         features=features, receiver_tensors={

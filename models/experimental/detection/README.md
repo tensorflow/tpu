@@ -1,7 +1,7 @@
 # Object Detection Models on TPU
 
 ## Prerequsite
-To get started, make sure to use Tensorflow nightly on Google Cloud. Also here are a few package you need to install to get started:
+To get started, make sure to use Tensorflow 1.13+ on Google Cloud. Also here are a few package you need to install to get started:
 ```
 sudo apt-get install -y python-tk && \
 pip install Cython matplotlib opencv-python-headless pyyaml Pillow && \

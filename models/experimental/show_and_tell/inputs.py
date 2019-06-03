@@ -48,7 +48,7 @@ def parse_example(serialized, image_feature, caption_feature):
   caption = parsed[caption_feature]
 
   # Just take the first caption
-  caption = tf.sparse_tensor_to_dense(caption, default_value='')[0]
+  caption = tf.sparse_tensor_to_dense(caption, default_value="")[0]
   return encoded_image, caption
 
 
@@ -123,6 +123,7 @@ def prefetch_input_data(reader,
 
   return values_queue
 
+
 def pad_caption_to_input(caption, max_caption_len=64):
   # clip long captions
   caption = caption[0:max_caption_len]
@@ -148,6 +149,7 @@ def pad_caption_to_input(caption, max_caption_len=64):
   target_seq.set_shape(max_caption_len - 1)
   indicator.set_shape(max_caption_len - 1)
   return input_seq, target_seq, indicator
+
 
 def batch_with_dynamic_pad(images_and_captions,
                            batch_size,
@@ -206,6 +208,7 @@ def batch_with_dynamic_pad(images_and_captions,
   """
   enqueue_list = []
   for image, caption in images_and_captions:
+    input_seq, target_seq, indicator = pad_caption_to_input(caption)
     enqueue_list.append([image, input_seq, target_seq, indicator])
 
   images, input_seqs, target_seqs, mask = tf.train.batch_join(
