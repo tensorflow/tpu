@@ -126,7 +126,7 @@ def round_repeats(repeats, global_params):
 
 
 class MBConvBlock(object):
-  """A class of MBConv: Mobile Inveretd Residual Bottleneck.
+  """A class of MBConv: Mobile Inverted Residual Bottleneck.
 
   Attributes:
     has_se: boolean. Whether the block contains a Squeeze and Excitation layer
