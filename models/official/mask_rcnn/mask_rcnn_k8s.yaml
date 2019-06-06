@@ -42,7 +42,8 @@ spec:
             --iterations_per_loop=500
             --config=resnet_checkpoint=${RESNET_CHECKPOINT},resnet_depth=50,use_bfloat16=true,train_batch_size=64,eval_batch_size=8,training_file_pattern=${DATA_BUCKET}/train-*,validation_file_pattern=${DATA_BUCKET}/val-*,val_json_file=${DATA_BUCKET}/instances_val2017.json,total_steps=22500
         env:
-          # The Google Cloud Storage location to store dataset.
+          # The Google Cloud Storage location where the fake ImageNet dataset is
+          # stored.
         - name: DATA_BUCKET
           value: "gs://<my-data-bucket>"
         - name: MODEL_BUCKET
