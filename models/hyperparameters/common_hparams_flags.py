@@ -70,7 +70,7 @@ def define_common_hparams_flags():
       'config_file', default=None,
       help=('a YAML file which specifies overrides.'))
 
-  flags.DEFINE_multi_string(
+  flags.DEFINE_string(
       'params_override', default=None,
       help=('This is used to override only the model hyperparameters. It should'
             ' not be used to override the other parameters like the tpu '
