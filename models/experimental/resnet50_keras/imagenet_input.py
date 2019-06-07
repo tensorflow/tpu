@@ -112,12 +112,16 @@ class ImageNetInput(object):
 
     return image, label
 
-  def input_fn(self):
+  def input_fn(self, ctx=None):
     """Input function which provides a single batch for train or eval.
+
+    Args:
+      ctx: Input context.
 
     Returns:
       A `tf.data.Dataset` object.
     """
+    del ctx
     # Shuffle the filenames to ensure better randomization.
     file_pattern = os.path.join(
         self.data_dir, 'train-*' if self.is_training else 'validation-*')

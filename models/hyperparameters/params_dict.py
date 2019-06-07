@@ -18,10 +18,28 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import collections
 import copy
+import re
 import six
 import tensorflow as tf
 import yaml
+
+# regex pattern that matches on key-value pairs in a comma-separated
+# key-value pair string. It splits each k-v pair on the = sign, and
+# matches on values that are within single quotes, double quotes, single
+# values (e.g. floats, ints, etc.), and a lists within brackets.
+_PARAM_RE = re.compile(r"""
+  (?P<name>[a-zA-Z][\w\.]*)    # variable name: "var" or "x"
+  \s*=\s*
+  ((?P<val>\'[^\]]*\'          # single quote
+  |
+  \"[^\]]*\"                   # double quote
+  |
+  [^,\[]*                      # single value
+  |
+  \[[^\]]*\]))                 # list of values
+  ($|,\s*)""", re.VERBOSE)
 
 
 class ParamsDict(object):
@@ -126,7 +144,7 @@ class ParamsDict(object):
         if is_strict:
           raise KeyError('The key `{}` does not exist. '
                          'To extend the existing keys, use '
-                         '`override` with `is_strict` = True.'.format(k))
+                         '`override` with `is_strict` = False.'.format(k))
         else:
           self._set(k, v)
       else:
@@ -267,13 +285,87 @@ def save_params_dict_to_yaml(params, file_path):
     yaml.dump(params.as_dict(), f, default_flow_style=False)
 
 
+def nested_csv_str_to_json_str(csv_str):
+  """Converts a nested (using '.') comma-separated k=v string to a JSON string.
+
+  Converts a comma-separated string of key/value pairs that supports
+  nesting of keys to a JSON string. Nesting is implemented using
+  '.' between levels for a given key.
+
+  Spacing between commas and = is supported (e.g. there is no difference between
+  "a=1,b=2", "a = 1, b = 2", or "a=1, b=2") but there should be no spaces before
+  keys or after values (e.g. " a=1,b=2" and "a=1,b=2 " are not supported).
+
+  Note that this will only support values supported by CSV, meaning
+  values such as nested lists (e.g. "a=[[1,2,3],[4,5,6]]") are not
+  supported. Strings are supported as well, e.g. "a='hello'".
+
+  An example conversion would be:
+
+  "a=1, b=2, c.a=2, c.b=3, d.a.a=5"
+
+  to
+
+  "{ a: 1, b : 2, c: {a : 2, b : 3}, d: {a: {a : 5}}}"
+
+  Args:
+    csv_str: the comma separated string.
+
+  Returns:
+    the converted JSON string.
+
+  Raises:
+    ValueError: If csv_str is not in a comma separated string or
+      if the string is formatted incorrectly.
+  """
+  if not csv_str:
+    return ''
+
+  formatted_entries = []
+  nested_map = collections.defaultdict(list)
+  pos = 0
+  while pos < len(csv_str):
+    m = _PARAM_RE.match(csv_str, pos)
+    if not m:
+      raise ValueError('Malformed hyperparameter value while parsing '
+                       'CSV string: %s' % csv_str[pos:])
+    pos = m.end()
+    # Parse the values.
+    m_dict = m.groupdict()
+    name = m_dict['name']
+    v = m_dict['val']
+
+    name_nested = name.split('.')
+    if len(name_nested) > 1:
+      grouping = name_nested[0]
+      value = '.'.join(name_nested[1:]) + '=' + v
+      nested_map[grouping].append(value)
+    else:
+      formatted_entries.append('%s : %s' % (name, v))
+
+  for grouping, value in nested_map.items():
+    value = ','.join(value)
+    value = nested_csv_str_to_json_str(value)
+    formatted_entries.append('%s : %s' % (grouping, value))
+  return '{' + ', '.join(formatted_entries) + '}'
+
+
 def override_params_dict(params, dict_or_string_or_yaml_file, is_strict):
-  """Override a given ParamsDict using a dict or a YAML file.
+  """Override a given ParamsDict using a dict, JSON/YAML/CSV string or YAML file.
+
+  The logic of the function is outlined below:
+  1. Test that the input is a dict. If not, proceed to 2.
+  2. Tests that the input is a string. If not, raise unknown ValueError
+  2.1. Test if the string is in a CSV format. If so, parse.
+  If not, proceed to 2.2.
+  2.2. Try loading the string as a YAML/JSON. If successful, parse to
+  dict and use it to override. If not, proceed to 2.3.
+  2.3. Try using the string as a file path and load the YAML file.
 
   Args:
     params: a ParamsDict object to be overridden.
-    dict_or_string_or_yaml_file: a Python dict or a YAML string or path to a
-      YAML file specifying the parameters to be overridden.
+    dict_or_string_or_yaml_file: a Python dict, JSON/YAML/CSV string or
+      path to a YAML file specifying the parameters to be overridden.
     is_strict: a boolean specifying whether override is strict or not.
 
   Returns:
@@ -287,6 +379,11 @@ def override_params_dict(params, dict_or_string_or_yaml_file, is_strict):
   if isinstance(dict_or_string_or_yaml_file, dict):
     params.override(dict_or_string_or_yaml_file, is_strict)
   elif isinstance(dict_or_string_or_yaml_file, six.string_types):
+    try:
+      dict_or_string_or_yaml_file = (
+          nested_csv_str_to_json_str(dict_or_string_or_yaml_file))
+    except ValueError:
+      pass
     params_dict = yaml.load(dict_or_string_or_yaml_file)
     if isinstance(params_dict, dict):
       params.override(params_dict, is_strict)
