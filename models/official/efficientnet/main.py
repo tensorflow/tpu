@@ -298,6 +298,8 @@ def model_fn(features, labels, mode, params):
     override_params['depth_coefficient'] = FLAGS.depth_coefficient
   if FLAGS.width_coefficient:
     override_params['width_coefficient'] = FLAGS.width_coefficient
+  if FLAGS.num_label_classes:
+    override_params['num_classes'] = FLAGS.num_label_classes
 
   def build_model():
     logits, _ = efficientnet_builder.build_model(
