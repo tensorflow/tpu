@@ -25,6 +25,7 @@ import tensorflow as tf
 
 from dataloader import anchor
 from dataloader import mode_keys as ModeKeys
+from utils import autoaugment_utils
 from utils import box_utils
 from utils import input_utils
 from utils.object_detection import tf_example_decoder
@@ -213,6 +214,12 @@ class Parser(object):
 
     # Gets original image and its size.
     image = data['image']
+
+    # NOTE: The autoaugment method works best when used alongside the standard
+    # horizontal flipping of images along with size jittering and normalization.
+    if self._use_autoaugment:
+      image, boxes = autoaugment_utils.distort_image_with_autoaugment(
+          image, boxes, self._autoaugment_policy_name)
 
     image_shape = tf.shape(image)[0:2]
 
