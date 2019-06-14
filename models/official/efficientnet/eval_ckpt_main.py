@@ -107,7 +107,7 @@ class EvalCkptDriver(object):
     def _parse_function(filename, label):
       image_string = tf.read_file(filename)
       image_decoded = preprocessing.preprocess_image(
-          image_string, is_training, self.image_size)
+          image_string, is_training, image_size=self.image_size)
       image = tf.cast(image_decoded, tf.float32)
       return image, label
 
