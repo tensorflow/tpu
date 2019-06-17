@@ -162,7 +162,7 @@ def main(argv):
     for cycle in range(num_cycles):
       tf.logging.info('Start training cycle %d.' % cycle)
       current_step = (cycle + 1) * params.eval.num_steps_per_eval
-      executor.train(train_input_fn, params.eval.num_steps_per_eval)
+      executor.train(train_input_fn, current_step)
       executor.evaluate(
           eval_input_fn,
           params.eval.eval_samples // params.predict.predict_batch_size,
