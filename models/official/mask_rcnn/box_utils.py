@@ -66,7 +66,9 @@ def bbox_overlap(boxes, gt_boxes):
     iou = i_area / u_area
 
     # Fills -1 for padded ground truth boxes.
-    padding_mask = tf.less(i_xmin, tf.zeros_like(i_xmin))
+    padding_mask = tf.logical_and(
+        tf.less(i_xmax, tf.zeros_like(i_xmax)),
+        tf.less(i_ymax, tf.zeros_like(i_ymax)))
     iou = tf.where(padding_mask, -tf.ones_like(iou), iou)
 
     return iou
