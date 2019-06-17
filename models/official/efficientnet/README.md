@@ -32,7 +32,17 @@ EfficientNets achieve state-of-the-art accuracy on ImageNet with an order of mag
 
 ## 2. Using Pretrained EfficientNet Checkpoints
 
-We have provided a list of EfficientNet checkpoints for [EfficientNet-B0](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/efficientnet-b0.tar.gz), [EfficientNet-B1](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/efficientnet-b1.tar.gz), [EfficientNet-B2](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/efficientnet-b2.tar.gz), and [EfficientNet-B3](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/efficientnet-b3.tar.gz). A quick way to use these checkpoints is to run:
+We have provided a list of EfficientNet checkpoints for [EfficientNet-B0](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/efficientnet-b0.tar.gz), [EfficientNet-B1](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/efficientnet-b1.tar.gz), [EfficientNet-B2](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/efficientnet-b2.tar.gz),  [EfficientNet-B3](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/efficientnet-b3.tar.gz),
+[EfficientNet-B4](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/efficientnet-b4.tar.gz),
+[EfficientNet-B5](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/efficientnet-b5.tar.gz). Notably, here we use the standard ResNet preprocessing rather than  AutoAugment, but we have achieved similar ImageNet top-1 accuracy as the original paper:
+
+|               |   [B0](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/efficientnet-b0.tar.gz)     |  [B1](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/efficientnet-b1.tar.gz)   |  [B2](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/efficientnet-b2.tar.gz)   |  [B3](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/efficientnet-b3.tar.gz)   |  [B4](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/efficientnet-b4.tar.gz)   |  [B5](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/efficientnet-b5.tar.gz)   |
+|----------     |--------  | ------| ------|------ |------ |------ |
+| ImageNet accuracy for released ckpts |  76.8%   | 78.8% | 79.8% | 81.0% | 82.6% | 83.2% |
+<!--
+| Acc. from paper        |  76.3%   | 78.8% | 79.8% | 81.1% | 82.6% | 83.3% |
+-->
+A quick way to use these checkpoints is to run:
 
     $ export MODEL=efficientnet-b0
     $ wget https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/${MODEL}.tar.gz
@@ -47,7 +57,22 @@ Please refer to the following colab for more instructions on how to obtain and u
  EfficientNet pretrained checkpoints files and use the restored model to classify images.
 
 
-## 3. Training EfficientNets on TPUs.
+## 3. Using EfficientNet as Feature Extractor
+
+```
+    import efficientnet_builder
+    features, endpoints = efficientnet_builder.build_model_base(images, 'efficient-b0')
+```
+
+  * Use `features` for classification finetuning.
+  * Use `endpoints['reduction_i']` for detection/segmentation, as the last intermediate feature with reduction level `i`. For example, if input image has resolution 224x224, then:
+    * `endpoints['reduction_1']` has resolution 112x112
+    * `endpoints['reduction_2']` has resolution 56x56
+    * `endpoints['reduction_3']` has resolution 28x28
+    * `endpoints['reduction_4']` has resolution 14x14
+    * `endpoints['reduction_5']` has resolution 7x7
+
+## 4. Training EfficientNets on TPUs.
 
 
 To train this model on Cloud TPU, you will need:

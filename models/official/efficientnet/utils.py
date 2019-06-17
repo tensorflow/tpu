@@ -116,21 +116,18 @@ class TpuBatchNormalization(tf.layers.BatchNormalization):
     if num_shards <= 8:  # Skip cross_replica for 2x2 or smaller slices.
       num_shards_per_group = 1
     else:
-      num_shards_per_group = max(8, num_shards // 4)
+      num_shards_per_group = max(8, num_shards // 8)
     tf.logging.info('TpuBatchNormalization with num_shards_per_group %s',
                     num_shards_per_group)
     if num_shards_per_group > 1:
-      # Each group has multiple replicas: here we compute group mean/variance by
-      # aggregating per-replica mean/variance.
-      group_mean = self._cross_replica_average(shard_mean, num_shards_per_group)
-      group_variance = self._cross_replica_average(shard_variance,
-                                                   num_shards_per_group)
-
-      # Group variance needs to also include the difference between shard_mean
-      # and group_mean.
-      mean_distance = tf.square(group_mean - shard_mean)
-      group_variance += self._cross_replica_average(mean_distance,
-                                                    num_shards_per_group)
+      # Compute variance using: Var[X]= E[X^2] - E[X]^2.
+      shard_square_of_mean = tf.math.square(shard_mean)
+      shard_mean_of_square = shard_variance + shard_square_of_mean
+      group_mean = self._cross_replica_average(
+          shard_mean, num_shards_per_group)
+      group_mean_of_square = self._cross_replica_average(
+          shard_mean_of_square, num_shards_per_group)
+      group_variance = group_mean_of_square - tf.math.square(group_mean)
       return (group_mean, group_variance)
     else:
       return (shard_mean, shard_variance)
