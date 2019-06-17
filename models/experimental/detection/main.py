@@ -97,6 +97,10 @@ def main(argv):
           'num_shards': FLAGS.num_cores,
       },
   }, is_strict=False)
+  # Only run spatial partitioning in training mode.
+  if FLAGS.mode != 'train':
+    params.train.input_partition_dims = None
+    params.train.num_cores_per_replica = None
   params.validate()
   params.lock()
   pp = pprint.PrettyPrinter()

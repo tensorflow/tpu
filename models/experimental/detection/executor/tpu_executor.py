@@ -40,6 +40,9 @@ class TpuExecutor(object):
     # Sets up evaluator.
     self._evaluator = factory.evaluator_generator(params.eval)
 
+    input_partition_dims = None
+    num_cores_per_replica = None
+
     if params.use_tpu:
       tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
           params.platform.tpu,
@@ -47,13 +50,22 @@ class TpuExecutor(object):
           project=params.platform.gcp_project)
       tpu_grpc_url = tpu_cluster_resolver.get_master()
       tf.Session.reset(tpu_grpc_url)
+
+      if params.train.input_partition_dims is not None:
+        num_cores_per_replica = params.train.num_cores_per_replica
+        input_partition_dims = params.train.input_partition_dims
+        # Parse 'None' into None.
+        input_partition_dims = [
+            None if x == 'None' else x for x in input_partition_dims
+        ]
     else:
       tpu_cluster_resolver = None
 
     # Sets up config for TPUEstimator.
     tpu_config = tf.contrib.tpu.TPUConfig(
         params.train.iterations_per_loop,
-        num_shards=params.train.num_shards,
+        num_cores_per_replica=num_cores_per_replica,
+        input_partition_dims=input_partition_dims,
         per_host_input_for_training=tf.contrib.tpu.InputPipelineConfig.PER_HOST_V2  # pylint: disable=line-too-long
     )
 

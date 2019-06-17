@@ -23,6 +23,8 @@ RETINANET_CFG = {
         'iterations_per_loop': 100,
         'train_batch_size': 64,
         'total_steps': 22500,
+        'num_cores_per_replica': None,
+        'input_partition_dims': None,
         'optimizer': {
             'type': 'momentum',
             'momentum': 0.9,
