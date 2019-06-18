@@ -85,8 +85,10 @@ RETINANET_CFG = {
     },
     'resnet': {
         'resnet_depth': 50,
-        'dropblock_keep_prob': None,
-        'dropblock_size': None,
+        'dropblock': {
+            'dropblock_keep_prob': None,
+            'dropblock_size': None,
+        },
         'batch_norm': {
             'batch_norm_momentum': 0.997,
             'batch_norm_epsilon': 1e-4,
@@ -97,6 +99,22 @@ RETINANET_CFG = {
         'min_level': 3,
         'max_level': 7,
         'fpn_feat_dims': 256,
+        'batch_norm': {
+            'batch_norm_momentum': 0.997,
+            'batch_norm_epsilon': 1e-4,
+            'batch_norm_trainable': True,
+        },
+    },
+    'nasfpn': {
+        'min_level': 3,
+        'max_level': 7,
+        'fpn_feat_dims': 256,
+        'num_repeats': 5,
+        'use_separable_conv': False,
+        'dropblock': {
+            'dropblock_keep_prob': None,
+            'dropblock_size': None,
+        },
         'batch_norm': {
             'batch_norm_momentum': 0.997,
             'batch_norm_epsilon': 1e-4,
@@ -139,6 +157,8 @@ RETINANET_RESTRICTIONS = [
     'architecture.use_bfloat16 == retinanet_parser.use_bfloat16',
     'anchor.min_level == fpn.min_level',
     'anchor.max_level == fpn.max_level',
+    'anchor.min_level == nasfpn.min_level',
+    'anchor.max_level == nasfpn.max_level',
     'anchor.min_level == retinanet_head.min_level',
     'anchor.max_level == retinanet_head.max_level',
     'anchor.min_level == postprocess.min_level',

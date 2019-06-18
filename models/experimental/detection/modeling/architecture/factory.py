@@ -19,6 +19,7 @@ from __future__ import division
 from __future__ import print_function
 from modeling.architecture import fpn
 from modeling.architecture import heads
+from modeling.architecture import nasfpn
 from modeling.architecture import nn_ops
 from modeling.architecture import resnet
 
@@ -30,14 +31,19 @@ def batch_norm_relu_generator(params):
       trainable=params.batch_norm_trainable)
 
 
+def dropblock_generator(params):
+  return nn_ops.Dropblock(
+      dropblock_keep_prob=params.dropblock_keep_prob,
+      dropblock_size=params.dropblock_size)
+
+
 def backbone_generator(params):
   """Generator function for various backbone models."""
   if params.architecture.backbone == 'resnet':
     resnet_params = params.resnet
     backbone_fn = resnet.Resnet(
         resnet_depth=resnet_params.resnet_depth,
-        dropblock_keep_prob=resnet_params.dropblock_keep_prob,
-        dropblock_size=resnet_params.dropblock_size,
+        dropblock=dropblock_generator(resnet_params.dropblock),
         batch_norm_relu=batch_norm_relu_generator(resnet_params.batch_norm))
   else:
     raise ValueError('Backbone model %s is not supported.' %
@@ -55,6 +61,16 @@ def multilevel_features_generator(params):
         max_level=fpn_params.max_level,
         fpn_feat_dims=fpn_params.fpn_feat_dims,
         batch_norm_relu=batch_norm_relu_generator(fpn_params.batch_norm))
+  elif params.architecture.multilevel_features == 'nasfpn':
+    nasfpn_params = params.nasfpn
+    fpn_fn = nasfpn.Nasfpn(
+        min_level=nasfpn_params.min_level,
+        max_level=nasfpn_params.max_level,
+        fpn_feat_dims=nasfpn_params.fpn_feat_dims,
+        num_repeats=nasfpn_params.num_repeats,
+        use_separable_conv=nasfpn_params.use_separable_conv,
+        dropblock=dropblock_generator(nasfpn_params.dropblock),
+        batch_norm_relu=batch_norm_relu_generator(nasfpn_params.batch_norm))
   else:
     raise ValueError('The multi-level feature model %s is not supported.'
                      % params.architecture.multilevel_features)
