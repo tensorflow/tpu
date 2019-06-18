@@ -74,7 +74,7 @@ def save_config(params, model_dir):
   if model_dir:
     if not tf.gfile.Exists(model_dir):
       tf.gfile.MakeDirs(model_dir)
-    params_dict.save_params_dict_to_yaml(params, model_dir + '/param.yaml')
+    params_dict.save_params_dict_to_yaml(params, model_dir + '/params.yaml')
 
 
 def main(argv):
