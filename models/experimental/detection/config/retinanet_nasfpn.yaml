@@ -1,0 +1,11 @@
+# ---------- TRAINING PARAMETERS ----------
+# Expected accuracy with using NAS-FPN l3-l7 and image size 640x640: 39.5
+architecture:
+  multilevel_features: 'nasfpn'
+
+nasfpn:
+  fpn_feat_dims: 256
+  min_level: 3
+  max_level: 7
+  num_repeats: 5
+  use_separable_conv: False,
