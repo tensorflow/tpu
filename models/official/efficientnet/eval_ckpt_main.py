@@ -44,6 +44,8 @@ flags.DEFINE_string('imagenet_eval_label', None,
                     'Imagenet eval label file path, '
                     'such as /imagenet/ILSVRC2012_validation_ground_truth.txt')
 flags.DEFINE_string('ckpt_dir', '/tmp/ckpt/', 'Checkpoint folders')
+flags.DEFINE_boolean('enable_ema', True, 'Enable exponential moving average.')
+flags.DEFINE_string('export_ckpt', None, 'Exported ckpt for eval graph.')
 flags.DEFINE_string('example_img', '/tmp/panda.jpg',
                     'Filepath for a single example image.')
 flags.DEFINE_string('labels_map_file', '/tmp/labels_map.txt',
@@ -75,18 +77,32 @@ class EvalCkptDriver(object):
     _, _, self.image_size, _ = efficientnet_builder.efficientnet_params(
         model_name)
 
-  def restore_model(self, sess, ckpt_dir):
+  def restore_model(self, sess, ckpt_dir, enable_ema=True, export_ckpt=None):
     """Restore variables from checkpoint dir."""
+    sess.run(tf.global_variables_initializer())
     checkpoint = tf.train.latest_checkpoint(ckpt_dir)
-    ema = tf.train.ExponentialMovingAverage(decay=0.9999)
-    ema_vars = tf.trainable_variables() + tf.get_collection('moving_vars')
-    for v in tf.global_variables():
-      if 'moving_mean' in v.name or 'moving_variance' in v.name:
-        ema_vars.append(v)
-    ema_vars = list(set(ema_vars))
-    var_dict = ema.variables_to_restore(ema_vars)
+    if enable_ema:
+      ema = tf.train.ExponentialMovingAverage(decay=0.0)
+      ema_vars = tf.trainable_variables() + tf.get_collection('moving_vars')
+      for v in tf.global_variables():
+        if 'moving_mean' in v.name or 'moving_variance' in v.name:
+          ema_vars.append(v)
+      ema_vars = list(set(ema_vars))
+      var_dict = ema.variables_to_restore(ema_vars)
+      ema_assign_op = ema.apply(ema_vars)
+    else:
+      var_dict = None
+      ema_assign_op = None
+
+    sess.run(tf.global_variables_initializer())
     saver = tf.train.Saver(var_dict, max_to_keep=1)
     saver.restore(sess, checkpoint)
+
+    if export_ckpt:
+      if ema_assign_op is not None:
+        sess.run(ema_assign_op)
+      saver = tf.train.Saver(max_to_keep=1)
+      saver.save(sess, export_ckpt)
 
   def build_model(self, features, is_training):
     """Build model with input features."""
@@ -124,8 +140,7 @@ class EvalCkptDriver(object):
       images, labels = self.build_dataset(image_files, labels, False)
       probs = self.build_model(images, is_training=False)
 
-      sess.run(tf.global_variables_initializer())
-      self.restore_model(sess, ckpt_dir)
+      self.restore_model(sess, ckpt_dir, FLAGS.enable_ema, FLAGS.export_ckpt)
 
       prediction_idx = []
       prediction_prob = []
