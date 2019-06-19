@@ -242,7 +242,10 @@ def serving_model_graph_builder(output_image_info,
     model_fn = factory.model_generator(params)
     model_outputs = model_fn.build_outputs(
         features['images'],
-        labels={'anchor_boxes': input_anchor.multilevel_boxes},
+        labels={
+            'anchor_boxes': input_anchor.multilevel_boxes,
+            'image_info': features['image_info'],
+        },
         mode=mode_keys.PREDICT)
 
     if cast_num_detections_to_float:

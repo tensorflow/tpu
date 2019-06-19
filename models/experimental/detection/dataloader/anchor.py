@@ -65,14 +65,19 @@ class Anchor(object):
     self.boxes = self._generate_boxes()
 
   def _generate_boxes(self):
-    """Generates multiscale anchor boxes."""
+    """Generates multiscale anchor boxes.
+
+    Returns:
+      a Tensor of shape [N, 4], represneting anchor boxes of all levels
+      concatenated together.
+    """
     boxes_all = []
     for level in range(self.min_level, self.max_level + 1):
       boxes_l = []
       for scale in range(self.num_scales):
         for aspect_ratio in self.aspect_ratios:
-          stride = 2**level
-          intermidate_scale = 2**(scale/float(self.num_scales))
+          stride = 2 ** level
+          intermidate_scale = 2 ** (scale / float(self.num_scales))
           base_anchor_size = self.anchor_size * stride * intermidate_scale
           aspect_x = aspect_ratio ** 0.5
           aspect_y = aspect_ratio ** -0.5
@@ -99,11 +104,11 @@ class Anchor(object):
     unpacked_labels = collections.OrderedDict()
     count = 0
     for level in range(self.min_level, self.max_level + 1):
-      feat_size_y = tf.cast(self.image_size[0] / 2**level, tf.int32)
-      feat_size_x = tf.cast(self.image_size[1] / 2**level, tf.int32)
+      feat_size_y = tf.cast(self.image_size[0] / 2 ** level, tf.int32)
+      feat_size_x = tf.cast(self.image_size[1] / 2 ** level, tf.int32)
       steps = feat_size_y * feat_size_x * self.anchors_per_location
-      unpacked_labels[level] = tf.reshape(labels[count:count + steps],
-                                          [feat_size_y, feat_size_x, -1])
+      unpacked_labels[level] = tf.reshape(
+          labels[count:count + steps], [feat_size_y, feat_size_x, -1])
       count += steps
     return unpacked_labels
 

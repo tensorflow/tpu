@@ -148,8 +148,8 @@ def encode_boxes(boxes, anchors, weights=None):
   Args:
     boxes: a tensor whose last dimension is 4 representing the coordinates
       of boxes in ymin, xmin, ymax, xmax order.
-    anchors: a tensor whose shape is the same as `boxes` representing the
-      coordinates of anchors in ymin, xmin, ymax, xmax order.
+    anchors: a tensor whose shape is the same as, or `broadcastable` to `boxes`,
+      representing the coordinates of anchors in ymin, xmin, ymax, xmax order.
     weights: None or a list of four float numbers used to scale coordinates.
 
   Returns:
@@ -205,8 +205,8 @@ def decode_boxes(encoded_boxes, anchors, weights=None):
   Args:
     encoded_boxes: a tensor whose last dimension is 4 representing the
       coordinates of encoded boxes in ymin, xmin, ymax, xmax order.
-    anchors: a tensor whose shape is the same as `boxes` representing the
-      coordinates of anchors in ymin, xmin, ymax, xmax order.
+    anchors: a tensor whose shape is the same as, or `broadcastable` to `boxes`,
+      representing the coordinates of anchors in ymin, xmin, ymax, xmax order.
     weights: None or a list of four float numbers used to scale coordinates.
 
   Returns:

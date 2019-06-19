@@ -124,6 +124,8 @@ RETINANET_CFG = {
     'retinanet_head': {
         'min_level': 3,
         'max_level': 7,
+        # Note that `num_classes` is the total number of classes including
+        # one background classes whose index is 0.
         'num_classes': 91,
         'anchors_per_location': 9,
         'retinanet_head_num_convs': 4,

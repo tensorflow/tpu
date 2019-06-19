@@ -62,7 +62,8 @@ class RetinanetModel(base_model.Model):
     }
     if mode != mode_keys.TRAIN:
       boxes, scores, classes, valid_detections = self._generate_detections_fn(
-          box_outputs, cls_outputs, labels['anchor_boxes'])
+          box_outputs, cls_outputs, labels['anchor_boxes'],
+          labels['image_info'][:, 1:2, :])
       model_outputs.update({
           'num_detections': valid_detections,
           'detection_boxes': boxes,

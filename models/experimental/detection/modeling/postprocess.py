@@ -246,18 +246,33 @@ def _generate_detections_batched(boxes,
 
 
 def _apply_score_activation(logits, num_classes, activation):
-  """Applies activation to logits and removes the background class."""
+  """Applies activation to logits and removes the background class.
+
+  Note that it is assumed that the background class has index 0, which is
+  sliced away after the score transformation.
+
+  Args:
+    logits: the raw logit tensor.
+    num_classes: the total number of classes including one background class.
+    activation: the score activation type, one of 'SIGMOID', 'SOFTMAX' and
+      'IDENTITY'.
+
+  Returns:
+    scores: the tensor after applying score transformation and background
+      class removal.
+  """
   batch_size = tf.shape(logits)[0]
+  logits = tf.reshape(logits, [batch_size, -1, num_classes])
   if activation == 'SIGMOID':
-    logits = tf.reshape(logits, [batch_size, -1, num_classes])
     scores = tf.sigmoid(logits)
   elif activation == 'SOFTMAX':
-    logits = tf.reshape(logits, [batch_size, -1, num_classes + 1])
     scores = tf.softmax(logits)
-    scores = scores[:, 1::]
+  elif activation == 'IDENTITY':
+    pass
   else:
     raise ValueError(
-        'The score activation should be either SIGMOID or SOFTMAX.')
+        'The score activation should be SIGMOID, SOFTMAX or IDENTITY')
+  scores = scores[..., 1:]
   return scores
 
 
@@ -271,19 +286,26 @@ class GenerateOneStageDetections(object):
     self._num_classes = params.num_classes
     self._score_activation = 'SIGMOID'
 
-  def __call__(self, box_outputs, class_outputs, anchor_boxes):
+  def __call__(self, box_outputs, class_outputs, anchor_boxes, image_shape):
     # Collects outputs from all levels into a list.
     boxes = []
     scores = []
     for i in range(self._min_level, self._max_level + 1):
       batch_size = tf.shape(class_outputs[i])[0]
+
+      # Applies score transformation and remove the implicit background class.
       scores_i = _apply_score_activation(
           class_outputs[i], self._num_classes, self._score_activation)
+
+      # Box decoding.
       # The anchor boxes are shared for all data in a batch.
       # One stage detector only supports class agnostic box regression.
       anchor_boxes_i = tf.reshape(anchor_boxes[i], [batch_size, -1, 4])
       box_outputs_i = tf.reshape(box_outputs[i], [batch_size, -1, 4])
       boxes_i = box_utils.decode_boxes(box_outputs_i, anchor_boxes_i)
+
+      # Box clipping.
+      boxes_i = box_utils.clip_boxes(boxes_i, image_shape)
 
       boxes.append(boxes_i)
       scores.append(scores_i)
@@ -293,4 +315,6 @@ class GenerateOneStageDetections(object):
 
     (nmsed_boxes, nmsed_scores, nmsed_classes,
      valid_detections) = self._generate_detections(boxes, scores)
+    # Adds 1 to offset the background class which has index 0.
+    nmsed_classes += 1
     return nmsed_boxes, nmsed_scores, nmsed_classes, valid_detections
