@@ -1,14 +1,19 @@
 # ---------- TRAINING PARAMETERS ----------
-# AutoAugment achieves best results when trained for longer and when not using a pretrained
-# checkpoint for the backbone, although it will still work well in these settings.
-# Expected accuracy with using autoaugment: 38.67
-# Expected accuracy without using autoaugment: 34.52
+# AutoAugment achieves best results when trained for long and when not using a pretrained
+# checkpoint for the backbone.
+# Right now the code uses a pretrained checkpoint, but a future version will change this.
+# To train the ResNet 101 or ResNet 200 version, simply change the 'resnet_depth' to 101 or 200.
+# Expected accuracy on ResNet 50 with using autoaugment: 38.67
+# Expected accuracy on ResNet 50 without using autoaugment: 34.52
 train:
   total_steps: 277200
   learning_rate:
     init_learning_rate: 0.08
     learning_rate_levels: [0.008, 0.0008]
     learning_rate_steps: [220000, 258700]
+
+resnet:
+  resnet_depth: 50
 
 retinanet_parser:
   use_autoaugment: true
