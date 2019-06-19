@@ -2,20 +2,23 @@
 
 ## Prerequsite
 To get started, make sure to use Tensorflow 1.13+ on Google Cloud. Also here are a few package you need to install to get started:
-```
+
+```bash
 sudo apt-get install -y python-tk && \
 pip install Cython matplotlib opencv-python-headless pyyaml Pillow && \
 pip install 'git+https://github.com/cocodataset/cocoapi#egg=pycocotools&subdirectory=PythonAPI'
 ```
 
 ## Train RetinaNet on TPU
-```
-TPU_NAME=
-MODEL_DIR=
-RESNET_CHECKPOINT=
-TRAIN_FILE_PATTERN=
-EVAL_FILE_PATTERN=
-VAL_JSON_FILE=
+### Train a vanilla ResNet-50 based RetinaNet.
+
+```bash
+TPU_NAME="<your GCP TPU name>"
+MODEL_DIR="<path to the directory to store model files>"
+RESNET_CHECKPOINT="<path to the pre-trained Resnet-50 checkpoint>"
+TRAIN_FILE_PATTERN="<path to the TFRecord training data>"
+EVAL_FILE_PATTERN="<path to the TFRecord validation data>"
+VAL_JSON_FILE="<path to the validation annotation JSON file>"
 python ~/tpu/models/experimental/detection/main.py \
   --use_tpu=True \
   --tpu="${TPU_NAME?}" \
@@ -23,15 +26,52 @@ python ~/tpu/models/experimental/detection/main.py \
   --model_dir="${MODEL_DIR?}" \
   --mode=train \
   --eval_after_training=True \
-  --params_overrides="{ type: retinanet, train: { checkpoint: { path: ${RESNET_CHECKPOINT?}, prefix: resnet50/ }, train_file_pattern: ${TRAIN_FILE_PATTERN?} }, eval: { val_json_file: ${VAL_JSON_FILE?}, eval_file_pattern: ${EVAL_FILE_PATTERN?}, eval_samples: 5000 } }"
+  --params_overrides="{ type: retinanet, train: { checkpoint: { path: ${RESNET_CHECKPOINT?}, prefix: resnet50/ }, train_file_pattern: ${TRAIN_FILE_PATTERN?} }, eval: { val_json_file: ${VAL_JSON_FILE?}, eval_file_pattern: ${EVAL_FILE_PATTERN?} } }"
 ```
 
-## Export to SavedModel for serving
+### Train a custom RetinaNet using the config file.
+
+First, create a YAML config file, e.g. *my_retinanet.yaml*. This file specifies the parameters to be overridden, which should at least include the following fields.
+
+```YAML
+# my_retinanet.yaml
+type: 'retinanet'
+train:
+  train_file_pattern: <path to the TFRecord training data>
+eval:
+  eval_file_pattern: <path to the TFRecord validation data>
+  val_json_file: <path to the validation annotation JSON file>
 ```
-EXPORT_DIR=
-CHECKPOINT_PATH=
+
+Once the YAML config file is created, you can launch the training using the following command.
+
+```bash
+TPU_NAME="<your GCP TPU name>"
+MODEL_DIR="<path to the directory to store model files>"
+python ~/tpu/models/experimental/detection/main.py \
+  --use_tpu=True \
+  --tpu="${TPU_NAME?}" \
+  --num_cores=8 \
+  --model_dir="${MODEL_DIR?}" \
+  --mode=train \
+  --eval_after_training=True \
+  --params_overrides="my_retinanet.yaml"
+```
+
+### Available RetinaNet templates.
+
+* NAS-FPN: [arXiv](https://arxiv.org/abs/1904.07392), [yaml](https://github.com/tensorflow/tpu/blob/master/models/experimental/detection/config/yaml/retinanet_nasfpn.yaml)
+* Auto-augument: arXiv, [yaml](https://github.com/tensorflow/tpu/blob/master/models/experimental/detection/config/yaml/retinanet_autoaugment.yaml)
+
+
+## Export to SavedModel for serving
+Once the training is finished, you can export the model in the SavedModel format for serving using the following command.
+
+```bash
+EXPORT_DIR="<path to the directory to store the exported model>"
+CHECKPOINT_PATH="<path to the pre-trained checkpoint>"
 USE_TPU=true
-PARAMS_OVERRIDES=""
+PARAMS_OVERRIDES=""  # if any.
 BATCH_SIZE=1
 INPUT_TYPE="image_bytes"
 INPUT_NAME="input"
