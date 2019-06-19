@@ -1,0 +1,22 @@
+# ---------- RetianNet + NAS-FPN ----------
+# Expected accuracy with using NAS-FPN l3-l7 and image size 640x640: 39.5
+train:
+  total_steps: 90000
+  learning_rate:
+    init_learning_rate: 0.08
+    learning_rate_levels: [0.008, 0.0008]
+    learning_rate_steps: [60000, 80000]
+
+architecture:
+  multilevel_features: 'nasfpn'
+
+nasfpn:
+  fpn_feat_dims: 256
+  min_level: 3
+  max_level: 7
+  num_repeats: 5
+  use_separable_conv: False
+
+retinanet_parser:
+  aug_scale_min: 0.8
+  aug_scale_max: 1.2
