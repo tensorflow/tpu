@@ -16,7 +16,7 @@ RESNET_CHECKPOINT=
 TRAIN_FILE_PATTERN=
 EVAL_FILE_PATTERN=
 VAL_JSON_FILE=
-python ~/tpu/models/experimental/detection/main.py \
+python ~/tpu/models/official/detection/main.py \
   --use_tpu=True \
   --tpu="${TPU_NAME?}" \
   --num_cores=8 \
@@ -39,7 +39,7 @@ INPUT_IMAGE_SIZE="640,640"
 OUTPUT_IMAGE_INFO=true
 OUTPUT_NORMALIZED_COORDINATES=false
 CAST_NUM_DETECTIONS_TO_FLOAT=true
-python ~/tpu/models/experimental/detection/export_saved_model.py \
+python ~/tpu/models/official/detection/export_saved_model.py \
   --export_dir="${EXPORT_DIR?}" \
   --checkpoint_path="${CHECKPOINT_PATH?}" \
   --use_tpu=${USE_TPU?} \
