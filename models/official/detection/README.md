@@ -19,7 +19,7 @@ RESNET_CHECKPOINT="<path to the pre-trained Resnet-50 checkpoint>"
 TRAIN_FILE_PATTERN="<path to the TFRecord training data>"
 EVAL_FILE_PATTERN="<path to the TFRecord validation data>"
 VAL_JSON_FILE="<path to the validation annotation JSON file>"
-python ~/tpu/models/experimental/detection/main.py \
+python ~/tpu/models/official/detection/main.py \
   --use_tpu=True \
   --tpu="${TPU_NAME?}" \
   --num_cores=8 \
@@ -48,20 +48,20 @@ Once the YAML config file is created, you can launch the training using the foll
 ```bash
 TPU_NAME="<your GCP TPU name>"
 MODEL_DIR="<path to the directory to store model files>"
-python ~/tpu/models/experimental/detection/main.py \
+python ~/tpu/models/official/detection/main.py \
   --use_tpu=True \
   --tpu="${TPU_NAME?}" \
   --num_cores=8 \
   --model_dir="${MODEL_DIR?}" \
   --mode=train \
   --eval_after_training=True \
-  --params_overrides="my_retinanet.yaml"
+  --config_file="my_retinanet.yaml"
 ```
 
 ### Available RetinaNet templates.
 
-* NAS-FPN: [arXiv](https://arxiv.org/abs/1904.07392), [yaml](https://github.com/tensorflow/tpu/blob/master/models/experimental/detection/config/yaml/retinanet_nasfpn.yaml)
-* Auto-augument: arXiv, [yaml](https://github.com/tensorflow/tpu/blob/master/models/experimental/detection/config/yaml/retinanet_autoaugment.yaml)
+* NAS-FPN: [arXiv](https://arxiv.org/abs/1904.07392), [yaml](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/yaml/retinanet_nasfpn.yaml)
+* Auto-augument: arXiv, [yaml](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/yaml/retinanet_autoaugment.yaml)
 
 
 ## Export to SavedModel for serving
@@ -71,7 +71,7 @@ Once the training is finished, you can export the model in the SavedModel format
 EXPORT_DIR="<path to the directory to store the exported model>"
 CHECKPOINT_PATH="<path to the pre-trained checkpoint>"
 USE_TPU=true
-PARAMS_OVERRIDES=""  # if any.
+PARAMS_OVERRIDE=""  # if any.
 BATCH_SIZE=1
 INPUT_TYPE="image_bytes"
 INPUT_NAME="input"
@@ -79,11 +79,11 @@ INPUT_IMAGE_SIZE="640,640"
 OUTPUT_IMAGE_INFO=true
 OUTPUT_NORMALIZED_COORDINATES=false
 CAST_NUM_DETECTIONS_TO_FLOAT=true
-python ~/tpu/models/experimental/detection/export_saved_model.py \
+python ~/tpu/models/official/detection/export_saved_model.py \
   --export_dir="${EXPORT_DIR?}" \
   --checkpoint_path="${CHECKPOINT_PATH?}" \
   --use_tpu=${USE_TPU?} \
-  --params_overrides="${PARAMS_OVERRIDES?}" \
+  --params_override="${PARAMS_OVERRIDE?}" \
   --batch_size=${BATCH_SIZE?} \
   --input_type="${INPUT_TYPE?}" \
   --input_name="${INPUT_NAME?}" \

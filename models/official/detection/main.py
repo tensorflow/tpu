@@ -25,47 +25,25 @@ from absl import flags
 
 import tensorflow as tf
 
-from config import retinanet_config
+from configs import retinanet_config
 from dataloader import input_reader
 from dataloader import mode_keys as ModeKeys
 from executor import tpu_executor
 from modeling import model_builder
+from hyperparameters import common_hparams_flags
+from hyperparameters import common_tpu_flags
 from hyperparameters import params_dict
 
+common_tpu_flags.define_common_tpu_flags()
+common_hparams_flags.define_common_hparams_flags()
+
 
 flags.DEFINE_string(
-    'tpu',
-    default=None,
-    help='The Cloud TPU to use for training. This should be either the name '
-    'used when creating the Cloud TPU, or a grpc://ip.address.of.tpu:8470 '
-    'url.')
-flags.DEFINE_string(
-    'gcp_project',
-    default=None,
-    help='Project name for the Cloud TPU-enabled project. If not specified, we '
-    'will attempt to automatically detect the GCE project from metadata.')
-flags.DEFINE_string(
-    'tpu_zone',
-    default=None,
-    help='GCE zone where the Cloud TPU is located in. If not specified, we '
-    'will attempt to automatically detect the GCE project from metadata.')
+    'mode', default='train',
+    help='Mode to run: train or eval or train_and_eval (default: train)')
+
 flags.DEFINE_integer(
-    'num_cores', default=8, help='Number of TPU cores for training')
-flags.DEFINE_string(
-    'eval_master', default='',
-    help='GRPC URL of the eval master. Set to an appropiate value when running '
-    'on CPU/GPU')
-flags.DEFINE_bool('use_tpu', True, 'Use TPUs rather than CPUs')
-flags.DEFINE_string('mode', 'train',
-                    'Mode to run: train or eval or train_and_eval '
-                    '(default: train)')
-flags.DEFINE_bool('eval_after_training', False,
-                  'Run one eval after the training finishes.')
-flags.DEFINE_string('model_dir', None, 'Location of model_dir')
-flags.DEFINE_string(
-    'params_overrides', '',
-    'A JSON-style string or a YAML file which specifies overrides.')
-
+    'num_cores', default=8, help='Number of TPU cores for training.')
 
 FLAGS = flags.FLAGS
 
@@ -82,8 +60,13 @@ def main(argv):
 
   params = params_dict.ParamsDict(
       retinanet_config.RETINANET_CFG, retinanet_config.RETINANET_RESTRICTIONS)
+
+  if FLAGS.config_file:
+    params = params_dict.override_params_dict(
+        params, FLAGS.config_file, is_strict=True)
+
   params = params_dict.override_params_dict(
-      params, FLAGS.params_overrides, is_strict=True)
+      params, FLAGS.params_override, is_strict=True)
   params.override({
       'platform': {
           'eval_master': FLAGS.eval_master,

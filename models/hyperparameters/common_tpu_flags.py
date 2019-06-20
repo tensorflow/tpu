@@ -34,3 +34,8 @@ def define_common_tpu_flags():
       'tpu_zone', default=None,
       help='GCE zone where the Cloud TPU is located in. If not specified, we '
       'will attempt to automatically detect the GCE project from metadata.')
+
+  flags.DEFINE_string(
+      'eval_master', default='',
+      help='GRPC URL of the eval master. Set to an appropiate value when running '
+      'on CPU/GPU.')

@@ -12,9 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Config to train Retinanet on COCO."""
+"""Config template to train Retinanet."""
 
 # pylint: disable=line-too-long
+
+# For ResNet-50, this freezes the variables of the first conv1 and conv2_x
+# layers [1], which leads to higher training speed and slightly better testing
+# accuracy. The intuition is that the low-level architecture (e.g., ResNet-50)
+# is able to capture low-level features such as edges; therefore, it does not
+# need to be fine-tuned for the detection task.
+# Note that we need to trailing `/` to avoid the incorrect match.
+# [1]: https://github.com/facebookresearch/Detectron/blob/master/detectron/core/config.py#L198
+RESNET50_FROZEN_VAR_PREFIX = r'resnet\/conv2d(|_([1-9]|10))\/'
+
 RETINANET_CFG = {
     'type': 'retinanet',
     'model_dir': '',
@@ -40,7 +50,7 @@ RETINANET_CFG = {
             'path': '',
             'prefix': '',
         },
-        'variable_filter': 'resnet50_conv2',
+        'frozen_variable_prefix': RESNET50_FROZEN_VAR_PREFIX,
         'train_file_pattern': '',
     },
     'eval': {

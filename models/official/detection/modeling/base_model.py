@@ -25,6 +25,23 @@ import six
 import tensorflow as tf
 
 
+def filter_trainable_variables(variables, frozen_variable_prefix):
+  """Filter trainable varialbes.
+
+  Args:
+    variables: a list of tf.Variable to be filtered.
+    frozen_variable_prefix: a regex string specifing the prefix pattern of
+      the frozen variables' names.
+
+  Returns:
+    filtered_variables: a list of tf.Variable filtered out the frozen ones.
+  """
+  filtered_variables = [
+      v for v in variables if not re.match(frozen_variable_prefix, v.name)
+  ]
+  return filtered_variables
+
+
 class OptimizerFactory(object):
   """Class to generate optimizer function."""
 
@@ -83,7 +100,7 @@ class Model(object):
     self._optimizer_fn = OptimizerFactory(params.train.optimizer)
     self._learning_rate_fn = LearningRateFactory(params.train.learning_rate)
 
-    self._variable_filter = params.train.variable_filter
+    self._frozen_variable_prefix = params.train.frozen_variable_prefix
 
     # Checkpoint restoration.
     self._checkpoint = params.train.checkpoint.path
@@ -151,50 +168,13 @@ class Model(object):
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
 
     # Gets all trainable variables and apply the variable filter.
-    variables = tf.trainable_variables()
-    var_list = self._remove_variables(variables, self._variable_filter)
+    train_var_list = filter_trainable_variables(
+        tf.trainable_variables(), self._frozen_variable_prefix)
 
     with tf.control_dependencies(update_ops):
-      train_op = optimizer.minimize(total_loss, global_step, var_list=var_list)
+      train_op = optimizer.minimize(
+          total_loss, global_step, var_list=train_var_list)
     return train_op
-
-  def _remove_variables(self, variables, variable_filter):
-    """Removes variables from the input.
-
-    Removing low-level parameters (e.g., initial convolution layer) from
-    training usually leads to higher training speed and slightly better testing
-    accuracy. The intuition is that the low-level architecture (e.g., ResNet-50)
-    is able to capture low-level features such as edges; therefore, it does not
-    need to be fine-tuned for the detection task.
-
-    Args:
-      variables: trainable variables in the model.
-      variable_filter: `str` name for predefined variable filters, e.g.,
-        `resnet50/conv2` removes low-level variables in resnet50 model.
-
-    Returns:
-      var_list: a list containing variables for training
-
-    """
-    remove_list = []
-
-    # Freeze at conv2 based on reference model.
-    # Reference: https://github.com/facebookresearch/Detectron/blob/master/detectron/core/config.py#L194  # pylint: disable=line-too-long
-    match = re.search(r'(resnet\d+/)conv2', variable_filter)
-    if match:
-      prefix = match.group(1)
-      remove_list.append(prefix + 'conv2d/')
-      for i in range(1, 11):
-        remove_list.append(prefix + 'conv2d_{}/'.format(i))
-
-    def _is_kept(variable):
-      for rm_str in remove_list:
-        if rm_str in variable.name:
-          return False
-      return True
-
-    var_list = [v for v in variables if _is_kept(v)]
-    return var_list
 
   def weight_decay_loss(self, l2_weight_decay):
     return l2_weight_decay * tf.add_n([

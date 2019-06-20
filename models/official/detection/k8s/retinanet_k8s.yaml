@@ -41,13 +41,13 @@ spec:
             DEBIAN_FRONTEND=noninteractive apt-get install -y python-dev python-tk &&
             pip install Cython matplotlib &&
             pip install 'git+https://github.com/cocodataset/cocoapi#egg=pycocotools&subdirectory=PythonAPI' &&
-            python /tensorflow_tpu_models/models/experimental/detection/main.py
+            python /tensorflow_tpu_models/models/official/detection/main.py
             --use_tpu=True
             --model_dir="${MODEL_DIR?}"
             --num_cores=8
             --mode=train
             --eval_after_training=True
-            --params_overrides="{ type: retinanet, train: { checkpoint: { path: ${RESNET_CHECKPOINT?},
+            --params_override="{ type: retinanet, train: { checkpoint: { path: ${RESNET_CHECKPOINT?},
              prefix: resnet50/ }, train_file_pattern: ${TRAIN_FILE_PATTERN?} },
              eval: { val_json_file: ${VAL_JSON_FILE?}, eval_file_pattern: ${EVAL_FILE_PATTERN?},
              eval_samples: 5000 } }"
