@@ -3,6 +3,10 @@
 This folder contains an implementation of the
 [RetinaNet](https://arxiv.org/pdf/1708.02002.pdf) object detection model.
 
+WARNING: No more development is happening on this codebase of Retinanet.
+Latest codebase is present in [Detection Model](https://github.com/tensorflow/tpu/tree/master/models/official/retinanet).
+This codebase is going to be deprecated after September-2019.
+
 The instructions below assume you are already familiar with running a model on
 the TPU.  If you haven't already, please review the [instructions for running
 the ResNet model on the Cloud TPU](https://cloud.google.com/tpu/docs/tutorials/resnet).
@@ -22,6 +26,9 @@ If they are not available, you can find the latest version on GitHub:
 git clone https://github.com/tensorflow/tpu/
 ls tpu/models/official/retinanet
 ```
+WARNING:This retinanet model code is compatible with Tensorflow version 1.13 & 1.14.
+There might be some version incompatibilities if running with other versions
+as no further development is happening in this.
 
 ## Before we start
 
@@ -190,7 +197,7 @@ gcloud compute instances create\
   retinanet-eval-vm\
   --machine-type=n1-highcpu-64\
   --image-project=ml-images\
-  --image-family=tf-1-6\
+  --image-family=tf-1-13\
   --scopes=cloud-platform
 ```
 
