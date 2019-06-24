@@ -3,5 +3,5 @@ train_batch_size: 65536
 train_steps: 125000
 eval_batch_size: 1024
 iterations_per_loop: 100
-num_shards: 512
+num_cores: 512
 train_steps_per_eval: 2000

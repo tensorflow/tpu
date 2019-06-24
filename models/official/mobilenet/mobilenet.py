@@ -33,8 +33,10 @@ import tensorflow as tf
 import supervised_images
 from hyperparameters import common_hparams_flags
 from hyperparameters import common_tpu_flags
-from hyperparameters import hyperparameters
+from hyperparameters import flags_to_params
+from hyperparameters import params_dict
 import mobilenet_model as mobilenet_v1
+from configs import mobilenet_config
 
 from tensorflow.contrib.framework.python.ops import arg_scope
 from tensorflow.contrib.training.python.training import evaluation
@@ -43,28 +45,6 @@ common_tpu_flags.define_common_tpu_flags()
 common_hparams_flags.define_common_hparams_flags()
 
 # Model specific parameters
-flags.DEFINE_string(
-    'hparams_file',
-    default=None,
-    help=('Set of model parameters to override the default mparams.'
-         ))
-
-flags.DEFINE_multi_string(
-    'hparams',
-    default=None,
-    help=('This is used to override only the model hyperparameters. It should '
-          'not be used to override the other parameters like the tpu specific '
-          'flags etc. For example, if experimenting with larger numbers of '
-          'train_steps, a possible value is '
-          '--param_overrides=train_steps=9000000.'))
-
-flags.DEFINE_string(
-    'default_hparams_file',
-    default=None,
-    help=('Default set of model parameters to use with this model. Look at '
-          'configs/default.yaml for this.'
-         ))
-
 flags.DEFINE_string(
     'tflite_export_dir',
     default=None,
@@ -82,7 +62,7 @@ flags.DEFINE_integer(
     'num_eval_images', default=None, help='Size of evaluation data set.')
 
 flags.DEFINE_integer(
-    'num_shards', None,
+    'num_cores', None,
     'Number of shards (workers).')
 
 flags.DEFINE_integer(
@@ -394,49 +374,58 @@ class LoadEMAHook(tf.train.SessionRunHook):
 def main(unused_argv):
   del unused_argv  # Unused
 
-  default_hparams_file = FLAGS.default_hparams_file
-  if default_hparams_file is None:
-    default_hparams_file = os.path.join(os.path.dirname(__file__),
-                                        './configs/default.yaml')
+  params = params_dict.ParamsDict({}, mobilenet_config.MOBILENET_RESTRICTIONS)
+  params = flags_to_params.override_params_from_input_flags(params, FLAGS)
+  params = params_dict.override_params_dict(
+      params, mobilenet_config.MOBILENET_CFG, is_strict=False)
+  params = params_dict.override_params_dict(
+      params, FLAGS.config_file, is_strict=True)
+  params = params_dict.override_params_dict(
+      params, FLAGS.params_override, is_strict=True)
 
-  params = hyperparameters.get_hyperparameters(default_hparams_file,
-                                               FLAGS.hparams_file,
-                                               FLAGS,
-                                               FLAGS.hparams)
+  input_perm = [0, 1, 2, 3]
+  output_perm = [0, 1, 2, 3]
+
+  batch_axis = 0
+  batch_size_per_shard = params.train_batch_size // params.num_cores
+  if params.transpose_enabled:
+    if batch_size_per_shard >= 64:
+      input_perm = [3, 0, 1, 2]
+      output_perm = [1, 2, 3, 0]
+      batch_axis = 3
+    else:
+      input_perm = [2, 0, 1, 3]
+      output_perm = [1, 2, 0, 3]
+      batch_axis = 2
+
+  additional_params = {
+      'input_perm': input_perm,
+      'output_perm': output_perm,
+  }
+  params = params_dict.override_params_dict(
+      params, additional_params, is_strict=False)
+
+  params.validate()
+  params.lock()
 
   tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
-      FLAGS.tpu if (FLAGS.tpu or params['use_tpu']) else '',
+      FLAGS.tpu if (FLAGS.tpu or params.use_tpu) else '',
       zone=FLAGS.tpu_zone,
       project=FLAGS.gcp_project)
 
-  batch_size_per_shard = params['train_batch_size'] // params['num_shards']
-  params['input_perm'] = [0, 1, 2, 3]
-  params['output_perm'] = [0, 1, 2, 3]
-
-  batch_axis = 0
-  if params['transpose_enabled']:
-    if batch_size_per_shard >= 64:
-      params['input_perm'] = [3, 0, 1, 2]
-      params['output_perm'] = [1, 2, 3, 0]
-      batch_axis = 3
-    else:
-      params['input_perm'] = [2, 0, 1, 3]
-      params['output_perm'] = [1, 2, 0, 3]
-      batch_axis = 2
-
-  if params['eval_total_size'] > 0:
-    eval_size = params['eval_total_size']
+  if params.eval_total_size > 0:
+    eval_size = params.eval_total_size
   else:
-    eval_size = params['num_eval_images']
-  eval_steps = eval_size // params['eval_batch_size']
+    eval_size = params.num_eval_images
+  eval_steps = eval_size // params.eval_batch_size
 
   iterations = (eval_steps if FLAGS.mode == 'eval' else
-                params['iterations_per_loop'])
+                params.iterations_per_loop)
 
   eval_batch_size = (None if FLAGS.mode == 'train' else
-                     params['eval_batch_size'])
+                     params.eval_batch_size)
 
-  per_host_input_for_training = (params['num_shards'] <= 8 if
+  per_host_input_for_training = (params.num_cores <= 8 if
                                  FLAGS.mode == 'train' else True)
 
   run_config = tf.contrib.tpu.RunConfig(
@@ -449,15 +438,14 @@ def main(unused_argv):
           log_device_placement=FLAGS.log_device_placement),
       tpu_config=tf.contrib.tpu.TPUConfig(
           iterations_per_loop=iterations,
-          num_shards=params['num_shards'],
           per_host_input_for_training=per_host_input_for_training))
 
   inception_classifier = tf.contrib.tpu.TPUEstimator(
       model_fn=model_fn,
-      use_tpu=params['use_tpu'],
+      use_tpu=params.use_tpu,
       config=run_config,
-      params=params,
-      train_batch_size=params['train_batch_size'],
+      params=params.as_dict(),
+      train_batch_size=params.train_batch_size,
       eval_batch_size=eval_batch_size,
       batch_axis=(batch_axis, 0))
 
@@ -470,7 +458,7 @@ def main(unused_argv):
       is_training=False,
       data_dir=FLAGS.data_dir)
 
-  if params['moving_average']:
+  if params.moving_average:
     eval_hooks = [LoadEMAHook(FLAGS.model_dir)]
   else:
     eval_hooks = []
@@ -484,7 +472,7 @@ def main(unused_argv):
     def get_next_checkpoint():
       return evaluation.checkpoints_iterator(
           FLAGS.model_dir,
-          min_interval_secs=params['min_eval_interval'],
+          min_interval_secs=params.min_eval_interval,
           timeout=FLAGS.eval_timeout,
           timeout_fn=terminate_eval)
 
@@ -502,11 +490,11 @@ def main(unused_argv):
         tf.logging.info('Checkpoint %s no longer exists ... skipping')
 
   elif FLAGS.mode == 'train_and_eval':
-    for cycle in range(params['train_steps'] // params['train_steps_per_eval']):
+    for cycle in range(params.train_steps // params.train_steps_per_eval):
       tf.logging.info('Starting training cycle %d.' % cycle)
       inception_classifier.train(
           input_fn=imagenet_train.input_fn,
-          steps=params['train_steps_per_eval'])
+          steps=params.train_steps_per_eval)
 
       tf.logging.info('Starting evaluation cycle %d .' % cycle)
       eval_results = inception_classifier.evaluate(
@@ -516,7 +504,7 @@ def main(unused_argv):
   else:
     tf.logging.info('Starting training ...')
     inception_classifier.train(
-        input_fn=imagenet_train.input_fn, steps=params['train_steps'])
+        input_fn=imagenet_train.input_fn, steps=params.train_steps)
 
   if FLAGS.export_dir:
     tf.logging.info('Starting to export model with image input.')
@@ -534,7 +522,7 @@ def main(unused_argv):
         savedmodel_dir,
         output_arrays=['softmax_tensor'])
     tflite_file_name = 'mobilenet.tflite'
-    if params['post_quantize']:
+    if params.post_quantize:
       converter.post_training_quantize = True
       tflite_file_name = 'quantized_' + tflite_file_name
     tflite_file = os.path.join(savedmodel_dir, tflite_file_name)
