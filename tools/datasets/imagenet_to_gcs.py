@@ -366,7 +366,7 @@ def convert_to_tf_records(raw_data_dir):
   # across the batches.
   random.seed(0)
   def make_shuffle_idx(n):
-    order = range(n)
+    order = list(range(n))
     random.shuffle(order)
     return order
 
