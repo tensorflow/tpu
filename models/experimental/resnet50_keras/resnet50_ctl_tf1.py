@@ -99,128 +99,122 @@ def main(unused_argv):
   tf.tpu.experimental.initialize_tpu_system(resolver)
   strategy = tf.distribute.experimental.TPUStrategy(resolver)
 
-  # TODO(rxsang): This doesn't work on cloud for some reason
-  strategy.extended.experimental_enable_get_next_as_optional = False
+  imagenet_train = imagenet_input.ImageNetInput(
+      is_training=True,
+      data_dir=FLAGS.data,
+      batch_size=batch_size,
+      use_bfloat16=_USE_BFLOAT16)
+  imagenet_eval = imagenet_input.ImageNetInput(
+      is_training=False,
+      data_dir=FLAGS.data,
+      batch_size=batch_size,
+      use_bfloat16=_USE_BFLOAT16)
+
+  train_iterator = strategy.make_dataset_iterator(imagenet_train.input_fn())
+  test_iterator = strategy.make_dataset_iterator(imagenet_eval.input_fn())
+
+  with strategy.scope():
+    logging.info('Building Keras ResNet-50 model')
+    model = resnet_model.ResNet50(num_classes=NUM_CLASSES)
+    optimizer = tf.keras.optimizers.SGD(
+        learning_rate=_BASE_LEARNING_RATE, momentum=0.9, nesterov=True)
+    training_loss = tf.keras.metrics.Mean('training_loss', dtype=tf.float32)
+    training_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(
+        'training_accuracy', dtype=tf.float32)
+    test_loss = tf.keras.metrics.Mean('test_loss', dtype=tf.float32)
+    test_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(
+        'test_accuracy', dtype=tf.float32)
+    logging.info('Finished building Keras ResNet-50 model')
+
+  def train_step(inputs):
+    """Training StepFn."""
+    images, labels = inputs
+    with tf.GradientTape() as tape:
+      logits = model(images, training=True)
+
+      # Loss calculations.
+      #
+      # Part 1: Prediciton loss.
+      prediction_loss = tf.keras.losses.sparse_categorical_crossentropy(
+          labels, logits)
+      loss1 = tf.reduce_mean(prediction_loss)
+      # Part 2: Model weights regularization
+      loss2 = tf.reduce_sum(model.losses)
+
+      # Scale the loss given the TPUStrategy will reduce sum all gradients.
+      loss = loss1 + loss2
+      loss = loss / strategy.num_replicas_in_sync
+
+    grads = tape.gradient(loss, model.trainable_variables)
+    update_vars = optimizer.apply_gradients(
+        zip(grads, model.trainable_variables))
+    update_loss = training_loss.update_state(loss)
+    update_accuracy = training_accuracy.update_state(labels, logits)
+    with tf.control_dependencies([update_vars, update_loss, update_accuracy]):
+      return tf.identity(loss)
+
+  def test_step(inputs):
+    """Evaluation StepFn."""
+    images, labels = inputs
+    logits = model(images, training=False)
+    loss = tf.keras.losses.sparse_categorical_crossentropy(labels, logits)
+    loss = tf.reduce_mean(loss) / strategy.num_replicas_in_sync
+    update_loss = test_loss.update_state(loss)
+    update_accuracy = test_accuracy.update_state(labels, logits)
+    with tf.control_dependencies([update_loss, update_accuracy]):
+      return tf.identity(loss)
+
+  dist_train = strategy.unwrap(
+      strategy.experimental_run(train_step, train_iterator))
+  dist_test = strategy.unwrap(
+      strategy.experimental_run(test_step, test_iterator))
+
+  training_loss_result = training_loss.result()
+  training_accuracy_result = training_accuracy.result()
+  test_loss_result = test_loss.result()
+  test_accuracy_result = test_accuracy.result()
+
+  train_iterator_init = train_iterator.initialize()
+  test_iterator_init = test_iterator.initialize()
 
   config = tf.ConfigProto()
+  config.allow_soft_placement = True
   cluster_spec = resolver.cluster_spec()
   if cluster_spec:
     config.cluster_def.CopyFrom(cluster_spec.as_cluster_def())
-
-  with tf.Session(target=resolver.master(), config=config) as session:
-    imagenet_train = imagenet_input.ImageNetInput(
-        is_training=True, data_dir=FLAGS.data, batch_size=batch_size,
-        use_bfloat16=_USE_BFLOAT16)
-    imagenet_eval = imagenet_input.ImageNetInput(
-        is_training=False, data_dir=FLAGS.data, batch_size=batch_size,
-        use_bfloat16=_USE_BFLOAT16)
-
-    train_iterator = strategy.make_dataset_iterator(imagenet_train.input_fn())
-    test_iterator = strategy.make_dataset_iterator(imagenet_eval.input_fn())
-
-    with strategy.scope():
-      logging.info('Building Keras ResNet-50 model')
-      model = resnet_model.ResNet50(num_classes=NUM_CLASSES)
-      optimizer = tf.keras.optimizers.SGD(
-          learning_rate=_BASE_LEARNING_RATE, momentum=0.9, nesterov=True)
-      training_loss = tf.keras.metrics.Mean('training_loss', dtype=tf.float32)
-      training_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(
-          'training_accuracy', dtype=tf.float32)
-      test_loss = tf.keras.metrics.Mean('test_loss', dtype=tf.float32)
-      test_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(
-          'test_accuracy', dtype=tf.float32)
-      logging.info('Finished building Keras ResNet-50 model')
-
-      def train_step(inputs):
-        """Training StepFn."""
-        images, labels = inputs
-        with tf.GradientTape() as tape:
-          logits = model(images, training=True)
-
-          # Loss calculations.
-          #
-          # Part 1: Prediciton loss.
-          prediction_loss = tf.keras.losses.sparse_categorical_crossentropy(
-              labels, logits)
-          loss1 = tf.reduce_mean(prediction_loss)
-          # Part 2: Model weights regularization
-          loss2 = tf.reduce_sum(model.losses)
-
-          # Scale the loss given the TPUStrategy will reduce sum all gradients.
-          loss = loss1 + loss2
-          loss = loss / strategy.num_replicas_in_sync
-
-        grads = tape.gradient(loss, model.trainable_variables)
-        update_vars = optimizer.apply_gradients(
-            zip(grads, model.trainable_variables))
-        update_loss = training_loss.update_state(loss)
-        update_accuracy = training_accuracy.update_state(labels, logits)
-        with tf.control_dependencies([update_vars, update_loss,
-                                      update_accuracy]):
-          return tf.identity(loss)
-
-      def test_step(inputs):
-        """Evaluation StepFn."""
-        images, labels = inputs
-        logits = model(images, training=False)
-        loss = tf.keras.losses.sparse_categorical_crossentropy(labels,
-                                                               logits)
-        loss = tf.reduce_mean(loss) / strategy.num_replicas_in_sync
-        update_loss = test_loss.update_state(loss)
-        update_accuracy = test_accuracy.update_state(labels, logits)
-        with tf.control_dependencies([update_loss, update_accuracy]):
-          return tf.identity(loss)
-
-      dist_train = strategy.unwrap(
-          strategy.experimental_run(train_step, train_iterator))
-      dist_test = strategy.unwrap(
-          strategy.experimental_run(test_step, test_iterator))
-
-      training_loss_result = training_loss.result()
-      training_accuracy_result = training_accuracy.result()
-      test_loss_result = test_loss.result()
-      test_accuracy_result = test_accuracy.result()
-
-      train_iterator_init = train_iterator.initialize()
-      test_iterator_init = test_iterator.initialize()
-
-      all_variables = (
-          tf.global_variables() +
-          training_loss.variables +
-          training_accuracy.variables +
-          test_loss.variables +
-          test_accuracy.variables)
-
-    session.run([v.initializer for v in all_variables])
+  with tf.Session(target=resolver.master(), config=config) as sess:
+    sess.run(
+        [tf.initializers.local_variables(),
+         tf.initializers.global_variables()])
+    sess.run(train_iterator_init)
 
     for epoch in range(0, FLAGS.num_epochs):
       logging.info('Starting to run epoch: %s', epoch)
-      session.run(train_iterator_init)
       for step in range(steps_per_epoch):
         learning_rate = compute_learning_rate(epoch + 1 +
                                               (float(step) / steps_per_epoch))
-        session.run(optimizer.lr.assign(learning_rate))
+        sess.run(optimizer.lr.assign(learning_rate))
         if step % 20 == 0:
           logging.info('Learning rate at step %s in epoch %s is %s', step,
                        epoch, learning_rate)
-        session.run(dist_train)
+        sess.run(dist_train)
         if step % 20 == 0:
           logging.info('Training loss: %s, accuracy: %s%%',
-                       round(session.run(training_loss_result), 4),
-                       round(session.run(training_accuracy_result) * 100, 2))
+                       round(sess.run(training_loss_result), 4),
+                       round(sess.run(training_accuracy_result) * 100, 2))
         training_loss.reset_states()
         training_accuracy.reset_states()
 
-      session.run(test_iterator_init)
+      sess.run(test_iterator_init)
       for step in range(steps_per_eval):
         if step % 20 == 0:
           logging.info('Starting to run eval step %s of epoch: %s', step,
                        epoch)
-        session.run(dist_test)
+        sess.run(dist_test)
         if step % 20 == 0:
           logging.info('Test loss: %s, accuracy: %s%%',
-                       round(session.run(test_loss_result), 4),
-                       round(session.run(test_accuracy_result) * 100, 2))
+                       round(sess.run(test_loss_result), 4),
+                       round(sess.run(test_accuracy_result) * 100, 2))
         test_loss.reset_states()
         test_accuracy.reset_states()
 
