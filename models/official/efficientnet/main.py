@@ -262,19 +262,22 @@ def model_fn(features, labels, mode, params):
     features = features['feature']
 
   # In most cases, the default data format NCHW instead of NHWC should be
-  # used for a significant performance boost on GPU/TPU. NHWC should be used
+  # used for a significant performance boost on GPU. NHWC should be used
   # only if the network needs to be run on CPU since the pooling operations
-  # are only supported on NHWC.
+  # are only supported on NHWC. TPU uses XLA compiler to figure out best layout.
   if FLAGS.data_format == 'channels_first':
     assert not FLAGS.transpose_input    # channels_first only for GPU
     features = tf.transpose(features, [0, 3, 1, 2])
+    stats_shape = [3, 1, 1]
+  else:
+    stats_shape = [1, 1, 3]
 
   if FLAGS.transpose_input and mode != tf.estimator.ModeKeys.PREDICT:
     features = tf.transpose(features, [3, 0, 1, 2])  # HWCN to NHWC
 
   # Normalize the image to zero mean and unit variance.
-  features -= tf.constant(MEAN_RGB, shape=[1, 1, 3], dtype=features.dtype)
-  features /= tf.constant(STDDEV_RGB, shape=[1, 1, 3], dtype=features.dtype)
+  features -= tf.constant(MEAN_RGB, shape=stats_shape, dtype=features.dtype)
+  features /= tf.constant(STDDEV_RGB, shape=stats_shape, dtype=features.dtype)
 
   is_training = (mode == tf.estimator.ModeKeys.TRAIN)
   has_moving_average_decay = (FLAGS.moving_average_decay > 0)

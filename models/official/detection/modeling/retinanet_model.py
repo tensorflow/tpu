@@ -116,20 +116,23 @@ class RetinanetModel(base_model.Model):
 
     predictions = {
         'images': images,
-        'image_info': labels['image_info'],
-        'pred_boxes': outputs['detection_boxes'],
-        'pred_scores': outputs['detection_scores'],
-        'pred_classes': outputs['detection_classes'],
-        'pred_valid_detections': outputs['num_detections'],
+        'pred_source_id': labels['groundtruths']['source_id'],
+        'pred_image_info': labels['image_info'],
+        'pred_num_detections': outputs['num_detections'],
+        'pred_detection_boxes': outputs['detection_boxes'],
+        'pred_detection_classes': outputs['detection_classes'],
+        'pred_detection_scores': outputs['detection_scores'],
     }
 
     if 'groundtruths' in labels:
       predictions['gt_source_id'] = labels['groundtruths']['source_id']
+      predictions['gt_image_info'] = labels['image_info']
+      predictions['gt_num_detections'] = (
+          labels['groundtruths']['num_detections'])
       predictions['gt_boxes'] = labels['groundtruths']['boxes']
       predictions['gt_classes'] = labels['groundtruths']['classes']
       predictions['gt_areas'] = labels['groundtruths']['areas']
       predictions['gt_is_crowds'] = labels['groundtruths']['is_crowds']
-      predictions['gt_image_info'] = labels['image_info']
 
       # Computes model loss for logging.
       cls_loss = self._cls_loss_fn(

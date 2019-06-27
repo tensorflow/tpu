@@ -12,24 +12,3 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Evaluator factory."""
-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
-from evaluation import coco_evaluator
-
-
-def evaluator_generator(params):
-  """Generator function for various evaluators."""
-  if params.type == 'box':
-    evaluator = coco_evaluator.COCOEvaluator(
-        annotation_file=params.val_json_file, include_mask=False)
-  elif params.type == 'box_and_mask':
-    evaluator = coco_evaluator.COCOEvaluator(
-        annotation_file=params.val_json_file, include_mask=True)
-  else:
-    raise ValueError('Evaluator %s is not supported.' % params.type)
-
-  return evaluator

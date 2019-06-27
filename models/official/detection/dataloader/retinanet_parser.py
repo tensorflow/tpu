@@ -330,6 +330,8 @@ class Parser(object):
     # Sets up groundtruth data for evaluation.
     groundtruths = {
         'source_id': data['source_id'],
+        'num_groundtrtuhs': tf.shape(data['groundtruth_classes']),
+        'image_info': image_info,
         'boxes': box_utils.denormalize_boxes(
             data['groundtruth_boxes'], image_shape),
         'classes': data['groundtruth_classes'],
@@ -386,16 +388,13 @@ class Parser(object):
     # If mode is PREDICT_WITH_GT, returns groundtruths and training targets
     # in labels.
     if self._mode == ModeKeys.PREDICT_WITH_GT:
-      gt_boxes = box_utils.denormalize_boxes(
+      # Converts boxes from normalized coordinates to pixel coordinates.
+      boxes = box_utils.denormalize_boxes(
           data['groundtruth_boxes'], image_shape)
-      gt_boxes = tf.stack([gt_boxes[:, 1],
-                           gt_boxes[:, 0],
-                           gt_boxes[:, 3] - gt_boxes[:, 1],
-                           gt_boxes[:, 2] - gt_boxes[:, 0]],
-                          axis=1)
       groundtruths = {
           'source_id': data['source_id'],
-          'boxes': gt_boxes,
+          'num_detections': tf.shape(data['groundtruth_classes']),
+          'boxes': boxes,
           'classes': data['groundtruth_classes'],
           'areas': data['groundtruth_area'],
           'is_crowds': tf.cast(data['groundtruth_is_crowd'], tf.int32),
@@ -407,10 +406,6 @@ class Parser(object):
 
       # Computes training objective for evaluation loss.
       classes = data['groundtruth_classes']
-      boxes = data['groundtruth_boxes']
-
-      # Converts boxes from normalized coordinates to pixel coordinates.
-      boxes = box_utils.denormalize_boxes(boxes, image_shape)
 
       image_scale = image_info[2, :]
       offset = image_info[3, :]
