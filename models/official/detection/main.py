@@ -106,7 +106,7 @@ def main(argv):
         params, FLAGS.config_file, is_strict=True)
 
   params = params_dict.override_params_dict(
-      params, FLAGS.params_overrides, is_strict=True)
+      params, FLAGS.params_override, is_strict=True)
   params.override({
       'platform': {
           'eval_master': FLAGS.eval_master,
