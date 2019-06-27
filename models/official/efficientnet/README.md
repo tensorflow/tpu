@@ -61,7 +61,7 @@ Please refer to the following colab for more instructions on how to obtain and u
 
 ```
     import efficientnet_builder
-    features, endpoints = efficientnet_builder.build_model_base(images, 'efficientnet-b0')
+    features, endpoints = efficientnet_builder.build_model_base(images, 'efficient-b0')
 ```
 
   * Use `features` for classification finetuning.

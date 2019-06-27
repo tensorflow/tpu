@@ -22,7 +22,7 @@ import contextlib
 
 # Standard Imports
 import numpy as np
-import tensorflow.google as tf
+import tensorflow as tf
 
 import configuration
 import show_and_tell_model
