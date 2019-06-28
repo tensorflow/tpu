@@ -25,10 +25,10 @@ import tensorflow as tf
 
 from dataloader import anchor
 from dataloader import mode_keys as ModeKeys
+from dataloader import tf_example_decoder
 from utils import autoaugment_utils
 from utils import box_utils
 from utils import input_utils
-from utils.object_detection import tf_example_decoder
 
 
 def process_source_id(source_id):
@@ -117,7 +117,8 @@ class Parser(object):
     self._skip_crowd_during_training = skip_crowd_during_training
     self._is_training = (mode == ModeKeys.TRAIN)
 
-    self._example_decoder = tf_example_decoder.TfExampleDecoder()
+    self._example_decoder = tf_example_decoder.TfExampleDecoder(
+        include_mask=False)
 
     # Anchor.
     self._output_size = output_size
