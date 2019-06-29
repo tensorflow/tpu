@@ -432,6 +432,7 @@ class Model(tf.keras.Model):
         outputs = self._avg_pooling(outputs)
         if self._dropout:
           outputs = self._dropout(outputs, training=training)
+        self.endpoints['global_pool'] = outputs
         outputs = self._fc(outputs)
         self.endpoints['head'] = outputs
     return outputs
