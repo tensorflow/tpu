@@ -49,19 +49,26 @@ FLAGS = flags.FLAGS
 FAKE_DATA_DIR = 'gs://cloud-tpu-test-datasets/fake_imagenet'
 
 flags.DEFINE_string(
-    'hparams_file',
-    default=None,
-    help=('Set of model parameters to override the default mparams.'
-         ))
-
-flags.DEFINE_multi_string(
-    'hparams',
-    default=None,
-    help=('This is used to override only the model hyperparameters. It should '
-          'not be used to override the other parameters like the tpu specific '
-          'flags etc. For example, if experimenting with larger numbers of '
-          'train_steps, a possible value is '
-          '--param_overrides=train_steps=28152.'))
+    'config_file', default=None,
+    help=('A YAML file which specifies overrides. Note that this file can be '
+          'used as an override template to override the default parameters '
+          'specified in Python. If the same parameter is specified in both '
+          '`--config_file` and `--params_override`, the one in '
+          '`--params_override` will be used finally.'))
+flags.DEFINE_string(
+    'params_override', default=None,
+    help=('a YAML/JSON string or a YAML file which specifies additional '
+          'overrides over the default parameters and those specified in '
+          '`--config_file`. Note that this is supposed to be used only to '
+          'override the model parameters, but not the parameters like TPU '
+          'specific flags. One canonical use case of `--config_file` and '
+          '`--params_override` is users first define a template config file '
+          'using `--config_file`, then use `--params_override` to adjust the '
+          'minimal set of tuning parameters, for example setting up different'
+          ' `train_batch_size`. '
+          'The final override order of parameters: default_model_params --> '
+          'params from config_file --> params in params_override.'
+          'See also the help message of `--config_file`.'))
 
 flags.DEFINE_string(
     'default_hparams_file',
@@ -562,9 +569,9 @@ def main(unused_argv):
                                         './configs/default.yaml')
 
   params = hyperparameters.get_hyperparameters(default_hparams_file,
-                                               FLAGS.hparams_file,
+                                               FLAGS.config_file,
                                                FLAGS,
-                                               FLAGS.hparams)
+                                               FLAGS.params_override)
 
   tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
       FLAGS.tpu if (FLAGS.tpu or params['use_tpu']) else '',
