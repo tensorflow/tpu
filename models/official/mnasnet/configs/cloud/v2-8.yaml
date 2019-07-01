@@ -1,0 +1,8 @@
+train_steps: 437899
+train_batch_size: 1024
+eval_batch_size: 1024
+iterations_per_loop: 1251
+skip_host_call: True
+model_name: 'mnasnet-a1'
+dropout_rate: null
+depth_multiplier: null

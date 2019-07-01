@@ -1,0 +1,7 @@
+use_tpu: False
+train_steps: 3503192 # 1281167 * 350 / train_batch_size
+train_batch_size: 128 # 1024 / 8
+eval_batch_size: 128 # 1024 / 8
+model_name: 'mnasnet-a1'
+dropout_rate: null
+depth_multiplier: null
