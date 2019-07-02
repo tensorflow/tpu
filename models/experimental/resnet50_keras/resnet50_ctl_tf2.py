@@ -71,19 +71,31 @@ _LR_SCHEDULE = [    # (multiplier, epoch to start) tuples
 ]
 
 
-def compute_learning_rate(lr_epoch):
-  """Learning rate for each step."""
-  warmup_lr_multiplier, warmup_end_epoch = _LR_SCHEDULE[0]
-  if lr_epoch < warmup_end_epoch:
-    # Learning rate increases linearly per step.
-    return (_BASE_LEARNING_RATE * warmup_lr_multiplier *
-            lr_epoch / warmup_end_epoch)
-  for mult, start_epoch in _LR_SCHEDULE:
-    if lr_epoch >= start_epoch:
-      learning_rate = _BASE_LEARNING_RATE * mult
-    else:
-      break
-  return learning_rate
+class ResnetLearningRateSchedule(
+    tf.keras.optimizers.schedules.LearningRateSchedule):
+  """Resnet learning rate schedule."""
+
+  def __init__(self, steps_per_epoch, initial_learning_rate):
+    super(ResnetLearningRateSchedule, self).__init__()
+    self.steps_per_epoch = steps_per_epoch
+    self.initial_learning_rate = initial_learning_rate
+
+  def __call__(self, step):
+    lr_epoch = tf.cast(step, tf.float32) / self.steps_per_epoch
+    warmup_lr_multiplier, warmup_end_epoch = _LR_SCHEDULE[0]
+    learning_rate = (
+        self.initial_learning_rate * warmup_lr_multiplier * lr_epoch /
+        warmup_end_epoch)
+    for mult, start_epoch in _LR_SCHEDULE[1:]:
+      learning_rate = tf.where(lr_epoch >= start_epoch,
+                               self.initial_learning_rate * mult, learning_rate)
+    return learning_rate
+
+  def get_config(self):
+    return {
+        'steps_per_epoch': self.steps_per_epoch,
+        'initial_learning_rate': self.initial_learning_rate
+    }
 
 
 def main(unused_argv):
@@ -151,7 +163,10 @@ def main(unused_argv):
       logging.info('Building Keras ResNet-50 model')
       model = resnet_model.ResNet50(num_classes=NUM_CLASSES)
       optimizer = tf.keras.optimizers.SGD(
-          learning_rate=_BASE_LEARNING_RATE, momentum=0.9, nesterov=True)
+          learning_rate=ResnetLearningRateSchedule(steps_per_epoch,
+                                                   _BASE_LEARNING_RATE),
+          momentum=0.9,
+          nesterov=True)
       training_loss = tf.keras.metrics.Mean('training_loss', dtype=tf.float32)
       training_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(
           'training_accuracy', dtype=tf.float32)
@@ -222,12 +237,8 @@ def main(unused_argv):
       logging.info('Starting to run epoch: %s', epoch)
       with train_summary_writer.as_default():
         for step in range(steps_per_epoch):
-          learning_rate = compute_learning_rate(epoch + 1 +
-                                                (float(step) / steps_per_epoch))
-          optimizer.lr = learning_rate
           if step % 20 == 0:
-            logging.info('Learning rate at step %s in epoch %s is %s', step,
-                         epoch, optimizer.lr.numpy())
+            logging.info('Running step %s in epoch %s', step, epoch)
           train_step(train_iterator)
         tf.summary.scalar(
             'loss', training_loss.result(), step=optimizer.iterations)
