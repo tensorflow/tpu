@@ -275,7 +275,7 @@ def serving_model_graph_builder(output_source_id,
 
   def _serving_model_graph_wrapper(features, params):
     """Builds the model graph with outputs casted to bfloat16 if nessarary."""
-    if params['use_bfloat16']:
+    if params['precision'] == 'bfloat16':
       with tf.contrib.tpu.bfloat16_scope():
         model_outputs = _serving_model_graph(features, params)
         def _cast_outputs_to_float(d):

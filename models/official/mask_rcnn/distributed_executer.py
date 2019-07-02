@@ -24,8 +24,8 @@ import os
 import numpy as np
 import tensorflow as tf
 
+from hyperparameters import params_dict
 import evaluation
-import params_io
 
 
 class DistributedExecuter(object):
@@ -33,15 +33,15 @@ class DistributedExecuter(object):
 
   Arguments:
     flags: FLAGS object passed from the user.
-    model_config: Model configuration needed to run distribution strategy.
+    model_params: Model configuration needed to run distribution strategy.
     model_fn: Model function to be passed to Estimator.
   """
 
   __metaclass__ = abc.ABCMeta
 
-  def __init__(self, flags, model_config, model_fn):
+  def __init__(self, flags, model_params, model_fn):
     self._flags = flags
-    self._model_config = model_config
+    self._model_params = model_params
     self._model_fn = model_fn
 
   @abc.abstractmethod
@@ -70,7 +70,7 @@ class DistributedExecuter(object):
     """Creates TPUEstimator/Estimator instance.
 
     Arguments:
-      params: A dictionay to pass to Estimator `model_fn`.
+      params: A dictionary to pass to Estimator `model_fn`.
       run_config: RunConfig instance specifying distribution strategy
         configurations.
       mode: Mode -- one of 'train` or `eval`.
@@ -88,12 +88,12 @@ class DistributedExecuter(object):
     if model_dir is not None:
       if not tf.gfile.Exists(model_dir):
         tf.gfile.MakeDirs(model_dir)
-      params_io.save_hparams_to_yaml(self._model_config,
-                                     model_dir + '/params.yaml')
+      params_dict.save_params_dict_to_yaml(self._model_params,
+                                           model_dir + '/params.yaml')
 
   def _write_summary(self, summary_writer, eval_results, predictions,
                      current_step):
-    if not self._model_config.visualize_images_summary:
+    if not self._model_params.visualize_images_summary:
       predictions = None
     evaluation.write_summary(
         eval_results, summary_writer, current_step, predictions=predictions)
@@ -110,14 +110,14 @@ class DistributedExecuter(object):
     tf.logging.info(params)
     train_estimator = self.build_mask_rcnn_estimator(params, run_config,
                                                      'train')
-    if params['use_tpu']:
+    if self._model_params.use_tpu:
       train_estimator.train(
-          input_fn=train_input_fn, max_steps=self._model_config.total_steps)
+          input_fn=train_input_fn, max_steps=self._model_params.total_steps)
     else:
       # As MirroredStrategy only supports `train_and_evaluate`, for training,
       # we pass dummy `eval_spec`.
       train_spec = tf.estimator.TrainSpec(
-          input_fn=train_input_fn, max_steps=self._model_config.total_steps)
+          input_fn=train_input_fn, max_steps=self._model_params.total_steps)
       eval_spec = tf.estimator.EvalSpec(input_fn=tf.data.Dataset)
       tf.estimator.train_and_evaluate(train_estimator, train_spec, eval_spec)
 
@@ -133,16 +133,16 @@ class DistributedExecuter(object):
     eval_estimator = self.build_mask_rcnn_estimator(eval_params, run_config,
                                                     'eval')
     eval_results, predictions = evaluation.evaluate(
-        eval_estimator, eval_input_fn, self._model_config.eval_samples,
-        self._model_config.eval_batch_size, self._model_config.include_mask,
-        self._model_config.val_json_file)
+        eval_estimator, eval_input_fn, self._model_params.eval_samples,
+        self._model_params.eval_batch_size, self._model_params.include_mask,
+        self._model_params.val_json_file)
 
     output_dir = os.path.join(self._flags.model_dir, 'eval')
     tf.gfile.MakeDirs(output_dir)
     # Summary writer writes out eval metrics.
     summary_writer = tf.summary.FileWriter(output_dir)
     self._write_summary(summary_writer, eval_results, predictions,
-                        self._model_config.total_steps)
+                        self._model_params.total_steps)
     summary_writer.close()
 
     return eval_results
@@ -178,13 +178,13 @@ class DistributedExecuter(object):
       tf.logging.info('Starting to evaluate.')
       try:
         eval_results, predictions = evaluation.evaluate(
-            eval_estimator, eval_input_fn, self._model_config.eval_samples,
-            self._model_config.eval_batch_size, self._model_config.include_mask,
-            self._model_config.val_json_file)
+            eval_estimator, eval_input_fn, self._model_params.eval_samples,
+            self._model_params.eval_batch_size, self._model_params.include_mask,
+            self._model_params.val_json_file)
         self._write_summary(summary_writer, eval_results, predictions,
                             current_step)
 
-        if current_step >= self._model_config.total_steps:
+        if current_step >= self._model_params.total_steps:
           tf.logging.info('Evaluation finished after training step %d' %
                           current_step)
           break
@@ -214,32 +214,32 @@ class DistributedExecuter(object):
     eval_estimator = self.build_mask_rcnn_estimator(eval_params, run_config,
                                                     'eval')
 
-    num_cycles = int(self._model_config.total_steps /
-                     self._model_config.num_steps_per_eval)
+    num_cycles = int(self._model_params.total_steps /
+                     self._model_params.num_steps_per_eval)
     for cycle in range(num_cycles):
       tf.logging.info('Start training cycle %d.' % cycle)
       train_estimator.train(
-          input_fn=train_input_fn, steps=self._model_config.num_steps_per_eval)
+          input_fn=train_input_fn, steps=self._model_params.num_steps_per_eval)
 
       tf.logging.info('Start evaluation cycle %d.' % cycle)
       eval_results, predictions = evaluation.evaluate(
-          eval_estimator, eval_input_fn, self._model_config.eval_samples,
-          self._model_config.eval_batch_size, self._model_config.include_mask,
-          self._model_config.val_json_file)
+          eval_estimator, eval_input_fn, self._model_params.eval_samples,
+          self._model_params.eval_batch_size, self._model_params.include_mask,
+          self._model_params.val_json_file)
 
-      current_step = int(cycle * self._model_config.num_steps_per_eval)
+      current_step = int(cycle * self._model_params.num_steps_per_eval)
       self._write_summary(summary_writer, eval_results, predictions,
                           current_step)
 
     tf.logging.info('Starting training cycle %d.' % num_cycles)
     train_estimator.train(
-        input_fn=train_input_fn, max_steps=self._model_config.total_steps)
+        input_fn=train_input_fn, max_steps=self._model_params.total_steps)
     eval_results, predictions = evaluation.evaluate(
-        eval_estimator, eval_input_fn, self._model_config.eval_samples,
-        self._model_config.eval_batch_size, self._model_config.include_mask,
-        self._model_config.val_json_file)
+        eval_estimator, eval_input_fn, self._model_params.eval_samples,
+        self._model_params.eval_batch_size, self._model_params.include_mask,
+        self._model_params.val_json_file)
     self._write_summary(summary_writer, eval_results, predictions,
-                        self._model_config.total_steps)
+                        self._model_params.total_steps)
     summary_writer.close()
     return eval_results
 
@@ -250,7 +250,7 @@ class TPUEstimatorExecuter(DistributedExecuter):
   def build_strategy_configuration(self):
     """Retrieves model configuration for running tpu estimator."""
 
-    if self._flags.use_tpu:
+    if self._model_params.use_tpu:
       tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
           self._flags.tpu,
           zone=self._flags.tpu_zone,
@@ -260,7 +260,7 @@ class TPUEstimatorExecuter(DistributedExecuter):
     else:
       tpu_cluster_resolver = None
 
-    num_cores = self._flags.num_cores
+    num_cores = self._model_params.num_cores
     input_partition_dims = self._flags.input_partition_dims
 
     # The following is for spatial partitioning. `features` has one tensor while
@@ -286,9 +286,9 @@ class TPUEstimatorExecuter(DistributedExecuter):
       # cannot be partitioned (6 % 4 != 0). In this case, the level-8 and
       # level-9 target tensors are not partition-able, and the highest
       # partition-able level is 7.
-      image_size = self._model_config.image_size
-      for level in range(self._model_config.min_level,
-                         self._model_config.max_level + 1):
+      image_size = self._model_params.image_size
+      for level in range(self._model_params.min_level,
+                         self._model_params.max_level + 1):
 
         def _can_partition(spatial_dim):
           partitionable_index = np.where(spatial_dim %
@@ -306,7 +306,7 @@ class TPUEstimatorExecuter(DistributedExecuter):
           labels_partition_dims['score_targets_%d' % level] = None
 
       num_cores_per_replica = np.prod(input_partition_dims)
-      transpose_input = self._flags.transpose_input
+      transpose_input = self._model_params.transpose_input
       image_partition_dims = [input_partition_dims[i] for i in [1, 2, 3, 0]
                              ] if transpose_input else input_partition_dims
 
@@ -323,7 +323,7 @@ class TPUEstimatorExecuter(DistributedExecuter):
       num_shards = num_cores
 
     tpu_config = tf.contrib.tpu.TPUConfig(
-        self._flags.iterations_per_loop,
+        self._model_params.iterations_per_loop,
         num_shards=num_shards,
         num_cores_per_replica=num_cores_per_replica,
         input_partition_dims=input_partition_dims,
@@ -333,7 +333,7 @@ class TPUEstimatorExecuter(DistributedExecuter):
         cluster=tpu_cluster_resolver,
         evaluation_master=self._flags.eval_master,
         model_dir=self._flags.model_dir,
-        log_step_count_steps=self._flags.iterations_per_loop,
+        log_step_count_steps=self._model_params.iterations_per_loop,
         tpu_config=tpu_config,
     )
     return run_config
@@ -341,14 +341,14 @@ class TPUEstimatorExecuter(DistributedExecuter):
   def build_model_parameters(self, mode, run_config):
     assert mode in ('train', 'eval')
     params = dict(
-        self._model_config.values(),
+        self._model_params.as_dict().items(),
         mode=self._flags.mode,
         model_dir=self._flags.model_dir,
-        transpose_input=self._flags.transpose_input,
+        transpose_input=self._model_params.transpose_input,
         num_shards=run_config.tpu_config.num_shards,
-        use_tpu=self._flags.use_tpu,
+        use_tpu=self._model_params.use_tpu,
         # Used by the host_call function.
-        iterations_per_loop=self._flags.iterations_per_loop)
+        iterations_per_loop=self._model_params.iterations_per_loop)
 
     if mode == 'eval':
       params = dict(
@@ -362,9 +362,9 @@ class TPUEstimatorExecuter(DistributedExecuter):
     estimator = tf.contrib.tpu.TPUEstimator(
         model_fn=self._model_fn,
         use_tpu=params['use_tpu'],
-        train_batch_size=self._model_config.train_batch_size,
-        eval_batch_size=self._model_config.eval_batch_size,
-        predict_batch_size=self._model_config.eval_batch_size,
+        train_batch_size=self._model_params.train_batch_size,
+        eval_batch_size=self._model_params.eval_batch_size,
+        predict_batch_size=self._model_params.eval_batch_size,
         config=run_config,
         params=params)
     return estimator
@@ -408,10 +408,10 @@ class MultiWorkerExecuter(DistributedExecuter):
 
     assert mode in ('train', 'eval')
     batch_size = (
-        self._model_config.train_batch_size
-        if mode == 'train' else self._model_config.eval_batch_size)
+        self._model_params.train_batch_size
+        if mode == 'train' else self._model_params.eval_batch_size)
     params = dict(
-        self._model_config.values(),
+        self._model_params.as_dict().items(),
         use_tpu=False,
         mode=mode,
         model_dir=self._flags.model_dir,
@@ -420,7 +420,7 @@ class MultiWorkerExecuter(DistributedExecuter):
         # transpose input by default to make data format consistent.
         transpose_input=False,
         batch_size=batch_size,
-        use_bfloat16=False)
+        precision='float32')
     return params
 
   def build_mask_rcnn_estimator(self, params, run_config, mode):
