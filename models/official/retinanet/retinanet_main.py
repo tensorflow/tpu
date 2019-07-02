@@ -674,6 +674,7 @@ def main(argv):
           use_tpu=FLAGS.use_tpu,
           train_batch_size=FLAGS.train_batch_size,
           eval_batch_size=FLAGS.eval_batch_size,
+          predict_batch_size=FLAGS.eval_batch_size,
           config=run_config,
           params=eval_params)
       eval_results = evaluation.evaluate(
