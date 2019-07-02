@@ -26,105 +26,108 @@ from absl import flags
 import absl.logging as _logging  # pylint: disable=unused-import
 import tensorflow as tf
 
+from hyperparameters import common_hparams_flags
+from hyperparameters import common_tpu_flags
+from hyperparameters import flags_to_params
+from hyperparameters import params_dict
 import data_pipeline
 import squeezenet_model
+from configs import squeezenet_config
 
+common_tpu_flags.define_common_tpu_flags()
+common_hparams_flags.define_common_hparams_flags()
 
-# Cloud TPU Cluster Resolvers
-flags.DEFINE_string(
-    "tpu", default=None,
-    help="The Cloud TPU to use for training. This should be either the name "
-    "used when creating the Cloud TPU, or a grpc://ip.address.of.tpu:8470 url.")
-flags.DEFINE_string(
-    "gcp_project", default=None,
-    help="Project name for the Cloud TPU-enabled project. If not specified, we "
-    "will attempt to automatically detect the GCE project from metadata.")
-flags.DEFINE_string(
-    "tpu_zone", default=None,
-    help="GCE zone where the Cloud TPU is located in. If not specified, we "
-    "will attempt to automatically detect the GCE project from metadata.")
-
-# Model specific paramenters
-flags.DEFINE_string("data_dir", "", "Location of training files.")
-flags.DEFINE_string("model_dir", "", "Where to store model checkpoints.")
-flags.DEFINE_integer("save_checkpoints_secs", 3600,
-                     "Interval between saving model checkpoints.")
-flags.DEFINE_integer("num_shards", 8, "Number of TPU shards.")
-flags.DEFINE_integer("batch_size", 1024, "Batch size for training and eval.")
-flags.DEFINE_boolean("use_tpu", True, "If true, use TPU device.")
-
-flags.DEFINE_string("optimizer", "momentum", "Optimizer: momentum|adam|rmsprop")
-flags.DEFINE_float("momentum", 0.9, "Momentum parameter for SGD optimizer.")
-flags.DEFINE_integer("num_epochs", 150,
-                     "Number of epochs of the training set to process.")
-flags.DEFINE_integer("num_evals", 10,
-                     "How many times to run an evaluation during training.")
-flags.DEFINE_float("learning_rate", 0.03, "Learning rate.")
-flags.DEFINE_float("min_learning_rate", 0.005, "The minimal end learning rate.")
-flags.DEFINE_integer("iterations_per_loop", 100,
-                     "Number of global step increased per session run.")
-flags.DEFINE_integer("num_examples_per_epoch", 1300 * 1000,
+flags.DEFINE_integer("num_examples_per_epoch", None,
                      "Number of examples to train per epoch.")
-flags.DEFINE_integer("num_eval_examples", 50 * 1000,
+flags.DEFINE_integer("num_eval_examples", None,
                      "Number of examples to evaluate per run.")
+flags.DEFINE_float("init_learning_rate", None, "Learning rate.")
+flags.DEFINE_float("end_learning_rate", None, "The minimal end learning rate.")
+
+flags.DEFINE_integer("num_epochs", None,
+                     "Number of epochs of the training set to process.")
+flags.DEFINE_integer("num_evals", None,
+                     "How many times to run an evaluation during training.")
+flags.DEFINE_integer(
+    "num_cores_per_replica", default=None,
+    help=("Number of TPU cores in total. For a single TPU device, this is 8"
+          " because each TPU has 4 chips each with 2 cores."))
+flags.DEFINE_bool(
+    "use_async_checkpointing", default=None, help=("Enable async checkpoint"))
+flags.DEFINE_integer(
+    "num_classes", default=None, help="Number of classes, at least 2")
 
 FLAGS = flags.FLAGS
 
 
 def main(unused_argv):
+  params = params_dict.ParamsDict(
+      squeezenet_config.SQUEEZENET_CFG,
+      squeezenet_config.SQUEEZENET_RESTRICTIONS)
+  params = params_dict.override_params_dict(
+      params, FLAGS.config_file, is_strict=True)
+  params = params_dict.override_params_dict(
+      params, FLAGS.params_override, is_strict=True)
+
+  params = flags_to_params.override_params_from_input_flags(params, FLAGS)
+
+  total_steps = ((params.train.num_epochs * params.train.num_examples_per_epoch)
+                 // params.train.train_batch_size)
+  params.override({
+      "train": {
+          "total_steps": total_steps
+      },
+      "eval": {
+          "num_steps_per_eval": (total_steps // params.eval.num_evals)
+      },
+  }, is_strict=False)
+
+  params.validate()
+  params.lock()
+
   tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
       FLAGS.tpu,
       zone=FLAGS.tpu_zone,
       project=FLAGS.gcp_project)
 
-  training_examples = FLAGS.num_examples_per_epoch * FLAGS.num_epochs
-  eval_examples = FLAGS.num_eval_examples
-
-  params = {
-      "num_classes": 1001,
-      "lr": FLAGS.learning_rate,
-      "min_lr": FLAGS.min_learning_rate,
-      "momentum": FLAGS.momentum,
-      "optimizer": FLAGS.optimizer,
-      "num_eval_examples": eval_examples,
-      "num_shards": FLAGS.num_shards,
-      "num_epochs": FLAGS.num_epochs,
-  }
+  if not params.use_async_checkpointing:
+    save_checkpoints_steps = max(5000, params.train.iterations_per_loop)
 
   run_config = tf.contrib.tpu.RunConfig(
       cluster=tpu_cluster_resolver,
-      model_dir=FLAGS.model_dir,
-      save_checkpoints_secs=FLAGS.save_checkpoints_secs,
+      model_dir=params.model_dir,
+      save_checkpoints_steps=save_checkpoints_steps,
       session_config=tf.ConfigProto(
           allow_soft_placement=True, log_device_placement=False),
       tpu_config=tf.contrib.tpu.TPUConfig(
-          iterations_per_loop=FLAGS.iterations_per_loop,
-          num_shards=FLAGS.num_shards,
+          iterations_per_loop=params.train.iterations_per_loop,
+          num_shards=params.train.num_cores_per_replica,
       ),
   )
 
   estimator = tf.contrib.tpu.TPUEstimator(
       model_fn=squeezenet_model.model_fn,
-      use_tpu=FLAGS.use_tpu,
+      use_tpu=params.use_tpu,
       config=run_config,
-      train_batch_size=FLAGS.batch_size,
-      eval_batch_size=FLAGS.batch_size,
-      params=dict(params, use_tpu=FLAGS.use_tpu),
+      train_batch_size=params.train.train_batch_size,
+      eval_batch_size=params.eval.eval_batch_size,
+      params=params.as_dict(),
   )
 
-  num_evals = max(FLAGS.num_evals, 1)
-  examples_per_eval = training_examples // num_evals
-  for _ in range(num_evals):
+  for eval_cycle in range(params.eval.num_evals):
+    current_cycle_last_train_step = ((eval_cycle + 1) *
+                                     params.eval.num_steps_per_eval)
     estimator.train(
         input_fn=data_pipeline.InputReader(FLAGS.data_dir, is_training=True),
-        steps=examples_per_eval // FLAGS.batch_size)
+        steps=current_cycle_last_train_step)
 
     tf.logging.info("Running evaluation")
     tf.logging.info("%s",
                     estimator.evaluate(
                         input_fn=data_pipeline.InputReader(
                             FLAGS.data_dir, is_training=False),
-                        steps=eval_examples // FLAGS.batch_size,
+                        steps=(params.eval.num_eval_examples //
+                               params.eval.eval_batch_size)
                     ))
 
 
