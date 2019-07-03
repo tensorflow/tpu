@@ -63,8 +63,26 @@ flags.DEFINE_bool('eval_after_training', False,
                   'Run one eval after the training finishes.')
 flags.DEFINE_string('model_dir', None, 'Location of model_dir')
 flags.DEFINE_string(
-    'params_overrides', '',
-    'A JSON-style string or a YAML file which specifies overrides.')
+    'config_file', default=None,
+    help=('A YAML file which specifies overrides. Note that this file can be '
+          'used as an override template to override the default parameters '
+          'specified in Python. If the same parameter is specified in both '
+          '`--config_file` and `--params_override`, the one in '
+          '`--params_override` will be used finally.'))
+flags.DEFINE_string(
+    'params_override', default=None,
+    help=('a YAML/JSON string or a YAML file which specifies additional '
+          'overrides over the default parameters and those specified in '
+          '`--config_file`. Note that this is supposed to be used only to '
+          'override the model parameters, but not the parameters like TPU '
+          'specific flags. One canonical use case of `--config_file` and '
+          '`--params_override` is users first define a template config file '
+          'using `--config_file`, then use `--params_override` to adjust the '
+          'minimal set of tuning parameters, for example setting up different'
+          ' `train_batch_size`. '
+          'The final override order of parameters: default_model_params --> '
+          'params from config_file --> params in params_override.'
+          'See also the help message of `--config_file`.'))
 
 
 FLAGS = flags.FLAGS
@@ -82,8 +100,13 @@ def main(argv):
 
   params = params_dict.ParamsDict(
       retinanet_config.RETINANET_CFG, retinanet_config.RETINANET_RESTRICTIONS)
+
+  if FLAGS.config_file:
+    params = params_dict.override_params_dict(
+        params, FLAGS.config_file, is_strict=True)
+
   params = params_dict.override_params_dict(
-      params, FLAGS.params_overrides, is_strict=True)
+      params, FLAGS.params_override, is_strict=True)
   params.override({
       'platform': {
           'eval_master': FLAGS.eval_master,
@@ -162,7 +185,7 @@ def main(argv):
     for cycle in range(num_cycles):
       tf.logging.info('Start training cycle %d.' % cycle)
       current_step = (cycle + 1) * params.eval.num_steps_per_eval
-      executor.train(train_input_fn, params.eval.num_steps_per_eval)
+      executor.train(train_input_fn, current_step)
       executor.evaluate(
           eval_input_fn,
           params.eval.eval_samples // params.predict.predict_batch_size,
