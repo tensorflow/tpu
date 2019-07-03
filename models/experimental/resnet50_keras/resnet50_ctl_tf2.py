@@ -98,6 +98,12 @@ class ResnetLearningRateSchedule(
     }
 
 
+def safe_mean(losses):
+  total = tf.reduce_sum(losses)
+  num_elements = tf.dtypes.cast(tf.size(losses), dtype=losses.dtype)
+  return tf.math.divide_no_nan(total, num_elements)
+
+
 def main(unused_argv):
   tf.enable_v2_behavior()
   num_workers = 1
@@ -226,7 +232,7 @@ def main(unused_argv):
         logits = model(images, training=False)
         loss = tf.keras.losses.sparse_categorical_crossentropy(labels,
                                                                logits)
-        loss = tf.reduce_mean(loss) / strategy.num_replicas_in_sync
+        loss = safe_mean(loss) / strategy.num_replicas_in_sync
         test_loss.update_state(loss)
         test_accuracy.update_state(labels, logits)
 
