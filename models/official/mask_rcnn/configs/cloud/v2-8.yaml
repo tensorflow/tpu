@@ -1,0 +1,16 @@
+# ---------- MODEL PARAMETERS -------------
+backbone: 'resnet50'
+num_cores: 8
+# ---------- TRAINING PARAMETERS ----------
+train_batch_size: 32
+init_learning_rate: 0.04
+warmup_learning_rate: 0.0067
+warmup_steps: 500
+learning_rate_levels: [0.004, 0.0004]
+learning_rate_steps: [30000, 40000]
+total_steps: 45000
+precision: 'bfloat16'
+# ---------- EVAL PARAMETERS --------------
+eval_batch_size: 8
+eval_samples: 5000
+num_steps_per_eval: 2500

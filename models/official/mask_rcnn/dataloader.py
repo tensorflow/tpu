@@ -163,7 +163,7 @@ class InputReader(object):
           image = preprocess_ops.normalize_image(image)
           image, image_info, _, _ = preprocess_ops.resize_and_pad(
               image, params['image_size'], 2 ** params['max_level'])
-          if params['use_bfloat16']:
+          if params['precision'] == 'bfloat16':
             image = tf.cast(image, dtype=tf.bfloat16)
 
           features = {
@@ -266,7 +266,7 @@ class InputReader(object):
                 [self._max_num_instances, params['gt_mask_size'] + 4,
                  params['gt_mask_size'] + 4])
 
-          if params['use_bfloat16']:
+          if params['precision'] == 'bfloat16':
             image = tf.cast(image, dtype=tf.bfloat16)
 
           features = {

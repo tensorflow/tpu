@@ -328,7 +328,7 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
       features = features['features']
       # Otherwise, it is in export mode, the features is past in directly.
 
-  if params['use_bfloat16']:
+  if params['precision'] == 'bfloat16':
     with tf.contrib.tpu.bfloat16_scope():
       model_outputs = build_model_graph(
           features, labels, mode == tf.estimator.ModeKeys.TRAIN, params)
