@@ -37,5 +37,5 @@ def define_common_tpu_flags():
 
   flags.DEFINE_string(
       'eval_master', default='',
-      help='GRPC URL of the eval master. Set to an appropiate value when running '
+      help='GRPC URL of the eval master. Set to an appropriate value when running '
       'on CPU/GPU.')
