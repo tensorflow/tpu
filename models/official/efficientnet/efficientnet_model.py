@@ -35,18 +35,16 @@ import utils
 GlobalParams = collections.namedtuple('GlobalParams', [
     'batch_norm_momentum', 'batch_norm_epsilon', 'dropout_rate', 'data_format',
     'num_classes', 'width_coefficient', 'depth_coefficient',
-    'depth_divisor', 'min_depth', 'drop_connect_rate',
+    'depth_divisor', 'min_depth', 'drop_connect_rate', 'relu_fn',
 ])
 GlobalParams.__new__.__defaults__ = (None,) * len(GlobalParams._fields)
 
 # batchnorm = tf.layers.BatchNormalization
 batchnorm = utils.TpuBatchNormalization  # TPU-specific requirement.
-relu_fn = tf.nn.swish
-
 
 BlockArgs = collections.namedtuple('BlockArgs', [
     'kernel_size', 'num_repeat', 'input_filters', 'output_filters',
-    'expand_ratio', 'id_skip', 'strides', 'se_ratio'
+    'expand_ratio', 'id_skip', 'strides', 'se_ratio', 'conv_type',
 ])
 # defaults will be a public argument for namedtuple in Python 3.7
 # https://docs.python.org/3/library/collections.html#collections.namedtuple
@@ -129,8 +127,6 @@ class MBConvBlock(object):
   """A class of MBConv: Mobile Inverted Residual Bottleneck.
 
   Attributes:
-    has_se: boolean. Whether the block contains a Squeeze and Excitation layer
-      inside.
     endpoints: dict. A list of internal tensors.
   """
 
@@ -151,7 +147,9 @@ class MBConvBlock(object):
     else:
       self._channel_axis = -1
       self._spatial_dims = [1, 2]
-    self.has_se = (self._block_args.se_ratio is not None) and (
+
+    self._relu_fn = global_params.relu_fn or tf.nn.swish
+    self._has_se = (self._block_args.se_ratio is not None) and (
         self._block_args.se_ratio > 0) and (self._block_args.se_ratio <= 1)
 
     self.endpoints = None
@@ -194,7 +192,7 @@ class MBConvBlock(object):
         momentum=self._batch_norm_momentum,
         epsilon=self._batch_norm_epsilon)
 
-    if self.has_se:
+    if self._has_se:
       num_reduced_filters = max(
           1, int(self._block_args.input_filters * self._block_args.se_ratio))
       # Squeeze and Excitation layer.
@@ -240,7 +238,7 @@ class MBConvBlock(object):
       A output tensor, which should have the same shape as input.
     """
     se_tensor = tf.reduce_mean(input_tensor, self._spatial_dims, keepdims=True)
-    se_tensor = self._se_expand(relu_fn(self._se_reduce(se_tensor)))
+    se_tensor = self._se_expand(self._relu_fn(self._se_reduce(se_tensor)))
     tf.logging.info('Built Squeeze and Excitation with tensor shape: %s' %
                     (se_tensor.shape))
     return tf.sigmoid(se_tensor) * input_tensor
@@ -258,15 +256,15 @@ class MBConvBlock(object):
     """
     tf.logging.info('Block input: %s shape: %s' % (inputs.name, inputs.shape))
     if self._block_args.expand_ratio != 1:
-      x = relu_fn(self._bn0(self._expand_conv(inputs), training=training))
+      x = self._relu_fn(self._bn0(self._expand_conv(inputs), training=training))
     else:
       x = inputs
     tf.logging.info('Expand: %s shape: %s' % (x.name, x.shape))
 
-    x = relu_fn(self._bn1(self._depthwise_conv(x), training=training))
+    x = self._relu_fn(self._bn1(self._depthwise_conv(x), training=training))
     tf.logging.info('DWConv: %s shape: %s' % (x.name, x.shape))
 
-    if self.has_se:
+    if self._has_se:
       with tf.variable_scope('se'):
         x = self._call_se(x)
 
@@ -306,8 +304,17 @@ class Model(tf.keras.Model):
       raise ValueError('blocks_args should be a list.')
     self._global_params = global_params
     self._blocks_args = blocks_args
+    self._relu_fn = global_params.relu_fn or tf.nn.swish
+
     self.endpoints = None
+
     self._build()
+
+  def _get_conv_block(self, conv_type):
+    conv_block_map = {
+        0: MBConvBlock
+    }
+    return conv_block_map[conv_type]
 
   def _build(self):
     """Builds a model."""
@@ -324,14 +331,15 @@ class Model(tf.keras.Model):
           num_repeat=round_repeats(block_args.num_repeat, self._global_params))
 
       # The first block needs to take care of stride and filter size increase.
-      self._blocks.append(MBConvBlock(block_args, self._global_params))
+      conv_block = self._get_conv_block(block_args.conv_type)
+      self._blocks.append(conv_block(block_args, self._global_params))
       if block_args.num_repeat > 1:
         # pylint: disable=protected-access
         block_args = block_args._replace(
             input_filters=block_args.output_filters, strides=[1, 1])
         # pylint: enable=protected-access
       for _ in xrange(block_args.num_repeat - 1):
-        self._blocks.append(MBConvBlock(block_args, self._global_params))
+        self._blocks.append(conv_block(block_args, self._global_params))
 
     batch_norm_momentum = self._global_params.batch_norm_momentum
     batch_norm_epsilon = self._global_params.batch_norm_epsilon
@@ -393,7 +401,7 @@ class Model(tf.keras.Model):
     self.endpoints = {}
     # Calls Stem layers
     with tf.variable_scope('stem'):
-      outputs = relu_fn(
+      outputs = self._relu_fn(
           self._bn0(self._conv_stem(inputs), training=training))
     tf.logging.info('Built stem layers with output shape: %s' % outputs.shape)
     self.endpoints['stem'] = outputs
@@ -427,7 +435,7 @@ class Model(tf.keras.Model):
     if not features_only:
       # Calls final layers and returns logits.
       with tf.variable_scope('head'):
-        outputs = relu_fn(
+        outputs = self._relu_fn(
             self._bn1(self._conv_head(outputs), training=training))
         outputs = self._avg_pooling(outputs)
         if self._dropout:

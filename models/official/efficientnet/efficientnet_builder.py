@@ -66,7 +66,8 @@ class BlockDecoder(object):
         expand_ratio=int(options['e']),
         id_skip=('noskip' not in block_string),
         se_ratio=float(options['se']) if 'se' in options else None,
-        strides=[int(options['s'][0]), int(options['s'][1])])
+        strides=[int(options['s'][0]), int(options['s'][1])],
+        conv_type=int(options['c']) if 'c' in options else 0)
 
   def _encode_block_string(self, block):
     """Encodes a block to a string."""
@@ -76,7 +77,8 @@ class BlockDecoder(object):
         's%d%d' % (block.strides[0], block.strides[1]),
         'e%s' % block.expand_ratio,
         'i%d' % block.input_filters,
-        'o%d' % block.output_filters
+        'o%d' % block.output_filters,
+        'c%d' % block.conv_type,
     ]
     if block.se_ratio > 0 and block.se_ratio <= 1:
       args.append('se%s' % block.se_ratio)
@@ -134,7 +136,8 @@ def efficientnet(width_coefficient=None,
       width_coefficient=width_coefficient,
       depth_coefficient=depth_coefficient,
       depth_divisor=8,
-      min_depth=None)
+      min_depth=None,
+      relu_fn=tf.nn.swish)
   decoder = BlockDecoder()
   return decoder.decode(blocks_args), global_params
 
