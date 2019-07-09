@@ -1,0 +1,19 @@
+# ---------- MODEL PARAMETERS -------------
+resnet_depth: 50
+num_cores: 128
+# ---------- TRAINING PARAMETERS ----------
+train_batch_size: 512
+init_learning_rate: 0.24
+warmup_learning_rate: 0.0067
+warmup_steps: 1600
+learning_rate_levels: [0.024, 0.0024, 0.00024]
+learning_rate_steps: [6000, 8000, 10000]
+total_steps: 11250
+global_gradient_clip_ratio: 0.02
+num_batch_norm_group: 1
+momentum: 0.95
+precision: 'bfloat16'
+# ---------- EVAL PARAMETERS --------------
+eval_batch_size: 8
+eval_samples: 5000
+num_steps_per_eval: 2500

@@ -58,6 +58,10 @@ flags.DEFINE_string(
 flags.DEFINE_bool('use_tpu', True, 'Use TPUs rather than CPUs')
 flags.DEFINE_string('model_dir', None, 'Location of model_dir')
 flags.DEFINE_string(
+    'config', '',
+    'A comma-separated k=v pairs, or a YAML config file that specifies the '
+    'parameters to build, train and eval the model.')
+flags.DEFINE_string(
     'config_file', '',
     'A YAML config file that specifies the '
     'parameters to build, train and eval the model.')
@@ -164,6 +168,7 @@ def main(argv):
   config = mask_rcnn_params.default_config()
   config = params_io.override_hparams(config, FLAGS.config_file)
   config = params_io.override_hparams(config, FLAGS.params_override)
+  config = params_io.override_hparams(config, FLAGS.config)
 
   if FLAGS.use_tpu:
     tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
