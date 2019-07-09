@@ -1,5 +1,5 @@
 # ---------- MODEL PARAMETERS -------------
-backbone: 'resnet50'
+resnet_depth: 50
 num_cores: 32
 # ---------- TRAINING PARAMETERS ----------
 train_batch_size: 128
