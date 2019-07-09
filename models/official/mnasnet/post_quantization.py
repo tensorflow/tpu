@@ -25,8 +25,8 @@ import tensorflow as tf
 import imagenet_input
 
 flags.DEFINE_string("saved_model_dir", None, "Path to input savedmodel bundle.")
-flags.DEFINE_string(
-    "input_name", "float_image_input",
+flags.DEFINE_enum(
+    "input_name", "float_image_input", ["float_image_input", "truediv"],
     "Name of the input node. `float_image_input` is for image "
     "array input and `truediv` is for normalized input. Please "
     "use `truediv` if require_int8=True and be aware that "
@@ -62,6 +62,11 @@ def representative_dataset_gen():
 
   def preprocess_map_fn(images, labels):
     del labels
+    if FLAGS.input_name == "truediv":
+      images -= tf.constant(
+          imagenet_input.MEAN_RGB, shape=[1, 1, 3], dtype=images.dtype)
+      images /= tf.constant(
+          imagenet_input.STDDEV_RGB, shape=[1, 1, 3], dtype=images.dtype)
     return images
 
   data = data.map(preprocess_map_fn)

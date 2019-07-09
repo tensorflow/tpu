@@ -27,6 +27,11 @@ import tensorflow as tf
 import preprocessing
 
 
+# The input tensor is in the range of [0, 255], we need to scale them.
+MEAN_RGB = [0.485 * 255, 0.456 * 255, 0.406 * 255]
+STDDEV_RGB = [0.229 * 255, 0.224 * 255, 0.225 * 255]
+
+
 def build_image_serving_input_fn(image_size):
   """Builds a serving input fn for raw images."""
   def _image_serving_input_fn():

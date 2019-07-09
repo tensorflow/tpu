@@ -215,11 +215,6 @@ LR_SCHEDULE = [  # (multiplier, epoch to start) tuples
     (1.0, 5), (0.1, 30), (0.01, 60), (0.001, 80)
 ]
 
-# The input tensor is in the range of [0, 255], we need to scale them to the
-# range of [0, 1]
-MEAN_RGB = [0.485 * 255, 0.456 * 255, 0.406 * 255]
-STDDEV_RGB = [0.229 * 255, 0.224 * 255, 0.225 * 255]
-
 
 def get_pretrained_variables_to_restore(checkpoint_path,
                                         load_moving_average=False):
@@ -304,8 +299,10 @@ def mnasnet_model_fn(features, labels, mode, params):
     features = tf.transpose(features, [3, 0, 1, 2])  # HWCN to NHWC
 
   # Normalize the image to zero mean and unit variance.
-  features -= tf.constant(MEAN_RGB, shape=stats_shape, dtype=features.dtype)
-  features /= tf.constant(STDDEV_RGB, shape=stats_shape, dtype=features.dtype)
+  features -= tf.constant(
+      imagenet_input.MEAN_RGB, shape=stats_shape, dtype=features.dtype)
+  features /= tf.constant(
+      imagenet_input.STDDEV_RGB, shape=stats_shape, dtype=features.dtype)
 
   has_moving_average_decay = (params['moving_average_decay'] > 0)
 
