@@ -24,7 +24,7 @@ sys.path.insert(0, '../../common')
 ```
 
 If an error in parsing yaml config file is encountered, please check the config
-and `mask_rcnn_params.py` to make sure the hyperparameters are compatible.
+to make sure the hyperparameters are compatible.
 Remove the incompatible hyperparameters if necessary.
 """
 # pylint: enable=line-too-long
@@ -38,11 +38,10 @@ from absl import flags
 import tensorflow as tf
 
 from common import inference_warmup
-import mask_rcnn_params
-import params_io
+from hyperparameters import params_dict
 import serving
+from configs import mask_rcnn_config
 from tensorflow.contrib.tpu.python.tpu import tpu_config
-
 
 FLAGS = flags.FLAGS
 
@@ -53,16 +52,29 @@ flags.DEFINE_string('config', '', 'The model config.')
 flags.DEFINE_string('model_dir', None, 'The model directory.')
 flags.DEFINE_integer('iterations_per_loop', 1, 'The iterations per loop.')
 flags.DEFINE_integer('batch_size', 1, 'The batch size.')
-flags.DEFINE_string('input_type', 'image_bytes', 'One of `raw_image_tensor`, `image_tensor`, `image_bytes` and `tf_example`.')
+flags.DEFINE_string(
+    'input_type', 'image_bytes',
+    'One of `raw_image_tensor`, `image_tensor`, `image_bytes` and `tf_example`.'
+)
 flags.DEFINE_string('input_name', 'input', 'The name of the input node.')
 flags.DEFINE_boolean('use_tpu', False, 'Whether or not use TPU.')
-flags.DEFINE_boolean('add_warmup_requests', False, 'Whether to add warmup requests into the export saved model dir, especially for TPU inference.')
-flags.DEFINE_string('model_name', 'mask-rcnn', 'Serving model name used for the model server.')
-flags.DEFINE_boolean('output_source_id', False, 'Whether or not output source_id node.')
-flags.DEFINE_boolean('output_image_info', True, 'Whether or not output image_info node.')
-flags.DEFINE_boolean('output_box_features', False, 'Whether or not output box_features node.')
-flags.DEFINE_boolean('output_normalized_coordinates', False, 'Whether or not output boxes in normalized coordinates.')
-flags.DEFINE_boolean('cast_num_detections_to_float', False, 'Whether or not cast the number of detections to float type.')
+flags.DEFINE_boolean(
+    'add_warmup_requests', False,
+    'Whether to add warmup requests into the export saved model dir, especially for TPU inference.'
+)
+flags.DEFINE_string('model_name', 'mask-rcnn',
+                    'Serving model name used for the model server.')
+flags.DEFINE_boolean('output_source_id', False,
+                     'Whether or not output source_id node.')
+flags.DEFINE_boolean('output_image_info', True,
+                     'Whether or not output image_info node.')
+flags.DEFINE_boolean('output_box_features', False,
+                     'Whether or not output box_features node.')
+flags.DEFINE_boolean('output_normalized_coordinates', False,
+                     'Whether or not output boxes in normalized coordinates.')
+flags.DEFINE_boolean(
+    'cast_num_detections_to_float', False,
+    'Whether or not cast the number of detections to float type.')
 # pylint: enable=line-too-long
 
 flags.mark_flag_as_required('export_dir')
@@ -70,14 +82,19 @@ flags.mark_flag_as_required('checkpoint_path')
 
 
 def main(_):
-  config = mask_rcnn_params.default_config()
-  config = params_io.override_hparams(config, FLAGS.config)
+  config = params_dict.ParamsDict(mask_rcnn_config.MASK_RCNN_CFG,
+                                  mask_rcnn_config.MASK_RCNN_RESTRICTIONS)
+  config = params_dict.override_params_dict(
+      config, FLAGS.config, is_strict=True)
   config.is_training_bn = False
   config.train_batch_size = FLAGS.batch_size
   config.eval_batch_size = FLAGS.batch_size
 
+  config.validate()
+  config.lock()
+
   model_params = dict(
-      config.values(),
+      config.as_dict().items(),
       use_tpu=FLAGS.use_tpu,
       mode=tf.estimator.ModeKeys.PREDICT,
       transpose_input=False)
@@ -85,10 +102,8 @@ def main(_):
   print(' - Setting up TPUEstimator...')
   estimator = tf.contrib.tpu.TPUEstimator(
       model_fn=serving.serving_model_fn_builder(
-          FLAGS.output_source_id,
-          FLAGS.output_image_info,
-          FLAGS.output_box_features,
-          FLAGS.output_normalized_coordinates,
+          FLAGS.output_source_id, FLAGS.output_image_info,
+          FLAGS.output_box_features, FLAGS.output_normalized_coordinates,
           FLAGS.cast_num_detections_to_float),
       model_dir=FLAGS.model_dir,
       config=tpu_config.RunConfig(
@@ -111,7 +126,7 @@ def main(_):
           serving.serving_input_fn,
           batch_size=FLAGS.batch_size,
           desired_image_size=config.image_size,
-          padding_stride=(2 ** config.max_level),
+          padding_stride=(2**config.max_level),
           input_type=input_type,
           input_name=FLAGS.input_name),
       checkpoint_path=FLAGS.checkpoint_path)
