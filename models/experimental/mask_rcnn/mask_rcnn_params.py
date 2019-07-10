@@ -23,6 +23,8 @@ import tensorflow as tf
 def default_config():
   return tf.contrib.training.HParams(
       # input preprocessing parameters
+      use_tpu=True,
+      num_cores=8,
       image_size=1024,
       input_rand_hflip=True,
       train_scale_min=1.0,
