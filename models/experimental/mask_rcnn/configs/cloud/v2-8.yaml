@@ -9,7 +9,7 @@ warmup_steps: 500
 learning_rate_levels: [0.004, 0.0004]
 learning_rate_steps: [30000, 40000]
 total_steps: 45000
-precision: 'bfloat16'
+use_bfloat16: True
 # ---------- EVAL PARAMETERS --------------
 eval_batch_size: 8
 eval_samples: 5000
