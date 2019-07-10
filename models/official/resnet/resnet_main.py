@@ -610,6 +610,7 @@ def main(unused_argv):
             cache=params.use_cache and is_training,
             image_size=params.image_size,
             num_parallel_calls=params.num_parallel_calls,
+            include_background_label=(params.num_label_classes == 1001),
             use_bfloat16=use_bfloat16) for is_training in [True, False]
     ]
 
