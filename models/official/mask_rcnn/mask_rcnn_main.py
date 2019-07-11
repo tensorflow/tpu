@@ -28,6 +28,7 @@ from hyperparameters import params_dict
 import dataloader
 import distributed_executer
 import mask_rcnn_model
+import sys; sys.path.insert(0, 'tpu/models/official/mask_rcnn')
 from configs import mask_rcnn_config
 
 common_tpu_flags.define_common_tpu_flags()
