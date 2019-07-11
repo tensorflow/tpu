@@ -232,6 +232,7 @@ def get_pretrained_variables_to_restore(checkpoint_path,
   variable_shape_map = checkpoint_reader.get_variable_to_shape_map()
 
   variables_to_restore = {}
+  ema_vars = mnasnet_utils.get_ema_vars()
   for v in tf.global_variables():
     # Skip variables if they are in excluded scopes.
     is_excluded = False
@@ -243,15 +244,16 @@ def get_pretrained_variables_to_restore(checkpoint_path,
       tf.logging.info('Exclude [%s] from loading from checkpoint.', v.op.name)
       continue
     variable_name_ckpt = v.op.name
-    if load_moving_average:
+    if load_moving_average and v in ema_vars:
       # To load moving average variables into non-moving version for
       # fine-tuning, maps variables here manually.
       variable_name_ckpt = v.op.name + '/ExponentialMovingAverage'
-      if variable_name_ckpt not in variable_shape_map:
-        tf.logging.info(
-            'Skip init [%s] from [%s] as it is not in the checkpoint',
-            v.op.name, variable_name_ckpt)
-        continue
+
+    if variable_name_ckpt not in variable_shape_map:
+      tf.logging.info(
+          'Skip init [%s] from [%s] as it is not in the checkpoint',
+          v.op.name, variable_name_ckpt)
+      continue
 
     variables_to_restore[variable_name_ckpt] = v
     tf.logging.info('Init variable [%s] from [%s] in ckpt', v.op.name,
@@ -403,12 +405,7 @@ def mnasnet_model_fn(features, labels, mode, params):
   if has_moving_average_decay:
     ema = tf.train.ExponentialMovingAverage(
         decay=params['moving_average_decay'], num_updates=global_step)
-    ema_vars = tf.trainable_variables() + tf.get_collection('moving_vars')
-    for v in tf.global_variables():
-      # We maintain mva for batch norm moving mean and variance as well.
-      if 'moving_mean' in v.name or 'moving_variance' in v.name:
-        ema_vars.append(v)
-    ema_vars = list(set(ema_vars))
+    ema_vars = mnasnet_utils.get_ema_vars()
 
   host_call = None
   if is_training:
@@ -643,7 +640,11 @@ def export(est, export_dir, params, post_quantize=True):
 
   tf.logging.info('Starting to export TFLite.')
   converter = tf.lite.TFLiteConverter.from_saved_model(
-      subfolder, input_arrays=['float_image_input'], output_arrays=['logits'])
+      subfolder, input_arrays=['truediv'], output_arrays=['logits'])
+  if params.quantized_training:
+    # Export quantized tflite if it is trained with quantized ops.
+    converter.inference_type = tf.uint8
+    converter.quantized_input_stats = {'truediv': (0., 2.)}
   tflite_model = converter.convert()
   tflite_file = os.path.join(export_dir, params.model_name + '.tflite')
   tf.gfile.GFile(tflite_file, 'wb').write(tflite_model)
@@ -837,7 +838,7 @@ def main(unused_argv):
       tf.logging.info('Finished training up to step %d. Elapsed seconds %d.',
                       params.train_steps, elapsed_time)
       if FLAGS.export_dir:
-        export(mnasnet_est, FLAGS.export_dir, params.as_dict(), FLAGS.post_quantize)
+        export(mnasnet_est, FLAGS.export_dir, params, FLAGS.post_quantize)
 
 
 if __name__ == '__main__':

@@ -1,0 +1,4 @@
+cloud-tpu-profiler>=1.12
+numpy
+pyyaml
+pytype

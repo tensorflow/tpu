@@ -77,3 +77,13 @@ def build_optimizer(learning_rate,
     tf.logging.fatal('Unknown optimizer:', optimizer_name)
 
   return optimizer
+
+
+def get_ema_vars():
+  """Get all exponential moving average (ema) variables."""
+  ema_vars = tf.trainable_variables() + tf.get_collection('moving_vars')
+  for v in tf.global_variables():
+    # We maintain mva for batch norm moving mean and variance as well.
+    if 'moving_mean' in v.name or 'moving_variance' in v.name:
+      ema_vars.append(v)
+  return list(set(ema_vars))

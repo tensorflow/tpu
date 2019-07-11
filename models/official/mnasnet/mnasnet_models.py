@@ -311,6 +311,7 @@ def build_mnasnet_model(images, model_name, training, override_params=None):
     model = mnasnet_model.MnasNetModel(blocks_args, global_params)
     logits = model(images, training=training)
 
+  logits = tf.squeeze(tf.expand_dims(logits, 0), 0)
   logits = tf.identity(logits, 'logits')
   return logits, model.endpoints
 

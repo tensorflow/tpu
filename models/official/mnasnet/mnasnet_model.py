@@ -310,7 +310,7 @@ class MnasBlock(object):
       ) and self._block_args.input_filters == self._block_args.output_filters:
         x = tf.add(x, inputs)
     tf.logging.info('Project: %s shape: %s' % (x.name, x.shape))
-    return x
+    return tf.identity(x)
 
 
 class MnasNetModel(tf.keras.Model):
