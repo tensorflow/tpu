@@ -53,6 +53,7 @@ class ImageNetTFExampleInput(object):
     use_bfloat16: If True, use bfloat16 precision; else use float32.
     transpose_input: 'bool' for whether to use the double transpose trick
     num_parallel_calls: `int` for the number of parallel threads.
+    include_background_label: `bool` for whether to include the background label
   """
   __metaclass__ = abc.ABCMeta
 
@@ -61,13 +62,15 @@ class ImageNetTFExampleInput(object):
                use_bfloat16,
                image_size=224,
                transpose_input=False,
-               num_parallel_calls=8):
+               num_parallel_calls=8,
+               include_background_label=False):
     self.image_preprocessing_fn = resnet_preprocessing.preprocess_image
     self.is_training = is_training
     self.use_bfloat16 = use_bfloat16
     self.transpose_input = transpose_input
     self.image_size = image_size
     self.num_parallel_calls = num_parallel_calls
+    self.include_background_label = include_background_label
 
   def set_shapes(self, batch_size, images, labels):
     """Statically set the batch_size dimension."""
@@ -110,6 +113,12 @@ class ImageNetTFExampleInput(object):
 
     label = tf.cast(
         tf.reshape(parsed['image/class/label'], shape=[]), dtype=tf.int32)
+
+    if not self.include_background_label:
+      # 'image/class/label' is encoded as an integer from 1 to num_label_classes
+      # In order to generate the correct one-hot label vector from this number,
+      # we subtract the number by 1 to make it in [0, num_label_classes).
+      label -= 1
 
     return image, label
 
@@ -215,7 +224,8 @@ class ImageNetInput(ImageNetTFExampleInput):
                num_parallel_calls=8,
                cache=False,
                dataset_split=None,
-               shuffle_shards=False):
+               shuffle_shards=False,
+               include_background_label=False):
     """Create an input from TFRecord files.
 
     Args:
@@ -233,12 +243,16 @@ class ImageNetInput(ImageNetTFExampleInput):
         is_training. In this case, is_training specifies whether the data is
         augmented.
       shuffle_shards: Whether to shuffle the dataset shards.
+      include_background_label: Whether to include the background label. If
+        this is True, then num_label_classes should be 1001. If False, then
+        num_label_classes should be 1000.
     """
     super(ImageNetInput, self).__init__(
         is_training=is_training,
         image_size=image_size,
         use_bfloat16=use_bfloat16,
-        transpose_input=transpose_input)
+        transpose_input=transpose_input,
+        include_background_label=include_background_label)
     self.data_dir = data_dir
     # TODO(b/112427086):  simplify the choice of input source
     if self.data_dir == 'null' or not self.data_dir:
