@@ -1,5 +1,7 @@
 # UNet 3D Model Codebase on TPU
 
+This folder contains an implementation of the [3D UNet](https://arxiv.org/abs/1606.06650) model.
+
 ## Prerequsites
 
 In Google Cloud console, please run the following command to create both cloud VM and TPU VM.
