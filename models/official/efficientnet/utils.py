@@ -196,7 +196,16 @@ def archive_ckpt(ckpt_eval, ckpt_objective, ckpt_path):
   return True
 
 
-# TODO(hongkuny): Consolidate this as a common library cross models.
+def get_ema_vars():
+  """Get all exponential moving average (ema) variables."""
+  ema_vars = tf.trainable_variables() + tf.get_collection('moving_vars')
+  for v in tf.global_variables():
+    # We maintain mva for batch norm moving mean and variance as well.
+    if 'moving_mean' in v.name or 'moving_variance' in v.name:
+      ema_vars.append(v)
+  return list(set(ema_vars))
+
+
 class DepthwiseConv2D(tf.keras.layers.DepthwiseConv2D, tf.layers.Layer):
   """Wrap keras DepthwiseConv2D to tf.layers."""
 

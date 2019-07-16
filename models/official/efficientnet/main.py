@@ -351,12 +351,7 @@ def model_fn(features, labels, mode, params):
   if has_moving_average_decay:
     ema = tf.train.ExponentialMovingAverage(
         decay=FLAGS.moving_average_decay, num_updates=global_step)
-    ema_vars = tf.trainable_variables() + tf.get_collection('moving_vars')
-    for v in tf.global_variables():
-      # We maintain mva for batch norm moving mean and variance as well.
-      if 'moving_mean' in v.name or 'moving_variance' in v.name:
-        ema_vars.append(v)
-    ema_vars = list(set(ema_vars))
+    ema_vars = utils.get_ema_vars()
 
   host_call = None
   restore_vars_dict = None

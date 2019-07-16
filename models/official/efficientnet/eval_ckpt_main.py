@@ -33,6 +33,7 @@ import tensorflow as tf
 
 import efficientnet_builder
 import preprocessing
+import utils
 
 
 flags.DEFINE_string('model_name', 'efficientnet-b0', 'Model name to eval.')
@@ -83,11 +84,7 @@ class EvalCkptDriver(object):
     checkpoint = tf.train.latest_checkpoint(ckpt_dir)
     if enable_ema:
       ema = tf.train.ExponentialMovingAverage(decay=0.0)
-      ema_vars = tf.trainable_variables() + tf.get_collection('moving_vars')
-      for v in tf.global_variables():
-        if 'moving_mean' in v.name or 'moving_variance' in v.name:
-          ema_vars.append(v)
-      ema_vars = list(set(ema_vars))
+      ema_vars = utils.get_ema_vars()
       var_dict = ema.variables_to_restore(ema_vars)
       ema_assign_op = ema.apply(ema_vars)
     else:
