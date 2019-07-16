@@ -681,10 +681,13 @@ def main(unused_argv):
   params.validate()
   params.lock()
 
-  tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
-      FLAGS.tpu if (FLAGS.tpu or params.use_tpu) else '',
-      zone=FLAGS.tpu_zone,
-      project=FLAGS.gcp_project)
+  if FLAGS.tpu or params.use_tpu:
+    tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
+        FLAGS.tpu,
+        zone=FLAGS.tpu_zone,
+        project=FLAGS.gcp_project)
+  else:
+    tpu_cluster_resolver = None
 
   if params.use_async_checkpointing:
     save_checkpoints_steps = None

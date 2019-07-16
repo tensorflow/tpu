@@ -573,10 +573,13 @@ def main(unused_argv):
     else:
       raise ValueError('input_image_size must be set expect for EfficientNet.')
 
-  tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
-      FLAGS.tpu if (FLAGS.tpu or FLAGS.use_tpu) else '',
-      zone=FLAGS.tpu_zone,
-      project=FLAGS.gcp_project)
+  if FLAGS.tpu or FLAGS.use_tpu:
+    tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
+        FLAGS.tpu,
+        zone=FLAGS.tpu_zone,
+        project=FLAGS.gcp_project)
+  else:
+    tpu_cluster_resolver = None
 
   if FLAGS.use_async_checkpointing:
     save_checkpoints_steps = None
