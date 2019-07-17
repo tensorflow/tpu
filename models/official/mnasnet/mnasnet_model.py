@@ -29,7 +29,7 @@ import six
 from six.moves import xrange  # pylint: disable=redefined-builtin
 import tensorflow as tf
 
-import utils
+import mnas_utils
 
 GlobalParams = collections.namedtuple('GlobalParams', [
     'batch_norm_momentum', 'batch_norm_epsilon', 'dropout_rate', 'data_format',
@@ -209,7 +209,7 @@ class MnasBlock(object):
           data_format=self._data_format,
           use_bias=False)
     else:
-      self._depthwise_conv = utils.DepthwiseConv2D(
+      self._depthwise_conv = mnas_utils.DepthwiseConv2D(
           [kernel_size, kernel_size],
           strides=self._block_args.strides,
           depthwise_initializer=conv_kernel_initializer,

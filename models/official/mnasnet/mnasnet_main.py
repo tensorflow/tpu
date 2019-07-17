@@ -30,8 +30,8 @@ from hyperparameters import common_tpu_flags
 from hyperparameters import flags_to_params
 from hyperparameters import params_dict
 import imagenet_input
+import mnas_utils
 import mnasnet_models
-import utils
 from configs import mnasnet_config
 from tensorflow.contrib.tpu.python.tpu import async_checkpoint
 from tensorflow.contrib.training.python.training import evaluation
@@ -232,7 +232,7 @@ def get_pretrained_variables_to_restore(checkpoint_path,
   variable_shape_map = checkpoint_reader.get_variable_to_shape_map()
 
   variables_to_restore = {}
-  ema_vars = utils.get_ema_vars()
+  ema_vars = mnas_utils.get_ema_vars()
   for v in tf.global_variables():
     # Skip variables if they are in excluded scopes.
     is_excluded = False
@@ -405,7 +405,7 @@ def mnasnet_model_fn(features, labels, mode, params):
   if has_moving_average_decay:
     ema = tf.train.ExponentialMovingAverage(
         decay=params['moving_average_decay'], num_updates=global_step)
-    ema_vars = utils.get_ema_vars()
+    ema_vars = mnas_utils.get_ema_vars()
 
   host_call = None
   if is_training:
@@ -414,9 +414,9 @@ def mnasnet_model_fn(features, labels, mode, params):
         tf.cast(global_step, tf.float32) / params['steps_per_epoch'])
 
     scaled_lr = params['base_learning_rate'] * (params['train_batch_size'] / 256.0)  # pylint: disable=line-too-long
-    learning_rate = utils.build_learning_rate(scaled_lr, global_step,
-                                              params['steps_per_epoch'])
-    optimizer = utils.build_optimizer(learning_rate)
+    learning_rate = mnas_utils.build_learning_rate(scaled_lr, global_step,
+                                                   params['steps_per_epoch'])
+    optimizer = mnas_utils.build_optimizer(learning_rate)
     if params['use_tpu']:
       # When using TPU, wrap the optimizer with CrossShardOptimizer which
       # handles synchronization details between different TPU cores. To the
@@ -771,7 +771,7 @@ def main(unused_argv):
         elapsed_time = int(time.time() - start_timestamp)
         tf.logging.info('Eval results: %s. Elapsed seconds: %d', eval_results,
                         elapsed_time)
-        utils.archive_ckpt(eval_results, eval_results['top_1_accuracy'], ckpt)
+        mnas_utils.archive_ckpt(eval_results, eval_results['top_1_accuracy'], ckpt)
 
         # Terminate eval job when final checkpoint is reached
         current_step = int(os.path.basename(ckpt).split('-')[1])
@@ -838,7 +838,7 @@ def main(unused_argv):
         tf.logging.info('Eval results at step %d: %s', next_checkpoint,
                         eval_results)
         ckpt = tf.train.latest_checkpoint(FLAGS.model_dir)
-        utils.archive_ckpt(eval_results, eval_results['top_1_accuracy'], ckpt)
+        mnas_utils.archive_ckpt(eval_results, eval_results['top_1_accuracy'], ckpt)
 
       elapsed_time = int(time.time() - start_timestamp)
       tf.logging.info('Finished training up to step %d. Elapsed seconds %d.',
