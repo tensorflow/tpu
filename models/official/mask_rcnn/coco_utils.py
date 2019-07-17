@@ -98,8 +98,8 @@ def _extract_bbox_annotation(prediction, b, obj_i):
   """Constructs COCO format bounding box annotation."""
   height = prediction['height'][b]
   width = prediction['width'][b]
-  bbox = _denormalize_to_coco_bbox(prediction['groundtruth_boxes'][b][obj_i, :],
-                                   height, width)
+  bbox = _denormalize_to_coco_bbox(
+      prediction['groundtruth_boxes'][b][obj_i, :], height, width)
   if 'groundtruth_area' in prediction:
     area = float(prediction['groundtruth_area'][b][obj_i])
   else:
@@ -144,10 +144,20 @@ def _extract_polygon_info(prediction, polygons, b, obj_i):
 
   annotation['segmentation'] = polygons[obj_i]
   # Add dummy polygon to is_crowd instance.
-  iscrowd = int(prediction['groundtruth_is_crowd'][b][obj_i])
-  if iscrowd > 0 and not annotation['segmentation'][0]:
-    # dummy polygon for iscrowd=1.
-    annotation['segmentation'] = [[0., 0., 0., 0., 0., 0., 0., 0.]]
+  if not annotation['segmentation'][0]:
+    # Adds a dummy polygon in case there is no segmentation.
+    # Note that this could affect eval number in a very tiny amount since
+    # for the instance without masks, it creates a fake single pixel mask
+    # in the center of the box.
+    height = prediction['height'][b]
+    width = prediction['width'][b]
+    bbox = _denormalize_to_coco_bbox(
+        prediction['groundtruth_boxes'][b][obj_i, :], height, width)
+    xcenter = bbox[0] + bbox[2] / 2.0
+    ycenter = bbox[1] + bbox[3] / 2.0
+    annotation['segmentation'] = [[
+        xcenter, ycenter, xcenter, ycenter, xcenter, ycenter, xcenter, ycenter
+    ]]
   return annotation
 
 
