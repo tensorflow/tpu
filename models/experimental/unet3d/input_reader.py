@@ -142,7 +142,9 @@ class LiverInputFn(InputFn):
         image = tf.cast(image, dtype=tf.bfloat16)
         if label.dtype == tf.float32:
           label = tf.cast(label, dtype=tf.bfloat16)
-
+      # TPU doesn't support tf.int64 well, use tf.int32 directly.
+      if label.dtype == tf.int64:
+        label = tf.cast(label, dtype=tf.int32)
       return image, label
 
     return _decode_liver_example
