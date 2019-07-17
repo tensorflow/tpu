@@ -8,7 +8,7 @@
 
 EfficientNets are a family of image classification models, which achieve state-of-the-art accuracy, yet being an order-of-magnitude smaller and faster than previous models.
 
-We develop EfficientNets based on AutoML and Compound Scaling. In particular, we first use [AutoML Mobile framework](https://ai.googleblog.com/2018/08/mnasnet-towards-automating-design-of.html) to develop a mobile-size baseline network, named as EfficientNet-B0; Then, we use the compound scaling method to scale up this baseline to obtain EfficientNet-B1 to B7.
+We develop EfficientNets based on AutoML and Compound Scaling. In particular, we first use [AutoML MNAS Mobile framework](https://ai.googleblog.com/2018/08/mnasnet-towards-automating-design-of.html) to develop a mobile-size baseline network, named as EfficientNet-B0; Then, we use the compound scaling method to scale up this baseline to obtain EfficientNet-B1 to B7.
 
 <table border="0">
 <tr>
@@ -32,11 +32,10 @@ EfficientNets achieve state-of-the-art accuracy on ImageNet with an order of mag
 
 ## 2. Using Pretrained EfficientNet Checkpoints
 
-We have provided a list of EfficientNet checkpoints for [EfficientNet-B0](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/efficientnet-b0.tar.gz), [EfficientNet-B1](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/efficientnet-b1.tar.gz), [EfficientNet-B2](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/efficientnet-b2.tar.gz),  [EfficientNet-B3](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/efficientnet-b3.tar.gz),
-[EfficientNet-B4](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/efficientnet-b4.tar.gz),
-[EfficientNet-B5](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/efficientnet-b5.tar.gz). Notably, here we use the standard ResNet preprocessing rather than  AutoAugment, but we have achieved similar ImageNet top-1 accuracy as the original paper:
+We have provided a list of EfficientNet checkpoints for EfficientNet B0 to B5 as follows:
+Notably, here we use the standard ResNet preprocessing rather than  AutoAugment, but we have achieved similar ImageNet top-1 accuracy as the original paper:
 
-|               |   [B0](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/efficientnet-b0.tar.gz)     |  [B1](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/efficientnet-b1.tar.gz)   |  [B2](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/efficientnet-b2.tar.gz)   |  [B3](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/efficientnet-b3.tar.gz)   |  [B4](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/efficientnet-b4.tar.gz)   |  [B5](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/efficientnet-b5.tar.gz)   |
+|               |   B0 ([link](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckpts/efficientnet-b0.tar.gz))     |  B1 ([link](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckpts/efficientnet-b1.tar.gz))   |  B2 ([link](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckpts/efficientnet-b2.tar.gz))   |  B3([link](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckpts/efficientnet-b3.tar.gz))   |  B4([link](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckpts/efficientnet-b4.tar.gz))   |  B5 ([link](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckpts/efficientnet-b5.tar.gz))   |
 |----------     |--------  | ------| ------|------ |------ |------ |
 | ImageNet accuracy for released ckpts |  76.8%   | 78.8% | 79.8% | 81.0% | 82.6% | 83.2% |
 <!--
@@ -45,8 +44,8 @@ We have provided a list of EfficientNet checkpoints for [EfficientNet-B0](https:
 A quick way to use these checkpoints is to run:
 
     $ export MODEL=efficientnet-b0
-    $ wget https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/${MODEL}.tar.gz
-    $ tar zxf ${MODEL}.tar.gz
+    $ wget https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckpts/${MODEL}.tar.gz
+    $ tar xf ${MODEL}.tar.gz
     $ wget https://upload.wikimedia.org/wikipedia/commons/f/fe/Giant_Panda_in_Beijing_Zoo_1.JPG -O panda.jpg
     $ wget https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/eval_data/labels_map.txt
     $ python eval_ckpt_main.py --model_name=$MODEL --ckpt_dir=$MODEL --example_img=panda.jpg --labels_map_file=labels_map.txt

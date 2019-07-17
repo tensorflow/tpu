@@ -131,13 +131,18 @@ class EvalCkptDriver(object):
     images, labels = iterator.get_next()
     return images, labels
 
-  def run_inference(self, ckpt_dir, image_files, labels):
+  def run_inference(self,
+                    ckpt_dir,
+                    image_files,
+                    labels,
+                    enable_ema=True,
+                    export_ckpt=None):
     """Build and run inference on the target images and labels."""
     with tf.Graph().as_default(), tf.Session() as sess:
       images, labels = self.build_dataset(image_files, labels, False)
       probs = self.build_model(images, is_training=False)
 
-      self.restore_model(sess, ckpt_dir, FLAGS.enable_ema, FLAGS.export_ckpt)
+      self.restore_model(sess, ckpt_dir, enable_ema, export_ckpt)
 
       prediction_idx = []
       prediction_prob = []
@@ -151,7 +156,8 @@ class EvalCkptDriver(object):
       return prediction_idx, prediction_prob
 
 
-def eval_example_images(model_name, ckpt_dir, image_files, labels_map_file):
+def eval_example_images(model_name, ckpt_dir, image_files, labels_map_file,
+                        enable_ema=True):
   """Eval a list of example images.
 
   Args:
@@ -159,6 +165,7 @@ def eval_example_images(model_name, ckpt_dir, image_files, labels_map_file):
     ckpt_dir: str. Checkpoint directory path.
     image_files: List[str]. A list of image file paths.
     labels_map_file: str. The labels map file path.
+    enable_ema: enable expotential moving average.
 
   Returns:
     A tuple (pred_idx, and pred_prob), where pred_idx is the top 5 prediction
@@ -167,7 +174,7 @@ def eval_example_images(model_name, ckpt_dir, image_files, labels_map_file):
   eval_ckpt_driver = EvalCkptDriver(model_name)
   classes = json.loads(tf.gfile.Open(labels_map_file).read())
   pred_idx, pred_prob = eval_ckpt_driver.run_inference(
-      ckpt_dir, image_files, [0] * len(image_files))
+      ckpt_dir, image_files, [0] * len(image_files), enable_ema)
   for i in range(len(image_files)):
     print('predicted class for image {}: '.format(image_files[i]))
     for j, idx in enumerate(pred_idx[i]):
@@ -180,7 +187,8 @@ def eval_imagenet(model_name,
                   ckpt_dir,
                   imagenet_eval_glob,
                   imagenet_eval_label,
-                  num_images):
+                  num_images,
+                  enable_ema):
   """Eval ImageNet images and report top1/top5 accuracy.
 
   Args:
@@ -189,6 +197,7 @@ def eval_imagenet(model_name,
     imagenet_eval_glob: str. File path glob for all eval images.
     imagenet_eval_label: str. File path for eval label.
     num_images: int. Number of images to eval: -1 means eval the whole dataset.
+    enable_ema: enable expotential moving average.
 
   Returns:
     A tuple (top1, top5) for top1 and top5 accuracy.
@@ -201,7 +210,8 @@ def eval_imagenet(model_name,
   image_files = imagenet_filenames[:num_images]
   labels = imagenet_val_labels[:num_images]
 
-  pred_idx, _ = eval_ckpt_driver.run_inference(ckpt_dir, image_files, labels)
+  pred_idx, _ = eval_ckpt_driver.run_inference(ckpt_dir, image_files, labels,
+                                               enable_ema)
   top1_cnt, top5_cnt = 0.0, 0.0
   for i, label in enumerate(labels):
     top1_cnt += label in pred_idx[i][:1]
@@ -220,11 +230,11 @@ def main(unused_argv):
   if FLAGS.runmode == 'examples':
     # Run inference for an example image.
     eval_example_images(FLAGS.model_name, FLAGS.ckpt_dir, [FLAGS.example_img],
-                        FLAGS.labels_map_file)
+                        FLAGS.labels_map_file, FLAGS.enable_ema)
   elif FLAGS.runmode == 'imagenet':
     # Run inference for imagenet.
     eval_imagenet(FLAGS.model_name, FLAGS.ckpt_dir, FLAGS.imagenet_eval_glob,
-                  FLAGS.imagenet_eval_label, FLAGS.num_images)
+                  FLAGS.imagenet_eval_label, FLAGS.num_images, FLAGS.enable_ema)
   else:
     print('must specify runmode: examples or imagenet')
 
