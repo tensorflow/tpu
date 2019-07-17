@@ -110,8 +110,10 @@ def main(unused_argv):
       batch_size=batch_size,
       use_bfloat16=_USE_BFLOAT16)
 
-  train_iterator = strategy.make_dataset_iterator(imagenet_train.input_fn())
-  test_iterator = strategy.make_dataset_iterator(imagenet_eval.input_fn())
+  train_iterator = strategy.experimental_distribute_dataset(
+      imagenet_train.input_fn()).make_initializable_iterator()
+  test_iterator = strategy.experimental_distribute_dataset(
+      imagenet_eval.input_fn()).make_initializable_iterator()
 
   with strategy.scope():
     logging.info('Building Keras ResNet-50 model')
@@ -164,10 +166,10 @@ def main(unused_argv):
     with tf.control_dependencies([update_loss, update_accuracy]):
       return tf.identity(loss)
 
-  dist_train = strategy.unwrap(
-      strategy.experimental_run(train_step, train_iterator))
-  dist_test = strategy.unwrap(
-      strategy.experimental_run(test_step, test_iterator))
+  dist_train = strategy.experimental_local_results(
+      strategy.experimental_run_v2(train_step, args=(next(train_iterator),)))
+  dist_test = strategy.experimental_local_results(
+      strategy.experimental_run_v2(test_step, args=(next(test_iterator),)))
 
   training_loss_result = training_loss.result()
   training_accuracy_result = training_accuracy.result()
@@ -183,9 +185,11 @@ def main(unused_argv):
   if cluster_spec:
     config.cluster_def.CopyFrom(cluster_spec.as_cluster_def())
   with tf.Session(target=resolver.master(), config=config) as sess:
-    sess.run(
-        [tf.initializers.local_variables(),
-         tf.initializers.global_variables()])
+    all_variables = (
+        tf.global_variables() +
+        training_loss.variables + training_accuracy.variables +
+        test_loss.variables + test_accuracy.variables)
+    sess.run([v.initializer for v in all_variables])
     sess.run(train_iterator_init)
 
     for epoch in range(0, FLAGS.num_epochs):
