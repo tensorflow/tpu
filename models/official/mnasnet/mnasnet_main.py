@@ -33,6 +33,7 @@ import imagenet_input
 import mnas_utils
 import mnasnet_models
 from configs import mnasnet_config
+from mixnet import mixnet_builder
 from tensorflow.contrib.tpu.python.tpu import async_checkpoint
 from tensorflow.contrib.training.python.training import evaluation
 from tensorflow.core.protobuf import rewriter_config_pb2
@@ -261,7 +262,7 @@ def get_pretrained_variables_to_restore(checkpoint_path,
   return variables_to_restore
 
 
-def mnasnet_model_fn(features, labels, mode, params):
+def build_model_fn(features, labels, mode, params):
   """The model_fn for MnasNet to be used with TPUEstimator.
 
   Args:
@@ -328,20 +329,29 @@ def mnasnet_model_fn(features, labels, mode, params):
     override_params['min_depth'] = params['min_depth']
   override_params['use_keras'] = params['use_keras']
 
-  if params['precision'] == 'bfloat16':
-    with tf.contrib.tpu.bfloat16_scope():
-      logits, _ = mnasnet_models.build_mnasnet_model(
+  def _build_model(model_name):
+    """Build the model for a given model name."""
+    if model_name.startswith('mnasnet'):
+      return mnasnet_models.build_mnasnet_model(
           features,
-          model_name=params['model_name'],
+          model_name=model_name,
           training=is_training,
           override_params=override_params)
+    elif model_name.startswith('mixnet'):
+      return mixnet_builder.build_model(
+          features,
+          model_name=model_name,
+          training=is_training,
+          override_params=override_params)
+    else:
+      raise ValueError('Unknown model name {}'.format(model_name))
+
+  if params['precision'] == 'bfloat16':
+    with tf.contrib.tpu.bfloat16_scope():
+      logits, _ = _build_model(params['model_name'])
     logits = tf.cast(logits, tf.float32)
   else:  # params['precision'] == 'float32'
-    logits, _ = mnasnet_models.build_mnasnet_model(
-        features,
-        model_name=params['model_name'],
-        training=is_training,
-        override_params=override_params)
+    logits, _ = _build_model(params['model_name'])
 
   if params['quantized_training']:
     if is_training:
@@ -717,7 +727,7 @@ def main(unused_argv):
   # Initializes model parameters.
   mnasnet_est = tf.contrib.tpu.TPUEstimator(
       use_tpu=params.use_tpu,
-      model_fn=mnasnet_model_fn,
+      model_fn=build_model_fn,
       config=config,
       train_batch_size=params.train_batch_size,
       eval_batch_size=params.eval_batch_size,
