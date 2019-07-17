@@ -115,7 +115,6 @@ class RetinanetModel(base_model.Model):
         images, labels=labels, mode=mode_keys.PREDICT)
 
     predictions = {
-        'images': images,
         'pred_source_id': labels['groundtruths']['source_id'],
         'pred_image_info': labels['image_info'],
         'pred_num_detections': outputs['num_detections'],
