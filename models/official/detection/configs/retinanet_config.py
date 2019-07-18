@@ -52,6 +52,7 @@ RETINANET_CFG = {
         },
         'frozen_variable_prefix': RESNET50_FROZEN_VAR_PREFIX,
         'train_file_pattern': '',
+        'transpose_input': True,
     },
     'eval': {
         'eval_batch_size': 8,

@@ -48,6 +48,7 @@ class RetinanetModel(base_model.Model):
         params.postprocess)
 
     self._l2_weight_decay = params.architecture.l2_weight_decay
+    self._transpose_input = params.train.transpose_input
 
   def build_outputs(self, features, labels, mode):
     backbone_features = self._backbone_fn(
@@ -73,6 +74,11 @@ class RetinanetModel(base_model.Model):
     return model_outputs
 
   def train(self, features, labels):
+    # If the input image is transposed (from NHWC to HWCN), we need to revert it
+    # back to the original shape before it's used in the computation.
+    if self._transpose_input:
+      features = tf.transpose(features, [3, 0, 1, 2])
+
     outputs = self.model_outputs(features, labels, mode=mode_keys.TRAIN)
 
     # Adds RetinaNet model losses.

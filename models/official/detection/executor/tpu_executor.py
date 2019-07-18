@@ -51,12 +51,21 @@ class TpuExecutor(object):
       tpu_grpc_url = tpu_cluster_resolver.get_master()
       tf.Session.reset(tpu_grpc_url)
 
+      # If the input image is transposed (from NHWC to HWCN), the partition
+      # dimensions also need to be transposed the same way.
+      def _maybe_transpose(input_partition_dims):
+        if input_partition_dims and params.train.transpose_input:
+          return [input_partition_dims[i] for i in [1, 2, 3, 0]]
+        else:
+          return input_partition_dims
+
       if params.train.input_partition_dims is not None:
         num_cores_per_replica = params.train.num_cores_per_replica
         input_partition_dims = params.train.input_partition_dims
         # Parse 'None' into None.
         input_partition_dims = [
-            None if x == 'None' else x for x in input_partition_dims
+            None if x == 'None' else _maybe_transpose(x)
+            for x in input_partition_dims
         ]
     else:
       tpu_cluster_resolver = None

@@ -29,6 +29,8 @@ class InputFn(object):
     self._is_training = (mode == ModeKeys.TRAIN)
     self._parser_fn = factory.parser_generator(params, mode)
     self._dataset_fn = tf.data.TFRecordDataset
+    self._transpose_input = hasattr(params, 'train') and hasattr(
+        params.train, 'transpose_input') and params.train.transpose_input
 
   def __call__(self, params):
     batch_size = params['batch_size']
@@ -51,4 +53,14 @@ class InputFn(object):
     dataset = dataset.map(self._parser_fn, num_parallel_calls=64)
     dataset = dataset.prefetch(tf.contrib.data.AUTOTUNE)
     dataset = dataset.batch(batch_size, drop_remainder=True)
+
+    # Transpose the input images from [N,H,W,C] to [H,W,C,N] since reshape on
+    # TPU is expensive.
+    if self._transpose_input and self._is_training:
+
+      def _transpose_images(images, labels):
+        return tf.transpose(images, [1, 2, 3, 0]), labels
+
+      dataset = dataset.map(_transpose_images, num_parallel_calls=64)
+
     return dataset
