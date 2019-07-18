@@ -61,7 +61,7 @@ python ~/tpu/models/official/detection/main.py \
 ### Available RetinaNet templates.
 
 * NAS-FPN: [arXiv](https://arxiv.org/abs/1904.07392), [yaml](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/yaml/retinanet_nasfpn.yaml)
-* Auto-augument: arXiv, [yaml](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/yaml/retinanet_autoaugment.yaml)
+* Auto-augument: [arXiv](https://arxiv.org/abs/1805.09501), [yaml](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/yaml/retinanet_autoaugment.yaml)
 
 
 ## Export to SavedModel for serving
