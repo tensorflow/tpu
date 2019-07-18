@@ -44,6 +44,8 @@ flags.DEFINE_string(
     'model_dir', None,
     ('The directory where the model weights and training/evaluation summaries '
      'are stored. If not specified, save to /tmp/resnet50.'))
+flags.DEFINE_string('protocol', 'grpc',
+                    'The communication protocol for the cluster.')
 
 # Special flags for Resnet50.
 flags.DEFINE_bool(
@@ -178,7 +180,7 @@ def main(unused_argv):
 
   logging.info('Use TPU at %s', FLAGS.tpu if FLAGS.tpu is not None else 'local')
   resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu=FLAGS.tpu)
-  tf.config.experimental_connect_to_host(resolver.master())  # pylint: disable=line-too-long
+  tf.config.experimental_connect_to_cluster(resolver, protocol=FLAGS.protocol)
   tf.tpu.experimental.initialize_tpu_system(resolver)
   strategy = tf.distribute.experimental.TPUStrategy(resolver)
 
