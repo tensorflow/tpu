@@ -78,9 +78,11 @@ def get_dictionary_from_flags(params, input_flags):
       d = get_dictionary_from_flags(v, input_flags)
       flag_dict[k] = d
     else:
-      flag_value = input_flags.get_flag_value(k, None)
-
-      if flag_value is not None:
-        flag_dict[k] = flag_value
+      try:
+        flag_value = input_flags.get_flag_value(k, None)
+        if flag_value is not None:
+          flag_dict[k] = flag_value
+      except AttributeError:
+        flag_dict[k] = v
 
   return flag_dict
