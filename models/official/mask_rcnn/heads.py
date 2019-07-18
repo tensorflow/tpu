@@ -116,7 +116,8 @@ def box_head(roi_features, num_classes=91, mlp_head_dim=1024):
 def mask_head(roi_features,
               class_indices,
               num_classes=91,
-              mrcnn_resolution=28):
+              mrcnn_resolution=28,
+              is_gpu_inference=False):
   """Mask branch for the Mask-RCNN model.
 
   Args:
@@ -124,17 +125,13 @@ def mask_head(roi_features,
       [batch_size, num_rois, height_l, width_l, num_filters].
     class_indices: a Tensor of shape [batch_size, num_rois], indicating
       which class the ROI is.
-    num_classes: a integer for the number of classes.
-    mrcnn_resolution: a integer that is the resolution of masks.
+    num_classes: an integer for the number of classes.
+    mrcnn_resolution: an integer that is the resolution of masks.
+    is_gpu_inference: whether to build the model for GPU inference.
   Returns:
     mask_outputs: a tensor with a shape of
-      [batch_size, num_masks, mask_height, mask_width, num_classes],
+      [batch_size, num_masks, mask_height, mask_width],
       representing the mask predictions.
-    fg_gather_indices: a tensor with a shape of [batch_size, num_masks, 2],
-      representing the fg mask targets.
-  Raises:
-    ValueError: If boxes is not a rank-3 tensor or the last dimension of
-      boxes is not 4.
   """
 
   def _get_stddev_equivalent_to_msra_fill(kernel_size, fan_out):
@@ -195,14 +192,22 @@ def mask_head(roi_features,
         mask_outputs,
         [-1, num_rois, mrcnn_resolution, mrcnn_resolution, num_classes])
 
+    indices_dtype = tf.float32 if is_gpu_inference else tf.int32
     with tf.name_scope('masks_post_processing'):
       mask_outputs = tf.transpose(mask_outputs, [0, 1, 4, 2, 3])
       if batch_size == 1:
         indices = tf.reshape(
             tf.reshape(
-                tf.range(num_rois), [batch_size, num_rois, 1]) * num_classes +
+                tf.range(num_rois, dtype=indices_dtype),
+                [batch_size, num_rois, 1]) * num_classes +
             tf.expand_dims(class_indices, axis=-1),
             [batch_size, -1])
+        # If using GPU for inference, delay the cast until when Gather ops show
+        # up since GPU inference supports float point better.
+        # TODO(laigd): revisit this when newer versions of GPU libraries is
+        # released.
+        if is_gpu_inference:
+          indices = tf.cast(indices, dtype=tf.int32)
         mask_outputs = tf.gather(
             tf.reshape(mask_outputs,
                        [batch_size, -1, mrcnn_resolution, mrcnn_resolution]),
@@ -213,15 +218,15 @@ def mask_head(roi_features,
             [batch_size, num_rois, mrcnn_resolution, mrcnn_resolution])
       else:
         batch_indices = (
-            tf.expand_dims(tf.range(batch_size), axis=1) *
-            tf.ones([1, num_rois], dtype=tf.int32))
+            tf.expand_dims(tf.range(batch_size, dtype=indices_dtype), axis=1) *
+            tf.ones([1, num_rois], dtype=indices_dtype))
         mask_indices = (
-            tf.expand_dims(tf.range(num_rois), axis=0) *
-            tf.ones([batch_size, 1], dtype=tf.int32))
+            tf.expand_dims(tf.range(num_rois, dtype=indices_dtype), axis=0) *
+            tf.ones([batch_size, 1], dtype=indices_dtype))
         gather_indices = tf.stack(
             [batch_indices, mask_indices, class_indices], axis=2)
+        if is_gpu_inference:
+          gather_indices = tf.cast(gather_indices, dtype=tf.int32)
         mask_outputs = tf.gather_nd(mask_outputs, gather_indices)
 
     return mask_outputs
-
-

@@ -107,6 +107,8 @@ def remove_variables(variables, prefix):
 
 def build_model_graph(features, labels, is_training, params):
   """Builds the forward model graph."""
+  use_batched_nms = (not params['use_tpu'] and params['use_batched_nms'])
+  is_gpu_inference = (not is_training and use_batched_nms)
   model_outputs = {}
 
   if params['transpose_input'] and is_training:
@@ -174,7 +176,7 @@ def build_model_graph(features, labels, is_training, params):
       params['rpn_nms_threshold'],
       params['rpn_min_size'],
       bbox_reg_weights=None,
-      use_batched_nms=(not params['use_tpu'] and params['use_batched_nms']))
+      use_batched_nms=use_batched_nms)
   rpn_box_rois = tf.to_float(rpn_box_rois)
   if is_training:
     rpn_box_rois = tf.stop_gradient(rpn_box_rois)
@@ -196,14 +198,14 @@ def build_model_graph(features, labels, is_training, params):
 
   # Performs multi-level RoIAlign.
   box_roi_features = spatial_transform_ops.multilevel_crop_and_resize(
-      fpn_feats, rpn_box_rois, output_size=7)
+      fpn_feats, rpn_box_rois, output_size=7, is_gpu_inference=is_gpu_inference)
 
   class_outputs, box_outputs, _ = heads.box_head(
       box_roi_features, num_classes=params['num_classes'],
       mlp_head_dim=params['fast_rcnn_mlp_head_dim'])
 
   if not is_training:
-    if not params['use_tpu'] and params['use_batched_nms']:
+    if is_gpu_inference:
       generate_detections_fn = postprocess_ops.generate_detections_gpu
     else:
       generate_detections_fn = postprocess_ops.generate_detections_tpu
@@ -243,7 +245,13 @@ def build_model_graph(features, labels, is_training, params):
   # Mask sampling
   if not is_training:
     selected_box_rois = model_outputs['detection_boxes']
-    class_indices = tf.to_int32(model_outputs['detection_classes'])
+    class_indices = model_outputs['detection_classes']
+    # If using GPU for inference, delay the cast until when Gather ops show up
+    # since GPU inference supports float point better.
+    # TODO(laigd): revisit this when newer versions of GPU libraries is
+    # released.
+    if not is_gpu_inference:
+      class_indices = tf.to_int32(class_indices)
   else:
     (selected_class_targets, selected_box_targets, selected_box_rois,
      proposal_to_label_map) = (
@@ -255,12 +263,16 @@ def build_model_graph(features, labels, is_training, params):
     class_indices = tf.to_int32(selected_class_targets)
 
   mask_roi_features = spatial_transform_ops.multilevel_crop_and_resize(
-      fpn_feats, selected_box_rois, output_size=14)
+      fpn_feats,
+      selected_box_rois,
+      output_size=14,
+      is_gpu_inference=is_gpu_inference)
   mask_outputs = heads.mask_head(
       mask_roi_features,
       class_indices,
       num_classes=params['num_classes'],
-      mrcnn_resolution=params['mrcnn_resolution'])
+      mrcnn_resolution=params['mrcnn_resolution'],
+      is_gpu_inference=is_gpu_inference)
 
   if is_training:
     mask_targets = training_ops.get_mask_targets(

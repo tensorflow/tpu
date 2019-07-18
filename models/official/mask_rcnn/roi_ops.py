@@ -152,11 +152,8 @@ def _propose_rois_gpu(scores,
   """
   batch_size, num_boxes = scores.get_shape().as_list()
 
-  topk_limit = (num_boxes if num_boxes < rpn_pre_nms_topn
-                else rpn_pre_nms_topn)
-
+  topk_limit = min(num_boxes, rpn_pre_nms_topn)
   boxes = box_utils.decode_boxes(boxes, anchor_boxes, bbox_reg_weights)
-
   boxes = box_utils.clip_boxes(boxes, height, width)
 
   if rpn_min_size > 0.0:
@@ -295,10 +292,7 @@ def multilevel_propose_rois(scores_outputs,
 
     with tf.name_scope('roi_post_nms_topk'):
       post_nms_num_anchors = scores.shape[1]
-      post_nms_topk_limit = (
-          post_nms_num_anchors if post_nms_num_anchors < rpn_post_nms_topn
-          else rpn_post_nms_topn)
-
+      post_nms_topk_limit = min(post_nms_num_anchors, rpn_post_nms_topn)
       top_k_scores, top_k_rois = box_utils.top_k(
           scores, k=post_nms_topk_limit, boxes_list=[rois])
       top_k_rois = top_k_rois[0]

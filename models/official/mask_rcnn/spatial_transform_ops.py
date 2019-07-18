@@ -27,6 +27,7 @@ def nearest_upsampling(data, scale):
   Args:
     data: A tensor with a shape of [batch, height_in, width_in, channels].
     scale: An integer multiple to scale resolution of input data.
+
   Returns:
     data_up: A tensor with a shape of
       [batch, height_in*scale, width_in*scale, channels]. Same dtype as input
@@ -46,7 +47,8 @@ def selective_crop_and_resize(features,
                               boxes,
                               box_levels,
                               boundaries,
-                              output_size=7):
+                              output_size=7,
+                              is_gpu_inference=False):
   """Crop and resize boxes on a set of feature maps.
 
   Given multiple features maps indexed by different levels, and a set of boxes
@@ -86,13 +88,14 @@ def selective_crop_and_resize(features,
       information of each box w.r.t. the corresponding feature map.
       boxes[:, :, 0:2] are the grid position in (y, x) (float) of the top-left
       corner of each box. boxes[:, :, 2:4] are the box sizes in (h, w) (float)
-      in terms of the number of pixels of the corresponding feature map size.
+        in terms of the number of pixels of the corresponding feature map size.
     box_levels: a 3-D tensor of shape [batch_size, num_boxes, 1] representing
       the 0-based corresponding feature level index of each box.
     boundaries: a 3-D tensor of shape [batch_size, num_boxes, 2] representing
       the boundary (in (y, x)) of the corresponding feature map for each box.
       Any resampled grid points that go beyond the bounary will be clipped.
     output_size: a scalar indicating the output crop size.
+    is_gpu_inference: whether to build the model for GPU inference.
 
   Returns:
     features_per_box: a 5-D tensor of shape
@@ -130,12 +133,18 @@ def selective_crop_and_resize(features,
   ],
                           axis=3)
 
-  x_indices = tf.cast(
-      tf.reshape(box_gridx0x1, [batch_size, num_boxes, output_size * 2]),
-      dtype=tf.int32)
-  y_indices = tf.cast(
-      tf.reshape(box_gridy0y1, [batch_size, num_boxes, output_size * 2]),
-      dtype=tf.int32)
+  x_indices = (
+      tf.reshape(box_gridx0x1, [batch_size, num_boxes, output_size * 2]))
+  y_indices = (
+      tf.reshape(box_gridy0y1, [batch_size, num_boxes, output_size * 2]))
+
+  # If using GPU for inference, delay the cast until when Gather ops show up
+  # since GPU inference supports float point better.
+  # TODO(laigd): revisit this when newer versions of GPU libraries is released.
+  indices_dtype = tf.float32 if is_gpu_inference else tf.int32
+  if not is_gpu_inference:
+    x_indices = tf.cast(x_indices, tf.int32)
+    y_indices = tf.cast(y_indices, tf.int32)
 
   height_dim_offset = max_feature_width
   level_dim_offset = max_feature_height * height_dim_offset
@@ -143,18 +152,20 @@ def selective_crop_and_resize(features,
 
   batch_dim_indices = (
       tf.reshape(
-          tf.range(batch_size) * batch_dim_offset, [batch_size, 1, 1, 1]) *
-      tf.ones([1, num_boxes, output_size * 2, output_size * 2], dtype=tf.int32))
+          tf.range(batch_size, dtype=indices_dtype) * batch_dim_offset,
+          [batch_size, 1, 1, 1]) *
+      tf.ones([1, num_boxes, output_size * 2, output_size * 2],
+              dtype=indices_dtype))
   box_level_indices = (
       tf.reshape(box_levels * level_dim_offset, [batch_size, num_boxes, 1, 1]) *
-      tf.ones([1, 1, output_size * 2, output_size * 2], dtype=tf.int32))
+      tf.ones([1, 1, output_size * 2, output_size * 2], dtype=indices_dtype))
   height_indices = (
       tf.reshape(y_indices * height_dim_offset,
                  [batch_size, num_boxes, output_size * 2, 1]) *
-      tf.ones([1, 1, 1, output_size * 2], dtype=tf.int32))
+      tf.ones([1, 1, 1, output_size * 2], dtype=indices_dtype))
   width_indices = (
       tf.reshape(x_indices, [batch_size, num_boxes, 1, output_size * 2]) *
-      tf.ones([1, 1, output_size * 2, 1], dtype=tf.int32))
+      tf.ones([1, 1, output_size * 2, 1], dtype=indices_dtype))
 
   # TODO(hongjunchoi): Remove the need for temporary variables as
   # temporary variables with int32 dtype are not supported for GPU's.
@@ -164,10 +175,23 @@ def selective_crop_and_resize(features,
       height_indices,
       width_indices,
   ])
-  indices = tf.reshape(indices, [-1])
 
-  features = tf.reshape(features, [-1, num_filters])
-  features_per_box = tf.gather(features, indices)
+  if batch_size == 1:
+    # Special handling for single batch input to make it friendly for GPU
+    # inference.
+    indices = tf.reshape(indices, [1, -1])
+    if is_gpu_inference:
+      indices = tf.cast(indices, dtype=tf.int32)
+    features = tf.reshape(features, [1, -1, num_filters])
+    # Cast should happen at last since GPU has better support for floating point
+    # operations.
+    features_per_box = tf.gather(features, indices, axis=1)
+  else:
+    indices = tf.reshape(indices, [-1])
+    if is_gpu_inference:
+      indices = tf.cast(indices, dtype=tf.int32)
+    features = tf.reshape(features, [-1, num_filters])
+    features_per_box = tf.gather(features, indices)
 
   features_per_box = tf.reshape(
       features_per_box,
@@ -207,7 +231,10 @@ def selective_crop_and_resize(features,
   return features_per_box
 
 
-def multilevel_crop_and_resize(features, boxes, output_size=7):
+def multilevel_crop_and_resize(features,
+                               boxes,
+                               output_size=7,
+                               is_gpu_inference=False):
   """Crop and resize on multilevel feature pyramid.
 
   Generate the (output_size, output_size) set of pixels for each input box
@@ -215,11 +242,12 @@ def multilevel_crop_and_resize(features, boxes, output_size=7):
   and resizing it using the correspoding feature map of that level.
 
   Args:
-    features: A dictionary with key as pyramid level and value as features.
-      The features are in shape of [batch_size, height_l, width_l, num_filters].
-    boxes: A 3-D Tensor of shape [batch_size, num_boxes, 4]. Each row
-      represents a box with [y1, x1, y2, x2] in un-normalized coordinates.
+    features: A dictionary with key as pyramid level and value as features. The
+      features are in shape of [batch_size, height_l, width_l, num_filters].
+    boxes: A 3-D Tensor of shape [batch_size, num_boxes, 4]. Each row represents
+      a box with [y1, x1, y2, x2] in un-normalized coordinates.
     output_size: A scalar to indicate the output crop size.
+    is_gpu_inference: whether to build the model for GPU inference.
 
   Returns:
     A 5-D tensor representing feature crop of shape
@@ -235,22 +263,30 @@ def multilevel_crop_and_resize(features, boxes, output_size=7):
     # [batch_size, levels, height, width, num_filters].
     features_all = []
     for level in range(min_level, max_level + 1):
-      features_all.append(tf.image.pad_to_bounding_box(
-          features[level], 0, 0, max_feature_height, max_feature_width))
+      features_all.append(
+          tf.image.pad_to_bounding_box(features[level], 0, 0,
+                                       max_feature_height, max_feature_width))
     features_all = tf.stack(features_all, axis=1)
 
     # Assign boxes to the right level.
     box_width = tf.squeeze(boxes[:, :, 3:4] - boxes[:, :, 1:2], axis=-1)
     box_height = tf.squeeze(boxes[:, :, 2:3] - boxes[:, :, 0:1], axis=-1)
     areas_sqrt = tf.sqrt(box_height * box_width)
-    levels = tf.cast(tf.floordiv(tf.log(tf.div(areas_sqrt, 224.0)),
-                                 tf.log(2.0)) + 4.0, dtype=tf.int32)
+    levels = tf.floordiv(tf.log(tf.div(areas_sqrt, 224.0)), tf.log(2.0)) + 4.0
+    if not is_gpu_inference:
+      levels = tf.cast(levels, dtype=tf.int32)
+
     # Map levels between [min_level, max_level].
-    levels = tf.minimum(max_level, tf.maximum(levels, min_level))
+    levels = tf.minimum(
+        float(max_level) if is_gpu_inference else max_level,
+        tf.maximum(levels,
+                   float(min_level) if is_gpu_inference else min_level))
 
     # Project box location and sizes to corresponding feature levels.
     scale_to_level = tf.cast(
-        tf.pow(tf.constant(2.0), tf.cast(levels, tf.float32)),
+        tf.pow(
+            tf.constant(2.0),
+            levels if is_gpu_inference else tf.cast(levels, tf.float32)),
         dtype=boxes.dtype)
     boxes /= tf.expand_dims(scale_to_level, axis=2)
     box_width /= scale_to_level
@@ -261,7 +297,8 @@ def multilevel_crop_and_resize(features, boxes, output_size=7):
 
     # Map levels to [0, max_level-min_level].
     levels -= min_level
-    level_strides = tf.pow([[2.0]], tf.cast(levels, tf.float32))
+    level_strides = tf.pow(
+        [[2.0]], levels if is_gpu_inference else tf.cast(levels, tf.float32))
     boundary = tf.cast(
         tf.concat([
             tf.expand_dims([[tf.cast(max_feature_height, tf.float32)]] /
@@ -274,4 +311,4 @@ def multilevel_crop_and_resize(features, boxes, output_size=7):
         boxes.dtype)
 
     return selective_crop_and_resize(
-        features_all, boxes, levels, boundary, output_size)
+        features_all, boxes, levels, boundary, output_size, is_gpu_inference)
