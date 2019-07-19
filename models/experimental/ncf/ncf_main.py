@@ -25,10 +25,6 @@ from absl import flags
 import numpy as np
 import tensorflow as tf
 
-# pylint: disable=g-direct-tensorflow-import
-from tensorflow.python.tpu import _tpu_estimator_embedding as embedding
-from tensorflow.python.tpu import feature_column
-# pylint: enable=g-direct-tensorflow-import
 from official.datasets import movielens
 from official.recommendation import constants as rconst
 from official.recommendation import data_pipeline
@@ -211,16 +207,16 @@ def create_tpu_estimator(model_fn, feature_columns, params):
           per_host_input_for_training=tf.contrib.tpu.InputPipelineConfig
           .PER_HOST_V2))
 
-  return tf.contrib.tpu.TPUEstimator(
+  return tf.estimator.tpu.TPUEstimator(
       use_tpu=params["use_tpu"],
       model_fn=model_fn,
       config=config,
       train_batch_size=params["global_batch_size"],
       eval_batch_size=params["eval_global_batch_size"],
       params=params,
-      embedding_config_spec=embedding.EmbeddingConfigSpec(
+      embedding_config_spec=tf.estimator.tpu.experimental.EmbeddingConfigSpec(
           feature_columns=feature_columns,
-          optimization_parameters=embedding.AdamParameters(
+          optimization_parameters=tf.tpu.experimental.AdamParameters(
               learning_rate=params["learning_rate"],
               use_gradient_accumulation=params["use_gradient_accumulation"],
               lazy_adam=params["lazy_adam"],
@@ -240,16 +236,17 @@ def create_feature_columns(params):
       key="item_id", num_buckets=params["num_items"])
 
   feature_columns = [
-      feature_column.embedding_column(
+      tf.tpu.experimental.embedding_column(
           categorical_column=user_column,
-          dimension=params["mf_dim"]+params["mlp_dim"],
+          dimension=params["mf_dim"] + params["mlp_dim"],
           combiner=None,
           initializer=initializer),
-      feature_column.embedding_column(
+      tf.tpu.experimental.embedding_column(
           categorical_column=item_column,
-          dimension=params["mf_dim"]+params["mlp_dim"],
+          dimension=params["mf_dim"] + params["mlp_dim"],
           combiner=None,
-          initializer=initializer)]
+          initializer=initializer)
+  ]
   return feature_columns
 
 
@@ -432,12 +429,7 @@ def create_model_fn(feature_columns):
 
 def logits_fn(features, feature_columns, params):
   """Calculate logits."""
-  cols_to_output_tensors = {}
-  tf.feature_column.input_layer(
-      features=features, feature_columns=feature_columns,
-      cols_to_output_tensors=cols_to_output_tensors)
-
-  input_layer = {col.name: cols_to_output_tensors[col]
+  input_layer = {col.name: tf.keras.layers.DenseFeatures(col)(features)
                  for col in feature_columns}
 
   input_layer_mf_user, input_layer_mlp_user = tf.split(
