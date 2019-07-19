@@ -283,6 +283,73 @@ class MBConvBlock(object):
     return x
 
 
+class MBConvBlockWithoutDepthwise(MBConvBlock):
+  """MBConv-like block without depthwise convolution and squeeze-and-excite."""
+
+  def _build(self):
+    """Builds block according to the arguments."""
+    filters = self._block_args.input_filters * self._block_args.expand_ratio
+    if self._block_args.expand_ratio != 1:
+      # Expansion phase:
+      self._expand_conv = tf.layers.Conv2D(
+          filters,
+          kernel_size=[3, 3],
+          strides=[1, 1],
+          kernel_initializer=conv_kernel_initializer,
+          padding='same',
+          use_bias=False)
+      self._bn0 = batchnorm(
+          axis=self._channel_axis,
+          momentum=self._batch_norm_momentum,
+          epsilon=self._batch_norm_epsilon)
+
+    # Output phase:
+    filters = self._block_args.output_filters
+    self._project_conv = tf.layers.Conv2D(
+        filters,
+        kernel_size=[1, 1],
+        strides=self._block_args.strides,
+        kernel_initializer=conv_kernel_initializer,
+        padding='same',
+        use_bias=False)
+    self._bn1 = batchnorm(
+        axis=self._channel_axis,
+        momentum=self._batch_norm_momentum,
+        epsilon=self._batch_norm_epsilon)
+
+  def call(self, inputs, training=True, drop_connect_rate=None):
+    """Implementation of call().
+
+    Args:
+      inputs: the inputs tensor.
+      training: boolean, whether the model is constructed for training.
+      drop_connect_rate: float, between 0 to 1, drop connect rate.
+
+    Returns:
+      A output tensor.
+    """
+    tf.logging.info('Block input: %s shape: %s' % (inputs.name, inputs.shape))
+    if self._block_args.expand_ratio != 1:
+      x = self._relu_fn(self._bn0(self._expand_conv(inputs), training=training))
+    else:
+      x = inputs
+    tf.logging.info('Expand: %s shape: %s' % (x.name, x.shape))
+
+    self.endpoints = {'expansion_output': x}
+
+    x = self._bn1(self._project_conv(x), training=training)
+    if self._block_args.id_skip:
+      if all(
+          s == 1 for s in self._block_args.strides
+      ) and self._block_args.input_filters == self._block_args.output_filters:
+        # only apply drop_connect if skip presents.
+        if drop_connect_rate:
+          x = utils.drop_connect(x, training, drop_connect_rate)
+        x = tf.add(x, inputs)
+    tf.logging.info('Project: %s shape: %s' % (x.name, x.shape))
+    return x
+
+
 class Model(tf.keras.Model):
   """A class implements tf.keras.Model for MNAS-like model.
 
@@ -311,9 +378,7 @@ class Model(tf.keras.Model):
     self._build()
 
   def _get_conv_block(self, conv_type):
-    conv_block_map = {
-        0: MBConvBlock
-    }
+    conv_block_map = {0: MBConvBlock, 1: MBConvBlockWithoutDepthwise}
     return conv_block_map[conv_type]
 
   def _build(self):

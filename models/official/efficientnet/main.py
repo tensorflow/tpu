@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Train a EfficientNet on ImageNet on TPU."""
+"""Train a EfficientNets on ImageNet on TPU."""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -28,11 +28,11 @@ import tensorflow as tf
 import efficientnet_builder
 import imagenet_input
 import utils
+import efficientnet_edgetpu_builder
 from tensorflow.contrib.tpu.python.tpu import async_checkpoint
 from tensorflow.contrib.training.python.training import evaluation
 from tensorflow.core.protobuf import rewriter_config_pb2
 from tensorflow.python.estimator import estimator
-
 
 FLAGS = flags.FLAGS
 
@@ -164,6 +164,7 @@ flags.DEFINE_string(
           ' will improve performance.'))
 flags.DEFINE_integer(
     'num_label_classes', default=1000, help='Number of classes, at least 2')
+
 flags.DEFINE_float(
     'batch_norm_momentum',
     default=None,
@@ -238,11 +239,6 @@ flags.DEFINE_float(
 flags.DEFINE_bool(
     'use_async_checkpointing', default=False, help=('Enable async checkpoint'))
 
-# The input tensor is in the range of [0, 255], we need to scale them to the
-# range of [0, 1]
-MEAN_RGB = [0.485 * 255, 0.456 * 255, 0.406 * 255]
-STDDEV_RGB = [0.229 * 255, 0.224 * 255, 0.225 * 255]
-
 
 def model_fn(features, labels, mode, params):
   """The model_fn to be used with TPUEstimator.
@@ -275,10 +271,6 @@ def model_fn(features, labels, mode, params):
   if FLAGS.transpose_input and mode != tf.estimator.ModeKeys.PREDICT:
     features = tf.transpose(features, [3, 0, 1, 2])  # HWCN to NHWC
 
-  # Normalize the image to zero mean and unit variance.
-  features -= tf.constant(MEAN_RGB, shape=stats_shape, dtype=features.dtype)
-  features /= tf.constant(STDDEV_RGB, shape=stats_shape, dtype=features.dtype)
-
   is_training = (mode == tf.estimator.ModeKeys.TRAIN)
   has_moving_average_decay = (FLAGS.moving_average_decay > 0)
   # This is essential, if using a keras-derived model.
@@ -301,12 +293,28 @@ def model_fn(features, labels, mode, params):
     override_params['depth_coefficient'] = FLAGS.depth_coefficient
   if FLAGS.width_coefficient:
     override_params['width_coefficient'] = FLAGS.width_coefficient
-  if FLAGS.num_label_classes:
-    override_params['num_classes'] = FLAGS.num_label_classes
+
+  def normalize_features(features, mean_rgb, stddev_rgb):
+    """Normalize the image given the means and stddevs."""
+    features -= tf.constant(mean_rgb, shape=stats_shape, dtype=features.dtype)
+    features /= tf.constant(stddev_rgb, shape=stats_shape, dtype=features.dtype)
+    return features
 
   def build_model():
-    logits, _ = efficientnet_builder.build_model(
-        features,
+    """Build model using the model_name given through the command line."""
+    model_builder = None
+    if FLAGS.model_name.startswith('efficientnet-edgetpu'):
+      model_builder = efficientnet_edgetpu_builder
+    elif FLAGS.model_name.startswith('efficientnet'):
+      model_builder = efficientnet_builder
+    else:
+      raise ValueError(
+          'Model must be either efficientnet-b* or efficientnet-edgetpu*')
+
+    normalized_features = normalize_features(features, model_builder.MEAN_RGB,
+                                             model_builder.STDDEV_RGB)
+    logits, _ = model_builder.build_model(
+        normalized_features,
         model_name=FLAGS.model_name,
         training=is_training,
         override_params=override_params,
@@ -562,11 +570,18 @@ def main(unused_argv):
 
   input_image_size = FLAGS.input_image_size
   if not input_image_size:
-    if FLAGS.model_name.startswith('efficientnet'):
+    if FLAGS.model_name.startswith('efficientnet-edgetpu'):
+      _, _, input_image_size, _ = efficientnet_edgetpu_builder.efficientnet_edgetpu_params(
+          FLAGS.model_name)
+    elif FLAGS.model_name.startswith('efficientnet'):
       _, _, input_image_size, _ = efficientnet_builder.efficientnet_params(
           FLAGS.model_name)
     else:
-      raise ValueError('input_image_size must be set expect for EfficientNet.')
+      raise ValueError('input_image_size must be set except for EfficientNet')
+
+  # For imagenet dataset, include background label if number of output classes
+  # is 1001
+  include_background_label = (FLAGS.num_label_classes == 1001)
 
   if FLAGS.tpu or FLAGS.use_tpu:
     tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
@@ -608,31 +623,35 @@ def main(unused_argv):
 
   # Input pipelines are slightly different (with regards to shuffling and
   # preprocessing) between training and evaluation.
-  if FLAGS.bigtable_instance:
-    tf.logging.info('Using Bigtable dataset, table %s', FLAGS.bigtable_table)
-    select_train, select_eval = _select_tables_from_flags()
-    imagenet_train, imagenet_eval = [imagenet_input.ImageNetBigtableInput(
-        is_training=is_training,
-        use_bfloat16=FLAGS.use_bfloat16,
-        transpose_input=FLAGS.transpose_input,
-        selection=selection) for (is_training, selection) in
-                                     [(True, select_train),
-                                      (False, select_eval)]]
-  else:
-    if FLAGS.data_dir == FAKE_DATA_DIR:
-      tf.logging.info('Using fake dataset.')
+  def build_imagenet_input(is_training):
+    """Generate ImageNetInput for training and eval."""
+    if FLAGS.bigtable_instance:
+      tf.logging.info('Using Bigtable dataset, table %s', FLAGS.bigtable_table)
+      select_train, select_eval = _select_tables_from_flags()
+      return imagenet_input.ImageNetBigtableInput(
+          is_training=is_training,
+          use_bfloat16=FLAGS.use_bfloat16,
+          transpose_input=FLAGS.transpose_input,
+          selection=select_train if is_training else select_eval,
+          include_background_label=include_background_label)
     else:
-      tf.logging.info('Using dataset: %s', FLAGS.data_dir)
-    imagenet_train, imagenet_eval = [
-        imagenet_input.ImageNetInput(
-            is_training=is_training,
-            data_dir=FLAGS.data_dir,
-            transpose_input=FLAGS.transpose_input,
-            cache=FLAGS.use_cache and is_training,
-            image_size=input_image_size,
-            num_parallel_calls=FLAGS.num_parallel_calls,
-            use_bfloat16=FLAGS.use_bfloat16) for is_training in [True, False]
-    ]
+      if FLAGS.data_dir == FAKE_DATA_DIR:
+        tf.logging.info('Using fake dataset.')
+      else:
+        tf.logging.info('Using dataset: %s', FLAGS.data_dir)
+
+      return imagenet_input.ImageNetInput(
+          is_training=is_training,
+          data_dir=FLAGS.data_dir,
+          transpose_input=FLAGS.transpose_input,
+          cache=FLAGS.use_cache and is_training,
+          image_size=input_image_size,
+          num_parallel_calls=FLAGS.num_parallel_calls,
+          use_bfloat16=FLAGS.use_bfloat16,
+          include_background_label=include_background_label)
+
+  imagenet_train = build_imagenet_input(is_training=True)
+  imagenet_eval = build_imagenet_input(is_training=False)
 
   if FLAGS.mode == 'eval':
     eval_steps = FLAGS.num_eval_images // FLAGS.eval_batch_size

@@ -57,6 +57,7 @@ class ImageNetTFExampleInput(object):
     num_cores: `int` for the number of TPU cores
     image_size: `int` for image size (both width and height).
     transpose_input: 'bool' for whether to use the double transpose trick
+    include_background_label: If true, label #0 is reserved for background.
   """
   __metaclass__ = abc.ABCMeta
 
@@ -65,13 +66,15 @@ class ImageNetTFExampleInput(object):
                use_bfloat16,
                num_cores=8,
                image_size=224,
-               transpose_input=False):
+               transpose_input=False,
+               include_background_label=False):
     self.image_preprocessing_fn = preprocessing.preprocess_image
     self.is_training = is_training
     self.use_bfloat16 = use_bfloat16
     self.num_cores = num_cores
     self.transpose_input = transpose_input
     self.image_size = image_size
+    self.include_background_label = include_background_label
 
   def set_shapes(self, batch_size, images, labels):
     """Statically set the batch_size dimension."""
@@ -111,9 +114,13 @@ class ImageNetTFExampleInput(object):
         image_size=self.image_size,
         use_bfloat16=self.use_bfloat16)
 
-    # Subtract one so that labels are in [0, 1000).
+    # The labels will be in range [1,1000], 0 is reserved for background
     label = tf.cast(
-        tf.reshape(parsed['image/class/label'], shape=[]), dtype=tf.int32) - 1
+        tf.reshape(parsed['image/class/label'], shape=[]), dtype=tf.int32)
+
+    if not self.include_background_label:
+      # Subtract 1 if the background label is discarded.
+      label -= 1
 
     return image, label
 
@@ -213,7 +220,8 @@ class ImageNetInput(ImageNetTFExampleInput):
                data_dir,
                image_size=224,
                num_parallel_calls=64,
-               cache=False):
+               cache=False,
+               include_background_label=False):
     """Create an input from TFRecord files.
 
     Args:
@@ -226,13 +234,15 @@ class ImageNetInput(ImageNetTFExampleInput):
           and blank labels.
       image_size: `int` for image size (both width and height).
       num_parallel_calls: concurrency level to use when reading data from disk.
-      cache: if true, fill the dataset by repeating from its cache
+      cache: if true, fill the dataset by repeating from its cache.
+      include_background_label: if true, label #0 is reserved for background.
     """
     super(ImageNetInput, self).__init__(
         is_training=is_training,
         image_size=image_size,
         use_bfloat16=use_bfloat16,
-        transpose_input=transpose_input)
+        transpose_input=transpose_input,
+        include_background_label=include_background_label)
     self.data_dir = data_dir
     if self.data_dir == 'null' or not self.data_dir:
       self.data_dir = None
@@ -307,7 +317,12 @@ class ImageNetBigtableInput(ImageNetTFExampleInput):
   """Generates ImageNet input_fn from a Bigtable for training or evaluation.
   """
 
-  def __init__(self, is_training, use_bfloat16, transpose_input, selection):
+  def __init__(self,
+               is_training,
+               use_bfloat16,
+               transpose_input,
+               selection,
+               include_background_label=False):
     """Constructs an ImageNet input from a BigtableSelection.
 
     Args:
@@ -315,11 +330,13 @@ class ImageNetBigtableInput(ImageNetTFExampleInput):
       use_bfloat16: If True, use bfloat16 precision; else use float32.
       transpose_input: 'bool' for whether to use the double transpose trick
       selection: a BigtableSelection specifying a part of a Bigtable.
+      include_background_label: if true, label #0 is reserved for background.
     """
     super(ImageNetBigtableInput, self).__init__(
         is_training=is_training,
         use_bfloat16=use_bfloat16,
-        transpose_input=transpose_input)
+        transpose_input=transpose_input,
+        include_background_label=include_background_label)
     self.selection = selection
 
   def make_source_dataset(self, index, num_hosts):

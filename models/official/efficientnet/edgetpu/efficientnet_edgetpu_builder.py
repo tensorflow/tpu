@@ -12,122 +12,47 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Model Builder for EfficientNet."""
+"""Model Builder for Efficientnet-edgetpu."""
 
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
 import os
-import re
 import tensorflow as tf
 
+import efficientnet_builder
 import efficientnet_model
 
-MEAN_RGB = [0.485 * 255, 0.456 * 255, 0.406 * 255]
-STDDEV_RGB = [0.229 * 255, 0.224 * 255, 0.225 * 255]
+# The input tensor is in the range of [0, 255], we need to scale them to the
+# range of [0, 1]
+MEAN_RGB = [127.0, 127.0, 127.0]
+STDDEV_RGB = [128.0, 128.0, 128.0]
 
 
-def efficientnet_params(model_name):
-  """Get efficientnet params based on model name."""
+def efficientnet_edgetpu_params(model_name):
+  """Get efficientnet-edgetpu params based on model name."""
   params_dict = {
       # (width_coefficient, depth_coefficient, resolution, dropout_rate)
-      'efficientnet-b0': (1.0, 1.0, 224, 0.2),
-      'efficientnet-b1': (1.0, 1.1, 240, 0.2),
-      'efficientnet-b2': (1.1, 1.2, 260, 0.3),
-      'efficientnet-b3': (1.2, 1.4, 300, 0.3),
-      'efficientnet-b4': (1.4, 1.8, 380, 0.4),
-      'efficientnet-b5': (1.6, 2.2, 456, 0.4),
-      'efficientnet-b6': (1.8, 2.6, 528, 0.5),
-      'efficientnet-b7': (2.0, 3.1, 600, 0.5),
+      'efficientnet-edgetpu-S': (1.0, 1.0, 224, 0.2),
+      'efficientnet-edgetpu-M': (1.0, 1.1, 240, 0.2),
+      'efficientnet-edgetpu-L': (1.2, 1.4, 300, 0.3),
   }
   return params_dict[model_name]
 
 
-class BlockDecoder(object):
-  """Block Decoder for readability."""
-
-  def _decode_block_string(self, block_string):
-    """Gets a block through a string notation of arguments."""
-    assert isinstance(block_string, str)
-    ops = block_string.split('_')
-    options = {}
-    for op in ops:
-      splits = re.split(r'(\d.*)', op)
-      if len(splits) >= 2:
-        key, value = splits[:2]
-        options[key] = value
-
-    if 's' not in options or len(options['s']) != 2:
-      raise ValueError('Strides options should be a pair of integers.')
-
-    return efficientnet_model.BlockArgs(
-        kernel_size=int(options['k']),
-        num_repeat=int(options['r']),
-        input_filters=int(options['i']),
-        output_filters=int(options['o']),
-        expand_ratio=int(options['e']),
-        id_skip=('noskip' not in block_string),
-        se_ratio=float(options['se']) if 'se' in options else None,
-        strides=[int(options['s'][0]), int(options['s'][1])],
-        conv_type=int(options['c']) if 'c' in options else 0)
-
-  def _encode_block_string(self, block):
-    """Encodes a block to a string."""
-    args = [
-        'r%d' % block.num_repeat,
-        'k%d' % block.kernel_size,
-        's%d%d' % (block.strides[0], block.strides[1]),
-        'e%s' % block.expand_ratio,
-        'i%d' % block.input_filters,
-        'o%d' % block.output_filters,
-        'c%d' % block.conv_type,
-    ]
-    if block.se_ratio > 0 and block.se_ratio <= 1:
-      args.append('se%s' % block.se_ratio)
-    if block.id_skip is False:
-      args.append('noskip')
-    return '_'.join(args)
-
-  def decode(self, string_list):
-    """Decodes a list of string notations to specify blocks inside the network.
-
-    Args:
-      string_list: a list of strings, each string is a notation of block.
-
-    Returns:
-      A list of namedtuples to represent blocks arguments.
-    """
-    assert isinstance(string_list, list)
-    blocks_args = []
-    for block_string in string_list:
-      blocks_args.append(self._decode_block_string(block_string))
-    return blocks_args
-
-  def encode(self, blocks_args):
-    """Encodes a list of Blocks to a list of strings.
-
-    Args:
-      blocks_args: A list of namedtuples to represent blocks arguments.
-    Returns:
-      a list of strings, each string is a notation of block.
-    """
-    block_strings = []
-    for block in blocks_args:
-      block_strings.append(self._encode_block_string(block))
-    return block_strings
-
-
-def efficientnet(width_coefficient=None,
-                 depth_coefficient=None,
-                 dropout_rate=0.2,
-                 drop_connect_rate=0.2):
-  """Creates a efficientnet model."""
+def efficientnet_edgetpu(width_coefficient=None,
+                         depth_coefficient=None,
+                         dropout_rate=0.2,
+                         drop_connect_rate=0.2):
+  """Creates an efficientnet-edgetpu model."""
   blocks_args = [
-      'r1_k3_s11_e1_i32_o16_se0.25', 'r2_k3_s22_e6_i16_o24_se0.25',
-      'r2_k5_s22_e6_i24_o40_se0.25', 'r3_k3_s22_e6_i40_o80_se0.25',
-      'r3_k5_s11_e6_i80_o112_se0.25', 'r4_k5_s22_e6_i112_o192_se0.25',
-      'r1_k3_s11_e6_i192_o320_se0.25',
+      'r1_k3_s11_e4_i24_o24_c1_noskip',
+      'r2_k3_s22_e8_i24_o32_c1',
+      'r4_k3_s22_e8_i32_o48_c1',
+      'r5_k5_s22_e8_i48_o96',
+      'r4_k5_s11_e8_i96_o144',
+      'r2_k5_s22_e8_i144_o192',
   ]
   global_params = efficientnet_model.GlobalParams(
       batch_norm_momentum=0.99,
@@ -135,23 +60,24 @@ def efficientnet(width_coefficient=None,
       dropout_rate=dropout_rate,
       drop_connect_rate=drop_connect_rate,
       data_format='channels_last',
-      num_classes=1000,
+      num_classes=1001,
       width_coefficient=width_coefficient,
       depth_coefficient=depth_coefficient,
       depth_divisor=8,
       min_depth=None,
-      relu_fn=tf.nn.swish)
-  decoder = BlockDecoder()
+      relu_fn=tf.nn.relu)
+  decoder = efficientnet_builder.BlockDecoder()
   return decoder.decode(blocks_args), global_params
 
 
 def get_model_params(model_name, override_params):
   """Get the block args and global params for a given model."""
-  if model_name.startswith('efficientnet'):
+  if model_name.startswith('efficientnet-edgetpu'):
     width_coefficient, depth_coefficient, _, dropout_rate = (
-        efficientnet_params(model_name))
-    blocks_args, global_params = efficientnet(
-        width_coefficient, depth_coefficient, dropout_rate)
+        efficientnet_edgetpu_params(model_name))
+    blocks_args, global_params = efficientnet_edgetpu(width_coefficient,
+                                                      depth_coefficient,
+                                                      dropout_rate)
   else:
     raise NotImplementedError('model name is not pre-defined: %s' % model_name)
 

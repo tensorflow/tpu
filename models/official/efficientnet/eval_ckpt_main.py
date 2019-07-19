@@ -34,6 +34,7 @@ import tensorflow as tf
 import efficientnet_builder
 import preprocessing
 import utils
+import efficientnet_edgetpu_builder
 
 
 flags.DEFINE_string('model_name', 'efficientnet-b0', 'Model name to eval.')
@@ -51,12 +52,11 @@ flags.DEFINE_string('example_img', '/tmp/panda.jpg',
                     'Filepath for a single example image.')
 flags.DEFINE_string('labels_map_file', '/tmp/labels_map.txt',
                     'Labels map from label id to its meaning.')
+flags.DEFINE_bool('include_background_label', False,
+                  'Whether to include background as label #0')
 flags.DEFINE_integer('num_images', 5000,
                      'Number of images to eval. Use -1 to eval all images.')
 FLAGS = flags.FLAGS
-
-MEAN_RGB = [0.485 * 255, 0.456 * 255, 0.406 * 255]
-STDDEV_RGB = [0.229 * 255, 0.224 * 255, 0.225 * 255]
 
 
 class EvalCkptDriver(object):
@@ -75,8 +75,15 @@ class EvalCkptDriver(object):
     self.batch_size = batch_size
     self.num_classes = 1000
     # Model Scaling parameters
-    _, _, self.image_size, _ = efficientnet_builder.efficientnet_params(
-        model_name)
+    if model_name.startswith('efficientnet-edgetpu'):
+      _, _, self.image_size, _ = efficientnet_edgetpu_builder.efficientnet_edgetpu_params(
+          model_name)
+    elif model_name.startswith('efficientnet'):
+      _, _, self.image_size, _ = efficientnet_builder.efficientnet_params(
+          model_name)
+    else:
+      raise ValueError(
+          'Model must be either efficientnet-b* or efficientnet-edgetpu*')
 
   def restore_model(self, sess, ckpt_dir, enable_ema=True, export_ckpt=None):
     """Restore variables from checkpoint dir."""
@@ -103,10 +110,20 @@ class EvalCkptDriver(object):
 
   def build_model(self, features, is_training):
     """Build model with input features."""
-    features -= tf.constant(MEAN_RGB, shape=[1, 1, 3], dtype=features.dtype)
-    features /= tf.constant(STDDEV_RGB, shape=[1, 1, 3], dtype=features.dtype)
-    logits, _ = efficientnet_builder.build_model(
-        features, self.model_name, is_training)
+    if self.model_name.startswith('efficientnet-edgetpu'):
+      model_builder = efficientnet_edgetpu_builder
+    elif self.model_name.startswith('efficientnet'):
+      model_builder = efficientnet_builder
+    else:
+      raise ValueError(
+          'Model must be either efficientnet-b* or efficientnet-edgetpu*')
+
+    features -= tf.constant(
+        model_builder.MEAN_RGB, shape=[1, 1, 3], dtype=features.dtype)
+    features /= tf.constant(
+        model_builder.STDDEV_RGB, shape=[1, 1, 3], dtype=features.dtype)
+    logits, _ = model_builder.build_model(features, self.model_name,
+                                          is_training)
     probs = tf.nn.softmax(logits)
     probs = tf.squeeze(probs)
     return probs
@@ -138,6 +155,7 @@ class EvalCkptDriver(object):
                     enable_ema=True,
                     export_ckpt=None):
     """Build and run inference on the target images and labels."""
+    label_offset = 1 if FLAGS.include_background_label else 0
     with tf.Graph().as_default(), tf.Session() as sess:
       images, labels = self.build_dataset(image_files, labels, False)
       probs = self.build_model(images, is_training=False)
@@ -149,7 +167,7 @@ class EvalCkptDriver(object):
       for _ in range(len(image_files) // self.batch_size):
         out_probs = sess.run(probs)
         idx = np.argsort(out_probs)[::-1]
-        prediction_idx.append(idx[:5])
+        prediction_idx.append(idx[:5] - label_offset)
         prediction_prob.append([out_probs[pid] for pid in idx[:5]])
 
       # Return the top 5 predictions (idx and prob) for each image.

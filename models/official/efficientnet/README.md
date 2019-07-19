@@ -3,6 +3,7 @@
 [1] Mingxing Tan and Quoc V. Le.  EfficientNet: Rethinking Model Scaling for Convolutional Neural Networks. ICML 2019.
    Arxiv link: https://arxiv.org/abs/1905.11946.
 
+**Update: We have also released a few EdgeTPU-specialized efficientnets, see the [EfficientNet-EdgeTPU README](edgetpu/README.md).**
 
 ## 1. About EfficientNet Models
 
