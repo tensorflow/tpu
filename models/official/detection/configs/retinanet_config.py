@@ -23,7 +23,7 @@
 # need to be fine-tuned for the detection task.
 # Note that we need to trailing `/` to avoid the incorrect match.
 # [1]: https://github.com/facebookresearch/Detectron/blob/master/detectron/core/config.py#L198
-RESNET50_FROZEN_VAR_PREFIX = r'resnet\/conv2d(|_([1-9]|10))\/'
+RESNET50_FROZEN_VAR_PREFIX = r'(resnet\d+/)conv2d(|_([1-9]|10))\/'
 
 RETINANET_CFG = {
     'type': 'retinanet',
