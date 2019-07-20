@@ -7,13 +7,17 @@ Efficientnet-EdgeTPU were developed using the [AutoML MNAS framework](https://ai
 <table border="0">
 <tr>
     <td>
-    <img src="./g3doc/efficientnet-edgetpu.png" width="100%" />
+    <img src="../g3doc/efficientnet-edgetpu.png" width="100%" />
     </td>
 </tr>
 </table>
 
 ### Using Pretrained Efficientnet-EdgeTPU Checkpoints
-We have provided checkpoints for [Efficientnet-EdgeTPU-S](), [Efficientnet-EdgeTPU-S](), and [Efficientnet-EdgeTPU-L]().
+We have provided checkpoints for:
+
+* [Efficientnet-EdgeTPU-S](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/efficientnet-edgetpu-S.tar.gz)
+* [Efficientnet-EdgeTPU-M](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/efficientnet-edgetpu-M.tar.gz)
+* [Efficientnet-EdgeTPU-L](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/efficientnet-edgetpu-L.tar.gz)
 
 A quick way to use these checkpoints is to run:
 
