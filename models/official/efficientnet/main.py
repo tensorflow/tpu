@@ -28,7 +28,7 @@ import tensorflow as tf
 import efficientnet_builder
 import imagenet_input
 import utils
-import efficientnet_edgetpu_builder
+from edgetpu import efficientnet_edgetpu_builder
 from tensorflow.contrib.tpu.python.tpu import async_checkpoint
 from tensorflow.contrib.training.python.training import evaluation
 from tensorflow.core.protobuf import rewriter_config_pb2

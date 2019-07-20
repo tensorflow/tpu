@@ -24,7 +24,7 @@ import tensorflow as tf
 
 import efficientnet_builder
 import imagenet_input
-import efficientnet_edgetpu_builder
+from edgetpu import efficientnet_edgetpu_builder
 
 flags.DEFINE_string("model_name", None, "Model name to eval.")
 flags.DEFINE_string("ckpt_dir", None, "Path to the training checkpoint")

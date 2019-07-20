@@ -34,7 +34,7 @@ import tensorflow as tf
 import efficientnet_builder
 import preprocessing
 import utils
-import efficientnet_edgetpu_builder
+from edgetpu import efficientnet_edgetpu_builder
 
 
 flags.DEFINE_string('model_name', 'efficientnet-b0', 'Model name to eval.')
