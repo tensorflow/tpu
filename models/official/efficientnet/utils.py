@@ -18,7 +18,9 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import json
 import os
+import sys
 import numpy as np
 import tensorflow as tf
 
@@ -210,3 +212,172 @@ class DepthwiseConv2D(tf.keras.layers.DepthwiseConv2D, tf.layers.Layer):
   """Wrap keras DepthwiseConv2D to tf.layers."""
 
   pass
+
+
+class EvalCkptDriver(object):
+  """A driver for running eval inference.
+
+  Attributes:
+    model_name: str. Model name to eval.
+    batch_size: int. Eval batch size.
+    image_size: int. Input image size, determined by model name.
+    num_classes: int. Number of classes, default to 1000 for ImageNet.
+    include_background_label: whether to include extra background label.
+  """
+
+  def __init__(self,
+               model_name,
+               batch_size=1,
+               image_size=224,
+               num_classes=1000,
+               include_background_label=False):
+    """Initialize internal variables."""
+    self.model_name = model_name
+    self.batch_size = batch_size
+    self.num_classes = num_classes
+    self.include_background_label = include_background_label
+    self.image_size = image_size
+
+  def restore_model(self, sess, ckpt_dir, enable_ema=True, export_ckpt=None):
+    """Restore variables from checkpoint dir."""
+    sess.run(tf.global_variables_initializer())
+    checkpoint = tf.train.latest_checkpoint(ckpt_dir)
+    if enable_ema:
+      ema = tf.train.ExponentialMovingAverage(decay=0.0)
+      ema_vars = get_ema_vars()
+      var_dict = ema.variables_to_restore(ema_vars)
+      ema_assign_op = ema.apply(ema_vars)
+    else:
+      var_dict = get_ema_vars()
+      ema_assign_op = None
+
+    tf.train.get_or_create_global_step()
+    sess.run(tf.global_variables_initializer())
+    saver = tf.train.Saver(var_dict, max_to_keep=1)
+    saver.restore(sess, checkpoint)
+
+    if export_ckpt:
+      if ema_assign_op is not None:
+        sess.run(ema_assign_op)
+      saver = tf.train.Saver(max_to_keep=1, save_relative_paths=True)
+      saver.save(sess, export_ckpt)
+
+  def build_model(self, features, is_training):
+    """Build model with input features."""
+    del features, is_training
+    raise ValueError('Must be implemented by subclasses.')
+
+  def get_preprocess_fn(self):
+    raise ValueError('Must be implemented by subclsses.')
+
+  def build_dataset(self, filenames, labels, is_training):
+    """Build input dataset."""
+    filenames = tf.constant(filenames)
+    labels = tf.constant(labels)
+    dataset = tf.data.Dataset.from_tensor_slices((filenames, labels))
+
+    def _parse_function(filename, label):
+      image_string = tf.read_file(filename)
+      preprocess_fn = self.get_preprocess_fn()
+      image_decoded = preprocess_fn(
+          image_string, is_training, image_size=self.image_size)
+      image = tf.cast(image_decoded, tf.float32)
+      return image, label
+
+    dataset = dataset.map(_parse_function)
+    dataset = dataset.batch(self.batch_size)
+
+    iterator = dataset.make_one_shot_iterator()
+    images, labels = iterator.get_next()
+    return images, labels
+
+  def run_inference(self,
+                    ckpt_dir,
+                    image_files,
+                    labels,
+                    enable_ema=True,
+                    export_ckpt=None):
+    """Build and run inference on the target images and labels."""
+    label_offset = 1 if self.include_background_label else 0
+    with tf.Graph().as_default(), tf.Session() as sess:
+      images, labels = self.build_dataset(image_files, labels, False)
+      probs = self.build_model(images, is_training=False)
+
+      self.restore_model(sess, ckpt_dir, enable_ema, export_ckpt)
+
+      prediction_idx = []
+      prediction_prob = []
+      for _ in range(len(image_files) // self.batch_size):
+        out_probs = sess.run(probs)
+        idx = np.argsort(out_probs)[::-1]
+        prediction_idx.append(idx[:5] - label_offset)
+        prediction_prob.append([out_probs[pid] for pid in idx[:5]])
+
+      # Return the top 5 predictions (idx and prob) for each image.
+      return prediction_idx, prediction_prob
+
+  def eval_example_images(self,
+                          ckpt_dir,
+                          image_files,
+                          labels_map_file,
+                          enable_ema=True,
+                          export_ckpt=None):
+    """Eval a list of example images.
+
+    Args:
+      ckpt_dir: str. Checkpoint directory path.
+      image_files: List[str]. A list of image file paths.
+      labels_map_file: str. The labels map file path.
+      enable_ema: enable expotential moving average.
+      export_ckpt: export ckpt folder.
+
+    Returns:
+      A tuple (pred_idx, and pred_prob), where pred_idx is the top 5 prediction
+      index and pred_prob is the top 5 prediction probability.
+    """
+    classes = json.loads(tf.gfile.Open(labels_map_file).read())
+    pred_idx, pred_prob = self.run_inference(
+        ckpt_dir, image_files, [0] * len(image_files), enable_ema, export_ckpt)
+    for i in range(len(image_files)):
+      print('predicted class for image {}: '.format(image_files[i]))
+      for j, idx in enumerate(pred_idx[i]):
+        print('  -> top_{} ({:4.2f}%): {}  '.format(j, pred_prob[i][j] * 100,
+                                                    classes[str(idx)]))
+    return pred_idx, pred_prob
+
+  def eval_imagenet(self, ckpt_dir, imagenet_eval_glob,
+                    imagenet_eval_label, num_images, enable_ema, export_ckpt):
+    """Eval ImageNet images and report top1/top5 accuracy.
+
+    Args:
+      ckpt_dir: str. Checkpoint directory path.
+      imagenet_eval_glob: str. File path glob for all eval images.
+      imagenet_eval_label: str. File path for eval label.
+      num_images: int. Number of images to eval: -1 means eval the whole
+        dataset.
+      enable_ema: enable expotential moving average.
+      export_ckpt: export checkpoint folder.
+
+    Returns:
+      A tuple (top1, top5) for top1 and top5 accuracy.
+    """
+    imagenet_val_labels = [int(i) for i in tf.gfile.GFile(imagenet_eval_label)]
+    imagenet_filenames = sorted(tf.gfile.Glob(imagenet_eval_glob))
+    if num_images < 0:
+      num_images = len(imagenet_filenames)
+    image_files = imagenet_filenames[:num_images]
+    labels = imagenet_val_labels[:num_images]
+
+    pred_idx, _ = self.run_inference(
+        ckpt_dir, image_files, labels, enable_ema, export_ckpt)
+    top1_cnt, top5_cnt = 0.0, 0.0
+    for i, label in enumerate(labels):
+      top1_cnt += label in pred_idx[i][:1]
+      top5_cnt += label in pred_idx[i][:5]
+      if i % 100 == 0:
+        print('Step {}: top1_acc = {:4.2f}%  top5_acc = {:4.2f}%'.format(
+            i, 100 * top1_cnt / (i + 1), 100 * top5_cnt / (i + 1)))
+        sys.stdout.flush()
+    top1, top5 = 100 * top1_cnt / num_images, 100 * top5_cnt / num_images
+    print('Final: top1_acc = {:4.2f}%  top5_acc = {:4.2f}%'.format(top1, top5))
+    return top1, top5

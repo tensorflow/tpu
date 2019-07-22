@@ -12,22 +12,3 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Utils for MnasNet."""
-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
-import sys
-sys.path.insert(0, 'tpu/models/official/efficientnet')
-import utils as efficientnet_utils
-
-
-# Import common utils from efficientnet.
-archive_ckpt = efficientnet_utils.archive_ckpt
-build_learning_rate = efficientnet_utils.build_learning_rate
-build_optimizer = efficientnet_utils.build_optimizer
-drop_connect = efficientnet_utils.drop_connect
-get_ema_vars = efficientnet_utils.get_ema_vars
-DepthwiseConv2D = efficientnet_utils.DepthwiseConv2D
-EvalCkptDriver = efficientnet_utils.EvalCkptDriver

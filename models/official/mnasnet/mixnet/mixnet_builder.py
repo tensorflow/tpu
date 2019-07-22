@@ -213,6 +213,11 @@ def mixnet_m(depth_multiplier=None):
   return decoder.decode(blocks_args), global_params
 
 
+def mixnet_l(depth_multiplier=None):
+  d = 1.3 * depth_multiplier if depth_multiplier else 1.3
+  return mixnet_m(d)
+
+
 def get_model_params(model_name, override_params):
   """Get the block args and global params for a given model."""
   if model_name == 'mixnet-s':
@@ -220,7 +225,7 @@ def get_model_params(model_name, override_params):
   elif model_name == 'mixnet-m':
     blocks_args, global_params = mixnet_m()
   elif model_name == 'mixnet-l':
-    blocks_args, global_params = mixnet_m(1.4)
+    blocks_args, global_params = mixnet_l()
   else:
     raise NotImplementedError('model name is not pre-defined: %s' % model_name)
 

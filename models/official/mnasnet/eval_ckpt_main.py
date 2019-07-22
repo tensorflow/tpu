@@ -14,9 +14,9 @@
 # ==============================================================================
 """Eval checkpoint driver.
 
-This is an example evaluation script for users to understand the EfficientNet
-model checkpoints on CPU. To serve EfficientNet, please consider to export a
-`SavedModel` from checkpoints and use tf-serving to serve.
+This is an example evaluation script for users to understand the model
+checkpoints on CPU. To serve the model, please consider to export a `SavedModel`
+from checkpoints and use tf-serving to serve.
 """
 
 from __future__ import absolute_import
@@ -27,12 +27,13 @@ from absl import app
 from absl import flags
 import tensorflow as tf
 
-import efficientnet_builder
+import imagenet_input
+import mnas_utils
+import mnasnet_models
 import preprocessing
-import utils
-from edgetpu import efficientnet_edgetpu_builder
+from mixnet import mixnet_builder
 
-flags.DEFINE_string('model_name', 'efficientnet-b0', 'Model name to eval.')
+flags.DEFINE_string('model_name', 'mixnet-s', 'Model name to eval.')
 flags.DEFINE_string('runmode', 'examples', 'Running mode: examples or imagenet')
 flags.DEFINE_string(
     'imagenet_eval_glob', None, 'Imagenet eval image glob, '
@@ -53,25 +54,24 @@ flags.DEFINE_integer('num_images', 5000,
                      'Number of images to eval. Use -1 to eval all images.')
 
 
-class EvalCkptDriver(utils.EvalCkptDriver):
+class EvalCkptDriver(mnas_utils.EvalCkptDriver):
   """A driver for running eval inference."""
 
   def build_model(self, features, is_training):
     """Build model with input features."""
-    if self.model_name.startswith('efficientnet-edgetpu'):
-      model_builder = efficientnet_edgetpu_builder
-    elif self.model_name.startswith('efficientnet'):
-      model_builder = efficientnet_builder
+    if self.model_name.startswith('mixnet'):
+      model_builder = mixnet_builder
+    elif self.model_name.startswith('mnasnet'):
+      model_builder = mnasnet_models
     else:
-      raise ValueError(
-          'Model must be either efficientnet-b* or efficientnet-edgetpu*')
+      raise ValueError('Unknown model name {}'.format(self.model_name))
 
     features -= tf.constant(
-        model_builder.MEAN_RGB, shape=[1, 1, 3], dtype=features.dtype)
+        imagenet_input.MEAN_RGB, shape=[1, 1, 3], dtype=features.dtype)
     features /= tf.constant(
-        model_builder.STDDEV_RGB, shape=[1, 1, 3], dtype=features.dtype)
-    logits, _ = model_builder.build_model(
-        features, self.model_name, is_training)
+        imagenet_input.STDDEV_RGB, shape=[1, 1, 3], dtype=features.dtype)
+    logits, _ = model_builder.build_model(features, self.model_name,
+                                          is_training)
     probs = tf.nn.softmax(logits)
     probs = tf.squeeze(probs)
     return probs
@@ -83,19 +83,10 @@ class EvalCkptDriver(utils.EvalCkptDriver):
 
 def get_eval_driver(model_name, include_background_label=False):
   """Get a eval driver."""
-  if model_name.startswith('efficientnet-edgetpu'):
-    _, _, image_size, _ = (
-        efficientnet_edgetpu_builder.efficientnet_edgetpu_params(model_name))
-  elif model_name.startswith('efficientnet'):
-    _, _, image_size, _ = efficientnet_builder.efficientnet_params(model_name)
-  else:
-    raise ValueError(
-        'Model must be either efficientnet-b* or efficientnet-edgetpu*')
-
   return EvalCkptDriver(
       model_name=model_name,
       batch_size=1,
-      image_size=image_size,
+      image_size=224,
       include_background_label=include_background_label)
 
 
