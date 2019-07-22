@@ -211,7 +211,7 @@ def build_model(images,
 
 
 def build_model_base(images, model_name, training, override_params=None):
-  """A helper functiion to create a base model and return global_pool.
+  """A helper function to create a base model and return global_pool.
 
   Args:
     images: input images tensor.
