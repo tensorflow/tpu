@@ -381,13 +381,24 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
 
   # Set up training loss and learning rate.
   global_step = tf.train.get_or_create_global_step()
-  learning_rate = learning_rates.step_learning_rate_with_linear_warmup(
-      global_step,
-      params['init_learning_rate'],
-      params['warmup_learning_rate'],
-      params['warmup_steps'],
-      params['learning_rate_levels'],
-      params['learning_rate_steps'])
+  if params['learning_rate_type'] == 'step':
+    learning_rate = learning_rates.step_learning_rate_with_linear_warmup(
+        global_step,
+        params['init_learning_rate'],
+        params['warmup_learning_rate'],
+        params['warmup_steps'],
+        params['learning_rate_levels'],
+        params['learning_rate_steps'])
+  elif params['learning_rate_type'] == 'cosine':
+    learning_rate = learning_rates.cosine_learning_rate_with_linear_warmup(
+        global_step,
+        params['init_learning_rate'],
+        params['warmup_learning_rate'],
+        params['warmup_steps'],
+        params['total_steps'])
+  else:
+    raise ValueError('Unsupported learning rate type: `{}`!'
+                     .format(params['learning_rate_type']))
   # score_loss and box_loss are for logging. only total_loss is optimized.
   total_rpn_loss, rpn_score_loss, rpn_box_loss = losses.rpn_loss(
       model_outputs['rpn_score_outputs'], model_outputs['rpn_box_outputs'],

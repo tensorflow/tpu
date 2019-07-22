@@ -18,6 +18,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import numpy as np
 import tensorflow as tf
 
 
@@ -38,4 +39,22 @@ def step_learning_rate_with_linear_warmup(global_step,
                                             learning_rate_steps):
     learning_rate = tf.where(global_step >= start_step,
                              next_learning_rate, learning_rate)
+  return learning_rate
+
+
+def cosine_learning_rate_with_linear_warmup(global_step,
+                                            init_learning_rate,
+                                            warmup_learning_rate,
+                                            warmup_steps,
+                                            total_steps):
+  """Creates the cosine learning rate tensor with linear warmup."""
+  global_step = tf.cast(global_step, dtype=tf.float32)
+  linear_warmup = (warmup_learning_rate + global_step / warmup_steps *
+                   (init_learning_rate - warmup_learning_rate))
+  cosine_learning_rate = (
+      init_learning_rate * (tf.cos(
+          np.pi * (global_step - warmup_steps) / (total_steps - warmup_steps))
+                            + 1.0) / 2.0)
+  learning_rate = tf.where(global_step < warmup_steps,
+                           linear_warmup, cosine_learning_rate)
   return learning_rate

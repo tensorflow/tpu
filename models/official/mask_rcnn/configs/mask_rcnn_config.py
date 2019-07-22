@@ -86,6 +86,7 @@ MASK_RCNN_CFG = {
     'l2_weight_decay': 1e-4,
     # ---------- Training configurations ----------
     'train_batch_size': 64,
+    'learning_rate_type': 'step',  # 'step' or 'cosine'.
     'init_learning_rate': 0.08,
     'warmup_learning_rate': 0.0067,
     'warmup_steps': 500,
