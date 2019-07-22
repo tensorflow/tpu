@@ -121,11 +121,13 @@ class ImageNetInput(object):
     Returns:
       A `tf.data.Dataset` object.
     """
-    del ctx
     # Shuffle the filenames to ensure better randomization.
     file_pattern = os.path.join(
         self.data_dir, 'train-*' if self.is_training else 'validation-*')
     dataset = tf.data.Dataset.list_files(file_pattern, shuffle=self.is_training)
+
+    if ctx and ctx.num_input_pipelines > 1:
+      dataset = dataset.shard(ctx.num_input_pipelines, ctx.input_pipeline_id)
 
     if self.is_training:
       dataset = dataset.repeat()
