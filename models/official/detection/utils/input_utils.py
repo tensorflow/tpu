@@ -36,7 +36,7 @@ def pad_to_fixed_size(input_tensor, size, constant_values=0):
   padding_shape = []
 
   # Computes the padding length on the first dimension.
-  padding_length = size - tf.shape(input_tensor)[0]
+  padding_length = tf.maximum(0, size - tf.shape(input_tensor)[0])
   assert_length = tf.Assert(
       tf.greater_equal(padding_length, 0), [padding_length])
   with tf.control_dependencies([assert_length]):
@@ -238,18 +238,25 @@ def resize_and_crop_masks(masks,
   Returns:
     masks: `Tensor` of shape [N, H, W, 1] representing the scaled masks.
   """
-  mask_size = tf.shape(masks)[1:3]
-  scaled_size = tf.cast(image_scale * mask_size, tf.int32)
-  scaled_masks = tf.image.resize_images(
-      masks, scaled_size, method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
-  offset = tf.cast(offset, tf.int32)
-  scaled_masks = scaled_masks[
-      :, offset[0]:offset[0] + output_size[0],
-      offset[1]:offset[1] + output_size[1], :]
+  with tf.name_scope('resize_and_crop_masks'):
+    mask_size = tf.cast(tf.shape(masks)[1:3], tf.float32)
+    # Pad masks to avoid empty mask annotations.
+    masks = tf.concat([tf.zeros([1, mask_size[0], mask_size[1], 1]),
+                       masks], axis=0)
 
-  output_masks = tf.image.pad_to_bounding_box(
-      scaled_masks, 0, 0, output_size[0], output_size[1])
-  return output_masks
+    scaled_size = tf.cast(image_scale * mask_size, tf.int32)
+    scaled_masks = tf.image.resize_images(
+        masks, scaled_size, method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
+    offset = tf.cast(offset, tf.int32)
+    scaled_masks = scaled_masks[
+        :, offset[0]:offset[0] + output_size[0],
+        offset[1]:offset[1] + output_size[1], :]
+
+    output_masks = tf.image.pad_to_bounding_box(
+        scaled_masks, 0, 0, output_size[0], output_size[1])
+    # Remove padding.
+    output_masks = output_masks[1::]
+    return output_masks
 
 
 def random_horizontal_flip(image, boxes=None, masks=None):
