@@ -1,13 +1,13 @@
-# EfficientNets for EdgeTpu
+# Efficientnet-EdgeTPU
 
-Efficientnet-EdgeTPU are a family of image classification neural network models customized for deployment on [Google Edge TPU](https://coral.withgoogle.com/). These networks are closely related to [Efficientnets] (https://arxiv.org/abs/1905.11946)
+Efficientnet-EdgeTPU are a family of image classification neural network models customized for deployment on [Google Edge TPU](https://coral.withgoogle.com/). These networks are closely related to [Efficientnets] (https://arxiv.org/abs/1905.11946).
 
 Efficientnet-EdgeTPU were developed using the [AutoML MNAS framework](https://ai.googleblog.com/2018/08/mnasnet-towards-automating-design-of.html) by augmenting the neural network search space with building blocks tuned to execute efficiently on the EdgeTPU neural network accelerator architecture. The neural architecture search was incentivized to discover models that achieve low parameter footprint and low latency on EdgeTpu, while simultaneously achieving high classification accuracy. This neural architecture search produced a baseline model: edgetpunet-S, which is subsequently scaled up using EfficientNet's compound scaling method to produce the M and L models.
 
-<table border="0">
+<table border="0" width="70%">
 <tr>
     <td>
-    <img src="../g3doc/efficientnet-edgetpu.png" width="100%" />
+    <img src="../g3doc/efficientnet-edgetpu.png"/>
     </td>
 </tr>
 </table>
@@ -23,7 +23,7 @@ A quick way to use these checkpoints is to run:
 
 ```shell
 $ export MODEL=efficientnet-edgetpu-S
-$ wget https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/edgetpunets/${MODEL}.tar.gz
+$ wget https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/${MODEL}.tar.gz
 $ tar zxf ${MODEL}.tar.gz
 $ wget https://upload.wikimedia.org/wikipedia/commons/f/fe/Giant_Panda_in_Beijing_Zoo_1.JPG -O panda.jpg
 $ wget https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/eval_data/labels_map.txt
@@ -42,7 +42,7 @@ We provide a tool that invokes the post-training quantization tool to produce qu
 
 ```shell
 $ export MODEL=efficientnet-edgetpu-S
-$ wget https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/edgetpunets/${MODEL}.tar.gz
+$ wget https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/${MODEL}.tar.gz
 $ tar zxf ${MODEL}.tar.gz
 $ python export_model.py --model_name=$MODEL --ckpt_dir=$MODEL --data_dir=/path/to/representative_dataset/ --output_tflite=${MODEL}_quant.tflite
 ```
