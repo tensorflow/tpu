@@ -442,9 +442,12 @@ class Model(tf.keras.Model):
 
     self._avg_pooling = tf.keras.layers.GlobalAveragePooling2D(
         data_format=self._global_params.data_format)
-    self._fc = tf.layers.Dense(
-        self._global_params.num_classes,
-        kernel_initializer=dense_kernel_initializer)
+    if self._global_params.num_classes:
+      self._fc = tf.layers.Dense(
+          self._global_params.num_classes,
+          kernel_initializer=dense_kernel_initializer)
+    else:
+      self._fc = None
 
     if self._global_params.dropout_rate > 0:
       self._dropout = tf.keras.layers.Dropout(self._global_params.dropout_rate)
@@ -495,7 +498,7 @@ class Model(tf.keras.Model):
             self.endpoints['block_%s/%s' % (idx, k)] = v
             if is_reduction:
               self.endpoints['reduction_%s/%s' % (reduction_idx, k)] = v
-    self.endpoints['global_pool'] = outputs
+    self.endpoints['features'] = outputs
 
     if not features_only:
       # Calls final layers and returns logits.
@@ -506,6 +509,7 @@ class Model(tf.keras.Model):
         if self._dropout:
           outputs = self._dropout(outputs, training=training)
         self.endpoints['global_pool'] = outputs
-        outputs = self._fc(outputs)
+        if self._fc:
+          outputs = self._fc(outputs)
         self.endpoints['head'] = outputs
     return outputs
