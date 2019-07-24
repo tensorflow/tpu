@@ -1,4 +1,4 @@
-# MixNet
+# EfficientNets
 
 [1] Mingxing Tan and Quoc V. Le.  MixNet: Mixed Depthwise Convolutional Kernels.
    BMVC 2019. https://arxiv.org/abs/1907.09595

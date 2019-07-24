@@ -107,23 +107,12 @@ class DistributedExecutor(object):
   """
 
   def __init__(self,
-               strategy=None,
-               params=None,
-               model_fn=None,
-               loss_fn=None,
+               strategy,
+               params,
+               model_fn,
+               loss_fn,
                metric_fn=None,
                use_remote_tpu=False):
-    required_arguments = [
-        strategy,
-        params,
-        model_fn,
-        loss_fn,
-    ]
-    if [arg for arg in required_arguments if arg is None]:
-      raise ValueError(
-          'strategy', 'params`, `model_fn`, and `loss_fn`, '
-          'are required parameters')
-
     self._params = params
     self._model_fn = model_fn
     self._loss_fn = loss_fn
@@ -142,10 +131,9 @@ class DistributedExecutor(object):
     """Sets default summary writer for the current thread."""
     self._checkpoint_name = name
 
-  def _save_config(self):
+  def _save_config(self, model_dir):
     """Save parameters to config files if model_dir is defined."""
 
-    model_dir = self._params.model_dir
     logging.info('Save config to model_dir %s.', model_dir)
     if model_dir:
       if not tf.io.gfile.exists(model_dir):
@@ -181,6 +169,7 @@ class DistributedExecutor(object):
         with tf.GradientTape() as tape:
           logits = model(inputs, training=True)
           prediction_loss = loss_fn(labels, logits)
+          logging.info('debug prediction_loss %s', prediction_loss)
           loss = tf.reduce_mean(prediction_loss)
           loss = loss / strategy.num_replicas_in_sync
 
@@ -245,7 +234,14 @@ class DistributedExecutor(object):
 
     return test_step
 
-  def train(self, train_input_fn, eval_input_fn=None, save_config=True):
+  def train(self,
+            train_input_fn,
+            eval_input_fn=None,
+            model_dir=None,
+            steps_per_epoch=1,
+            steps_per_eval=1,
+            epochs=1,
+            save_config=True):
     """Run distributed training on Mask RCNN model.
 
     Args:
@@ -253,15 +249,19 @@ class DistributedExecutor(object):
         function.
       eval_input_fn: (Optional) same type as train_input_fn. If not None, will
         trigger evaluting metric on eval data. If None, will not run eval step.
+      model_dir: the folder path for model checkpoints.
+      steps_per_epoch: train steps per epoch.
+      steps_per_eval: test steps per evaluation.
+      epochs: number of training epoches.
       save_config: bool. Whether to save params to model_dir.
 
     Returns:
-      Training summaries including the loss and the number of trained steps.
+      Training summaries including the loss and the number of training steps.
     """
     assert train_input_fn is not None
 
     if save_config:
-      self._save_config()
+      self._save_config(model_dir)
 
     params = self._params
     strategy = self._strategy
@@ -272,7 +272,7 @@ class DistributedExecutor(object):
       train_step = self._create_train_step()
       eval_iterator = self._get_input_iterator(eval_input_fn, strategy)
       with strategy.scope():
-        total_training_steps = (params.steps_per_epoch * params.epochs)
+        total_training_steps = (steps_per_epoch * epochs)
 
         # To correctly place the model weights on accelerators,
         # model and optimizer should be created in scope.
@@ -284,7 +284,7 @@ class DistributedExecutor(object):
 
         # Training loop starts here.
         checkpoint = tf.train.Checkpoint(model=model, optimizer=optimizer)
-        latest_checkpoint_file = tf.train.latest_checkpoint(params.model_dir)
+        latest_checkpoint_file = tf.train.latest_checkpoint(model_dir)
         if latest_checkpoint_file:
           logging.info(
               'Checkpoint file %s found and restoring from '
@@ -305,7 +305,7 @@ class DistributedExecutor(object):
         train_loss = None
         while current_step < total_training_steps:
           current_step += 1
-          train_loss = train_step(strategy, model, self._loss_fn, optimizer,
+          train_loss = train_step(strategy, model, self._loss_fn(), optimizer,
                                   train_iterator).numpy().astype(float)
 
           if train_metric:
@@ -320,19 +320,19 @@ class DistributedExecutor(object):
                          total_training_steps, train_loss)
 
           # Saves model checkpoints and run validation steps at every epoch end.
-          if current_step % params.steps_per_epoch == 0:
+          if current_step % steps_per_epoch == 0:
             # To avoid repeated model saving, we do not save after the last
             # step of training.
             if current_step < total_training_steps:
-              _save_checkpoint(checkpoint, params.model_dir,
+              _save_checkpoint(checkpoint, model_dir,
                                checkpoint_name.format(step=current_step))
 
-            if eval_input_fn:
+            if eval_input_fn and metric:
               logging.info('Running evaluation after step: %s.', current_step)
               eval_metric_result = self._run_evaluation(strategy, current_step,
                                                         model, metric,
                                                         eval_iterator,
-                                                        params.steps_per_eval)
+                                                        steps_per_eval)
               logging.info('Step: %s evalation metric = %s.', current_step,
                            eval_metric_result)
 
@@ -341,22 +341,28 @@ class DistributedExecutor(object):
               metric.reset_states()
               train_metric.reset_states()
 
-        _save_checkpoint(checkpoint, params.model_dir,
+        _save_checkpoint(checkpoint, model_dir,
                          checkpoint_name.format(step=current_step))
 
-        if eval_input_fn:
+        if eval_input_fn and metric:
           logging.info('Running final evaluation after training is complete.')
           eval_metric_result = self._run_evaluation(strategy, current_step,
                                                     model, metric,
                                                     eval_iterator,
-                                                    params.steps_per_eval)
+                                                    steps_per_eval)
           logging.info('Final evaluation metric = %s.', eval_metric_result)
 
         # TODO(yeqing): Finish the summary writer to work with tensorboard.
+    return model
 
   def _run_evaluation(self, strategy, current_training_step, model, metric,
                       test_iterator, eval_steps):
     """Runs validation steps and aggregate metrics."""
+    if not test_iterator or not metric:
+      logging.warning(
+          'Both test_iterator (%s) and metrics (%s) must not be None.',
+          test_iterator, metric)
+      return None
     test_step = self._create_test_step()
     for _ in range(eval_steps):
       test_step(strategy, model, metric, test_iterator)
