@@ -30,6 +30,8 @@ from dataloader import input_reader
 from dataloader import mode_keys as ModeKeys
 from executor import tpu_executor
 from modeling import model_builder
+import sys
+sys.path.insert(0, 'tpu/models')
 from hyperparameters import common_hparams_flags
 from hyperparameters import common_tpu_flags
 from hyperparameters import params_dict
