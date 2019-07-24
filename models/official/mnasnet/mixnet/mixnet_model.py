@@ -16,7 +16,7 @@
 
 [1] Mingxing Tan, Quoc V. Le
   MixNet: Mixed Depthwise Convolutional Kernels.
-  arXiv: TBD
+  BMVC 2019. https://arxiv.org/abs/1907.09595
 """
 
 from __future__ import absolute_import
