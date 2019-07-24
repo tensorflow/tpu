@@ -123,7 +123,7 @@ def round_repeats(repeats, global_params):
   return int(math.ceil(multiplier * repeats))
 
 
-class MBConvBlock(object):
+class MBConvBlock(tf.keras.layers.Layer):
   """A class of MBConv: Mobile Inverted Residual Bottleneck.
 
   Attributes:
@@ -137,6 +137,7 @@ class MBConvBlock(object):
       block_args: BlockArgs, arguments to create a Block.
       global_params: GlobalParams, a set of global parameters.
     """
+    super(MBConvBlock, self).__init__()
     self._block_args = block_args
     self._batch_norm_momentum = global_params.batch_norm_momentum
     self._batch_norm_epsilon = global_params.batch_norm_epsilon
