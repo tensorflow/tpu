@@ -9,6 +9,12 @@ pip install Cython matplotlib opencv-python-headless pyyaml Pillow && \
 pip install 'git+https://github.com/cocodataset/cocoapi#egg=pycocotools&subdirectory=PythonAPI'
 ```
 
+Next, download the code from tpu github repository or use the pre-installed Google Cloud VM.
+
+```bash
+git clone https://github.com/tensorflow/tpu/
+```
+
 ## Train RetinaNet on TPU
 ### Train a vanilla ResNet-50 based RetinaNet.
 
