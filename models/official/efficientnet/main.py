@@ -80,6 +80,11 @@ flags.DEFINE_string(
     'mode', default='train_and_eval',
     help='One of {"train_and_eval", "train", "eval"}.')
 
+flags.DEFINE_string(
+    'autoaugment_name', default=None,
+    help='If value is None, then AutoAugment will not be used. Available '
+    'options are: v0.')
+
 flags.DEFINE_integer(
     'train_steps', default=218949,
     help=('The number of steps to use for training. Default is 218949 steps'
@@ -633,7 +638,8 @@ def main(unused_argv):
           use_bfloat16=FLAGS.use_bfloat16,
           transpose_input=FLAGS.transpose_input,
           selection=select_train if is_training else select_eval,
-          include_background_label=include_background_label)
+          include_background_label=include_background_label,
+          autoaugment_name=FLAGS.autoaugment_name)
     else:
       if FLAGS.data_dir == FAKE_DATA_DIR:
         tf.logging.info('Using fake dataset.')
@@ -648,7 +654,8 @@ def main(unused_argv):
           image_size=input_image_size,
           num_parallel_calls=FLAGS.num_parallel_calls,
           use_bfloat16=FLAGS.use_bfloat16,
-          include_background_label=include_background_label)
+          include_background_label=include_background_label,
+          autoaugment_name=FLAGS.autoaugment_name)
 
   imagenet_train = build_imagenet_input(is_training=True)
   imagenet_eval = build_imagenet_input(is_training=False)

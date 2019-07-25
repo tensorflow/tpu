@@ -58,6 +58,9 @@ class ImageNetTFExampleInput(object):
     image_size: `int` for image size (both width and height).
     transpose_input: 'bool' for whether to use the double transpose trick
     include_background_label: If true, label #0 is reserved for background.
+    autoaugment_name: `string` that is the name of the autoaugment policy
+        to apply to the image. If the value is `None` autoaugment will not be
+        applied.
   """
   __metaclass__ = abc.ABCMeta
 
@@ -67,7 +70,8 @@ class ImageNetTFExampleInput(object):
                num_cores=8,
                image_size=224,
                transpose_input=False,
-               include_background_label=False):
+               include_background_label=False,
+               autoaugment_name=None):
     self.image_preprocessing_fn = preprocessing.preprocess_image
     self.is_training = is_training
     self.use_bfloat16 = use_bfloat16
@@ -75,6 +79,7 @@ class ImageNetTFExampleInput(object):
     self.transpose_input = transpose_input
     self.image_size = image_size
     self.include_background_label = include_background_label
+    self.autoaugment_name = autoaugment_name
 
   def set_shapes(self, batch_size, images, labels):
     """Statically set the batch_size dimension."""
@@ -112,7 +117,8 @@ class ImageNetTFExampleInput(object):
         image_bytes=image_bytes,
         is_training=self.is_training,
         image_size=self.image_size,
-        use_bfloat16=self.use_bfloat16)
+        use_bfloat16=self.use_bfloat16,
+        autoaugment_name=self.autoaugment_name)
 
     # The labels will be in range [1,1000], 0 is reserved for background
     label = tf.cast(
@@ -221,7 +227,8 @@ class ImageNetInput(ImageNetTFExampleInput):
                image_size=224,
                num_parallel_calls=64,
                cache=False,
-               include_background_label=False):
+               include_background_label=False,
+               autoaugment_name=None):
     """Create an input from TFRecord files.
 
     Args:
@@ -236,13 +243,17 @@ class ImageNetInput(ImageNetTFExampleInput):
       num_parallel_calls: concurrency level to use when reading data from disk.
       cache: if true, fill the dataset by repeating from its cache.
       include_background_label: if true, label #0 is reserved for background.
+      autoaugment_name: `string` that is the name of the autoaugment policy
+          to apply to the image. If the value is `None` autoaugment will not be
+          applied.
     """
     super(ImageNetInput, self).__init__(
         is_training=is_training,
         image_size=image_size,
         use_bfloat16=use_bfloat16,
         transpose_input=transpose_input,
-        include_background_label=include_background_label)
+        include_background_label=include_background_label,
+        autoaugment_name=autoaugment_name)
     self.data_dir = data_dir
     if self.data_dir == 'null' or not self.data_dir:
       self.data_dir = None
@@ -322,6 +333,7 @@ class ImageNetBigtableInput(ImageNetTFExampleInput):
                use_bfloat16,
                transpose_input,
                selection,
+               autoaugment_name,
                include_background_label=False):
     """Constructs an ImageNet input from a BigtableSelection.
 
@@ -330,13 +342,17 @@ class ImageNetBigtableInput(ImageNetTFExampleInput):
       use_bfloat16: If True, use bfloat16 precision; else use float32.
       transpose_input: 'bool' for whether to use the double transpose trick
       selection: a BigtableSelection specifying a part of a Bigtable.
+      autoaugment_name: `string` that is the name of the autoaugment policy
+          to apply to the image. If the value is `None` autoaugment will not be
+          applied.
       include_background_label: if true, label #0 is reserved for background.
     """
     super(ImageNetBigtableInput, self).__init__(
         is_training=is_training,
         use_bfloat16=use_bfloat16,
         transpose_input=transpose_input,
-        include_background_label=include_background_label)
+        include_background_label=include_background_label,
+        autoaugment_name=autoaugment_name)
     self.selection = selection
 
   def make_source_dataset(self, index, num_hosts):
