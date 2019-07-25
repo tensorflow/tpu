@@ -202,13 +202,13 @@ def main(unused_argv):
         """Per-Replica StepFn."""
         images, labels = inputs
         with tf.GradientTape() as tape:
-          logits = model(images, training=True)
+          predictions = model(images, training=True)
 
           # Loss calculations.
           #
           # Part 1: Prediction loss.
           prediction_loss = tf.keras.losses.sparse_categorical_crossentropy(
-              labels, logits)
+              labels, predictions)
           loss1 = tf.reduce_mean(prediction_loss)
           # Part 2: Model weights regularization
           loss2 = tf.reduce_sum(model.losses)
@@ -220,7 +220,7 @@ def main(unused_argv):
         grads = tape.gradient(loss, model.trainable_variables)
         optimizer.apply_gradients(zip(grads, model.trainable_variables))
         training_loss.update_state(loss)
-        training_accuracy.update_state(labels, logits)
+        training_accuracy.update_state(labels, predictions)
 
       strategy.experimental_run_v2(step_fn, args=(next(iterator),))
 
@@ -229,12 +229,12 @@ def main(unused_argv):
       """Evaluation StepFn."""
       def step_fn(inputs):
         images, labels = inputs
-        logits = model(images, training=False)
+        predictions = model(images, training=False)
         loss = tf.keras.losses.sparse_categorical_crossentropy(labels,
-                                                               logits)
+                                                               predictions)
         loss = safe_mean(loss) / strategy.num_replicas_in_sync
         test_loss.update_state(loss)
-        test_accuracy.update_state(labels, logits)
+        test_accuracy.update_state(labels, predictions)
 
       strategy.experimental_run_v2(step_fn, args=(next(iterator),))
 

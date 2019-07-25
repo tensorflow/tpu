@@ -132,13 +132,13 @@ def main(unused_argv):
     """Training StepFn."""
     images, labels = inputs
     with tf.GradientTape() as tape:
-      logits = model(images, training=True)
+      predictions = model(images, training=True)
 
       # Loss calculations.
       #
       # Part 1: Prediciton loss.
       prediction_loss = tf.keras.losses.sparse_categorical_crossentropy(
-          labels, logits)
+          labels, predictions)
       loss1 = tf.reduce_mean(prediction_loss)
       # Part 2: Model weights regularization
       loss2 = tf.reduce_sum(model.losses)
@@ -151,18 +151,18 @@ def main(unused_argv):
     update_vars = optimizer.apply_gradients(
         zip(grads, model.trainable_variables))
     update_loss = training_loss.update_state(loss)
-    update_accuracy = training_accuracy.update_state(labels, logits)
+    update_accuracy = training_accuracy.update_state(labels, predictions)
     with tf.control_dependencies([update_vars, update_loss, update_accuracy]):
       return tf.identity(loss)
 
   def test_step(inputs):
     """Evaluation StepFn."""
     images, labels = inputs
-    logits = model(images, training=False)
-    loss = tf.keras.losses.sparse_categorical_crossentropy(labels, logits)
+    predictions = model(images, training=False)
+    loss = tf.keras.losses.sparse_categorical_crossentropy(labels, predictions)
     loss = tf.reduce_mean(loss) / strategy.num_replicas_in_sync
     update_loss = test_loss.update_state(loss)
-    update_accuracy = test_accuracy.update_state(labels, logits)
+    update_accuracy = test_accuracy.update_state(labels, predictions)
     with tf.control_dependencies([update_loss, update_accuracy]):
       return tf.identity(loss)
 
