@@ -25,7 +25,7 @@ from absl import flags
 
 import tensorflow as tf
 
-from configs import retinanet_config
+from configs import factory
 from dataloader import input_reader
 from dataloader import mode_keys as ModeKeys
 from executor import tpu_executor
@@ -42,7 +42,11 @@ common_hparams_flags.define_common_hparams_flags()
 
 flags.DEFINE_string(
     'mode', default='train',
-    help='Mode to run: train or eval or train_and_eval (default: train)')
+    help='Mode to run: `train`, `eval` or `train_and_eval`.')
+
+flags.DEFINE_string(
+    'model', default='retinanet',
+    help='Model to run: Currently only support `retinanet`.')
 
 flags.DEFINE_integer(
     'num_cores', default=8, help='Number of TPU cores for training.')
@@ -60,8 +64,7 @@ def save_config(params, model_dir):
 def main(argv):
   del argv  # Unused.
 
-  params = params_dict.ParamsDict(
-      retinanet_config.RETINANET_CFG, retinanet_config.RETINANET_RESTRICTIONS)
+  params = factory.config_generator(FLAGS.model)
 
   if FLAGS.config_file:
     params = params_dict.override_params_dict(
