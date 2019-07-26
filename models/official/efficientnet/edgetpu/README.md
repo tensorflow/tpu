@@ -1,8 +1,8 @@
-# Efficientnet-EdgeTPU
+# EfficientNet-EdgeTPU
 
-Efficientnet-EdgeTPU are a family of image classification neural network models customized for deployment on [Google Edge TPU](https://coral.withgoogle.com/). These networks are closely related to [Efficientnets] (https://arxiv.org/abs/1905.11946).
+EfficientNet-EdgeTPU are a family of image classification neural network models customized for deployment on [Google Edge TPU](https://coral.withgoogle.com/). These networks are closely related to [EfficientNets] (https://arxiv.org/abs/1905.11946).
 
-Efficientnet-EdgeTPU were developed using the [AutoML MNAS framework](https://ai.googleblog.com/2018/08/mnasnet-towards-automating-design-of.html) by augmenting the neural network search space with building blocks tuned to execute efficiently on the EdgeTPU neural network accelerator architecture. The neural architecture search was incentivized to discover models that achieve low parameter footprint and low latency on EdgeTpu, while simultaneously achieving high classification accuracy. This neural architecture search produced a baseline model: edgetpunet-S, which is subsequently scaled up using EfficientNet's compound scaling method to produce the M and L models.
+EfficientNet-EdgeTPU were developed using the [AutoML MNAS framework](https://ai.googleblog.com/2018/08/mnasnet-towards-automating-design-of.html) by augmenting the neural network search space with building blocks tuned to execute efficiently on the EdgeTPU neural network accelerator architecture. The neural architecture search was incentivized to discover models that achieve low parameter footprint and low latency on EdgeTpu, while simultaneously achieving high classification accuracy. This neural architecture search produced a baseline model: edgetpunet-S, which is subsequently scaled up using EfficientNet's compound scaling method to produce the M and L models.
 
 <table border="0" width="70%">
 <tr>
@@ -12,12 +12,12 @@ Efficientnet-EdgeTPU were developed using the [AutoML MNAS framework](https://ai
 </tr>
 </table>
 
-### Using Pretrained Efficientnet-EdgeTPU Checkpoints
+### Using Pretrained EfficientNet-EdgeTPU Checkpoints
 We have provided checkpoints for:
 
-* [Efficientnet-EdgeTPU-S](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/efficientnet-edgetpu-S.tar.gz)
-* [Efficientnet-EdgeTPU-M](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/efficientnet-edgetpu-M.tar.gz)
-* [Efficientnet-EdgeTPU-L](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/efficientnet-edgetpu-L.tar.gz)
+* [EfficientNet-EdgeTPU-S](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/efficientnet-edgetpu-S.tar.gz)
+* [EfficientNet-EdgeTPU-M](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/efficientnet-edgetpu-M.tar.gz)
+* [EfficientNet-EdgeTPU-L](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/efficientnet-edgetpu-L.tar.gz)
 
 A quick way to use these checkpoints is to run:
 
@@ -31,7 +31,7 @@ $ python eval_ckpt_main.py --model_name=$MODEL --ckpt_dir=$MODEL --example_img=p
 ```
 Note that these models were trained with label#0 marked as the background label for easier deployment.
 
-### Training Efficientnet-EdgeTPU on Cloud TPUs
+### Training EfficientNet-EdgeTPU on Cloud TPUs
 
 
 ### Post-training quantization
