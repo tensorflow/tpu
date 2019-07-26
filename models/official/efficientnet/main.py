@@ -484,13 +484,19 @@ def model_fn(features, labels, mode, params):
     saver = tf.train.Saver(restore_vars_dict)
     return tf.train.Scaffold(saver=saver)
 
+  if has_moving_average_decay and not is_training:
+    # Only apply scaffold for eval jobs.
+    scaffold_fn = _scaffold_fn
+  else:
+    scaffold_fn = None
+
   return tf.contrib.tpu.TPUEstimatorSpec(
       mode=mode,
       loss=loss,
       train_op=train_op,
       host_call=host_call,
       eval_metrics=eval_metrics,
-      scaffold_fn=_scaffold_fn if has_moving_average_decay else None)
+      scaffold_fn=scaffold_fn)
 
 
 def _verify_non_empty_string(value, field_name):
