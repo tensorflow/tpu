@@ -302,6 +302,8 @@ class EvalCkptDriver(object):
     with tf.Graph().as_default(), tf.Session() as sess:
       images, labels = self.build_dataset(image_files, labels, False)
       probs = self.build_model(images, is_training=False)
+      if isinstance(probs, tuple):
+        probs = probs[0]
 
       self.restore_model(sess, ckpt_dir, enable_ema, export_ckpt)
 
