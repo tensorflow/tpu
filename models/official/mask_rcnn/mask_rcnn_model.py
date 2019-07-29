@@ -40,7 +40,7 @@ import roi_ops
 import spatial_transform_ops
 import training_ops
 import sys
-sys.path.insert(0, 'tpu/models/official/mnasnet')
+sys.path.append('tpu/models/official/mnasnet')
 import mnasnet_models
 
 
