@@ -32,7 +32,7 @@ $ python eval_ckpt_main.py --model_name=$MODEL --ckpt_dir=$MODEL --example_img=p
 Note that these models were trained with label#0 marked as the background label for easier deployment.
 
 ### Training EfficientNet-EdgeTPU on Cloud TPUs
-
+Please refer to our tutorial: https://cloud.google.com/tpu/docs/tutorials/efficientnet
 
 ### Post-training quantization
 
