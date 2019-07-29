@@ -24,6 +24,7 @@ import tensorflow as tf
 import anchors
 import coco_utils
 import preprocess_ops
+import spatial_transform_ops
 from object_detection import tf_example_decoder
 
 
@@ -315,19 +316,22 @@ class InputReader(object):
             num_parallel_batches=64,
             drop_remainder=True))
 
-    # Transposes images for TPU performance.
-    # Given the batch size, the batch dimesion (N) goes to either the minor
-    # ((H, W, C, N) when N > C) or the second-minor ((H, W, N, C) when N < C)
-    # dimension. Here, we assume N is 4 or 8 and C is 3, so we use
-    # (H, W, C, N).
-    if (params['transpose_input'] and
-        self._mode == tf.estimator.ModeKeys.TRAIN):
-
-      def _transpose_images(features, labels):
-        features['images'] = tf.transpose(features['images'], [1, 2, 3, 0])
+    # Enable TPU performance optimization: transpose input, space-to-depth
+    # image transform, or both.
+    if self._mode == tf.estimator.ModeKeys.TRAIN and (
+        params['transpose_input'] or
+        params['conv0_space_to_depth_block_size'] != 0):
+      def _transform_images(features, labels):
+        """Transforms images."""
+        images = features['images']
+        # Transforms images for TPU performance.
+        images = spatial_transform_ops.fused_transpose_and_space_to_depth(
+            images, params['conv0_space_to_depth_block_size'],
+            params['transpose_input'])
+        features['images'] = images
         return features, labels
 
-      dataset = dataset.map(_transpose_images, num_parallel_calls=64)
+      dataset = dataset.map(_transform_images, num_parallel_calls=16)
 
     dataset = dataset.prefetch(tf.contrib.data.AUTOTUNE)
 

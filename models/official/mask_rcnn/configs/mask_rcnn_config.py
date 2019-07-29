@@ -104,7 +104,10 @@ MASK_RCNN_CFG = {
     # `tf.Tensor` names are unchanged. One can use the
     # `skip_checkpoint_variables` to skip some variables.
     'warm_start_path': '',
+    # TPU performance optimization.
     'precision': 'bfloat16',
+    'conv0_kernel_size': 7,
+    'conv0_space_to_depth_block_size': 2,
     'use_host_call': False,
     # One of ['momentum', 'adam', 'adadelta', 'adagrad', 'rmsprop', 'lars'].
     'optimizer': 'momentum',

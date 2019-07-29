@@ -111,10 +111,19 @@ def build_model_graph(features, labels, is_training, params):
   is_gpu_inference = (not is_training and use_batched_nms)
   model_outputs = {}
 
-  if params['transpose_input'] and is_training:
-    features['images'] = tf.transpose(features['images'], [3, 0, 1, 2])
+  if is_training:
+    if params['transpose_input']:
+      features['images'] = tf.transpose(features['images'], [2, 0, 1, 3])
   batch_size, image_height, image_width, _ = (
       features['images'].get_shape().as_list())
+
+  # Handles space-to-depth transform.
+  conv0_space_to_depth_block_size = 0
+  if is_training:
+    conv0_space_to_depth_block_size = params['conv0_space_to_depth_block_size']
+    image_height *= conv0_space_to_depth_block_size
+    image_width *= conv0_space_to_depth_block_size
+
   if 'source_ids' not in features:
     features['source_ids'] = -1 * tf.ones([batch_size], dtype=tf.float32)
 
@@ -127,6 +136,8 @@ def build_model_graph(features, labels, is_training, params):
     with tf.variable_scope(params['backbone']):
       resnet_fn = resnet.resnet_v1(
           params['backbone'],
+          conv0_kernel_size=params['conv0_kernel_size'],
+          conv0_space_to_depth_block_size=conv0_space_to_depth_block_size,
           num_batch_norm_group=params['num_batch_norm_group'])
       backbone_feats = resnet_fn(
           features['images'],

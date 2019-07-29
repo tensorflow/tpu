@@ -19,7 +19,9 @@ from __future__ import division
 from __future__ import print_function
 
 import tensorflow as tf
+import spatial_transform_ops
 import tpu_normalization
+
 
 _BATCH_NORM_DECAY = 0.997
 _BATCH_NORM_EPSILON = 1e-4
@@ -91,34 +93,6 @@ def batch_norm_relu(inputs,
   return inputs
 
 
-def fixed_padding(inputs, kernel_size, data_format='channels_last'):
-  """Pads the input along the spatial dimensions independently of input size.
-
-  Args:
-    inputs: `Tensor` of size `[batch, channels, height, width]` or
-        `[batch, height, width, channels]` depending on `data_format`.
-    kernel_size: `int` kernel size to be used for `conv2d` or max_pool2d`
-        operations. Should be a positive integer.
-    data_format: `str` either "channels_first" for `[batch, channels, height,
-        width]` or "channels_last for `[batch, height, width, channels]`.
-
-  Returns:
-    A padded `Tensor` of the same `data_format` with size either intact
-    (if `kernel_size == 1`) or padded (if `kernel_size > 1`).
-  """
-  pad_total = kernel_size - 1
-  pad_beg = pad_total // 2
-  pad_end = pad_total - pad_beg
-  if data_format == 'channels_first':
-    padded_inputs = tf.pad(
-        inputs, [[0, 0], [0, 0], [pad_beg, pad_end], [pad_beg, pad_end]])
-  else:
-    padded_inputs = tf.pad(
-        inputs, [[0, 0], [pad_beg, pad_end], [pad_beg, pad_end], [0, 0]])
-
-  return padded_inputs
-
-
 def conv2d_fixed_padding(inputs,
                          filters,
                          kernel_size,
@@ -141,7 +115,8 @@ def conv2d_fixed_padding(inputs,
     A `Tensor` of shape `[batch, filters, height_out, width_out]`.
   """
   if strides > 1:
-    inputs = fixed_padding(inputs, kernel_size, data_format=data_format)
+    inputs = spatial_transform_ops.fixed_padding(inputs, kernel_size,
+                                                 data_format=data_format)
 
   return tf.layers.conv2d(
       inputs=inputs,
@@ -370,9 +345,118 @@ def block_group(inputs,
   return tf.identity(inputs, name)
 
 
+def transform_space_to_depth_kernel(kernel, dtype, block_size=2):
+  """Transforms the convolution kernel for space-to-depth computation.
+
+  This function transforms the kernel for space-to-depth convolution. For
+  example, the kernel size is [7, 7, 3, 64] (conv0 in ResNet), and the
+  block_size is 2. First the kernel is padded with (top and left) zeros to
+  [8, 8, 3, 64]. Then, it is transformed to [4, 4, 12, 64] and casted to the
+  `dtype`.
+
+  Args:
+    kernel: A tensor with a shape of [height, width, in_depth, out_depth].
+    dtype: The type of the input of the convoluation kernel. The kernel will be
+      casted to this type.
+    block_size: An `int` to indicate the block size in space-to-depth
+      transform.
+
+  Returns:
+    A transformed kernel that has the same type as `dtype`. The shape is
+    [height // block_size, width // block_size, in_depth * (block_size ** 2),
+     out_depth].
+  """
+  def _round_up(num, multiple):
+    remainder = num % multiple
+    if remainder == 0:
+      return num
+    else:
+      return num + multiple - remainder
+
+  h, w, in_d, out_d = kernel.get_shape().as_list()
+  pad_h = _round_up(h, block_size) - h
+  pad_w = _round_up(w, block_size) - w
+  kernel = tf.pad(
+      kernel, paddings=tf.constant([[pad_h, 0], [pad_w, 0], [0, 0,], [0, 0]]),
+      mode='CONSTANT', constant_values=0.)
+  kernel = tf.reshape(kernel, [(h + pad_h) // block_size, block_size,
+                               (w + pad_w) // block_size, block_size,
+                               in_d, out_d])
+  kernel = tf.transpose(kernel, [0, 2, 1, 3, 4, 5])
+  kernel = tf.reshape(kernel, [(h + pad_h) // block_size,
+                               (w + pad_w) // block_size,
+                               in_d * (block_size ** 2), out_d])
+  kernel = tf.cast(kernel, dtype)
+
+  return kernel
+
+
+def conv0_space_to_depth(inputs, filters, kernel_size, strides,
+                         data_format='channels_last',
+                         space_to_depth_block_size=2):
+  """Uses space-to-depth convolution for conv0.
+
+  This function replaces the first convolution (conv0) in ResNet with
+  space-to-depth transformation. It creates a convolution kernel, whose
+  dimension and name are the same as those of conv0. The `inputs` is an image
+  tensor that already has the space-to-depth transform.
+
+  Args:
+    inputs: `Tensor` of size `[batch, height_in, width_in, channels]`.
+    filters: An `int` number of filters in the convolution.
+    kernel_size: An `int` size of the kernel to be used in the convolution.
+    strides: A `int` strides of the convolution.
+    data_format: A `str` either "channels_first" for `[batch, channels, height,
+        width]` or "channels_last for `[batch, height, width, channels]`.
+    space_to_depth_block_size: An `int` indicates the block size of
+      space-to-depth convolution for conv0. Specific to ResNet, this currently
+      supports only block_size=2.
+
+  Returns:
+    A `Tensor` with the same type as `inputs`.
+
+  Raises:
+    ValueError if `space_to_depth_block_size` is not 2.
+  """
+  if space_to_depth_block_size != 2:
+    raise ValueError('Space-to-depth does not support block_size (%d).' %
+                     space_to_depth_block_size)
+
+  conv0 = tf.layers.Conv2D(
+      filters=filters,
+      kernel_size=kernel_size,
+      strides=strides,
+      padding=('SAME' if strides == 1 else 'VALID'),
+      data_format=data_format,
+      use_bias=False,
+      kernel_initializer=tf.variance_scaling_initializer())
+  # Use the image size without space-to-depth transform as the input of conv0.
+  # This allows the kernel size to be the same as the original conv0 such that
+  # the model is able to load the pre-trained ResNet checkpoint.
+  batch_size, h, w, c = inputs.get_shape().as_list()
+  conv0.build([batch_size,
+               h * space_to_depth_block_size,
+               w * space_to_depth_block_size,
+               c / (space_to_depth_block_size ** 2)])
+
+  kernel = conv0.weights[0]
+  kernel = transform_space_to_depth_kernel(
+      kernel, inputs.dtype, block_size=space_to_depth_block_size)
+
+  inputs = spatial_transform_ops.space_to_depth_fixed_padding(
+      inputs, kernel_size, data_format, space_to_depth_block_size)
+
+  return tf.nn.conv2d(
+      input=inputs, filter=kernel, strides=[1, 1, 1, 1], padding='VALID',
+      data_format='NHWC' if data_format == 'channels_last' else 'NCHW',
+      name='conv2d/Conv2D')
+
+
 def resnet_v1_generator(block_fn,
                         layers,
                         data_format='channels_last',
+                        conv0_kernel_size=7,
+                        space_to_depth_block_size=0,
                         num_batch_norm_group=None):
   """Generator of ResNet v1 model with classification layers removed.
 
@@ -388,6 +472,10 @@ def resnet_v1_generator(block_fn,
       the same resolution.
     data_format: `str` either "channels_first" for `[batch, channels, height,
         width]` or "channels_last for `[batch, height, width, channels]`.
+    conv0_kernel_size: an integer of the kernel size of the first convolution.
+    space_to_depth_block_size: an integer indicates the block size of
+      space-to-depth convolution for conv0. `0` means use the original conv2d
+      in ResNet.
     num_batch_norm_group: If positive, use tpu specifc batch norm implemenation
       which calculates mean and variance accorss all the replicas. Number of
       groups to normalize in the distributed batch normalization. Replicas will
@@ -400,12 +488,22 @@ def resnet_v1_generator(block_fn,
   """
   def model(inputs, is_training_bn=False):
     """Creation of the model graph."""
-    inputs = conv2d_fixed_padding(
-        inputs=inputs,
-        filters=64,
-        kernel_size=7,
-        strides=2,
-        data_format=data_format)
+    if space_to_depth_block_size != 0:
+      # conv0 uses space-to-depth transform for TPU performance.
+      inputs = conv0_space_to_depth(
+          inputs=inputs,
+          filters=64,
+          kernel_size=conv0_kernel_size,
+          strides=2,
+          data_format=data_format,
+          space_to_depth_block_size=space_to_depth_block_size)
+    else:
+      inputs = conv2d_fixed_padding(
+          inputs=inputs,
+          filters=64,
+          kernel_size=conv0_kernel_size,
+          strides=2,
+          data_format=data_format)
     inputs = tf.identity(inputs, 'initial_conv')
     inputs = batch_norm_relu(
         inputs,
@@ -468,6 +566,8 @@ def resnet_v1_generator(block_fn,
 
 def resnet_v1(resnet_model,
               data_format='channels_last',
+              conv0_kernel_size=7,
+              conv0_space_to_depth_block_size=2,
               num_batch_norm_group=None):
   """Returns the ResNet model for a given size and number of output classes."""
   model_params = {
@@ -487,4 +587,7 @@ def resnet_v1(resnet_model,
       params['block'],
       params['layers'],
       data_format,
-      num_batch_norm_group=num_batch_norm_group)
+      conv0_kernel_size,
+      conv0_space_to_depth_block_size,
+      num_batch_norm_group=num_batch_norm_group,
+      )
