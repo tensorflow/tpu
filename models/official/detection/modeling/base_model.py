@@ -24,6 +24,8 @@ import re
 import six
 import tensorflow as tf
 
+from modeling import learning_rates
+
 
 def filter_trainable_variables(variables, frozen_variable_prefix):
   """Filter trainable varialbes.
@@ -66,28 +68,6 @@ class OptimizerFactory(object):
     return self._optimizer(learning_rate)
 
 
-class LearningRateFactory(object):
-  """Class to generate learning rate tensor."""
-
-  def __init__(self, params):
-    """Creates the step learning rate tensor with linear warmup."""
-    self._params = params
-
-  def __call__(self, global_step):
-    linear_warmup = (
-        self._params.warmup_learning_rate +
-        tf.cast(global_step, dtype=tf.float32) / self._params.warmup_steps *
-        (self._params.init_learning_rate - self._params.warmup_learning_rate))
-    learning_rate = tf.where(global_step < self._params.warmup_steps,
-                             linear_warmup, self._params.init_learning_rate)
-
-    for next_learning_rate, start_step in zip(self._params.learning_rate_levels,
-                                              self._params.learning_rate_steps):
-      learning_rate = tf.where(global_step >= start_step,
-                               next_learning_rate, learning_rate)
-    return learning_rate
-
-
 class Model(object):
   """Base class for model function."""
 
@@ -98,7 +78,8 @@ class Model(object):
 
     # Optimization.
     self._optimizer_fn = OptimizerFactory(params.train.optimizer)
-    self._learning_rate_fn = LearningRateFactory(params.train.learning_rate)
+    self._learning_rate_fn = learning_rates.learning_rate_generator(
+        params.train.learning_rate)
 
     self._frozen_variable_prefix = params.train.frozen_variable_prefix
 

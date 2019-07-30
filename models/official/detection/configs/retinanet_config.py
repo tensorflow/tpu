@@ -40,6 +40,7 @@ RETINANET_CFG = {
             'momentum': 0.9,
         },
         'learning_rate': {
+            'type': 'step',
             'warmup_learning_rate': 0.0067,
             'warmup_steps': 500,
             'init_learning_rate': 0.08,
