@@ -46,6 +46,7 @@ RETINANET_CFG = {
             'init_learning_rate': 0.08,
             'learning_rate_levels': [0.008, 0.0008],
             'learning_rate_steps': [15000, 20000],
+            'total_steps': 22500,
         },
         'checkpoint': {
             'path': '',
@@ -168,6 +169,7 @@ RETINANET_CFG = {
 }
 
 RETINANET_RESTRICTIONS = [
+    'train.total_steps == train.learning_rate.total_steps',
     'architecture.use_bfloat16 == retinanet_parser.use_bfloat16',
     'anchor.min_level == fpn.min_level',
     'anchor.max_level == fpn.max_level',
