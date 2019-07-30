@@ -48,6 +48,8 @@ tf.app.flags.DEFINE_string(
     'ip address and port will be directly used.')
 tf.app.flags.DEFINE_boolean('grpc', True, 'True if gRPC, False if REST.')
 tf.app.flags.DEFINE_string('image_path', '', 'The path of local image.')
+tf.app.flags.DEFINE_string('input_name', 'input',
+                           'The name of the model input tensor.')
 tf.app.flags.DEFINE_string('image_format', 'jpeg',
                            'The image format for generated image (png, jpeg)')
 tf.app.flags.DEFINE_integer('batch_size', 8, 'Per request batch size.')
@@ -200,7 +202,7 @@ def generate_grpc_request():
 
   image = get_image_payload()
 
-  request.inputs['input'].CopyFrom(
+  request.inputs[FLAGS.input_name].CopyFrom(
       tf.contrib.util.make_tensor_proto(
           [image] * FLAGS.batch_size, shape=[FLAGS.batch_size]))
   return request
