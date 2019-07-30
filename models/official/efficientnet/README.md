@@ -40,7 +40,7 @@ EfficientNets achieve state-of-the-art accuracy on ImageNet with an order of mag
 We have provided a list of EfficientNet checkpoints for EfficientNet checkpoints: both w/ and w/o AutoAugment.
 
   * With standard ResNet preprocessing, we achieved similar accuracy as the original ICML paper.
-  * WIth AutoAugment preprocessing, we achieves higher accuracy than the original ICML paper.
+  * WIth AutoAugment preprocessing, we achieved higher accuracy than the original ICML paper.
 
 |               |   B0    |  B1   |  B2    |  B3   |  B4   |  B5    | B6 | B7 |
 |----------     |--------  | ------| ------|------ |------ |------ | --- | --- |
@@ -50,6 +50,9 @@ We have provided a list of EfficientNet checkpoints for EfficientNet checkpoints
 <!--
 | Acc. from paper        |  76.3%   | 78.8% | 79.8% | 81.1% | 82.6% | 83.3% |
 -->
+
+** To train EfficientNets with AutoAugment, simply add option "--autoaugment_name=v0".
+
 A quick way to use these checkpoints is to run:
 
     $ export MODEL=efficientnet-b0
