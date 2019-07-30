@@ -3,7 +3,11 @@
 [1] Mingxing Tan and Quoc V. Le.  EfficientNet: Rethinking Model Scaling for Convolutional Neural Networks. ICML 2019.
    Arxiv link: https://arxiv.org/abs/1905.11946.
 
-**Update: We have also released a few EdgeTPU-specialized EfficientNets, see the [EfficientNet-EdgeTPU README](edgetpu/README.md).**
+Updates
+
+  - **[Jul 2019] Released new EfficientNet checkpoints trained with AutoAugment (better accuracy than paper).**
+
+  - [May 2019] Released EfficientNets code and weights.
 
 ## 1. About EfficientNet Models
 
@@ -33,12 +37,16 @@ EfficientNets achieve state-of-the-art accuracy on ImageNet with an order of mag
 
 ## 2. Using Pretrained EfficientNet Checkpoints
 
-We have provided a list of EfficientNet checkpoints for EfficientNet B0 to B5 as follows:
-Notably, here we use the standard ResNet preprocessing rather than  AutoAugment, but we have achieved similar ImageNet top-1 accuracy as the original paper:
+We have provided a list of EfficientNet checkpoints for EfficientNet checkpoints: both w/ and w/o AutoAugment.
 
-|               |   B0 ([link](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckpts/efficientnet-b0.tar.gz))     |  B1 ([link](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckpts/efficientnet-b1.tar.gz))   |  B2 ([link](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckpts/efficientnet-b2.tar.gz))   |  B3([link](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckpts/efficientnet-b3.tar.gz))   |  B4([link](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckpts/efficientnet-b4.tar.gz))   |  B5 ([link](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckpts/efficientnet-b5.tar.gz))   |
-|----------     |--------  | ------| ------|------ |------ |------ |
-| ImageNet accuracy for released ckpts |  76.8%   | 78.8% | 79.8% | 81.0% | 82.6% | 83.2% |
+  * With standard ResNet preprocessing, we achieved similar accuracy as the original ICML paper.
+  * WIth AutoAugment preprocessing, we achieves higher accuracy than the original ICML paper.
+
+|               |   B0    |  B1   |  B2    |  B3   |  B4   |  B5    | B6 | B7 |
+|----------     |--------  | ------| ------|------ |------ |------ | --- | --- |
+| Standard preprocessing |  76.8% ([ckpt](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckpts/efficientnet-b0.tar.gz))   | 78.8% ([ckpt](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckpts/efficientnet-b1.tar.gz))  | 79.8% ([ckpt](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckpts/efficientnet-b2.tar.gz)) | 81.0% ([ckpt](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckpts/efficientnet-b3.tar.gz)) | 82.6% ([ckpt](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckpts/efficientnet-b4.tar.gz)) | 83.2% ([ckpt](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckpts/efficientnet-b5.tar.gz)) | | |
+| AutoAugment |  77.3% ([ckpt](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckptsaug/efficientnet-b0.tar.gz))   | 79.2% ([ckpt](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckptsaug/efficientnet-b1.tar.gz))  | 80.3% ([ckpt](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckptsaug/efficientnet-b2.tar.gz)) | 81.7% ([ckpt](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckptsaug/efficientnet-b3.tar.gz)) | 83.0% ([ckpt](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckptsaug/efficientnet-b4.tar.gz)) | 83.7% ([ckpt](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckptsaug/efficientnet-b5.tar.gz)) |  84.2% ([ckpt](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckptsaug/efficientnet-b6.tar.gz)) | 84.5% ([ckpt](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckptsaug/efficientnet-b7.tar.gz))  |
+
 <!--
 | Acc. from paper        |  76.3%   | 78.8% | 79.8% | 81.1% | 82.6% | 83.3% |
 -->
