@@ -28,6 +28,7 @@ import tensorflow as tf
 from configs import factory
 from dataloader import input_reader
 from dataloader import mode_keys as ModeKeys
+from evaluation import coco_utils
 from executor import tpu_executor
 from modeling import model_builder
 import sys
@@ -89,6 +90,24 @@ def main(argv):
   if FLAGS.mode != 'train':
     params.train.input_partition_dims = None
     params.train.num_cores_per_replica = None
+
+  if FLAGS.model != 'train' or FLAGS.eval_after_training:
+    val_json_file = params.model_dir + '/eval_annotation_file.json'
+    if not tf.gfile.Exists(val_json_file):
+      if params.eval.val_json_file:
+        tf.gfile.Copy(params.eval.val_json_file, val_json_file)
+      else:
+        coco_utils.scan_and_generator_annotation_file(
+            params.eval.eval_file_pattern,
+            params.eval.eval_samples,
+            include_mask=False,
+            annotation_file=val_json_file)
+    params.override({
+        'eval': {
+            'val_json_file': val_json_file,
+        }
+    })
+
   params.validate()
   params.lock()
   pp = pprint.PrettyPrinter()
