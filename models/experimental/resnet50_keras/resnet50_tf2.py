@@ -44,8 +44,9 @@ flags.DEFINE_string(
     'model_dir', None,
     ('The directory where the model weights and training/evaluation summaries '
      'are stored. If not specified, save to /tmp/resnet50.'))
-flags.DEFINE_string('protocol', 'grpc',
-                    'The communication protocol for the cluster.')
+flags.DEFINE_string(
+    'protocol', None, 'Overrides the default communication protocol for the '
+    'cluster.')
 
 # Special flags for Resnet50.
 flags.DEFINE_bool(
