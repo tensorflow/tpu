@@ -697,9 +697,6 @@ def main(unused_argv):
         # file could have been deleted already.
         tf.logging.info(
             'Checkpoint %s no longer exists, skipping checkpoint', ckpt)
-
-    if FLAGS.export_dir:
-      export(est, FLAGS.export_dir, input_image_size)
   else:   # FLAGS.mode == 'train' or FLAGS.mode == 'train_and_eval'
     current_step = estimator._load_global_step_from_checkpoint_dir(FLAGS.model_dir)  # pylint: disable=protected-access,line-too-long
 
@@ -751,8 +748,8 @@ def main(unused_argv):
       elapsed_time = int(time.time() - start_timestamp)
       tf.logging.info('Finished training up to step %d. Elapsed seconds %d.',
                       FLAGS.train_steps, elapsed_time)
-      if FLAGS.export_dir:
-        export(est, FLAGS.export_dir, input_image_size)
+  if FLAGS.export_dir:
+    export(est, FLAGS.export_dir, input_image_size)
 
 
 if __name__ == '__main__':
