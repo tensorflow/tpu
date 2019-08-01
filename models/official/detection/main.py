@@ -59,7 +59,8 @@ def save_config(params, model_dir):
   if model_dir:
     if not tf.gfile.Exists(model_dir):
       tf.gfile.MakeDirs(model_dir)
-    params_dict.save_params_dict_to_yaml(params, model_dir + '/params.yaml')
+    params_dict.save_params_dict_to_yaml(
+        params, os.path.join(model_dir, 'params.yaml'))
 
 
 def main(argv):
@@ -92,7 +93,7 @@ def main(argv):
     params.train.num_cores_per_replica = None
 
   if FLAGS.model != 'train' or FLAGS.eval_after_training:
-    val_json_file = params.model_dir + '/eval_annotation_file.json'
+    val_json_file = os.path.join(params.model_dir, 'eval_annotation_file.json')
     if not tf.gfile.Exists(val_json_file):
       if params.eval.val_json_file:
         tf.gfile.Copy(params.eval.val_json_file, val_json_file)
