@@ -13,7 +13,7 @@ EfficientNet-EdgeTPU were developed using the [AutoML MNAS framework](https://ai
 </table>
 
 ### Using Pretrained EfficientNet-EdgeTPU Checkpoints
-We have provided checkpoints for:
+We have provided pretrained checkpoints and float/quantized TFLite models:
 
 * [EfficientNet-EdgeTPU-S](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/efficientnet-edgetpu-S.tar.gz)
 * [EfficientNet-EdgeTPU-M](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/efficientnet-edgetpu-M.tar.gz)
@@ -29,7 +29,8 @@ $ wget https://upload.wikimedia.org/wikipedia/commons/f/fe/Giant_Panda_in_Beijin
 $ wget https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/eval_data/labels_map.txt
 $ python eval_ckpt_main.py --model_name=$MODEL --ckpt_dir=$MODEL --example_img=panda.jpg --labels_map_file=labels_map.txt --include_background_label
 ```
-Note that these models were trained with label#0 marked as the background label for easier deployment.
+
+Note that these models were trained with label#0 marked as the background label for easier deployment. TFLite models can be evaluated using this [tool](https://github.com/tensorflow/tensorflow/tree/master/tensorflow/lite/tools/evaluation/tasks/imagenet_image_classification).
 
 ### Training EfficientNet-EdgeTPU on Cloud TPUs
 Please refer to our tutorial: https://cloud.google.com/tpu/docs/tutorials/efficientnet
