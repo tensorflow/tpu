@@ -212,7 +212,7 @@ if __name__ == '__main__':
     os.makedirs(OUTPUT_DIR)
 
   # read list of labels
-  with tf.gfile.FastGFile(arguments['labels_file'], 'r') as f:
+  with tf.gfile.GFile(arguments['labels_file'], 'r') as f:
     LABELS = [line.rstrip() for line in f]
   print('Read in {} labels, from {} to {}'.format(
       len(LABELS), LABELS[0], LABELS[-1]))
