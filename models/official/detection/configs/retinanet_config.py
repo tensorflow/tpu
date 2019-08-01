@@ -169,7 +169,6 @@ RETINANET_CFG = {
 }
 
 RETINANET_RESTRICTIONS = [
-    'train.total_steps == train.learning_rate.total_steps',
     'architecture.use_bfloat16 == retinanet_parser.use_bfloat16',
     'anchor.min_level == fpn.min_level',
     'anchor.max_level == fpn.max_level',
