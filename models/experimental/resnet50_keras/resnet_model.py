@@ -26,14 +26,12 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import os
-import warnings
 
 from tensorflow.python.keras import backend
+from tensorflow.python.keras import initializers
 from tensorflow.python.keras import layers
 from tensorflow.python.keras import models
 from tensorflow.python.keras import regularizers
-from tensorflow.python.keras import utils
 
 
 L2_WEIGHT_DECAY = 1e-4
@@ -44,7 +42,7 @@ BATCH_NORM_EPSILON = 1e-5
 def identity_block(input_tensor, kernel_size, filters, stage, block):
   """The identity block is the block that has no conv layer at shortcut.
 
-  # Arguments
+  Args:
       input_tensor: input tensor
       kernel_size: default 3, the kernel size of
           middle conv layer at main path
@@ -52,7 +50,7 @@ def identity_block(input_tensor, kernel_size, filters, stage, block):
       stage: integer, current stage label, used for generating layer names
       block: 'a','b'..., current block label, used for generating layer names
 
-  # Returns
+  Returns:
       Output tensor for the block.
   """
   filters1, filters2, filters3 = filters
@@ -106,7 +104,7 @@ def conv_block(input_tensor,
                strides=(2, 2)):
   """A block that has a conv layer at shortcut.
 
-  # Arguments
+  Args:
       input_tensor: input tensor
       kernel_size: default 3, the kernel size of
           middle conv layer at main path
@@ -115,7 +113,7 @@ def conv_block(input_tensor,
       block: 'a','b'..., current block label, used for generating layer names
       strides: Strides for the second conv layer in the block.
 
-  # Returns
+  Returns:
       Output tensor for the block.
 
   Note that from stage 3,
@@ -203,8 +201,7 @@ def ResNet50(num_classes):
                                 epsilon=BATCH_NORM_EPSILON,
                                 name='bn_conv1')(x)
   x = layers.Activation('relu')(x)
-  x = layers.ZeroPadding2D(padding=(1, 1), name='pool1_pad')(x)
-  x = layers.MaxPooling2D((3, 3), strides=(2, 2))(x)
+  x = layers.MaxPooling2D((3, 3), strides=(2, 2), padding='same')(x)
 
   x = conv_block(x, 3, [64, 64, 256], stage=2, block='a', strides=(1, 1))
   x = identity_block(x, 3, [64, 64, 256], stage=2, block='b')
@@ -228,10 +225,13 @@ def ResNet50(num_classes):
 
   x = layers.GlobalAveragePooling2D(name='avg_pool')(x)
   x = layers.Dense(
-      num_classes, activation='softmax',
+      num_classes,
+      activation='softmax',
+      kernel_initializer=initializers.RandomNormal(stddev=0.01),
       kernel_regularizer=regularizers.l2(L2_WEIGHT_DECAY),
       bias_regularizer=regularizers.l2(L2_WEIGHT_DECAY),
-      name='fc1000')(x)
+      name='fc1000')(
+          x)
 
   # Create model.
   return models.Model(img_input, x, name='resnet50')
