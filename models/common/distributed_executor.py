@@ -17,6 +17,7 @@
 
 from __future__ import absolute_import
 from __future__ import division
+#Standard imports
 from __future__ import print_function
 
 import json
@@ -26,11 +27,12 @@ from absl import flags
 from absl import logging
 import tensorflow.compat.v2 as tf
 
+from typing import Optional, Dict, Text, Callable, Union, Iterator, Any
 from hyperparameters import common_hparams_flags
 from hyperparameters import common_tpu_flags
 from hyperparameters import params_dict
 
-tf.compat.v1.enable_v2_behavior()
+tf.enable_v2_behavior()
 
 FLAGS = flags.FLAGS
 
@@ -92,6 +94,44 @@ def _save_checkpoint(checkpoint, model_dir, checkpoint_prefix):
   logging.info('Saving model as TF checkpoint: %s', saved_path)
 
 
+def _no_metric():
+  return None
+
+
+class SummaryWriter(object):
+  """Simple SummaryWriter for writing dictionary of metrics.
+
+  Attributes:
+    _writer: The tf.SummaryWriter.
+  """
+
+  def __init__(self, model_dir: Text, name: Text):
+    """Inits SummaryWriter with paths.
+
+    Arguments:
+      model_dir: the model folder path.
+      name: the summary subfolder name.
+    """
+    self._writer = tf.summary.create_file_writer(os.path.join(model_dir, name))
+
+  def __call__(self, metrics: Union[Dict[Text, float], float], step: int):
+    """Write metrics to summary with the given writer.
+
+    Args:
+      metrics: a dictionary of metrics values. Prefer dictionary.
+      step: integer. The training step.
+    """
+    if not isinstance(metrics, dict):
+      # Support scalar metric without name.
+      logging.warning('Warning: summary writer prefer metrics as dictionary.')
+      metrics = {'metric': metrics}
+
+    with self._writer.as_default():
+      for k, v in metrics.items():
+        tf.summary.scalar(k, v, step=step)
+      self._writer.flush()
+
+
 class DistributedExecutor(object):
   """Interface to train and eval models with tf.distribute.Strategy.
 
@@ -111,12 +151,11 @@ class DistributedExecutor(object):
                params,
                model_fn,
                loss_fn,
-               metric_fn=None,
                use_remote_tpu=False):
+
     self._params = params
     self._model_fn = model_fn
     self._loss_fn = loss_fn
-    self._metric_fn = metric_fn
     self._strategy = strategy
     self._use_remote_tpu = use_remote_tpu
     self._checkpoint_name = 'ctl_step_{step}.ckpt'
@@ -131,6 +170,12 @@ class DistributedExecutor(object):
     """Sets default summary writer for the current thread."""
     self._checkpoint_name = name
 
+  def loss_fn(self):
+    return self._loss_fn()
+
+  def model_fn(self, params):
+    return self._model_fn(params)
+
   def _save_config(self, model_dir):
     """Save parameters to config files if model_dir is defined."""
 
@@ -144,11 +189,33 @@ class DistributedExecutor(object):
     else:
       logging.warning('model_dir is empty, so skip the save config.')
 
+  def _get_input_iterator(
+      self, input_fn: Callable[[params_dict.ParamsDict], tf.data.Dataset],
+      strategy: tf.distribute.Strategy) -> Optional[Iterator[Any]]:
+    """Returns distributed dataset iterator.
+
+    Args:
+      input_fn: (params: dict) -> tf.data.Dataset.
+      strategy: an instance of tf.distribute.Strategy.
+
+    Returns:
+      An iterator that yields input tensors.
+    """
+
+    if input_fn is None:
+      return None
+    # When training with multiple TPU workers, datasets needs to be cloned
+    # across workers. Since Dataset instance cannot be cloned in eager mode,
+    # we instead pass callable that returns a dataset.
+    input_data = input_fn(self._params)
+    return iter(strategy.experimental_distribute_dataset(input_data))
+
+  # TODO(yeqing): Extract the train_step out as a class for re-usability.
   def _create_train_step(self):
     """Creates a distributed training step."""
 
     @tf.function
-    def train_step(strategy, model, loss_fn, optimizer, iterator):
+    def train_step(strategy, model, loss_fn, optimizer, iterator, metric=None):
       """Performs a distributed training step.
 
       Args:
@@ -157,6 +224,7 @@ class DistributedExecutor(object):
         loss_fn: (y_true: Tensor, y_pred: Tensor) -> Tensor.
         optimizer: tf.keras.optimizers.Optimizer.
         iterator: an iterator that yields input tensors.
+        metric: tf.keras.metrics.Metric subclass.
 
       Returns:
         The loss tensor.
@@ -167,11 +235,15 @@ class DistributedExecutor(object):
         inputs, labels = inputs
 
         with tf.GradientTape() as tape:
-          logits = model(inputs, training=True)
-          prediction_loss = loss_fn(labels, logits)
-          logging.info('debug prediction_loss %s', prediction_loss)
+          outputs = model(inputs, training=True)
+          prediction_loss = loss_fn(labels, outputs)
           loss = tf.reduce_mean(prediction_loss)
           loss = loss / strategy.num_replicas_in_sync
+          if isinstance(metric, tf.keras.metrics.Metric):
+            metric.update_state(labels, outputs)
+          else:
+            logging.error('train metric is not an instance of '
+                          'tf.keras.metrics.Metric.')
 
           return loss
 
@@ -188,60 +260,44 @@ class DistributedExecutor(object):
 
     return train_step
 
-  def _get_input_iterator(self, input_fn, strategy):
-    """Returns distributed dataset iterator.
-
-    Args:
-      input_fn: (params: dict) -> tf.data.Dataset.
-      strategy: an instance of tf.distribute.Strategy.
-
-    Returns:
-      An iterator that yields input tensors.
-    """
-
-    if input_fn is None:
-      return None
-    # When training with multiple TPU workers, datasets needs to be cloned
-    # across workers. Since Dataset instance cannot be cloned in eager mode,
-    # we instead pass callable that returns a dataset.
-    input_data = input_fn(self._params.as_dict())
-    if callable(input_data):
-      iterator = iter(
-          strategy.experimental_distribute_datasets_from_function(input_data))
-    else:
-      iterator = iter(strategy.experimental_distribute_dataset(input_data))
-    return iterator
-
   def _create_test_step(self):
     """Creates a distributed test step."""
 
     @tf.function
     def test_step(strategy, model, metric, iterator):
       """Calculates evaluation metrics on distributed devices."""
-      if self._metric_fn and not callable(self._metric_fn):
+      if not metric:
+        logging.info('Skip test_step because metric is None (%s)', metric)
+        return None, None
+      if not isinstance(metric, tf.keras.metrics.Metric):
         raise ValueError(
-            'if `metric_fn` is specified, metric_fn must be a callable.')
+            'Metric must be an instance of tf.keras.metrics.Metric '
+            'for running in test_step. Actual {}'.format(metric))
 
       def _test_step_fn(inputs):
         """Replicated accuracy calculation."""
-
         inputs, labels = inputs
         model_outputs = model(inputs, training=False)
-        if metric:
-          metric.update_state(labels, model_outputs)
+        metric.update_state(labels, model_outputs)
+        return labels, model_outputs
 
-      strategy.experimental_run_v2(_test_step_fn, args=(next(iterator),))
+      return strategy.experimental_run_v2(_test_step_fn, args=(next(iterator),))
 
     return test_step
 
   def train(self,
-            train_input_fn,
-            eval_input_fn=None,
-            model_dir=None,
-            steps_per_epoch=1,
-            steps_per_eval=1,
-            epochs=1,
-            save_config=True):
+            train_input_fn: Callable[[params_dict.ParamsDict], tf.data.Dataset],
+            eval_input_fn: Callable[[params_dict.ParamsDict],
+                                    tf.data.Dataset] = None,
+            model_dir: Text = None,
+            steps_per_epoch: int = 1,
+            steps_per_eval: int = 1,
+            epochs: int = 1,
+            train_metric_fn: Callable[[], Any] = _no_metric,
+            eval_metric_fn: Callable[[], Any] = _no_metric,
+            summary_writer_fn: Callable[[Text, Text],
+                                        SummaryWriter] = SummaryWriter,
+            save_config: bool = True):
     """Run distributed training on Mask RCNN model.
 
     Args:
@@ -253,12 +309,21 @@ class DistributedExecutor(object):
       steps_per_epoch: train steps per epoch.
       steps_per_eval: test steps per evaluation.
       epochs: number of training epoches.
+      train_metric_fn: metric_fn for evaluation in train_step.
+      eval_metric_fn: metric_fn for evaluation in test_step.
+      summary_writer_fn: function to create summary writer.
       save_config: bool. Whether to save params to model_dir.
 
     Returns:
       Training summaries including the loss and the number of training steps.
     """
     assert train_input_fn is not None
+    if train_metric_fn and not callable(train_metric_fn):
+      raise ValueError('if `train_metric_fn` is specified, '
+                       'train_metric_fn must be a callable.')
+    if eval_metric_fn and not callable(eval_metric_fn):
+      raise ValueError('if `eval_metric_fn` is specified, '
+                       'eval_metric_fn must be a callable.')
 
     if save_config:
       self._save_config(model_dir)
@@ -276,13 +341,14 @@ class DistributedExecutor(object):
 
         # To correctly place the model weights on accelerators,
         # model and optimizer should be created in scope.
-        model = self._model_fn(params.as_dict())
+        model = self.model_fn(params.as_dict())
         if not hasattr(model, 'optimizer'):
           raise ValueError('User should set optimizer attribute to model '
                            'inside `model_fn`.')
         optimizer = model.optimizer
 
         # Training loop starts here.
+        # TODO(yeqing): Implementing checkpoints with Callbacks.
         checkpoint = tf.train.Checkpoint(model=model, optimizer=optimizer)
         latest_checkpoint_file = tf.train.latest_checkpoint(model_dir)
         if latest_checkpoint_file:
@@ -295,29 +361,38 @@ class DistributedExecutor(object):
         current_step = optimizer.iterations.numpy()
         checkpoint_name = self.checkpoint_name
 
-        metric = None
-        train_metric = None
-        if self._metric_fn:
-          metric = self._metric_fn()
-          train_metric = self._metric_fn()
-        train_metric_result = None
-        eval_metric_result = None
-        train_loss = None
+        eval_metric = eval_metric_fn()
+        train_metric = train_metric_fn()
+        train_summary_writer = summary_writer_fn(model_dir, 'eval_train')
+        test_summary_writer = summary_writer_fn(model_dir, 'eval_test')
+        # Continue training loop.
         while current_step < total_training_steps:
           current_step += 1
-          train_loss = train_step(strategy, model, self._loss_fn(), optimizer,
-                                  train_iterator).numpy().astype(float)
+          train_loss = train_step(
+              strategy,
+              model,
+              self.loss_fn(),
+              optimizer,
+              train_iterator,
+              metric=train_metric)
+          train_loss = train_loss.numpy().astype(float)
 
           if train_metric:
-            train_metric_result = train_metric.result().numpy().astype(float)
-
-            logging.info(
-                'Train Step: %d/%d  / loss = %s / training metric = %s',
-                current_step, total_training_steps, train_loss,
-                train_metric_result)
+            train_metric_result = train_metric.result()
+            if isinstance(train_metric, tf.keras.metrics.Metric):
+              train_metric_result = tf.nest.map_structure(
+                  lambda x: x.numpy().astype(float), train_metric_result)
+            if not isinstance(train_metric_result, dict):
+              train_metric_result = {'metric': train_metric_result}
+            train_metric_result['loss'] = train_loss
           else:
-            logging.info('Train Step: %d/%d  / loss = %s', current_step,
-                         total_training_steps, train_loss)
+            train_metric_result = {'loss': train_loss}
+          logging.info('Train Step: %d/%d  / loss = %s / training metric = %s',
+                       current_step, total_training_steps, train_loss,
+                       train_metric_result)
+
+          train_summary_writer(
+              metrics=train_metric_result, step=optimizer.iterations)
 
           # Saves model checkpoints and run validation steps at every epoch end.
           if current_step % steps_per_epoch == 0:
@@ -327,32 +402,35 @@ class DistributedExecutor(object):
               _save_checkpoint(checkpoint, model_dir,
                                checkpoint_name.format(step=current_step))
 
-            if eval_input_fn and metric:
-              logging.info('Running evaluation after step: %s.', current_step)
+            if eval_input_fn and eval_metric:
               eval_metric_result = self._run_evaluation(strategy, current_step,
-                                                        model, metric,
+                                                        model, eval_metric,
                                                         eval_iterator,
                                                         steps_per_eval)
               logging.info('Step: %s evalation metric = %s.', current_step,
                            eval_metric_result)
+              test_summary_writer(
+                  metrics=eval_metric_result, step=optimizer.iterations)
 
             # Re-initialize evaluation metric, except the last step.
-            if metric and current_step < total_training_steps:
-              metric.reset_states()
+            if eval_metric and current_step < total_training_steps:
+              eval_metric.reset_states()
+            if train_metric and current_step < total_training_steps:
               train_metric.reset_states()
 
         _save_checkpoint(checkpoint, model_dir,
                          checkpoint_name.format(step=current_step))
 
-        if eval_input_fn and metric:
+        if eval_input_fn and eval_metric:
           logging.info('Running final evaluation after training is complete.')
           eval_metric_result = self._run_evaluation(strategy, current_step,
-                                                    model, metric,
+                                                    model, eval_metric,
                                                     eval_iterator,
                                                     steps_per_eval)
           logging.info('Final evaluation metric = %s.', eval_metric_result)
+          test_summary_writer(
+              metrics=eval_metric_result, step=optimizer.iterations)
 
-        # TODO(yeqing): Finish the summary writer to work with tensorboard.
     return model
 
   def _run_evaluation(self, strategy, current_training_step, model, metric,
@@ -363,11 +441,14 @@ class DistributedExecutor(object):
           'Both test_iterator (%s) and metrics (%s) must not be None.',
           test_iterator, metric)
       return None
+    logging.info('Running evaluation after step: %s.', current_training_step)
     test_step = self._create_test_step()
     for _ in range(eval_steps):
       test_step(strategy, model, metric, test_iterator)
 
-    metric_result = metric.result().numpy().astype(float)
+    metric_result = metric.result()
+    if isinstance(metric, tf.keras.metrics.Metric):
+      metric_result = metric_result.numpy().astype(float)
     logging.info('Step: [%d] Validation metric = %f', current_training_step,
                  metric_result)
     return metric_result
@@ -502,7 +583,6 @@ class ExecutorBuilder(object):
                      params=None,
                      model_fn=None,
                      loss_fn=None,
-                     metric_fn=None,
                      **kwargs):
     """Creates an executor according to strategy type.
 
@@ -515,7 +595,6 @@ class ExecutorBuilder(object):
       params: ParamsDict, all the model parameters and runtime parameters.
       model_fn: Keras model function.
       loss_fn: loss function.
-      metric_fn: single metric function.
       **kwargs: other arguments to the executor constructor.
 
     Returns:
@@ -535,5 +614,4 @@ class ExecutorBuilder(object):
         params=params,
         model_fn=model_fn,
         loss_fn=loss_fn,
-        metric_fn=metric_fn,
         **kwargs)
