@@ -108,7 +108,6 @@ def main(unused_argv):
   tf.enable_v2_behavior()
   num_workers = 1
   job_name = 'worker'
-  primary_cpu_task = '/job:%s' % job_name
 
   is_tpu_pod = num_workers > 1
   model_dir = FLAGS.model_dir if FLAGS.model_dir else DEFAULT_MODEL_DIR
@@ -126,7 +125,7 @@ def main(unused_argv):
   tf.tpu.experimental.initialize_tpu_system(resolver)
   strategy = tf.distribute.experimental.TPUStrategy(resolver)
 
-  with tf.device(primary_cpu_task):
+  with strategy.scope():
     # TODO(b/130307853): In TPU Pod, we have to use
     # `strategy.experimental_distribute_datasets_from_function` instead of
     # `strategy.experimental_distribute_dataset` because dataset cannot be
@@ -165,21 +164,20 @@ def main(unused_argv):
       test_dataset = strategy.experimental_distribute_dataset(
           imagenet_eval.input_fn())
 
-    with strategy.scope():
-      logging.info('Building Keras ResNet-50 model')
-      model = resnet_model.ResNet50(num_classes=NUM_CLASSES)
-      base_lr = _BASE_LEARNING_RATE * batch_size / 256
-      optimizer = tf.keras.optimizers.SGD(
-          learning_rate=ResnetLearningRateSchedule(steps_per_epoch, base_lr),
-          momentum=0.9,
-          nesterov=True)
-      training_loss = tf.keras.metrics.Mean('training_loss', dtype=tf.float32)
-      training_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(
-          'training_accuracy', dtype=tf.float32)
-      test_loss = tf.keras.metrics.Mean('test_loss', dtype=tf.float32)
-      test_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(
-          'test_accuracy', dtype=tf.float32)
-      logging.info('Finished building Keras ResNet-50 model')
+    logging.info('Building Keras ResNet-50 model')
+    model = resnet_model.ResNet50(num_classes=NUM_CLASSES)
+    base_lr = _BASE_LEARNING_RATE * batch_size / 256
+    optimizer = tf.keras.optimizers.SGD(
+        learning_rate=ResnetLearningRateSchedule(steps_per_epoch, base_lr),
+        momentum=0.9,
+        nesterov=True)
+    training_loss = tf.keras.metrics.Mean('training_loss', dtype=tf.float32)
+    training_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(
+        'training_accuracy', dtype=tf.float32)
+    test_loss = tf.keras.metrics.Mean('test_loss', dtype=tf.float32)
+    test_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(
+        'test_accuracy', dtype=tf.float32)
+    logging.info('Finished building Keras ResNet-50 model')
 
     checkpoint = tf.train.Checkpoint(model=model, optimizer=optimizer)
     latest_checkpoint = tf.train.latest_checkpoint(model_dir)

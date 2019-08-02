@@ -190,22 +190,21 @@ def main(unused_argv):
   logging.info('Enable top 5 accuracy: %s.', FLAGS.eval_top_5_accuracy)
   logging.info('Training model using data in directory "%s".', FLAGS.data)
 
-  with tf.device('/job:worker'):
-    with strategy.scope():
-      logging.info('Building Keras ResNet-50 model')
-      model = resnet_model.ResNet50(num_classes=NUM_CLASSES)
+  with strategy.scope():
+    logging.info('Building Keras ResNet-50 model')
+    model = resnet_model.ResNet50(num_classes=NUM_CLASSES)
 
-      logging.info('Compiling model.')
-      metrics = ['sparse_categorical_accuracy']
+    logging.info('Compiling model.')
+    metrics = ['sparse_categorical_accuracy']
 
-      if FLAGS.eval_top_5_accuracy:
-        metrics.append(sparse_top_k_categorical_accuracy)
+    if FLAGS.eval_top_5_accuracy:
+      metrics.append(sparse_top_k_categorical_accuracy)
 
-      model.compile(
-          optimizer=tf.keras.optimizers.SGD(
-              learning_rate=BASE_LEARNING_RATE, momentum=0.9, nesterov=True),
-          loss='sparse_categorical_crossentropy',
-          metrics=metrics)
+    model.compile(
+        optimizer=tf.keras.optimizers.SGD(
+            learning_rate=BASE_LEARNING_RATE, momentum=0.9, nesterov=True),
+        loss='sparse_categorical_crossentropy',
+        metrics=metrics)
 
     imagenet_train = imagenet_input.ImageNetInput(
         is_training=True, data_dir=FLAGS.data, batch_size=batch_size,
