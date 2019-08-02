@@ -9,6 +9,9 @@ Updates
 
   - [May 2019] Released EfficientNets code and weights.
 
+    - Blog: https://ai.googleblog.com/2019/05/efficientnet-improving-accuracy-and.html
+    - paper: https://arxiv.org/abs/1905.11946
+
 ## 1. About EfficientNet Models
 
 EfficientNets are a family of image classification models, which achieve state-of-the-art accuracy, yet being an order-of-magnitude smaller and faster than previous models.
