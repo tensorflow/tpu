@@ -5,12 +5,11 @@
 
 Updates
 
-  - **[Jul 2019] Released new EfficientNet checkpoints trained with AutoAugment (better accuracy than paper).**
+  - **[Aug 2019] Released EfficientNet-EdgeTPU models: [EfficientNet-EdgeTPU README](edgetpu/README.md).**
 
-  - [May 2019] Released EfficientNets code and weights.
+  - [Jul 2019] Released new EfficientNet checkpoints trained with AutoAugment (better accuracy than paper).
 
-    - Blog: https://ai.googleblog.com/2019/05/efficientnet-improving-accuracy-and.html
-    - paper: https://arxiv.org/abs/1905.11946
+  - [May 2019] Released EfficientNets code and weights: [blog post](https://ai.googleblog.com/2019/05/efficientnet-improving-accuracy-and.html)
 
 ## 1. About EfficientNet Models
 
