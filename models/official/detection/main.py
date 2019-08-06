@@ -28,7 +28,6 @@ import tensorflow as tf
 from configs import factory
 from dataloader import input_reader
 from dataloader import mode_keys as ModeKeys
-from evaluation import coco_utils
 from executor import tpu_executor
 from modeling import model_builder
 import sys
@@ -92,23 +91,6 @@ def main(argv):
     params.train.input_partition_dims = None
     params.train.num_cores_per_replica = None
 
-  if FLAGS.model != 'train' or FLAGS.eval_after_training:
-    val_json_file = os.path.join(params.model_dir, 'eval_annotation_file.json')
-    if not tf.gfile.Exists(val_json_file):
-      if params.eval.val_json_file:
-        tf.gfile.Copy(params.eval.val_json_file, val_json_file)
-      else:
-        coco_utils.scan_and_generator_annotation_file(
-            params.eval.eval_file_pattern,
-            params.eval.eval_samples,
-            include_mask=False,
-            annotation_file=val_json_file)
-    params.override({
-        'eval': {
-            'val_json_file': val_json_file,
-        }
-    })
-
   params.validate()
   params.lock()
   pp = pprint.PrettyPrinter()
@@ -130,6 +112,7 @@ def main(argv):
     save_config(params, params.model_dir)
     executor.train(train_input_fn, params.train.total_steps)
     if FLAGS.eval_after_training:
+      executor.prepare_evaluation()
       executor.evaluate(
           eval_input_fn,
           params.eval.eval_samples // params.predict.predict_batch_size)
@@ -139,6 +122,7 @@ def main(argv):
       tf.logging.info('Terminating eval after %d seconds of no checkpoints' %
                       params.eval.eval_timeout)
       return True
+    executor.prepare_evaluation()
     # Runs evaluation when there's a new checkpoint.
     for ckpt in tf.contrib.training.checkpoints_iterator(
         params.model_dir,
@@ -168,6 +152,7 @@ def main(argv):
 
   elif FLAGS.mode == 'train_and_eval':
     save_config(params, params.model_dir)
+    executor.prepare_evaluation()
     num_cycles = int(params.train.total_steps / params.eval.num_steps_per_eval)
     for cycle in range(num_cycles):
       tf.logging.info('Start training cycle %d.' % cycle)
