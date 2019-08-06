@@ -147,6 +147,21 @@ def nearest_upsampling(data, scale):
     return tf.reshape(data, [bs, h * scale, w * scale, c])
 
 
+def compute_grid_positions(boxes, output_size):
+  """Compute the grid position w.r.t. the corresponding feature map."""
+  box_grid_y = []
+  box_grid_x = []
+  for i in range(output_size):
+    box_grid_y.append(boxes[:, :, 0:1] +
+                      (i + 0.5) * boxes[:, :, 2:3] / output_size)
+    box_grid_x.append(boxes[:, :, 1:2] +
+                      (i + 0.5) * boxes[:, :, 3:4] / output_size)
+
+  box_grid_y = tf.concat(box_grid_y, axis=-1)
+  box_grid_x = tf.concat(box_grid_x, axis=-1)
+  return box_grid_y, box_grid_x
+
+
 def selective_crop_and_resize(features,
                               boxes,
                               box_levels,
@@ -211,15 +226,7 @@ def selective_crop_and_resize(features,
   _, num_boxes, _ = boxes.get_shape().as_list()
 
   # Compute the grid position w.r.t. the corresponding feature map.
-  box_grid_x = []
-  box_grid_y = []
-  for i in range(output_size):
-    box_grid_x.append(boxes[:, :, 1:2] +
-                      (i + 0.5) * boxes[:, :, 3:4] / output_size)
-    box_grid_y.append(boxes[:, :, 0:1] +
-                      (i + 0.5) * boxes[:, :, 2:3] / output_size)
-  box_grid_x = tf.concat(box_grid_x, axis=-1)
-  box_grid_y = tf.concat(box_grid_y, axis=-1)
+  box_grid_y, box_grid_x = compute_grid_positions(boxes, output_size)
 
   # Compute indices for gather operation.
   box_grid_y0 = tf.floor(box_grid_y)

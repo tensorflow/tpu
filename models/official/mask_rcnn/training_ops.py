@@ -263,7 +263,7 @@ def select_fg_for_masks(class_targets, box_targets, boxes,
 
 def get_mask_targets(fg_boxes, fg_proposal_to_label_map, fg_box_targets,
                      mask_gt_labels, output_size=28):
-  """Crop and resize on multilevel feature pyramid.
+  """Crop and resize on ground truth masks.
 
   Args:
     fg_boxes: A 3-D tensor of shape [batch_size, num_masks, 4]. Each row
@@ -278,12 +278,33 @@ def get_mask_targets(fg_boxes, fg_proposal_to_label_map, fg_box_targets,
     output_size: A scalar to indicate the output crop size.
 
   Returns:
-    A 4-D tensor representing feature crop of shape
-    [batch_size, num_boxes, output_size, output_size].
+    A 4-D tensor representing ground truth masks with a shape of [batch_size,
+    num_boxes, output_size, output_size].
   """
   with tf.name_scope('get_mask_targets'):
-    _, _, max_feature_height, max_feature_width = (
-        mask_gt_labels.get_shape().as_list())
+    (batch_size, num_instances, max_feature_height,
+     max_feature_width) = mask_gt_labels.get_shape().as_list()
+    _, num_masks = fg_proposal_to_label_map.get_shape().as_list()
+
+    # Use a convolution to pre-compute a box of four values (for interpolation)
+    # and stack four values in the channel dimension.
+    features_all = tf.reshape(
+        mask_gt_labels,
+        [batch_size * num_instances, max_feature_height, max_feature_width, 1])
+    value = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
+    features_all = tf.layers.conv2d(
+        features_all, filters=4, kernel_size=(2, 2), strides=(1, 1),
+        padding='same', data_format='channels_last', use_bias=False,
+        kernel_initializer=tf.constant_initializer(value), trainable=False,
+        name='get_mask_targets_conv2d')
+
+    # Transposes tensor dimension for TPU performance.
+    features_all = tf.transpose(features_all, [1, 2, 0, 3])
+    features_all = tf.reshape(features_all, [-1, 4])
+
+    batch_dim_size = num_instances
+    width_dim_size = batch_size * batch_dim_size
+    height_dim_size = max_feature_width * width_dim_size
 
     # proposal_to_label_map might have a -1 paddings.
     levels = tf.maximum(fg_proposal_to_label_map, 0)
@@ -305,18 +326,68 @@ def get_mask_targets(fg_boxes, fg_proposal_to_label_map, fg_box_targets,
     w_transform = (bb_x_max - bb_x_min) * valid_feature_width / (
         gt_x_max - gt_x_min + _EPSILON)
 
-    boundaries = tf.concat(
-        [tf.to_float(tf.ones_like(y_transform) * (max_feature_height - 1)),
-         tf.to_float(tf.ones_like(x_transform) * (max_feature_width - 1))],
-        axis=-1)
-
-    features_per_box = spatial_transform_ops.selective_crop_and_resize(
-        tf.expand_dims(mask_gt_labels, -1),
-        tf.concat([y_transform, x_transform, h_transform, w_transform], -1),
-        tf.expand_dims(levels, -1),
-        boundaries,
+    # Compute y and x coordinate indices.
+    box_grid_y, box_grid_x = spatial_transform_ops.compute_grid_positions(
+        tf.stack([y_transform, x_transform, h_transform, w_transform], axis=2),
         output_size)
-    features_per_box = tf.squeeze(features_per_box, axis=-1)
+
+    box_grid_y0 = tf.floor(box_grid_y)
+    box_grid_x0 = tf.floor(box_grid_x)
+
+    # Check boundary.
+    box_y0 = tf.minimum(
+        tf.to_float(max_feature_height-1), tf.maximum(0., box_grid_y0))
+    box_x0 = tf.minimum(
+        tf.to_float(max_feature_width-1), tf.maximum(0., box_grid_x0))
+
+    y_indices = tf.cast(
+        tf.reshape(box_y0,
+                   [batch_size, num_masks, output_size]), dtype=tf.int32)
+    x_indices = tf.cast(
+        tf.reshape(box_x0,
+                   [batch_size, num_masks, output_size]), dtype=tf.int32)
+
+    indices = tf.reshape(
+        tf.tile(tf.reshape(tf.range(batch_size) * batch_dim_size,
+                           [batch_size, 1, 1, 1]),
+                [1, num_masks, output_size, output_size]) +
+        tf.tile(tf.reshape(levels,
+                           [batch_size, num_masks, 1, 1]),
+                [1, 1, output_size, output_size]) +
+        tf.tile(tf.reshape(y_indices * height_dim_size,
+                           [batch_size, num_masks, output_size, 1]),
+                [1, 1, 1, output_size]) +
+        tf.tile(tf.reshape(x_indices * width_dim_size,
+                           [batch_size, num_masks, 1, output_size]),
+                [1, 1, output_size, 1]), [-1])
+
+    features_per_box = tf.reshape(
+        tf.gather(features_all, indices),
+        [batch_size, num_masks, output_size, output_size, 4])
+
+    # The output can be computed by bilinear interpolation of four neighboring
+    # points f0, f1, f2, and f3.
+    # f(y, x) = [hy, ly] * [[f00, f01], * [hx, lx]^T
+    #                       [f10, f11]]
+    # f(y, x) = (hy*hx)f00 + (hy*lx)f01 + (ly*hx)f10 + (lx*ly)f11
+    # f(y, x) = w00*f00 + w01*f01 + w10*f10 + w11*f11
+    ly = box_grid_y - box_grid_y0
+    lx = box_grid_x - box_grid_x0
+    ly = tf.tile(
+        tf.reshape(ly, [batch_size, num_masks, output_size, 1, 1]),
+        [1, 1, 1, output_size, 1])
+    lx = tf.tile(
+        tf.reshape(lx, [batch_size, num_masks, 1, output_size, 1]),
+        [1, 1, output_size, 1, 1])
+
+    hy = 1.0 - ly
+    hx = 1.0 - lx
+    interpolation_kernel = tf.concat([hy*hx, hy*lx, ly*hx, ly*lx], axis=4)
+
+    # Interpolate the gathered features with computed interpolation kernels.
+    features_per_box *= tf.cast(interpolation_kernel,
+                                dtype=features_per_box.dtype)
+    features_per_box = tf.reduce_sum(features_per_box, axis=4)
 
     # Masks are binary outputs.
     features_per_box = tf.where(

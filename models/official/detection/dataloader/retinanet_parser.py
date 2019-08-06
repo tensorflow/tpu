@@ -331,8 +331,9 @@ class Parser(object):
     # Sets up groundtruth data for evaluation.
     groundtruths = {
         'source_id': data['source_id'],
+        'height': data['height'],
+        'width': data['width'],
         'num_groundtrtuhs': tf.shape(data['groundtruth_classes']),
-        'image_info': image_info,
         'boxes': box_utils.denormalize_boxes(
             data['groundtruth_boxes'], image_shape),
         'classes': data['groundtruth_classes'],
@@ -394,6 +395,8 @@ class Parser(object):
           data['groundtruth_boxes'], image_shape)
       groundtruths = {
           'source_id': data['source_id'],
+          'height': data['height'],
+          'width': data['width'],
           'num_detections': tf.shape(data['groundtruth_classes']),
           'boxes': boxes,
           'classes': data['groundtruth_classes'],

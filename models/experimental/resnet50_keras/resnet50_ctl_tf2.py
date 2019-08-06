@@ -48,15 +48,15 @@ flags.DEFINE_integer('num_cores', 8, 'Number of TPU cores.')
 FLAGS = flags.FLAGS
 
 # Imagenet training and test data sets.
-APPROX_IMAGENET_TRAINING_IMAGES = 1280000  # Approximate number of images.
-IMAGENET_VALIDATION_IMAGES = 50000  # Number of images.
+APPROX_IMAGENET_TRAINING_IMAGES = 1281167  # Number of images in ImageNet-1k train dataset.
+IMAGENET_VALIDATION_IMAGES = 50000  # Number of images in eval dataset.
 PER_CORE_BATCH_SIZE = 128
 NUM_CLASSES = 1000
 
 # Training hyperparameters.
 _EPOCHS = 90
 _USE_BFLOAT16 = True
-_BASE_LEARNING_RATE = 0.4
+_BASE_LEARNING_RATE = 0.1
 DEFAULT_MODEL_DIR = '/tmp/resnet50'
 
 # Allow overriding epochs, steps_per_epoch for testing
@@ -86,7 +86,7 @@ class ResnetLearningRateSchedule(
     learning_rate = (
         self.initial_learning_rate * warmup_lr_multiplier * lr_epoch /
         warmup_end_epoch)
-    for mult, start_epoch in _LR_SCHEDULE[1:]:
+    for mult, start_epoch in _LR_SCHEDULE:
       learning_rate = tf.where(lr_epoch >= start_epoch,
                                self.initial_learning_rate * mult, learning_rate)
     return learning_rate
@@ -168,9 +168,9 @@ def main(unused_argv):
     with strategy.scope():
       logging.info('Building Keras ResNet-50 model')
       model = resnet_model.ResNet50(num_classes=NUM_CLASSES)
+      base_lr = _BASE_LEARNING_RATE * batch_size / 256
       optimizer = tf.keras.optimizers.SGD(
-          learning_rate=ResnetLearningRateSchedule(steps_per_epoch,
-                                                   _BASE_LEARNING_RATE),
+          learning_rate=ResnetLearningRateSchedule(steps_per_epoch, base_lr),
           momentum=0.9,
           nesterov=True)
       training_loss = tf.keras.metrics.Mean('training_loss', dtype=tf.float32)

@@ -59,10 +59,10 @@ def random_horizontal_flip(image, boxes=None, masks=None):
   return preprocessor.random_horizontal_flip(image, boxes, masks)
 
 
-def resize_and_pad(image, desired_output_size, stride, boxes=None, masks=None):
-  """Resize and pad images, boxes and masks.
+def resize_and_pad(image, desired_output_size, stride, boxes=None):
+  """Resize and pad images and boxes .
 
-  Resize and pad images, (optionally boxes and masks) given the desired output
+  Resize and pad images, (optionally boxes) given the desired output
   size of the image and stride size.
 
   Here are the preprocessing steps.
@@ -81,9 +81,6 @@ def resize_and_pad(image, desired_output_size, stride, boxes=None, masks=None):
       must be the multiple of this.
     boxes: (Optional) a tensor of shape [num_boxes, 4] represneting the box
       corners in normalized coordinates.
-    masks: (Optional) a tensor of shape [num_masks, height, width]
-      representing the object masks. Note that the size of the mask is the
-      same as the image.
 
   Returns:
     image: the processed image tensor after being resized and padded.
@@ -92,7 +89,6 @@ def resize_and_pad(image, desired_output_size, stride, boxes=None, masks=None):
     boxes: None or the processed box tensor after being resized and padded.
       After the processing, boxes will be in the absolute coordinates w.r.t.
       the scaled image.
-    masks: None or the processed mask tensor after being resized and padded.
   """
   input_shape = tf.shape(image)
   input_height = tf.cast(input_shape[0], dtype=tf.float32)
@@ -128,36 +124,31 @@ def resize_and_pad(image, desired_output_size, stride, boxes=None, masks=None):
     scaled_boxes = preprocessor.box_list_scale(
         normalized_box_list, scaled_height, scaled_width).get()
 
-  scaled_masks = None
-  if masks is not None:
-    scaled_masks = tf.image.resize_images(
-        tf.expand_dims(masks, -1),
-        [scaled_height, scaled_width],
-        method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
-    # Check if there is any instance in this image or not.
-    # pylint: disable=g-long-lambda
-    num_masks = tf.shape(scaled_masks)[0]
-    scaled_masks = tf.cond(
-        tf.greater(num_masks, 0),
-        lambda: tf.image.pad_to_bounding_box(scaled_masks, 0, 0, padded_height, padded_width),  # pylint: disable=line-too-long
-        lambda: tf.zeros([0, padded_height, padded_width, 1]))
-    # pylint: enable=g-long-lambda
-
-  return image, image_info, scaled_boxes, scaled_masks
+  return image, image_info, scaled_boxes
 
 
-def crop_gt_masks(instance_masks, boxes, gt_mask_size, image_size):
-  """Crops the ground truth binary masks and resize to fixed-size masks."""
+def crop_gt_masks(instance_masks, boxes, gt_mask_size):
+  """Crops the ground truth binary masks and resize to fixed-size masks.
+
+  Args:
+    instance_masks: a tensor of shape [num_masks, h, w], representing the
+      groundtruth masks.
+    boxes: a tensor of shape [num_boxes, 4] represneting the box
+      corners in normalized coordinates.
+    gt_mask_size: an integer that specifies the size of cropped masks.
+
+  Returns:
+    A tensor of shape [num_masks, gt_mask-size + 4, gt_mask_size + 4]. The
+    addition four pixels are zero paddings on both directions of the both height
+    and width, where each direction adds two zeros.
+  """
   num_boxes = tf.shape(boxes)[0]
   num_masks = tf.shape(instance_masks)[0]
   assert_length = tf.Assert(
       tf.equal(num_boxes, num_masks), [num_masks])
-  scale_sizes = tf.convert_to_tensor(
-      [image_size[0], image_size[1]] * 2, dtype=tf.float32)
-  boxes = boxes / scale_sizes
   with tf.control_dependencies([assert_length]):
     cropped_gt_masks = tf.image.crop_and_resize(
-        image=instance_masks,
+        image=tf.expand_dims(instance_masks, -1),
         boxes=boxes,
         box_ind=tf.range(num_masks, dtype=tf.int32),
         crop_size=[gt_mask_size, gt_mask_size],
