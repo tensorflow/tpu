@@ -20,7 +20,9 @@ import os
 import numpy as np
 import tensorflow as tf
 
+from evaluation import coco_utils
 from evaluation import factory
+from hyperparameters import params_dict
 
 
 def write_summary(logs, summary_writer, current_step):
@@ -37,7 +39,8 @@ class TpuExecutor(object):
 
   def __init__(self, model_fn, params):
     self._model_dir = params.model_dir
-    self._evaluator = factory.evaluator_generator(params.eval)
+    self._params = params
+    self._evaluator = None
 
     input_partition_dims = None
     num_cores_per_replica = None
@@ -97,6 +100,22 @@ class TpuExecutor(object):
     """Training the model with training data and labels in input_fn."""
     self._estimator.train(input_fn=input_fn, max_steps=steps)
 
+  def prepare_evaluation(self):
+    """Preapre for evaluation."""
+    val_json_file = os.path.join(
+        self._params.model_dir, 'eval_annotation_file.json')
+    if self._params.eval.val_json_file:
+      tf.gfile.Copy(self._params.eval.val_json_file, val_json_file)
+    else:
+      coco_utils.scan_and_generator_annotation_file(
+          self._params.eval.eval_file_pattern,
+          self._params.eval.eval_samples,
+          include_mask=False,
+          annotation_file=val_json_file)
+    eval_params = params_dict.ParamsDict(self._params.eval)
+    eval_params.override({'val_json_file': val_json_file})
+    self._evaluator = factory.evaluator_generator(eval_params)
+
   def evaluate(self, input_fn, eval_steps, checkpoint_path=None):
     """Evaluating the model with data and labels in input_fn.
 
@@ -109,6 +128,9 @@ class TpuExecutor(object):
     Returns:
       A dictionary as evaluation metrics.
     """
+    if not self._evaluator:
+      self.prepare_evaluation()
+
     if not checkpoint_path:
       checkpoint_path = self._estimator.latest_checkpoint()
     current_step = int(os.path.basename(checkpoint_path).split('-')[1])
