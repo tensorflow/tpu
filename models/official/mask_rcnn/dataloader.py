@@ -163,7 +163,7 @@ class InputReader(object):
 
         if self._mode == tf.estimator.ModeKeys.PREDICT:
           image = preprocess_ops.normalize_image(image)
-          image, image_info, _, _ = preprocess_ops.resize_and_pad(
+          image, image_info, _ = preprocess_ops.resize_and_pad(
               image, params['image_size'], 2 ** params['max_level'])
           if params['precision'] == 'bfloat16':
             image = tf.cast(image, dtype=tf.bfloat16)
@@ -215,20 +215,19 @@ class InputReader(object):
               image, boxes, instance_masks = flipped_results
             else:
               image, boxes = flipped_results
+          normalized_boxes = boxes
           # Scaling and padding.
-          image, image_info, boxes, instance_masks = (
+          image, image_info, boxes = (
               preprocess_ops.resize_and_pad(
                   image,
                   params['image_size'],
                   2 ** params['max_level'],
-                  boxes=boxes,
-                  masks=instance_masks))
+                  boxes=normalized_boxes))
           padded_height, padded_width, _ = image.get_shape().as_list()
           padded_image_size = (padded_height, padded_width)
           if self._use_instance_mask:
             cropped_gt_masks = preprocess_ops.crop_gt_masks(
-                instance_masks, boxes, params['gt_mask_size'],
-                padded_image_size)
+                instance_masks, normalized_boxes, params['gt_mask_size'])
 
           input_anchors = anchors.Anchors(
               params['min_level'],

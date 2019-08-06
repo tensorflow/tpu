@@ -87,6 +87,16 @@ class TfExampleDecoder(object):
         lambda: tf.map_fn(_decode_png_mask, masks, dtype=tf.float32),
         lambda: tf.zeros([0, height, width], dtype=tf.float32))
 
+  def _decode_areas(self, parsed_tensors):
+    xmin = parsed_tensors['image/object/bbox/xmin']
+    xmax = parsed_tensors['image/object/bbox/xmax']
+    ymin = parsed_tensors['image/object/bbox/ymin']
+    ymax = parsed_tensors['image/object/bbox/ymax']
+    return tf.cond(
+        tf.greater(tf.shape(parsed_tensors['image/object/area'])[0], 0),
+        lambda: parsed_tensors['image/object/area'],
+        lambda: (xmax - xmin) * (ymax - ymin))
+
   def decode(self, serialized_example):
     """Decode the serialized example.
 
@@ -120,7 +130,11 @@ class TfExampleDecoder(object):
 
     image = self._decode_image(parsed_tensors)
     boxes = self._decode_boxes(parsed_tensors)
-    is_crowd = tf.cast(parsed_tensors['image/object/is_crowd'], dtype=tf.bool)
+    areas = self._decode_areas(parsed_tensors)
+    is_crowds = tf.cond(
+        tf.greater(tf.shape(parsed_tensors['image/object/is_crowd'])[0], 0),
+        lambda: tf.cast(parsed_tensors['image/object/is_crowd'], dtype=tf.bool),
+        lambda: tf.zeros_like(parsed_tensors['image/object/class/label'], dtype=tf.bool))  # pylint: disable=line-too-long
     if self._include_mask:
       masks = self._decode_masks(parsed_tensors)
 
@@ -130,8 +144,8 @@ class TfExampleDecoder(object):
         'height': parsed_tensors['image/height'],
         'width': parsed_tensors['image/width'],
         'groundtruth_classes': parsed_tensors['image/object/class/label'],
-        'groundtruth_is_crowd': is_crowd,
-        'groundtruth_area': parsed_tensors['image/object/area'],
+        'groundtruth_is_crowd': is_crowds,
+        'groundtruth_area': areas,
         'groundtruth_boxes': boxes,
     }
     if self._include_mask:

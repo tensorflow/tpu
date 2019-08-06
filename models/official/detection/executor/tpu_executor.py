@@ -37,7 +37,6 @@ class TpuExecutor(object):
 
   def __init__(self, model_fn, params):
     self._model_dir = params.model_dir
-    # Sets up evaluator.
     self._evaluator = factory.evaluator_generator(params.eval)
 
     input_partition_dims = None
@@ -110,7 +109,6 @@ class TpuExecutor(object):
     Returns:
       A dictionary as evaluation metrics.
     """
-
     if not checkpoint_path:
       checkpoint_path = self._estimator.latest_checkpoint()
     current_step = int(os.path.basename(checkpoint_path).split('-')[1])
@@ -130,7 +128,7 @@ class TpuExecutor(object):
           groundtruths[key[3::]] = val
         if key[0:5] == 'loss_':
           losses[key[5::]] += (np.mean(val) / eval_steps)
-      self._evaluator.update(predictions, groundtruths)
+      self._evaluator.update(predictions)
     metrics = self._evaluator.evaluate()
 
     # Summary writer writes out eval metrics.
