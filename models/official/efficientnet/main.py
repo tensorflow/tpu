@@ -225,7 +225,7 @@ flags.DEFINE_integer('log_step_count_steps', 64, 'The number of steps at '
                      'which the global step information is logged.')
 
 flags.DEFINE_bool(
-    'use_cache', default=True, help=('Enable cache for training input.'))
+    'use_cache', default=False, help=('Enable cache for training input.'))
 
 flags.DEFINE_float(
     'depth_coefficient', default=None,
