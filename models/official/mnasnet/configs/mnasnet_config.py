@@ -30,7 +30,7 @@ MNASNET_CFG = {
     'weight_decay': 0.00001,
     'label_smoothing': 0.1,
     'dropout_rate': 0.2,
-    'use_cache': True,
+    'use_cache': False,
     'use_async_checkpointing': False,
     'precision': 'float32',
     'use_keras': True,
