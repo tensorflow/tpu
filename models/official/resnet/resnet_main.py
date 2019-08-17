@@ -352,9 +352,14 @@ def resnet_model_fn(features, labels, mode, params):
       label_smoothing=params['label_smoothing'])
 
   # Add weight decay to the loss for non-batch-normalization variables.
-  loss = cross_entropy + params['weight_decay'] * tf.add_n(
-      [tf.nn.l2_loss(v) for v in tf.trainable_variables()
-       if 'batch_normalization' not in v.name])
+  if params['enable_lars']:
+    loss = cross_entropy
+  else:
+    loss = cross_entropy + params['weight_decay'] * tf.add_n([
+        tf.nn.l2_loss(v)
+        for v in tf.trainable_variables()
+        if 'batch_normalization' not in v.name
+    ])
 
   host_call = None
   if mode == tf.estimator.ModeKeys.TRAIN:

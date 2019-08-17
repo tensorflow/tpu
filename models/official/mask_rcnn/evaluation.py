@@ -64,19 +64,20 @@ def compute_coco_eval_metric(predictor,
   Returns:
     eval_results: the aggregated COCO metric eval results.
   """
+  del num_batches
+
   if not annotation_json_file:
     annotation_json_file = None
   use_groundtruth_from_json = (annotation_json_file is not None)
 
-  predictions = dict()
   batch_idx = 0
-  while num_batches < 0 or batch_idx < num_batches:
+  predictions = dict()
+  while True:
     try:
       prediction = six.next(predictor)
-      tf.logging.info('Running inference on batch %d/%d...' %
-                      (batch_idx + 1, num_batches))
+      tf.logging.info('Running inference on batch %d...' % (batch_idx + 1))
     except StopIteration:
-      tf.logging.info('Get StopIteration at %d batch.' % (batch_idx + 1))
+      tf.logging.info('Finished the eval set at %d batch.' % (batch_idx + 1))
       break
 
     prediction = process_prediction_for_eval(prediction)
@@ -90,6 +91,7 @@ def compute_coco_eval_metric(predictor,
 
   for k, v in six.iteritems(predictions):
     predictions[k] = np.concatenate(predictions[k], axis=0)
+
   if 'orig_images' in predictions and predictions['orig_images'].shape[0] > 10:
     # Only samples a few images for visualization.
     predictions['orig_images'] = predictions['orig_images'][:10]

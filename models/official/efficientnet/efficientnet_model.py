@@ -36,11 +36,9 @@ GlobalParams = collections.namedtuple('GlobalParams', [
     'batch_norm_momentum', 'batch_norm_epsilon', 'dropout_rate', 'data_format',
     'num_classes', 'width_coefficient', 'depth_coefficient',
     'depth_divisor', 'min_depth', 'drop_connect_rate', 'relu_fn',
+    'batch_norm', 'use_se',
 ])
 GlobalParams.__new__.__defaults__ = (None,) * len(GlobalParams._fields)
-
-# batchnorm = tf.layers.BatchNormalization
-batchnorm = utils.TpuBatchNormalization  # TPU-specific requirement.
 
 BlockArgs = collections.namedtuple('BlockArgs', [
     'kernel_size', 'num_repeat', 'input_filters', 'output_filters',
@@ -141,6 +139,7 @@ class MBConvBlock(tf.keras.layers.Layer):
     self._block_args = block_args
     self._batch_norm_momentum = global_params.batch_norm_momentum
     self._batch_norm_epsilon = global_params.batch_norm_epsilon
+    self._batch_norm = global_params.batch_norm
     self._data_format = global_params.data_format
     if self._data_format == 'channels_first':
       self._channel_axis = 1
@@ -150,8 +149,9 @@ class MBConvBlock(tf.keras.layers.Layer):
       self._spatial_dims = [1, 2]
 
     self._relu_fn = global_params.relu_fn or tf.nn.swish
-    self._has_se = (self._block_args.se_ratio is not None) and (
-        self._block_args.se_ratio > 0) and (self._block_args.se_ratio <= 1)
+    self._has_se = (
+        global_params.use_se and self._block_args.se_ratio is not None and
+        0 < self._block_args.se_ratio <= 1)
 
     self.endpoints = None
 
@@ -174,7 +174,7 @@ class MBConvBlock(tf.keras.layers.Layer):
           padding='same',
           data_format=self._data_format,
           use_bias=False)
-      self._bn0 = batchnorm(
+      self._bn0 = self._batch_norm(
           axis=self._channel_axis,
           momentum=self._batch_norm_momentum,
           epsilon=self._batch_norm_epsilon)
@@ -188,7 +188,7 @@ class MBConvBlock(tf.keras.layers.Layer):
         padding='same',
         data_format=self._data_format,
         use_bias=False)
-    self._bn1 = batchnorm(
+    self._bn1 = self._batch_norm(
         axis=self._channel_axis,
         momentum=self._batch_norm_momentum,
         epsilon=self._batch_norm_epsilon)
@@ -224,7 +224,7 @@ class MBConvBlock(tf.keras.layers.Layer):
         padding='same',
         data_format=self._data_format,
         use_bias=False)
-    self._bn2 = batchnorm(
+    self._bn2 = self._batch_norm(
         axis=self._channel_axis,
         momentum=self._batch_norm_momentum,
         epsilon=self._batch_norm_epsilon)
@@ -299,7 +299,7 @@ class MBConvBlockWithoutDepthwise(MBConvBlock):
           kernel_initializer=conv_kernel_initializer,
           padding='same',
           use_bias=False)
-      self._bn0 = batchnorm(
+      self._bn0 = self._batch_norm(
           axis=self._channel_axis,
           momentum=self._batch_norm_momentum,
           epsilon=self._batch_norm_epsilon)
@@ -313,7 +313,7 @@ class MBConvBlockWithoutDepthwise(MBConvBlock):
         kernel_initializer=conv_kernel_initializer,
         padding='same',
         use_bias=False)
-    self._bn1 = batchnorm(
+    self._bn1 = self._batch_norm(
         axis=self._channel_axis,
         momentum=self._batch_norm_momentum,
         epsilon=self._batch_norm_epsilon)
@@ -373,6 +373,7 @@ class Model(tf.keras.Model):
     self._global_params = global_params
     self._blocks_args = blocks_args
     self._relu_fn = global_params.relu_fn or tf.nn.swish
+    self._batch_norm = global_params.batch_norm
 
     self.endpoints = None
 
@@ -423,7 +424,7 @@ class Model(tf.keras.Model):
         padding='same',
         data_format=self._global_params.data_format,
         use_bias=False)
-    self._bn0 = batchnorm(
+    self._bn0 = self._batch_norm(
         axis=channel_axis,
         momentum=batch_norm_momentum,
         epsilon=batch_norm_epsilon)
@@ -436,7 +437,7 @@ class Model(tf.keras.Model):
         kernel_initializer=conv_kernel_initializer,
         padding='same',
         use_bias=False)
-    self._bn1 = batchnorm(
+    self._bn1 = self._batch_norm(
         axis=channel_axis,
         momentum=batch_norm_momentum,
         epsilon=batch_norm_epsilon)

@@ -23,6 +23,7 @@ import re
 import tensorflow as tf
 
 import efficientnet_model
+import utils
 
 MEAN_RGB = [0.485 * 255, 0.456 * 255, 0.406 * 255]
 STDDEV_RGB = [0.229 * 255, 0.224 * 255, 0.225 * 255]
@@ -140,7 +141,11 @@ def efficientnet(width_coefficient=None,
       depth_coefficient=depth_coefficient,
       depth_divisor=8,
       min_depth=None,
-      relu_fn=tf.nn.swish)
+      relu_fn=tf.nn.swish,
+      # The default is TPU-specific batch norm.
+      # The alternative is tf.layers.BatchNormalization.
+      batch_norm=utils.TpuBatchNormalization,  # TPU-specific requirement.
+      use_se=True)
   decoder = BlockDecoder()
   return decoder.decode(blocks_args), global_params
 
@@ -215,10 +220,10 @@ def build_model_base(images, model_name, training, override_params=None):
 
   Args:
     images: input images tensor.
-    model_name: string, the model name of a pre-defined MnasNet.
+    model_name: string, the predefined model name.
     training: boolean, whether the model is constructed for training.
     override_params: A dictionary of params for overriding. Fields must exist in
-      mnasnet_model.GlobalParams.
+      efficientnet_model.GlobalParams.
 
   Returns:
     features: global pool features.

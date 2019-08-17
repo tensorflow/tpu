@@ -1,7 +1,4 @@
-`mnist_tpu.py` can be used to train the official TPU model using TPUs for
-hardware acceleration. Be sure to add the official models repository to your
-`$PYTHONPATH` as described in
-https://github.com/tensorflow/tpu/blob/master/README.md.
+`mnist_tpu.py` can be used to train a simple model on the MNIST dataset using
+a Cloud TPU.
 
-See https://github.com/tensorflow/models/blob/master/official/mnist for more
-details.
+See https://cloud.google.com/tpu/docs/quickstart for more details.

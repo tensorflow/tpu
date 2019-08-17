@@ -63,6 +63,7 @@ class Parser(object):
                anchor_size,
                use_category=True,
                outer_box_scale=1.0,
+               box_jitter_scale=0.025,
                num_sampled_masks=8,
                mask_crop_size=32,
                mask_min_level=3,
@@ -97,6 +98,8 @@ class Parser(object):
       outer_box_scale: `float` number in a range of [1.0, inf) representing
         the scale from object box to outer box. The mask branch predicts
         instance mask enclosed in outer box.
+      box_jitter_scale: `float` number representing the noise magnitude to
+        jitter the training groundtruth boxes for mask branch.
       num_sampled_masks: `int` number of sampled masks for training.
       mask_crop_size: `list` for [height, width] of output training masks.
       mask_min_level: `int` number indicating the minimum feature level to
@@ -157,6 +160,7 @@ class Parser(object):
     self._mask_min_level = mask_min_level
     self._mask_max_level = mask_max_level
     self._outer_box_scale = outer_box_scale
+    self._box_jitter_scale = box_jitter_scale
 
     # Data is parsed depending on the model Modekey.
     if mode == ModeKeys.TRAIN:
@@ -316,6 +320,9 @@ class Parser(object):
     sampled_boxes = tf.gather(padded_boxes, rand_indices)
     sampled_classes = tf.gather(padded_classes, rand_indices)
     sampled_masks = tf.gather(padded_masks, rand_indices)
+    # Jitter the sampled boxes to mimic the noisy detections.
+    sampled_boxes = box_utils.jitter_boxes(
+        sampled_boxes, noise_scale=self._box_jitter_scale)
 
     # Compute mask targets in feature crop. A feature crop fully contains a
     # sampled box.

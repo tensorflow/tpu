@@ -51,9 +51,12 @@ def poly_rate_schedule(current_epoch,
   elif batch_size < 32768:
     plr = 25.0
     w_epochs = 5
-  else:
+  elif batch_size < 65536:
     plr = 32.0
     w_epochs = 14
+  else:
+    plr = 35.6
+    w_epochs = 40
 
   # Override default poly learning rate and warmup epochs
   if params['poly_rate'] > 0.0:

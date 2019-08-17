@@ -55,9 +55,8 @@ class InputFn(object):
       if isinstance(gt_mask, tf.SparseTensor):
         gt_mask = tf.sparse_tensor_to_dense(gt_mask)
 
-      image_size = params.input_image_size + [params.num_channels]
+      image_size, label_size = self.get_input_shapes(params)
       image = tf.reshape(image, image_size)
-      label_size = params.input_image_size + [params.num_classes]
       gt_mask = tf.reshape(gt_mask, label_size)
 
       if params.use_bfloat16:
@@ -67,6 +66,11 @@ class InputFn(object):
       return image, gt_mask
 
     return _parser
+
+  def get_input_shapes(self, params):
+    image_size = params.input_image_size + [params.num_channels]
+    label_size = params.input_image_size + [params.num_classes]
+    return image_size, label_size
 
   def __call__(self, params):
     """Generates features and labels for training or evaluation.
@@ -148,3 +152,11 @@ class LiverInputFn(InputFn):
       return image, label
 
     return _decode_liver_example
+
+  def get_input_shapes(self, params):
+    image_size = params.input_image_size + [params.num_channels]
+    if self._is_training and params.use_index_label_in_train:
+      label_size = params.input_image_size
+    else:
+      label_size = params.input_image_size + [params.num_classes]
+    return image_size, label_size

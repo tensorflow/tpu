@@ -53,7 +53,7 @@ We have provided a list of EfficientNet checkpoints for EfficientNet checkpoints
 | Acc. from paper        |  76.3%   | 78.8% | 79.8% | 81.1% | 82.6% | 83.3% |
 -->
 
-** To train EfficientNets with AutoAugment ([code](https://github.com/tensorflow/tpu/blob/master/models/official/efficientnet/autoaugment.py)), simply add option "--autoaugment_name=v0".
+<sup>**To train EfficientNets with AutoAugment ([code](https://github.com/tensorflow/tpu/blob/master/models/official/efficientnet/autoaugment.py)), simply add option "--autoaugment_name=v0". If you use these checkpoints, you can cite this [paper](https://arxiv.org/abs/1805.09501).</sup>
 
 A quick way to use these checkpoints is to run:
 

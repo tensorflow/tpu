@@ -18,6 +18,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import functools
 import pickle
 
 import numpy as np
@@ -290,6 +291,7 @@ class RetinanetHead(object):
                anchors_per_location,
                num_convs=4,
                num_filters=256,
+               use_separable_conv=False,
                batch_norm_relu=nn_ops.BatchNormRelu()):
     """Initialize params to build RetinaNet head.
 
@@ -301,6 +303,8 @@ class RetinanetHead(object):
       num_convs: `int` number of stacked convolution before the last prediction
         layer.
       num_filters: `int` number of filters used in the head architecture.
+      use_separable_conv: `bool` to indicate whether to use separable
+        convoluation.
       batch_norm_relu: an operation that includes a batch normalization layer
         followed by a relu layer(optional).
     """
@@ -312,6 +316,7 @@ class RetinanetHead(object):
 
     self._num_convs = num_convs
     self._num_filters = num_filters
+    self._use_separable_conv = use_separable_conv
 
     self._batch_norm_relu = batch_norm_relu
 
@@ -333,12 +338,18 @@ class RetinanetHead(object):
   def class_net(self, features, level, is_training):
     """Class prediction network for RetinaNet."""
     for i in range(self._num_convs):
-      features = tf.layers.conv2d(
+      if self._use_separable_conv:
+        conv2d_op = functools.partial(
+            tf.layers.separable_conv2d, depth_multiplier=1)
+      else:
+        conv2d_op = functools.partial(
+            tf.layers.conv2d, kernel_initializer=tf.random_normal_initializer(
+                stddev=0.01))
+      features = conv2d_op(
           features,
           self._num_filters,
           kernel_size=(3, 3),
           bias_initializer=tf.zeros_initializer(),
-          kernel_initializer=tf.random_normal_initializer(stddev=0.01),
           activation=None,
           padding='same',
           name='class-'+str(i))
@@ -347,13 +358,18 @@ class RetinanetHead(object):
       # difference among different levels.
       features = self._batch_norm_relu(features, is_training=is_training,
                                        name='class-%d-%d'%(i, level),)
-
-    classes = tf.layers.conv2d(
+    if self._use_separable_conv:
+      conv2d_op = functools.partial(
+          tf.layers.separable_conv2d, depth_multiplier=1)
+    else:
+      conv2d_op = functools.partial(
+          tf.layers.conv2d, kernel_initializer=tf.random_normal_initializer(
+              stddev=1e-5))
+    classes = conv2d_op(
         features,
         self._num_classes * self._anchors_per_location,
         kernel_size=(3, 3),
         bias_initializer=tf.constant_initializer(-np.log((1 - 0.01) / 0.01)),
-        kernel_initializer=tf.random_normal_initializer(stddev=1e-5),
         padding='same',
         name='class-predict')
     return classes
@@ -361,13 +377,19 @@ class RetinanetHead(object):
   def box_net(self, features, level, is_training=False):
     """Box regression network for RetinaNet."""
     for i in range(self._num_convs):
-      features = tf.layers.conv2d(
+      if self._use_separable_conv:
+        conv2d_op = functools.partial(
+            tf.layers.separable_conv2d, depth_multiplier=1)
+      else:
+        conv2d_op = functools.partial(
+            tf.layers.conv2d, kernel_initializer=tf.random_normal_initializer(
+                stddev=0.01))
+      features = conv2d_op(
           features,
           self._num_filters,
           kernel_size=(3, 3),
           activation=None,
           bias_initializer=tf.zeros_initializer(),
-          kernel_initializer=tf.random_normal_initializer(stddev=0.01),
           padding='same',
           name='box-'+str(i))
       # The convolution layers in the box net are shared among all levels, but
@@ -375,13 +397,18 @@ class RetinanetHead(object):
       # difference among different levels.
       features = self._batch_norm_relu(features, is_training=is_training,
                                        name='box-%d-%d'%(i, level))
-
-    boxes = tf.layers.conv2d(
+    if self._use_separable_conv:
+      conv2d_op = functools.partial(
+          tf.layers.separable_conv2d, depth_multiplier=1)
+    else:
+      conv2d_op = functools.partial(
+          tf.layers.conv2d, kernel_initializer=tf.random_normal_initializer(
+              stddev=1e-5))
+    boxes = conv2d_op(
         features,
         4 * self._anchors_per_location,
         kernel_size=(3, 3),
         bias_initializer=tf.zeros_initializer(),
-        kernel_initializer=tf.random_normal_initializer(stddev=1e-5),
         padding='same',
         name='box-predict')
     return boxes

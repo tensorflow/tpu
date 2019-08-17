@@ -17,8 +17,10 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+
 from modeling.architecture import fpn
 from modeling.architecture import heads
+from modeling.architecture import identity
 from modeling.architecture import nasfpn
 from modeling.architecture import nn_ops
 from modeling.architecture import resnet
@@ -60,6 +62,7 @@ def multilevel_features_generator(params):
         min_level=fpn_params.min_level,
         max_level=fpn_params.max_level,
         fpn_feat_dims=fpn_params.fpn_feat_dims,
+        use_separable_conv=fpn_params.use_separable_conv,
         batch_norm_relu=batch_norm_relu_generator(fpn_params.batch_norm))
   elif params.architecture.multilevel_features == 'nasfpn':
     nasfpn_params = params.nasfpn
@@ -71,6 +74,8 @@ def multilevel_features_generator(params):
         use_separable_conv=nasfpn_params.use_separable_conv,
         dropblock=dropblock_generator(nasfpn_params.dropblock),
         batch_norm_relu=batch_norm_relu_generator(nasfpn_params.batch_norm))
+  elif params.architecture.multilevel_features == 'identity':
+    fpn_fn = identity.Identity()
   else:
     raise ValueError('The multi-level feature model %s is not supported.'
                      % params.architecture.multilevel_features)
@@ -86,6 +91,7 @@ def retinanet_head_generator(params):
       params.anchors_per_location,
       params.retinanet_head_num_convs,
       params.retinanet_head_num_filters,
+      params.use_separable_conv,
       batch_norm_relu=batch_norm_relu_generator(params.batch_norm))
 
 

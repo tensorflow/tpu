@@ -55,6 +55,7 @@ RETINANET_CFG = {
         'frozen_variable_prefix': RESNET50_FROZEN_VAR_PREFIX,
         'train_file_pattern': '',
         'transpose_input': True,
+        'l2_weight_decay': 0.0001,
     },
     'eval': {
         'eval_batch_size': 8,
@@ -74,7 +75,6 @@ RETINANET_CFG = {
         'backbone': 'resnet',
         'multilevel_features': 'fpn',
         'use_bfloat16': True,
-        'l2_weight_decay': 0.0001,
     },
     'anchor': {
         'min_level': 3,
@@ -112,6 +112,7 @@ RETINANET_CFG = {
         'min_level': 3,
         'max_level': 7,
         'fpn_feat_dims': 256,
+        'use_separable_conv': False,
         'batch_norm': {
             'batch_norm_momentum': 0.997,
             'batch_norm_epsilon': 1e-4,
@@ -143,6 +144,7 @@ RETINANET_CFG = {
         'anchors_per_location': 9,
         'retinanet_head_num_convs': 4,
         'retinanet_head_num_filters': 256,
+        'use_separable_conv': False,
         'batch_norm': {
             'batch_norm_momentum': 0.997,
             'batch_norm_epsilon': 1e-4,
