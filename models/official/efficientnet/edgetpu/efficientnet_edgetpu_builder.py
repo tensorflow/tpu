@@ -23,6 +23,7 @@ import tensorflow as tf
 
 import efficientnet_builder
 import efficientnet_model
+import utils
 
 # The input tensor is in the range of [0, 255], we need to scale them to the
 # range of [0, 1]
@@ -65,7 +66,11 @@ def efficientnet_edgetpu(width_coefficient=None,
       depth_coefficient=depth_coefficient,
       depth_divisor=8,
       min_depth=None,
-      relu_fn=tf.nn.relu)
+      relu_fn=tf.nn.relu,
+      # The default is TPU-specific batch norm.
+      # The alternative is tf.layers.BatchNormalization.
+      batch_norm=utils.TpuBatchNormalization,  # TPU-specific requirement.
+      use_se=False)
   decoder = efficientnet_builder.BlockDecoder()
   return decoder.decode(blocks_args), global_params
 

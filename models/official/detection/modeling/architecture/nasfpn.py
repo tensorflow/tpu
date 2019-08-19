@@ -38,13 +38,14 @@ NODE_TYPES = enum.Enum('NODE_TYPES', ['INTERMEDIATE', 'OUTPUT'])
 
 def resample_feature_map(feat, level, target_level, is_training,
                          target_feat_dims=256,
+                         conv2d_op=tf.layers.conv2d,
                          batch_norm_relu=nn_ops.BatchNormRelu(),
                          name=None):
   """Resample input feature map to have target number of channels and width."""
   feat_dims = feat.get_shape().as_list()[3]
   with tf.variable_scope('resample_{}'.format(name)):
     if feat_dims != target_feat_dims:
-      feat = tf.layers.conv2d(
+      feat = conv2d_op(
           feat, filters=target_feat_dims, kernel_size=(1, 1), padding='same')
       feat = batch_norm_relu(
           feat,
@@ -147,12 +148,18 @@ class Nasfpn(object):
     self._config = Config(model_config, self._min_level, self._max_level)
     self._num_repeats = num_repeats
     self._fpn_feat_dims = fpn_feat_dims
-    self._use_separable_conv = use_separable_conv
+    if use_separable_conv:
+      self._conv2d_op = functools.partial(
+          tf.layers.separable_conv2d, depth_multiplier=1)
+    else:
+      self._conv2d_op = tf.layers.conv2d
     self._dropblock = dropblock
     self._batch_norm_relu = batch_norm_relu
     self._resample_feature_map = functools.partial(
         resample_feature_map,
-        target_feat_dims=fpn_feat_dims, batch_norm_relu=batch_norm_relu)
+        target_feat_dims=fpn_feat_dims,
+        conv2d_op=self._conv2d_op,
+        batch_norm_relu=batch_norm_relu)
 
   def __call__(self, multilevel_features, is_training=False):
     """Returns the FPN features for a given multilevel features.
@@ -247,12 +254,7 @@ class Nasfpn(object):
         with tf.variable_scope('op_after_combine{}'.format(len(feats))):
           # ReLU -> Conv -> BN after binary op.
           new_node = tf.nn.relu(new_node)
-          if self._use_separable_conv:
-            conv_op = functools.partial(
-                tf.layers.separable_conv2d, depth_multiplier=1)
-          else:
-            conv_op = tf.layers.conv2d
-          new_node = conv_op(
+          new_node = self._conv2d_op(
               new_node,
               filters=self._fpn_feat_dims,
               kernel_size=(3, 3),
@@ -273,4 +275,3 @@ class Nasfpn(object):
       output_feats[level] = feats[i]
     tf.logging.info('Output feature pyramid: {}'.format(output_feats))
     return output_feats
-

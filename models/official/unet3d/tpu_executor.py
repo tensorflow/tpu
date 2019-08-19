@@ -90,11 +90,13 @@ def write_summary(logs, summary_writer, current_step):
 class TPUEstimatorExecuter(object):
   """An executor class for running jobs on TPUs."""
 
-  def __init__(self, model_fn, params):
+  def __init__(self, model_fn, params, input_shapes):
     self._model_dir = params.model_dir
     self._params = params
+    self._input_shapes = input_shapes
 
-    self._estimator = self._build_estimator(params.tpu_config, model_fn, params)
+    self._estimator = self._build_estimator(
+        params.tpu_config, model_fn, params, input_shapes)
 
   def _save_params(self):
     """Save parameters to config files if model_dir is defined."""
@@ -106,7 +108,7 @@ class TPUEstimatorExecuter(object):
       params_dict.save_params_dict_to_yaml(self._params,
                                            model_dir + '/params.yaml')
 
-  def _build_estimator(self, tpu_flags, model_fn, params):
+  def _build_estimator(self, tpu_flags, model_fn, params, input_shapes):
     """Creates TPUEstimator/Estimator instance.
 
     Args:
@@ -114,6 +116,8 @@ class TPUEstimatorExecuter(object):
       model_fn: model function that returns (TPU)EstimatorSpec.
       params: A ParamsDict of TPU configs and dictionary to pass to Estimator
         `model_fn`.
+      input_shapes: A nested tuple or list indicating the shape of each input.
+        For example, ([128, 128, 128, 1], [128, 128, 128, 3]).
 
     Returns:
       TFEstimator or TPUEstimator instance.
@@ -135,11 +139,17 @@ class TPUEstimatorExecuter(object):
       dims_overridden = tpu_flags.input_partition_dims
 
     if dims_overridden and dims_overridden != [1]:
-      num_cores_per_replica = np.prod(dims_overridden)
+      feature_shape, label_shape = input_shapes
+      # The input function may drop the last channel dimension. We need to do
+      # the same for spatial partition dims as well.
+      # Do not forget the batch dimension.
+      feature_partition = dims_overridden[:1 + len(feature_shape)]
+      label_partition = dims_overridden[:1 + len(label_shape)]
       input_partition_dims = [
-          dims_overridden,
-          dims_overridden,
+          feature_partition,
+          label_partition,
       ]
+      num_cores_per_replica = np.prod(dims_overridden)
       num_shards = tpu_flags.num_cores // num_cores_per_replica
     else:
       num_cores_per_replica = None

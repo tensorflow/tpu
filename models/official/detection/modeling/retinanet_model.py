@@ -47,7 +47,7 @@ class RetinanetModel(base_model.Model):
     self._generate_detections_fn = postprocess.GenerateOneStageDetections(
         params.postprocess)
 
-    self._l2_weight_decay = params.architecture.l2_weight_decay
+    self._l2_weight_decay = params.train.l2_weight_decay
     self._transpose_input = params.train.transpose_input
 
   def build_outputs(self, features, labels, mode):

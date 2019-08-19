@@ -152,6 +152,7 @@ class TpuExecutor(object):
           losses[key[5::]] += (np.mean(val) / eval_steps)
       self._evaluator.update(predictions)
     metrics = self._evaluator.evaluate()
+    tf.logging.info('Eval result: {}'.format(metrics))
 
     # Summary writer writes out eval metrics.
     output_dir = os.path.join(self._model_dir, 'eval')

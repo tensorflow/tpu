@@ -187,7 +187,8 @@ class InputReader(object):
           else:
             return {'features': features}
 
-        elif self._mode == tf.estimator.ModeKeys.TRAIN:
+        elif (self._mode == tf.estimator.ModeKeys.TRAIN or
+              self._mode == tf.estimator.ModeKeys.EVAL):
           instance_masks = None
           if self._use_instance_mask:
             instance_masks = data['groundtruth_instance_masks']
@@ -206,8 +207,9 @@ class InputReader(object):
               instance_masks = tf.gather_nd(instance_masks, indices)
 
           image = preprocess_ops.normalize_image(image)
-          # Random flipping.
-          if params['input_rand_hflip']:
+          # Random flipping for training only.
+          if (self._mode == tf.estimator.ModeKeys.TRAIN
+              and params['input_rand_hflip']):
             flipped_results = (
                 preprocess_ops.random_horizontal_flip(
                     image, boxes=boxes, masks=instance_masks))
@@ -317,9 +319,10 @@ class InputReader(object):
 
     # Enable TPU performance optimization: transpose input, space-to-depth
     # image transform, or both.
-    if self._mode == tf.estimator.ModeKeys.TRAIN and (
-        params['transpose_input'] or
-        params['conv0_space_to_depth_block_size'] != 0):
+    if (self._mode == tf.estimator.ModeKeys.TRAIN or
+        self._mode == tf.estimator.ModeKeys.EVAL) and (
+            params['transpose_input'] or
+            params['conv0_space_to_depth_block_size'] != 0):
       def _transform_images(features, labels):
         """Transforms images."""
         images = features['images']

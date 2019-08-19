@@ -145,9 +145,9 @@ def main(unused_argv):
 
       # Scale the loss given the TPUStrategy will reduce sum all gradients.
       loss = loss1 + loss2
-      loss = loss / strategy.num_replicas_in_sync
+      scaled_loss = loss / strategy.num_replicas_in_sync
 
-    grads = tape.gradient(loss, model.trainable_variables)
+    grads = tape.gradient(scaled_loss, model.trainable_variables)
     update_vars = optimizer.apply_gradients(
         zip(grads, model.trainable_variables))
     update_loss = training_loss.update_state(loss)
@@ -160,7 +160,7 @@ def main(unused_argv):
     images, labels = inputs
     predictions = model(images, training=False)
     loss = tf.keras.losses.sparse_categorical_crossentropy(labels, predictions)
-    loss = tf.reduce_mean(loss) / strategy.num_replicas_in_sync
+    loss = tf.reduce_mean(loss)
     update_loss = test_loss.update_state(loss)
     update_accuracy = test_accuracy.update_state(labels, predictions)
     with tf.control_dependencies([update_loss, update_accuracy]):

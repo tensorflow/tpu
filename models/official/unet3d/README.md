@@ -18,6 +18,30 @@ Before running any binary, please install necessary packages on cloud VM.
 pip install -r requirements.tx
 ```
 
+## Data Preparation
+
+This software uses TFRecords as input. We provide example scripts to convert
+Numpy (.npy) files or NIfTI-1 (.nii) files to TFRecords, using the Liver Tumor
+Segmentation (LiTS) dataset
+(Christ et al. https://competitions.codalab.org/competitions/17094).
+You can download the dataset by registering on the competition website.
+
+**Example**:
+
+```shell
+cd data_preprocess
+
+# Change input_path and output_path in convert_lits_nii_to_npy.py
+# Then run the script to convert nii to npy.
+python convert_lits_nii_to_npy.py
+
+# Convert npy files to TFRecords.
+python convert_lits.py \
+  --image_file_pattern=Downloads/.../volume-{}.npy \
+  --label_file_pattern=Downloads/.../segmentation-{}.npy \
+  --output_path=Downloads/...
+```
+
 ## Training
 
 Working configs on TPU V3-8:

@@ -38,10 +38,12 @@ preprocess function we squeeze the image to become a rank 3 tensor and then
 we pass it to the functions. At the end of the preprocess we expand the image
 back to rank 4.
 """
-
+import sys
+import numpy as np
 import tensorflow as tf
 
 from utils.object_detection import box_list
+from utils.object_detection import box_list_ops
 
 
 def _flip_boxes_left_right(boxes):
@@ -107,6 +109,66 @@ def keypoint_flip_horizontal(keypoints, flip_point, flip_permutation,
     u = flip_point * 2.0 - u
     new_keypoints = tf.concat([v, u], 2)
     new_keypoints = tf.transpose(new_keypoints, [1, 0, 2])
+    return new_keypoints
+
+
+def keypoint_change_coordinate_frame(keypoints, window, scope=None):
+  """Changes coordinate frame of the keypoints to be relative to window's frame.
+
+  Given a window of the form [y_min, x_min, y_max, x_max], changes keypoint
+  coordinates from keypoints of shape [num_instances, num_keypoints, 2]
+  to be relative to this window.
+
+  An example use case is data augmentation: where we are given groundtruth
+  keypoints and would like to randomly crop the image to some window. In this
+  case we need to change the coordinate frame of each groundtruth keypoint to be
+  relative to this new window.
+
+  Args:
+    keypoints: a tensor of shape [num_instances, num_keypoints, 2]
+    window: a tensor of shape [4] representing the [y_min, x_min, y_max, x_max]
+      window we should change the coordinate frame to.
+    scope: name scope.
+
+  Returns:
+    new_keypoints: a tensor of shape [num_instances, num_keypoints, 2]
+  """
+  with tf.name_scope(scope, 'ChangeCoordinateFrame'):
+    win_height = window[2] - window[0]
+    win_width = window[3] - window[1]
+    new_keypoints = box_list_ops.scale(
+        keypoints - [window[0], window[1]], 1.0 / win_height, 1.0 / win_width)
+    return new_keypoints
+
+
+def keypoint_prune_outside_window(keypoints, window, scope=None):
+  """Prunes keypoints that fall outside a given window.
+
+  This function replaces keypoints that fall outside the given window with nan.
+  See also clip_to_window which clips any keypoints that fall outside the given
+  window.
+
+  Args:
+    keypoints: a tensor of shape [num_instances, num_keypoints, 2]
+    window: a tensor of shape [4] representing the [y_min, x_min, y_max, x_max]
+      window outside of which the op should prune the keypoints.
+    scope: name scope.
+
+  Returns:
+    new_keypoints: a tensor of shape [num_instances, num_keypoints, 2]
+  """
+  with tf.name_scope(scope, 'PruneOutsideWindow'):
+    y, x = tf.split(value=keypoints, num_or_size_splits=2, axis=2)
+    win_y_min, win_x_min, win_y_max, win_x_max = tf.unstack(window)
+
+    valid_indices = tf.logical_and(
+        tf.logical_and(y >= win_y_min, y <= win_y_max),
+        tf.logical_and(x >= win_x_min, x <= win_x_max))
+
+    new_y = tf.where(valid_indices, y, np.nan * tf.ones_like(y))
+    new_x = tf.where(valid_indices, x, np.nan * tf.ones_like(x))
+    new_keypoints = tf.concat([new_y, new_x], 2)
+
     return new_keypoints
 
 
@@ -440,3 +502,235 @@ def scale_boxes_to_pixel_coordinates(image, boxes, keypoints=None):
     scaled_keypoints = keypoint_scale(keypoints, image_height, image_width)
     result.append(scaled_keypoints)
   return tuple(result)
+
+
+def _strict_random_crop_image(image,
+                              boxes,
+                              labels,
+                              masks=None,
+                              keypoints=None,
+                              min_object_covered=1.0,
+                              aspect_ratio_range=(0.75, 1.33),
+                              area_range=(0.1, 1.0),
+                              overlap_thresh=0.3,
+                              clip_boxes=True):
+  """Performs random crop.
+
+  Note: Keypoint coordinates that are outside the crop will be set to NaN, which
+  is consistent with the original keypoint encoding for non-existing keypoints.
+  This function always crops the image and is supposed to be used by
+  `random_crop_image` function which sometimes returns the image unchanged.
+
+  Args:
+    image: rank 3 float32 tensor containing 1 image -> [height, width, channels]
+           with pixel values varying between [0, 1].
+    boxes: rank 2 float32 tensor containing the bounding boxes with shape
+           [num_instances, 4].
+           Boxes are in normalized form meaning their coordinates vary
+           between [0, 1].
+           Each row is in the form of [ymin, xmin, ymax, xmax].
+    labels: rank 1 int32 tensor containing the object classes.
+    masks: (optional) rank 3 float32 tensor with shape
+           [num_instances, height, width] containing instance masks. The masks
+           are of the same height, width as the input `image`.
+    keypoints: (optional) rank 3 float32 tensor with shape
+               [num_instances, num_keypoints, 2]. The keypoints are in y-x
+               normalized coordinates.
+    min_object_covered: the cropped image must cover at least this fraction of
+                        at least one of the input bounding boxes.
+    aspect_ratio_range: allowed range for aspect ratio of cropped image.
+    area_range: allowed range for area ratio between cropped image and the
+                original image.
+    overlap_thresh: minimum overlap thresh with new cropped
+                    image to keep the box.
+    clip_boxes: whether to clip the boxes to the cropped image.
+
+  Returns:
+    image: image which is the same rank as input image.
+    boxes: boxes which is the same rank as input boxes.
+           Boxes are in normalized form.
+    labels: new labels.
+
+    If label_weights, multiclass_scores, masks, or keypoints is not None, the
+    function also returns:
+    masks: rank 3 float32 tensor with shape [num_instances, height, width]
+           containing instance masks.
+    keypoints: rank 3 float32 tensor with shape
+               [num_instances, num_keypoints, 2]
+  """
+  with tf.name_scope('RandomCropImage', values=[image, boxes]):
+    image_shape = tf.shape(image)
+
+    # boxes are [N, 4]. Lets first make them [N, 1, 4].
+    boxes_expanded = tf.expand_dims(
+        tf.clip_by_value(
+            boxes, clip_value_min=0.0, clip_value_max=1.0), 1)
+
+    sample_distorted_bounding_box = tf.image.sample_distorted_bounding_box(
+        tf.image.sample_distorted_bounding_box,
+        image_shape,
+        bounding_boxes=boxes_expanded,
+        min_object_covered=min_object_covered,
+        aspect_ratio_range=aspect_ratio_range,
+        area_range=area_range,
+        max_attempts=100,
+        use_image_if_no_bounding_boxes=True)
+
+    im_box_begin, im_box_size, im_box = sample_distorted_bounding_box
+
+    new_image = tf.slice(image, im_box_begin, im_box_size)
+    new_image.set_shape([None, None, image.get_shape()[2]])
+
+    # [1, 4]
+    im_box_rank2 = tf.squeeze(im_box, axis=[0])
+    # [4]
+    im_box_rank1 = tf.squeeze(im_box)
+
+    boxlist = box_list.BoxList(boxes)
+    boxlist.add_field('labels', labels)
+
+    im_boxlist = box_list.BoxList(im_box_rank2)
+
+    # remove boxes that are outside cropped image
+    boxlist, inside_window_ids = box_list_ops.prune_completely_outside_window(
+        boxlist, im_box_rank1)
+
+    # remove boxes that are outside image
+    overlapping_boxlist, keep_ids = box_list_ops.prune_non_overlapping_boxes(
+        boxlist, im_boxlist, overlap_thresh)
+
+    # change the coordinate of the remaining boxes
+    new_labels = overlapping_boxlist.get_field('labels')
+    new_boxlist = box_list_ops.change_coordinate_frame(overlapping_boxlist,
+                                                       im_box_rank1)
+    new_boxes = new_boxlist.get()
+    if clip_boxes:
+      new_boxes = tf.clip_by_value(
+          new_boxes, clip_value_min=0.0, clip_value_max=1.0)
+
+    result = [new_image, new_boxes, new_labels]
+
+    if masks is not None:
+      masks_of_boxes_inside_window = tf.gather(masks, inside_window_ids)
+      masks_of_boxes_completely_inside_window = tf.gather(
+          masks_of_boxes_inside_window, keep_ids)
+      masks_box_begin = [0, im_box_begin[0], im_box_begin[1]]
+      masks_box_size = [-1, im_box_size[0], im_box_size[1]]
+      new_masks = tf.slice(
+          masks_of_boxes_completely_inside_window,
+          masks_box_begin, masks_box_size)
+      result.append(new_masks)
+
+    if keypoints is not None:
+      keypoints_of_boxes_inside_window = tf.gather(keypoints, inside_window_ids)
+      keypoints_of_boxes_completely_inside_window = tf.gather(
+          keypoints_of_boxes_inside_window, keep_ids)
+      new_keypoints = keypoint_change_coordinate_frame(
+          keypoints_of_boxes_completely_inside_window, im_box_rank1)
+      if clip_boxes:
+        new_keypoints = keypoint_prune_outside_window(
+            new_keypoints, [0.0, 0.0, 1.0, 1.0])
+      result.append(new_keypoints)
+
+    return tuple(result)
+
+
+def random_crop_image(image,
+                      boxes,
+                      labels,
+                      masks=None,
+                      keypoints=None,
+                      min_object_covered=1.0,
+                      aspect_ratio_range=(0.75, 1.33),
+                      area_range=(0.1, 1.0),
+                      overlap_thresh=0.3,
+                      clip_boxes=True,
+                      random_coef=0.0,
+                      seed=None):
+  """Randomly crops the image.
+
+  Given the input image and its bounding boxes, this op randomly
+  crops a subimage.  Given a user-provided set of input constraints,
+  the crop window is resampled until it satisfies these constraints.
+  If within 100 trials it is unable to find a valid crop, the original
+  image is returned. See the Args section for a description of the input
+  constraints. Both input boxes and returned Boxes are in normalized
+  form (e.g., lie in the unit square [0, 1]).
+  This function will return the original image with probability random_coef.
+
+  Note: Keypoint coordinates that are outside the crop will be set to NaN, which
+  is consistent with the original keypoint encoding for non-existing keypoints.
+
+  Args:
+    image: rank 3 float32 tensor contains 1 image -> [height, width, channels]
+           with pixel values varying between [0, 1].
+    boxes: rank 2 float32 tensor containing the bounding boxes with shape
+           [num_instances, 4].
+           Boxes are in normalized form meaning their coordinates vary
+           between [0, 1].
+           Each row is in the form of [ymin, xmin, ymax, xmax].
+    labels: rank 1 int32 tensor containing the object classes.
+    masks: (optional) rank 3 float32 tensor with shape
+           [num_instances, height, width] containing instance masks. The masks
+           are of the same height, width as the input `image`.
+    keypoints: (optional) rank 3 float32 tensor with shape
+               [num_instances, num_keypoints, 2]. The keypoints are in y-x
+               normalized coordinates.
+    min_object_covered: the cropped image must cover at least this fraction of
+                        at least one of the input bounding boxes.
+    aspect_ratio_range: allowed range for aspect ratio of cropped image.
+    area_range: allowed range for area ratio between cropped image and the
+                original image.
+    overlap_thresh: minimum overlap thresh with new cropped
+                    image to keep the box.
+    clip_boxes: whether to clip the boxes to the cropped image.
+    random_coef: a random coefficient that defines the chance of getting the
+                 original image. If random_coef is 0, we will always get the
+                 cropped image, and if it is 1.0, we will always get the
+                 original image.
+    seed: random seed.
+
+  Returns:
+    image: Image shape will be [new_height, new_width, channels].
+    boxes: boxes which is the same rank as input boxes. Boxes are in normalized
+           form.
+    labels: new labels.
+
+    If label_weights, multiclass_scores, masks, or keypoints is not None, the
+    function also returns:
+    masks: rank 3 float32 tensor with shape [num_instances, height, width]
+           containing instance masks.
+    keypoints: rank 3 float32 tensor with shape
+               [num_instances, num_keypoints, 2]
+  """
+
+  def strict_random_crop_image_fn():
+    return _strict_random_crop_image(
+        image,
+        boxes,
+        labels,
+        masks=masks,
+        keypoints=keypoints,
+        min_object_covered=min_object_covered,
+        aspect_ratio_range=aspect_ratio_range,
+        area_range=area_range,
+        overlap_thresh=overlap_thresh,
+        clip_boxes=clip_boxes)
+
+  # avoids tf.cond to make faster RCNN training on borg. See b/140057645.
+  if random_coef < sys.float_info.min:
+    result = strict_random_crop_image_fn()
+  else:
+    do_a_crop_random = tf.greater(tf.random_uniform([], seed=seed), random_coef)
+
+    outputs = [image, boxes, labels]
+
+    if masks is not None:
+      outputs.append(masks)
+    if keypoints is not None:
+      outputs.append(keypoints)
+
+    result = tf.cond(do_a_crop_random, strict_random_crop_image_fn,
+                     lambda: tuple(outputs))
+  return result
+

@@ -354,7 +354,10 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
   if params['precision'] == 'bfloat16':
     with tf.contrib.tpu.bfloat16_scope():
       model_outputs = build_model_graph(
-          features, labels, mode == tf.estimator.ModeKeys.TRAIN, params)
+          features, labels,
+          (mode == tf.estimator.ModeKeys.TRAIN or
+           mode == tf.estimator.ModeKeys.EVAL),
+          params)
       model_outputs.update({
           'source_id': features['source_ids'],
           'image_info': features['image_info'],
@@ -368,27 +371,35 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
       cast_outputs_to_float(model_outputs)
   else:
     model_outputs = build_model_graph(
-        features, labels, mode == tf.estimator.ModeKeys.TRAIN, params)
+        features, labels,
+        (mode == tf.estimator.ModeKeys.TRAIN or
+         mode == tf.estimator.ModeKeys.EVAL),
+        params)
     model_outputs.update({
         'source_id': features['source_ids'],
         'image_info': features['image_info'],
     })
-  if mode == tf.estimator.ModeKeys.PREDICT and 'orig_images' in features:
-    model_outputs['orig_images'] = features['orig_images']
 
-  # First check if it is in PREDICT mode.
-  if mode == tf.estimator.ModeKeys.PREDICT:
-    predictions = {}
+  # First check if it is in PREDICT or EVAL mode to fill out predictions.
+  # Predictions are used during the eval step to generate metrics.
+  predictions = {}
+  if (mode == tf.estimator.ModeKeys.PREDICT or
+      mode == tf.estimator.ModeKeys.EVAL):
+    if 'orig_images' in features:
+      model_outputs['orig_images'] = features['orig_images']
     if labels and params['include_groundtruth_in_features']:
-      # Labels can only be emebeded in predictions. The predition cannot output
+      # Labels can only be embedded in predictions. The predition cannot output
       # dictionary as a value.
       predictions.update(labels)
     model_outputs.pop('fpn_features', None)
     predictions.update(model_outputs)
-
-    if params['use_tpu']:
-      return tf.contrib.tpu.TPUEstimatorSpec(mode=mode, predictions=predictions)
-    return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions)
+    # If we are doing PREDICT, we can return here.
+    if mode == tf.estimator.ModeKeys.PREDICT:
+      if params['use_tpu']:
+        return tf.contrib.tpu.TPUEstimatorSpec(mode=mode,
+                                               predictions=predictions)
+      return tf.estimator.EstimatorSpec(mode=mode,
+                                        predictions=predictions)
 
   # Set up training loss and learning rate.
   global_step = tf.train.get_or_create_global_step()
@@ -438,6 +449,21 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
   ])
   total_loss = (total_rpn_loss + total_fast_rcnn_loss + mask_loss +
                 l2_regularization_loss)
+
+  if mode == tf.estimator.ModeKeys.EVAL:
+    # Predictions can only contain a dict of tensors, not a dict of dict of
+    # tensors. These outputs are not used for eval purposes.
+    del predictions['rpn_score_outputs']
+    del predictions['rpn_box_outputs']
+    if params['use_tpu']:
+      # For now, just return loss against the eval dataset.
+      # In the future, calculate COCO metrics against the eval dataset.
+      return tf.contrib.tpu.TPUEstimatorSpec(mode=mode,
+                                             predictions=predictions,
+                                             eval_metrics=None,
+                                             loss=total_loss)
+    return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions,
+                                      eval_metrics=None, loss=total_loss)
 
   host_call = None
   if mode == tf.estimator.ModeKeys.TRAIN:
