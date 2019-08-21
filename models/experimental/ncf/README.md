@@ -23,12 +23,42 @@ Copy `./ncf_main.py` to your working directory.
 wget https://raw.githubusercontent.com/tensorflow/tpu/master/models/experimental/ncf/ncf_main.py
 ```
 
-## Train and Eval
+Setup a Google Cloud Bucket for your training data and model storage:
 
 ```shell
 BUCKET_NAME=your_bucket_name
-EXPERIMENT_NAME=your_experiment_name
-python ncf_main.py --data_dir gs://${BUCKET_NAME}/data_dir --learning_rate 0.00136794 --beta1 0.781076 --beta2 0.977589 --epsilon 7.36321e-8  --model_dir gs://${BUCKET_NAME}/model_dirs/${EXPERIMENT_NAME} |& tee ${EXPERIMENT_NAME}.log
 ```
+
+## Run the training data generator
+
+From the `models/` directory run the command:
+
+```shell
+python official/recommendation/create_ncf_data.py \
+--data_dir gs://${BUCKET_NAME}/ncf_data \
+--meta_data_file_path gs://${BUCKET_NAME}/ncf_data/metadata.json \
+--train_prebatch_size 98304 \
+--eval_prebatch_size 160000
+```
+
+This will download an preprocess your data and take several minutes to process
+the data.
+
+NOTE The prebatch sizes and number of epochs passed as arguments to
+`create_ncf_data.py` must match what you pass to ncf_main.py. In this
+case they match the defaults values for `--batch_size` and `--eval_batch_size`
+and the number of epochs for both scripts defaults to 14.
+
+## Train and Eval
+
+```shell
+EXPERIMENT_NAME=your_experiment_name
+python ncf_main.py \
+--train_dataset_path="gs://${BUCKET_NAME}/ncf_data/training_cycle_{}/*" \
+--eval_dataset_path="gs://${BUCKET_NAME}/ncf_data/eval_data/*" \
+--input_meta_data_path=gs://${BUCKET_NAME}/ncf_data/metadata.json \
+--model_dir gs://${BUCKET_NAME}/model_dirs/${EXPERIMENT_NAME} |& tee ${EXPERIMENT_NAME}.log
+```
+
 Most of the time, the hit rate metric (HR) reaches 0.635 in around 10 epochs.
 
