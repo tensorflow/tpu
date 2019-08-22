@@ -37,7 +37,7 @@ spec:
             DEBIAN_FRONTEND=noninteractive apt-get install -y python-dev python-tk libsm6 libxrender1 libxrender-dev libgtk2.0-dev libxext6 libglib2.0 &&
             pip install Cython matplotlib opencv-python-headless &&
             pip install 'git+https://github.com/cocodataset/cocoapi#egg=pycocotools&subdirectory=PythonAPI' &&
-            python /tensorflow_tpu_models/models/official/mask_rcnn/mask_rcnn_main.py
+            python /tensorflow_tpu_models/models/experimental/mask_rcnn/mask_rcnn_main.py
             --model_dir=${MODEL_BUCKET}
             --iterations_per_loop=500
             --config=resnet_checkpoint=${RESNET_CHECKPOINT},resnet_depth=50,use_bfloat16=true,train_batch_size=64,eval_batch_size=8,training_file_pattern=${DATA_BUCKET}/train-*,validation_file_pattern=${DATA_BUCKET}/val-*,val_json_file=${DATA_BUCKET}/instances_val2017.json,total_steps=22500
