@@ -1,11 +1,11 @@
 # MixNet
 
-[1] Mingxing Tan and Quoc V. Le.  MixNet: Mixed Depthwise Convolutional Kernels.
+[1] Mingxing Tan and Quoc V. Le.  MixConv: Mixed Depthwise Convolutional Kernels.
    BMVC 2019. https://arxiv.org/abs/1907.09595
 
 ## 1. About MixNet
 
-MixNets are a family of mobile-sizes image classification models equipped with MDConv, a new type of mixed depthwise convolutions. They are developed based on [AutoML MNAS Mobile framework](https://ai.googleblog.com/2018/08/mnasnet-towards-automating-design-of.html), with an extended search space including MDConv. Currently, MixNets achieve better accuracy and efficiency than previous mobile models. In particular, our MixNet-L achieves a new state-of-the-art 78.9% ImageNet top-1 accuracy under typical mobile FLOPS (<600M) constraint:
+MixNets are a family of mobile-sizes image classification models equipped with MixConv, a new type of mixed depthwise convolutions. They are developed based on [AutoML MNAS Mobile framework](https://ai.googleblog.com/2018/08/mnasnet-towards-automating-design-of.html), with an extended search space including MixConv. Currently, MixNets achieve better accuracy and efficiency than previous mobile models. In particular, our MixNet-L achieves a new state-of-the-art 78.9% ImageNet top-1 accuracy under typical mobile FLOPS (<600M) constraint:
 
 <table border="0", width="75%", align="center">
 <tr>
