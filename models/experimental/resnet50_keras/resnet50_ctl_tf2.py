@@ -181,13 +181,15 @@ def main(unused_argv):
           'test_accuracy', dtype=tf.float32)
       logging.info('Finished building Keras ResNet-50 model')
 
-    checkpoint = tf.train.Checkpoint(model=model, optimizer=optimizer)
-    latest_checkpoint = tf.train.latest_checkpoint(model_dir)
-    initial_epoch = 0
-    if latest_checkpoint:
-      checkpoint.restore(latest_checkpoint)
-      logging.info('Loaded checkpoint %s', latest_checkpoint)
-      initial_epoch = optimizer.iterations.numpy() // steps_per_epoch
+      checkpoint = tf.train.Checkpoint(model=model, optimizer=optimizer)
+      latest_checkpoint = tf.train.latest_checkpoint(model_dir)
+      initial_epoch = 0
+      if latest_checkpoint:
+        # checkpoint.restore must be within a strategy.scope() so that optimizer
+        # slot variables are mirrored.
+        checkpoint.restore(latest_checkpoint)
+        logging.info('Loaded checkpoint %s', latest_checkpoint)
+        initial_epoch = optimizer.iterations.numpy() // steps_per_epoch
 
     # Create summary writers
     train_summary_writer = tf.summary.create_file_writer(
