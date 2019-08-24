@@ -135,6 +135,13 @@ class TpuBatchNormalization(tf.layers.BatchNormalization):
       return (shard_mean, shard_variance)
 
 
+class BatchNormalization(tf.layers.BatchNormalization):
+  """Fixed default name of BatchNormalization to match TpuBatchNormalization."""
+
+  def __init__(self, name='tpu_batch_normalization', **kwargs):
+    super(BatchNormalization, self).__init__(name=name, **kwargs)
+
+
 def drop_connect(inputs, is_training, drop_connect_rate):
   """Apply drop connect."""
   if not is_training:
