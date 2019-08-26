@@ -77,8 +77,8 @@ class GroupedConv2D(object):
     return x
 
 
-class MDConv(object):
-  """MDConv with mixed depthwise convolutional kernels.
+class MixConv(object):
+  """MixConv with mixed depthwise convolutional kernels.
 
   MDConv is an improved depthwise convolution that mixes multiple kernels (e.g.
   3x3, 5x5, etc). Right now, we use an naive implementation that split channels

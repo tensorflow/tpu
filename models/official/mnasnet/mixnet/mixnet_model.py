@@ -169,7 +169,7 @@ class MixnetBlock(object):
 
     kernel_size = self._block_args.dw_ksize
     # Depth-wise convolution phase:
-    self._depthwise_conv = custom_layers.MDConv(
+    self._depthwise_conv = custom_layers.MixConv(
         kernel_size,
         strides=self._block_args.strides,
         depthwise_initializer=conv_kernel_initializer,

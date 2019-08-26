@@ -138,8 +138,7 @@ def nearest_upsampling(data, scale):
       data.
   """
   with tf.name_scope('nearest_upsampling'):
-    bs, h, w, c = data.get_shape().as_list()
-    bs = -1 if bs is None else bs
+    bs, h, w, c = tf.unstack(tf.shape(data))
     # Use reshape to quickly upsample the input.  The nearest pixel is selected
     # implicitly via broadcasting.
     data = tf.reshape(data, [bs, h, 1, w, 1, c]) * tf.ones(

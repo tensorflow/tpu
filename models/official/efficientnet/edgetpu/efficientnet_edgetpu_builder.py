@@ -100,7 +100,8 @@ def build_model(images,
                 model_name,
                 training,
                 override_params=None,
-                model_dir=None):
+                model_dir=None,
+                fine_tuning=False):
   """A helper functiion to creates a model and returns predicted logits.
 
   Args:
@@ -110,6 +111,7 @@ def build_model(images,
     override_params: A dictionary of params for overriding. Fields must exist in
       efficientnet_model.GlobalParams.
     model_dir: string, optional model dir for saving configs.
+    fine_tuning: boolean, whether the model is used for finetuning.
 
   Returns:
     logits: the logits tensor of classes.
@@ -120,7 +122,13 @@ def build_model(images,
     When override_params has invalid fields, raises ValueError.
   """
   assert isinstance(images, tf.Tensor)
+  if not training or fine_tuning:
+    if not override_params:
+      override_params = {}
+    override_params['batch_norm'] = utils.BatchNormalization
   blocks_args, global_params = get_model_params(model_name, override_params)
+  if not training or fine_tuning:
+    global_params = global_params._replace(batch_norm=utils.BatchNormalization)
 
   if model_dir:
     param_file = os.path.join(model_dir, 'model_params.txt')
