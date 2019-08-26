@@ -175,7 +175,8 @@ def build_model(images,
                 training,
                 override_params=None,
                 model_dir=None,
-                fine_tuning=False):
+                fine_tuning=False,
+                features_only=False):
   """A helper functiion to creates a model and returns predicted logits.
 
   Args:
@@ -186,6 +187,7 @@ def build_model(images,
       efficientnet_model.GlobalParams.
     model_dir: string, optional model dir for saving configs.
     fine_tuning: boolean, whether the model is used for finetuning.
+    features_only: build the base feature network only.
 
   Returns:
     logits: the logits tensor of classes.
@@ -215,10 +217,9 @@ def build_model(images,
 
   with tf.variable_scope(model_name):
     model = efficientnet_model.Model(blocks_args, global_params)
-    logits = model(images, training=training)
-
-  logits = tf.identity(logits, 'logits')
-  return logits, model.endpoints
+    outputs = model(images, training=training, features_only=features_only)
+  outputs = tf.identity(outputs, 'features' if features_only else 'logits')
+  return outputs, model.endpoints
 
 
 def build_model_base(images, model_name, training, override_params=None):
