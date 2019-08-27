@@ -81,6 +81,8 @@ class Model(object):
     self._learning_rate_fn = learning_rates.learning_rate_generator(
         params.train.learning_rate)
 
+    self._gradient_clip_norm = params.train.gradient_clip_norm
+
     self._frozen_variable_prefix = params.train.frozen_variable_prefix
 
     # Checkpoint restoration.
@@ -152,10 +154,16 @@ class Model(object):
     train_var_list = filter_trainable_variables(
         tf.trainable_variables(), self._frozen_variable_prefix)
 
+    grads_and_vars = optimizer.compute_gradients(total_loss, train_var_list)
+    if self._gradient_clip_norm > 0.0:
+      grads = [gv[0] for gv in grads_and_vars]
+      tvars = [gv[1] for gv in grads_and_vars]
+      clipped_grads, _ = tf.clip_by_global_norm(grads, self._gradient_clip_norm)
+      grads_and_vars = zip(clipped_grads, tvars)
+
     with tf.control_dependencies(update_ops):
-      train_op = optimizer.minimize(
-          total_loss, global_step, var_list=train_var_list)
-    return train_op
+      minimize_op = optimizer.apply_gradients(grads_and_vars, global_step)
+    return minimize_op
 
   def weight_decay_loss(self, l2_weight_decay):
     return l2_weight_decay * tf.add_n([
