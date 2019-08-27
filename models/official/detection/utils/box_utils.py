@@ -127,13 +127,13 @@ def denormalize_boxes(boxes, image_shape):
       height, width = image_shape
     else:
       image_shape = tf.cast(image_shape, dtype=boxes.dtype)
-      height = image_shape[..., 0:1]
-      width = image_shape[..., 1:2]
+      height, width = tf.split(image_shape, 2, axis=-1)
 
-    ymin = boxes[..., 0:1] * height
-    xmin = boxes[..., 1:2] * width
-    ymax = boxes[..., 2:3] * height
-    xmax = boxes[..., 3:4] * width
+    ymin, xmin, ymax, xmax = tf.split(boxes, 4, axis=-1)
+    ymin = ymin * height
+    xmin = xmin * width
+    ymax = ymax * height
+    xmax = xmax * width
 
     denormalized_boxes = tf.concat([ymin, xmin, ymax, xmax], axis=-1)
     return denormalized_boxes
