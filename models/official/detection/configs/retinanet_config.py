@@ -56,6 +56,7 @@ RETINANET_CFG = {
         'train_file_pattern': '',
         'transpose_input': True,
         'l2_weight_decay': 0.0001,
+        'gradient_clip_norm': 0.0,
     },
     'eval': {
         'eval_batch_size': 8,

@@ -18,6 +18,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import functools
 import os
 import re
 import tensorflow as tf
@@ -119,6 +120,32 @@ class BlockDecoder(object):
     return block_strings
 
 
+def swish(features, use_native=True):
+  """Computes the Swish activation function.
+
+  The tf.nn.swish operation uses a custom gradient to reduce memory usage.
+  Since saving custom gradients in SavedModel is currently not supported, and
+  one would not be able to use an exported TF-Hub module for fine-tuning, we
+  provide this wrapper that can allow to select whether to use the native
+  TensorFlow swish operation, or whether to use a customized operation that
+  has uses default TensorFlow gradient computation.
+
+  Args:
+    features: A `Tensor` representing preactivation values.
+    use_native: Whether to use the native swish from tf.nn that uses a custom
+      gradient to reduce memory usage, or to use customized swish that uses
+      default TensorFlow gradient computation.
+
+  Returns:
+    The activation value.
+  """
+  if use_native:
+    return tf.nn.swish(features)
+  else:
+    features = tf.convert_to_tensor(features, name='features')
+    return features * tf.nn.sigmoid(features)
+
+
 def efficientnet(width_coefficient=None,
                  depth_coefficient=None,
                  dropout_rate=0.2,
@@ -202,6 +229,7 @@ def build_model(images,
     if not override_params:
       override_params = {}
     override_params['batch_norm'] = utils.BatchNormalization
+    override_params['relu_fn'] = functools.partial(swish, use_native=False)
   blocks_args, global_params = get_model_params(model_name, override_params)
 
   if model_dir:
