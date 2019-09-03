@@ -40,7 +40,7 @@ flags.DEFINE_string('training_file_pattern', None,
                     'Location of the train data.')
 flags.DEFINE_string('eval_file_pattern', None, 'Location of ther eval data')
 flags.DEFINE_string('config_file', '', 'a YAML file which specifies overrides.')
-flags.DEFINE_string('params_overrides', '',
+flags.DEFINE_string('params_override', '',
                     'A JSON-style string that specifies overrides.')
 flags.DEFINE_integer('min_eval_interval', 180,
                      'Minimum seconds between evaluations.')
@@ -80,7 +80,7 @@ def main(argv):
   params = params_dict.override_params_dict(
       params, FLAGS.config_file, is_strict=False)
   params = params_dict.override_params_dict(
-      params, FLAGS.params_overrides, is_strict=False)
+      params, FLAGS.params_override, is_strict=False)
   params.override(
       {
           'training_file_pattern': FLAGS.training_file_pattern,
