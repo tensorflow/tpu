@@ -73,12 +73,12 @@ python unet_main.py \
 --mode=train \
 --num_cores=8 \
 --config_file="./DF2x2_params.yaml" \
---params_overrides="{\"optimizer\":\"momentum\",\"train_steps\":100}"
+--params_override="{\"optimizer\":\"momentum\",\"train_steps\":100}"
 ```
 
 The following script example is for running evaluation on TPU v3-8. It is only
 one line change from previous script: changes the mode to "eval". Also, modify
-the "eval_steps" in the yaml file or the "--params_overrides" to adjust
+the "eval_steps" in the yaml file or the "--params_override" to adjust
 evaluation duration.
 
 ### Train with Spatial Partition
@@ -105,7 +105,7 @@ python unet_main.py \
 --num_cores=8 \
 --input_partition_dims=[1,8,1,1,1] \
 --config_file="./DF2x2_params.yaml" \
---params_overrides="{\"optimizer\":\"momentum\",\"train_steps\":100}"
+--params_override="{\"optimizer\":\"momentum\",\"train_steps\":100}"
 ```
 
 ## Evaluation
@@ -127,7 +127,7 @@ python unet_main.py \
 --mode="eval" \
 --num_cores=8 \
 --config_file="./DF2x2_params.yaml" \
---params_overrides="{\"optimizer\":\"momentum\",\"eval_steps\":10}"
+--params_override="{\"optimizer\":\"momentum\",\"eval_steps\":10}"
 ```
 
 
