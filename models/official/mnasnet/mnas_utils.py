@@ -19,7 +19,7 @@ from __future__ import division
 from __future__ import print_function
 
 import sys
-sys.path.insert(0, '../efficientnet')
+sys.path.append('tpu/models/official/efficientnet')
 import utils as efficientnet_utils
 
 
