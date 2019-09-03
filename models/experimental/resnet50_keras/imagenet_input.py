@@ -156,18 +156,13 @@ class ImageNetInput(object):
     # Prefetch overlaps in-feed with training
     dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
 
-    options = tf.data.Options()
     if self.is_training:
       # Use a private thread pool and limit intra-op parallelism. Enable
       # non-determinism only for training.
+      options = tf.data.Options()
       options.experimental_threading.max_intra_op_parallelism = 1
       options.experimental_threading.private_threadpool_size = 16
       options.experimental_deterministic = False
+      dataset = dataset.with_options(options)
 
-    # Few ops are marked stateful because they introduce randomness in the
-    # transformation. While replicating the data pipeline onto multiple replicas
-    # we don't need to clone the state because we want each replica to behave
-    # independently.
-    options.experimental_allow_stateful = True
-    dataset = dataset.with_options(options)
     return dataset
