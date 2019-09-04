@@ -319,18 +319,25 @@ class InputReader(object):
 
     # Enable TPU performance optimization: transpose input, space-to-depth
     # image transform, or both.
-    if (self._mode == tf.estimator.ModeKeys.TRAIN or
-        self._mode == tf.estimator.ModeKeys.EVAL) and (
-            params['transpose_input'] or
-            params['conv0_space_to_depth_block_size'] != 0):
+    if ((self._mode == tf.estimator.ModeKeys.TRAIN or
+         self._mode == tf.estimator.ModeKeys.EVAL) and
+        (params['transpose_input'] or
+         (params['backbone'].startswith('resnet') and
+          params['conv0_space_to_depth_block_size'] > 0))):
+
       def _transform_images(features, labels):
         """Transforms images."""
         images = features['images']
-        # Transforms images for TPU performance.
-        images = spatial_transform_ops.fused_transpose_and_space_to_depth(
-            images, params['conv0_space_to_depth_block_size'],
-            params['transpose_input'])
-        features['images'] = images
+        if (params['backbone'].startswith('resnet') and
+            params['conv0_space_to_depth_block_size'] > 0):
+          # Transforms images for TPU performance.
+          features['images'] = (
+              spatial_transform_ops.fused_transpose_and_space_to_depth(
+                  images,
+                  params['conv0_space_to_depth_block_size'],
+                  params['transpose_input']))
+        else:
+          features['images'] = tf.transpose(features['images'], [1, 2, 3, 0])
         return features, labels
 
       dataset = dataset.map(_transform_images, num_parallel_calls=16)
