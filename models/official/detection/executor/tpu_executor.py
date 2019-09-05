@@ -105,7 +105,8 @@ class TpuExecutor(object):
     val_json_file = os.path.join(
         self._params.model_dir, 'eval_annotation_file.json')
     if self._params.eval.val_json_file:
-      tf.gfile.Copy(self._params.eval.val_json_file, val_json_file)
+      tf.gfile.Copy(self._params.eval.val_json_file, val_json_file,
+                    overwrite=True)
     else:
       coco_utils.scan_and_generator_annotation_file(
           self._params.eval.eval_file_pattern,

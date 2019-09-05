@@ -127,11 +127,6 @@ def shapeprior_head_generator(params):
       params.num_downsample_channels,
       params.mask_crop_size,
       params.use_category_for_mask,
-      params.num_of_instances,
-      params.min_mask_level,
-      params.max_mask_level,
-      params.num_clusters,
-      params.temperature,
       params.shape_prior_path)
 
 
@@ -151,6 +146,4 @@ def finemask_head_generator(params):
       params.num_classes,
       params.num_downsample_channels,
       params.mask_crop_size,
-      params.num_convs,
-      params.coarse_mask_thr,
-      params.gt_upsample_scale)
+      params.num_convs)
