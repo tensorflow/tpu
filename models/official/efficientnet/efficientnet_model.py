@@ -500,17 +500,17 @@ class Model(tf.keras.Model):
             self.endpoints['block_%s/%s' % (idx, k)] = v
             if is_reduction:
               self.endpoints['reduction_%s/%s' % (reduction_idx, k)] = v
-    self.endpoints['features'] = outputs
 
-    if not features_only:
-      # Calls final layers and returns logits.
-      with tf.variable_scope('head'):
-        outputs = self._relu_fn(
-            self._bn1(self._conv_head(outputs), training=training))
-        outputs = self._avg_pooling(outputs)
+    # Calls final layers and returns logits.
+    with tf.variable_scope('head'):
+      outputs = self._relu_fn(
+          self._bn1(self._conv_head(outputs), training=training))
+      self.endpoints['features'] = outputs
+      outputs = self._avg_pooling(outputs)
+      self.endpoints['global_pool'] = outputs
+      if not features_only:
         if self._dropout:
           outputs = self._dropout(outputs, training=training)
-        self.endpoints['global_pool'] = outputs
         if self._fc:
           outputs = self._fc(outputs)
         self.endpoints['head'] = outputs
