@@ -51,6 +51,11 @@ flags.DEFINE_string(
 flags.DEFINE_integer(
     'num_cores', default=8, help='Number of TPU cores for training.')
 
+flags.DEFINE_string(
+    'tpu_job_name', None,
+    'Name of TPU worker binary. Only necessary if job name is changed from'
+    ' default tpu_worker.')
+
 FLAGS = flags.FLAGS
 
 
@@ -80,6 +85,7 @@ def main(argv):
           'tpu_zone': FLAGS.tpu_zone,
           'gcp_project': FLAGS.gcp_project,
       },
+      'tpu_job_name': FLAGS.tpu_job_name,
       'use_tpu': FLAGS.use_tpu,
       'model_dir': FLAGS.model_dir,
       'train': {
