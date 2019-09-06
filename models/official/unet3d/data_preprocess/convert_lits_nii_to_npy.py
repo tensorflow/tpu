@@ -36,12 +36,10 @@ input_path = "Downloads/LiTS/Train/"  # where the .nii files are.
 output_path = "Downloads/LiTS/Train_np/"  # where you want to put the npy files.
 
 
-def process_one_file(image_file):
+def process_one_file(image_path):
   """Convert one nii file to npy."""
-  im_id = image_file.split("volume-")[1].split(".nii")[0]
-  image_path = os.path.join(nii_dir, image_file)
-  label_path = os.path.join(nii_dir,
-                            image_file.replace("volume", "segmentation"))
+  im_id = os.path.basename(image_path).split("volume-")[1].split(".nii")[0]
+  label_path = image_path.replace("volume-", "segmentation-")
 
   image = nib.load(image_path).get_data().astype(np.float32)
   label = nib.load(label_path).get_data().astype(np.float32)
