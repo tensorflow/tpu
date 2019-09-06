@@ -3,7 +3,7 @@ backbone: 'resnet50'
 num_cores: 32
 # ---------- TRAINING PARAMETERS ----------
 train_batch_size: 128
-init_learning_rate: 0.16
+init_learning_rate: 0.08
 warmup_learning_rate: 0.0067
 warmup_steps: 250
 learning_rate_levels: [0.016, 0.0016]
