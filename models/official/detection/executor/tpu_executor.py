@@ -40,6 +40,7 @@ class TpuExecutor(object):
   def __init__(self, model_fn, params):
     self._model_dir = params.model_dir
     self._params = params
+    self._tpu_job_name = params.tpu_job_name
     self._evaluator = None
 
     input_partition_dims = None
@@ -77,6 +78,7 @@ class TpuExecutor(object):
         params.train.iterations_per_loop,
         num_cores_per_replica=num_cores_per_replica,
         input_partition_dims=input_partition_dims,
+        tpu_job_name=self._tpu_job_name,
         per_host_input_for_training=tf.contrib.tpu.InputPipelineConfig.PER_HOST_V2  # pylint: disable=line-too-long
     )
 
