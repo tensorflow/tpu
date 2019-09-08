@@ -24,9 +24,7 @@ import sys
 import numpy as np
 import tensorflow as tf
 
-from tensorflow.contrib.tpu.python.ops import tpu_ops
-from tensorflow.contrib.tpu.python.tpu import tpu_function
-
+from tensorflow.python.tpu.ops.tpu_ops import *
 
 def build_learning_rate(initial_lr,
                         global_step,
