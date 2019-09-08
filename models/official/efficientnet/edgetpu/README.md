@@ -63,7 +63,7 @@ The table below compared the accuracy of float models (on CPU) and the quantized
 |efficientnet-edgetpu-M| 78.69 | 78.6 % |
 |efficientnet-edgetpu-L| 80.62 | 80.2% |
 
-The `export_model.py` script can also be used to export a [tensorflow saved_model](https://www.tensorflow.org/guide/saved_model]) from a training checkpoint:
+The `export_model.py` script can also be used to export a [tensorflow saved_model](https://www.tensorflow.org/guide/saved_model) from a training checkpoint:
 
 ```shell
 $ python export_model.py --model_name=$MODEL --ckpt_dir=/path/to/model-ckpt/ --output_saved_model_dir=/path/to/output_saved_model/ --output_tflite=${MODEL}_float.tflite --quantize=False
