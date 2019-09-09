@@ -43,6 +43,7 @@ GlobalParams.__new__.__defaults__ = (None,) * len(GlobalParams._fields)
 BlockArgs = collections.namedtuple('BlockArgs', [
     'kernel_size', 'num_repeat', 'input_filters', 'output_filters',
     'expand_ratio', 'id_skip', 'strides', 'se_ratio', 'conv_type',
+    'fused_conv',
 ])
 # defaults will be a public argument for namedtuple in Python 3.7
 # https://docs.python.org/3/library/collections.html#collections.namedtuple
@@ -164,30 +165,43 @@ class MBConvBlock(tf.keras.layers.Layer):
   def _build(self):
     """Builds block according to the arguments."""
     filters = self._block_args.input_filters * self._block_args.expand_ratio
-    if self._block_args.expand_ratio != 1:
-      # Expansion phase:
-      self._expand_conv = tf.layers.Conv2D(
+    kernel_size = self._block_args.kernel_size
+    if self._block_args.fused_conv:
+      # If use fused mbconv, skip expansion and use regular conv.
+      self._fused_conv = tf.layers.Conv2D(
           filters,
-          kernel_size=[1, 1],
-          strides=[1, 1],
+          [kernel_size, kernel_size],
+          strides=self._block_args.strides,
           kernel_initializer=conv_kernel_initializer,
           padding='same',
           data_format=self._data_format,
           use_bias=False)
-      self._bn0 = self._batch_norm(
-          axis=self._channel_axis,
-          momentum=self._batch_norm_momentum,
-          epsilon=self._batch_norm_epsilon)
+    else:
+      # Otherwise, first apply expansion and then apply depthwise conv.
+      if self._block_args.expand_ratio != 1:
+        # Expansion phase.
+        self._expand_conv = tf.layers.Conv2D(
+            filters,
+            kernel_size=[1, 1],
+            strides=[1, 1],
+            kernel_initializer=conv_kernel_initializer,
+            padding='same',
+            data_format=self._data_format,
+            use_bias=False)
+        self._bn0 = self._batch_norm(
+            axis=self._channel_axis,
+            momentum=self._batch_norm_momentum,
+            epsilon=self._batch_norm_epsilon)
 
-    kernel_size = self._block_args.kernel_size
-    # Depth-wise convolution phase:
-    self._depthwise_conv = utils.DepthwiseConv2D(
-        [kernel_size, kernel_size],
-        strides=self._block_args.strides,
-        depthwise_initializer=conv_kernel_initializer,
-        padding='same',
-        data_format=self._data_format,
-        use_bias=False)
+      # Depth-wise convolution phase:
+      self._depthwise_conv = utils.DepthwiseConv2D(
+          [kernel_size, kernel_size],
+          strides=self._block_args.strides,
+          depthwise_initializer=conv_kernel_initializer,
+          padding='same',
+          data_format=self._data_format,
+          use_bias=False)
+
     self._bn1 = self._batch_norm(
         axis=self._channel_axis,
         momentum=self._batch_norm_momentum,
@@ -256,14 +270,18 @@ class MBConvBlock(tf.keras.layers.Layer):
       A output tensor.
     """
     tf.logging.info('Block input: %s shape: %s' % (inputs.name, inputs.shape))
-    if self._block_args.expand_ratio != 1:
-      x = self._relu_fn(self._bn0(self._expand_conv(inputs), training=training))
+    x = inputs
+    if self._block_args.fused_conv:
+      x = self._relu_fn(self._bn1(self._fused_conv(x), training=training))
+      tf.logging.info('Conv2D: %s shape: %s' % (x.name, x.shape))
     else:
-      x = inputs
-    tf.logging.info('Expand: %s shape: %s' % (x.name, x.shape))
+      if self._block_args.expand_ratio != 1:
+        x = self._relu_fn(self._bn0(self._expand_conv(x),
+                                    training=training))
+        tf.logging.info('Expand: %s shape: %s' % (x.name, x.shape))
 
-    x = self._relu_fn(self._bn1(self._depthwise_conv(x), training=training))
-    tf.logging.info('DWConv: %s shape: %s' % (x.name, x.shape))
+      x = self._relu_fn(self._bn1(self._depthwise_conv(x), training=training))
+      tf.logging.info('DWConv: %s shape: %s' % (x.name, x.shape))
 
     if self._has_se:
       with tf.variable_scope('se'):
