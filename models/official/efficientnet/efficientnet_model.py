@@ -474,13 +474,20 @@ class Model(tf.keras.Model):
     else:
       self._dropout = None
 
-  def call(self, inputs, training=True, features_only=None):
+  def call(self,
+           inputs,
+           training=True,
+           features_only=None,
+           pooled_features_only=False):
     """Implementation of call().
 
     Args:
       inputs: input tensors.
       training: boolean, whether the model is constructed for training.
       features_only: build the base feature network only.
+      pooled_features_only: build the base network for features extraction
+        (after 1x2 conv layer and global pooling, but before dropout and fc
+        head).
 
     Returns:
       output tensors.
@@ -526,10 +533,12 @@ class Model(tf.keras.Model):
         outputs = self._relu_fn(
             self._bn1(self._conv_head(outputs), training=training))
         outputs = self._avg_pooling(outputs)
-        if self._dropout:
-          outputs = self._dropout(outputs, training=training)
-        self.endpoints['global_pool'] = outputs
-        if self._fc:
-          outputs = self._fc(outputs)
-        self.endpoints['head'] = outputs
+        self.endpoints['pooled_features'] = outputs
+        if not pooled_features_only:
+          if self._dropout:
+            outputs = self._dropout(outputs, training=training)
+          self.endpoints['global_pool'] = outputs
+          if self._fc:
+            outputs = self._fc(outputs)
+          self.endpoints['head'] = outputs
     return outputs
