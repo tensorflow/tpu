@@ -29,6 +29,7 @@ RETINANET_CFG = {
     'type': 'retinanet',
     'model_dir': '',
     'use_tpu': True,
+    'isolate_session_state': False,
     'train': {
         'iterations_per_loop': 100,
         'train_batch_size': 64,
