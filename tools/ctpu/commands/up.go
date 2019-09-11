@@ -417,12 +417,14 @@ func (c *upCmd) confirmExecution(tpuAPIEnabled bool) (bool, error) {
   Zone:                 %s
   GCP Project:          %s
   TensorFlow Version:   %s
-  VM:
+`, c.cfg.FlockName, c.cfg.Zone, c.cfg.Project, tfVersion)
+	if !c.tpuOnly {
+		fmt.Printf(`  VM:
       Machine Type:     %s
       Disk Size:        %d GB
       Preemptible:      %v
-`, c.cfg.FlockName, c.cfg.Zone, c.cfg.Project, tfVersion, c.machineType, c.diskSizeGb,
-		c.preemptibleVM)
+`, c.machineType, c.diskSizeGb, c.preemptibleVM)
+	}
 	if !c.vmOnly {
 		fmt.Printf(`  Cloud TPU:
       Size:             %s
