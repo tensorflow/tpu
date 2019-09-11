@@ -37,17 +37,18 @@ From the `models/` directory run the command:
 python official/recommendation/create_ncf_data.py \
 --data_dir gs://${BUCKET_NAME}/ncf_data \
 --meta_data_file_path gs://${BUCKET_NAME}/ncf_data/metadata.json \
---train_prebatch_size 98304 \
---eval_prebatch_size 160000
+--train_prebatch_size 12288 \
+--eval_prebatch_size 20000
 ```
 
 This will download an preprocess your data and take several minutes to process
 the data.
 
-NOTE The prebatch sizes and number of epochs passed as arguments to
-`create_ncf_data.py` must match what you pass to ncf_main.py. In this
-case they match the defaults values for `--batch_size` and `--eval_batch_size`
-and the number of epochs for both scripts defaults to 14.
+NOTE The pre-batch sizes must be the same as the `--batch_size` and
+`--eval_batch_size` passed to `ncf_main.py` divided by the value of
+`--num_tpu_shards` (the number of TPU cores being trained on). By default this
+model trains on a single host with 8 TPU cores, giving the pre-batch sizes
+above.
 
 ## Train and Eval
 
