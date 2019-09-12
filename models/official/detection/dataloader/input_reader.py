@@ -50,9 +50,13 @@ class InputFn(object):
       dataset = dataset.shuffle(64)
 
     # Parses the fetched records to input tensors for model function.
-    dataset = dataset.map(self._parser_fn, num_parallel_calls=64)
+    dataset = dataset.apply(
+        tf.contrib.data.map_and_batch(
+            self._parser_fn,
+            batch_size=batch_size,
+            num_parallel_batches=64,
+            drop_remainder=True))
     dataset = dataset.prefetch(tf.contrib.data.AUTOTUNE)
-    dataset = dataset.batch(batch_size, drop_remainder=True)
 
     # Transpose the input images from [N,H,W,C] to [H,W,C,N] since reshape on
     # TPU is expensive.

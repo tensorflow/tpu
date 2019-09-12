@@ -187,7 +187,6 @@ class COCOWrapper(coco.COCO):
         ann['segmentation'] = [
             [x1, y1, x1, y2, x2, y2, x2, y1]]
       elif self._eval_type == 'mask':
-        ann['bbox'] = mask_utils.toBbox(ann['segmentation'])
         ann['area'] = mask_utils.area(ann['segmentation'])
 
     res.dataset['annotations'] = copy.deepcopy(predictions)

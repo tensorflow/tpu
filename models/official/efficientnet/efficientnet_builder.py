@@ -72,7 +72,9 @@ class BlockDecoder(object):
         id_skip=('noskip' not in block_string),
         se_ratio=float(options['se']) if 'se' in options else None,
         strides=[int(options['s'][0]), int(options['s'][1])],
-        conv_type=int(options['c']) if 'c' in options else 0)
+        conv_type=int(options['c']) if 'c' in options else 0,
+        fused_conv=int(options['f']) if 'f' in options else 0
+        )
 
   def _encode_block_string(self, block):
     """Encodes a block to a string."""
@@ -84,10 +86,11 @@ class BlockDecoder(object):
         'i%d' % block.input_filters,
         'o%d' % block.output_filters,
         'c%d' % block.conv_type,
+        'f%d' % block.fused_conv,
     ]
     if block.se_ratio > 0 and block.se_ratio <= 1:
       args.append('se%s' % block.se_ratio)
-    if block.id_skip is False:
+    if block.id_skip is False:  # pylint: disable=g-bool-id-comparison
       args.append('noskip')
     return '_'.join(args)
 
@@ -203,7 +206,8 @@ def build_model(images,
                 override_params=None,
                 model_dir=None,
                 fine_tuning=False,
-                features_only=False):
+                features_only=False,
+                pooled_features_only=False):
   """A helper functiion to creates a model and returns predicted logits.
 
   Args:
@@ -214,7 +218,10 @@ def build_model(images,
       efficientnet_model.GlobalParams.
     model_dir: string, optional model dir for saving configs.
     fine_tuning: boolean, whether the model is used for finetuning.
-    features_only: build the base feature network only.
+    features_only: build the base feature network only (excluding final
+      1x1 conv layer, global pooling, dropout and fc head).
+    pooled_features_only: build the base network for features extraction (after
+      1x1 conv layer and global pooling, but before dropout and fc head).
 
   Returns:
     logits: the logits tensor of classes.
@@ -225,6 +232,7 @@ def build_model(images,
     When override_params has invalid fields, raises ValueError.
   """
   assert isinstance(images, tf.Tensor)
+  assert not (features_only and pooled_features_only)
   if not training or fine_tuning:
     if not override_params:
       override_params = {}
@@ -245,8 +253,17 @@ def build_model(images,
 
   with tf.variable_scope(model_name):
     model = efficientnet_model.Model(blocks_args, global_params)
-    outputs = model(images, training=training, features_only=features_only)
-  outputs = tf.identity(outputs, 'features' if features_only else 'logits')
+    outputs = model(
+        images,
+        training=training,
+        features_only=features_only,
+        pooled_features_only=pooled_features_only)
+  if features_only:
+    outputs = tf.identity(outputs, 'features')
+  elif pooled_features_only:
+    outputs = tf.identity(outputs, 'pooled_features')
+  else:
+    outputs = tf.identity(outputs, 'logits')
   return outputs, model.endpoints
 
 

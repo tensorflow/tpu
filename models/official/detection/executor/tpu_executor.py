@@ -83,6 +83,8 @@ class TpuExecutor(object):
     )
 
     run_config = tf.contrib.tpu.RunConfig(
+        session_config=tf.ConfigProto(
+            isolate_session_state=params.isolate_session_state),
         cluster=tpu_cluster_resolver,
         evaluation_master=params.platform.eval_master,
         model_dir=params.model_dir,
