@@ -201,7 +201,7 @@ class Nasfpn(object):
     # Number of output connections from each feat.
     num_output_connections = [0] * len(feats)
     num_output_levels = self._max_level - self._min_level + 1
-    feat_levels = range(self._min_level, self._max_level + 1)
+    feat_levels = list(range(self._min_level, self._max_level + 1))
 
     for i, sub_policy in enumerate(self._config.nodes):
       with tf.variable_scope('sub_policy{}'.format(i)):
