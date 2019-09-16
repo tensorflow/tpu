@@ -533,11 +533,10 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
       if grad is not None and ('beta' in var.name or 'bias' in var.name):
         grad = 2.0 * grad
       grads_and_vars.append((grad, var))
-    minimize_op = optimizer.apply_gradients(grads_and_vars,
-                                            global_step=global_step)
 
     with tf.control_dependencies(update_ops):
-      train_op = minimize_op
+      train_op = optimizer.apply_gradients(
+          grads_and_vars, global_step=global_step)
 
     if params['use_host_call']:
       def host_call_fn(global_step, total_loss, total_rpn_loss, rpn_score_loss,

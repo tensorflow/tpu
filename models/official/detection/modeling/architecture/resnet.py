@@ -53,6 +53,7 @@ class Resnet(object):
     self._data_format = data_format
 
     model_params = {
+        10: {'block': self.residual_block, 'layers': [1, 1, 1, 1]},
         18: {'block': self.residual_block, 'layers': [2, 2, 2, 2]},
         34: {'block': self.residual_block, 'layers': [3, 4, 6, 3]},
         50: {'block': self.bottleneck_block, 'layers': [3, 4, 6, 3]},
