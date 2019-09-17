@@ -3,7 +3,7 @@
 ## Prerequisites
 
 If you want to train the model on Cloud TPU through the managed service
-[Cloud Machine Learning Engine](cmle), skip to the [Train on Cloud Machine Learning Engine](#train-on-cloud-machine-learning-engine)
+[AI Platform Training](https://cloud.google.com/ml-engine/docs/training), skip to the [Train on AI Platform](#train-on-ai-platform)
 section.
 
 ### Setup a Google Cloud project
@@ -15,7 +15,7 @@ training of the ResNet algorithm.
 
 [quickstart-guide]: https://cloud.google.com/tpu/docs/quickstart
 [resnet-tutorial]: https://cloud.google.com/tpu/docs/tutorials/resnet
-[cmle]: https://cloud.google.com/ml-engine/
+[AI Platform]: https://cloud.google.com/ml-engine/
 
 To run this model, you will need:
 
@@ -143,11 +143,11 @@ curves and other metadata regarding your training run.
 [socks-proxy]: https://cloud.google.com/solutions/connecting-securely#socks-proxy-over-ssh
 
 
-## Train on Cloud Machine Learning Engine
+## Train on AI Platform
 
-To train this model on Machine Learning Engine, you will need:
+To train this model on AI Platform, you will need:
 
-* A GCP project with Cloud Machine Learning Engine enabled
+* A GCP project with AI Platform ("Cloud Machine Learning Engine") and Compute Engine APIs enabled.
 * A GCS bucket to store your training checkpoints (the "model directory") and for staging the training package
 * (Optional): The ImageNet training and validation data preprocessed into
   TFRecord format, and stored in GCS.
@@ -165,7 +165,7 @@ JOB_DIR=$BUCKET"/"$JOB_NAME
 STAGING_BUCKET=$BUCKET
 OUTPUT_PATH=$JOB_DIR
 
-gcloud ml-engine jobs submit training $JOB_NAME \
+gcloud ai-platform jobs submit training $JOB_NAME \
     --staging-bucket $STAGING_BUCKET \
     --runtime-version 1.9 \
     --scale-tier BASIC_TPU \
