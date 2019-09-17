@@ -167,7 +167,8 @@ RETINANET_CFG = {
         'num_classes': 91,
         'max_total_size': 100,
         'nms_iou_threshold': 0.5,
-        'score_threshold': 0.05
+        'score_threshold': 0.05,
+        'pre_nms_num_boxes': 5000,
     },
     'enable_summary': False,
 }
