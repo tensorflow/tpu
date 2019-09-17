@@ -19,78 +19,9 @@ from __future__ import division
 from __future__ import print_function
 
 import tensorflow as tf
+
+import nn_ops
 import spatial_transform_ops
-import tpu_normalization
-
-
-_BATCH_NORM_DECAY = 0.997
-_BATCH_NORM_EPSILON = 1e-4
-
-
-def batch_norm_relu(inputs,
-                    is_training_bn,
-                    relu=True,
-                    init_zero=False,
-                    data_format='channels_last',
-                    num_batch_norm_group=None,
-                    name=None):
-  """Performs a batch normalization followed by a ReLU.
-
-  Args:
-    inputs: `Tensor` of shape `[batch, channels, ...]`.
-    is_training_bn: `bool` for whether the model is training.
-    relu: `bool` if False, omits the ReLU operation.
-    init_zero: `bool` if True, initializes scale parameter of batch
-        normalization with 0 instead of 1 (default).
-    data_format: `str` either "channels_first" for `[batch, channels, height,
-        width]` or "channels_last for `[batch, height, width, channels]`.
-    num_batch_norm_group: If positive, use tpu specifc batch norm implemenation
-      which calculates mean and variance accorss all the replicas. Number of
-      groups to normalize in the distributed batch normalization. Replicas will
-      evenly split into groups.
-    name: the name of the batch normalization layer
-
-  Returns:
-    A normalized `Tensor` with the same `data_format`.
-  """
-  if init_zero:
-    gamma_initializer = tf.zeros_initializer()
-  else:
-    gamma_initializer = tf.ones_initializer()
-
-  if data_format == 'channels_first':
-    axis = 1
-  else:
-    axis = 3
-
-  if num_batch_norm_group > 0:
-    inputs = tpu_normalization.cross_replica_batch_normalization(
-        inputs=inputs,
-        axis=axis,
-        momentum=_BATCH_NORM_DECAY,
-        epsilon=_BATCH_NORM_EPSILON,
-        center=True,
-        scale=True,
-        training=is_training_bn,
-        gamma_initializer=gamma_initializer,
-        num_distributed_groups=num_batch_norm_group,
-        name=name)
-  else:
-    inputs = tf.layers.batch_normalization(
-        inputs=inputs,
-        axis=axis,
-        momentum=_BATCH_NORM_DECAY,
-        epsilon=_BATCH_NORM_EPSILON,
-        center=True,
-        scale=True,
-        training=is_training_bn,
-        fused=True,
-        gamma_initializer=gamma_initializer,
-        name=name)
-
-  if relu:
-    inputs = tf.nn.relu(inputs)
-  return inputs
 
 
 def conv2d_fixed_padding(inputs,
@@ -168,7 +99,7 @@ def residual_block(inputs,
         kernel_size=1,
         strides=strides,
         data_format=data_format)
-    shortcut = batch_norm_relu(
+    shortcut = nn_ops.batch_norm_relu(
         shortcut,
         is_training_bn,
         relu=False,
@@ -181,7 +112,7 @@ def residual_block(inputs,
       kernel_size=3,
       strides=strides,
       data_format=data_format)
-  inputs = batch_norm_relu(
+  inputs = nn_ops.batch_norm_relu(
       inputs,
       is_training_bn,
       data_format=data_format,
@@ -193,7 +124,7 @@ def residual_block(inputs,
       kernel_size=3,
       strides=1,
       data_format=data_format)
-  inputs = batch_norm_relu(
+  inputs = nn_ops.batch_norm_relu(
       inputs,
       is_training_bn,
       relu=False,
@@ -245,7 +176,7 @@ def bottleneck_block(inputs,
         kernel_size=1,
         strides=strides,
         data_format=data_format)
-    shortcut = batch_norm_relu(
+    shortcut = nn_ops.batch_norm_relu(
         shortcut,
         is_training_bn,
         relu=False,
@@ -258,7 +189,7 @@ def bottleneck_block(inputs,
       kernel_size=1,
       strides=1,
       data_format=data_format)
-  inputs = batch_norm_relu(
+  inputs = nn_ops.batch_norm_relu(
       inputs,
       is_training_bn,
       data_format=data_format,
@@ -270,7 +201,7 @@ def bottleneck_block(inputs,
       kernel_size=3,
       strides=strides,
       data_format=data_format)
-  inputs = batch_norm_relu(
+  inputs = nn_ops.batch_norm_relu(
       inputs,
       is_training_bn,
       data_format=data_format,
@@ -282,7 +213,7 @@ def bottleneck_block(inputs,
       kernel_size=1,
       strides=1,
       data_format=data_format)
-  inputs = batch_norm_relu(
+  inputs = nn_ops.batch_norm_relu(
       inputs,
       is_training_bn,
       relu=False,
@@ -505,7 +436,7 @@ def resnet_v1_generator(block_fn,
           strides=2,
           data_format=data_format)
     inputs = tf.identity(inputs, 'initial_conv')
-    inputs = batch_norm_relu(
+    inputs = nn_ops.batch_norm_relu(
         inputs,
         is_training_bn,
         data_format=data_format,
