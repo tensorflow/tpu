@@ -25,8 +25,8 @@ from absl import flags
 import numpy as np
 import tensorflow as tf
 
-from official.datasets import movielens
 from official.recommendation import constants as rconst
+from official.recommendation import movielens
 from official.recommendation import ncf_input_pipeline
 from official.recommendation import neumf_model
 from official.utils.flags import core as flags_core
