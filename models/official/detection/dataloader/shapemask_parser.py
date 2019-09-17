@@ -28,27 +28,8 @@ from dataloader import anchor
 from dataloader import mode_keys as ModeKeys
 from dataloader import tf_example_decoder
 from utils import box_utils
+from utils import dataloader_utils
 from utils import input_utils
-
-
-def process_source_id(source_id):
-  """Processes source_id to the right format."""
-  if source_id.dtype == tf.string:
-    source_id = tf.cast(tf.string_to_number(source_id), tf.int32)
-  with tf.control_dependencies([source_id]):
-    source_id = tf.cond(tf.equal(tf.size(source_id), 0),
-                        lambda: tf.cast(tf.constant(-1), tf.int32),
-                        lambda: tf.identity(source_id))
-  return source_id
-
-
-def pad_groundtruths_to_fixed_size(gt, n):
-  """Pads the first dimension of groundtruths labels to the fixed size."""
-  gt['boxes'] = input_utils.pad_to_fixed_size(gt['boxes'], n, -1)
-  gt['is_crowds'] = input_utils.pad_to_fixed_size(gt['is_crowds'], n, 0)
-  gt['areas'] = input_utils.pad_to_fixed_size(gt['areas'], n, -1)
-  gt['classes'] = input_utils.pad_to_fixed_size(gt['classes'], n, -1)
-  return gt
 
 
 class Parser(object):
@@ -434,8 +415,9 @@ class Parser(object):
           'areas': data['groundtruth_area'],
           'is_crowds': tf.cast(data['groundtruth_is_crowd'], tf.int32),
       }
-      groundtruths['source_id'] = process_source_id(groundtruths['source_id'])
-      groundtruths = pad_groundtruths_to_fixed_size(
+      groundtruths['source_id'] = dataloader_utils.process_source_id(
+          groundtruths['source_id'])
+      groundtruths = dataloader_utils.pad_groundtruths_to_fixed_size(
           groundtruths, self._max_num_instances)
       # Computes training labels.
       (cls_targets,
