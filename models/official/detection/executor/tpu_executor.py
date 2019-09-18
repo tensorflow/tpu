@@ -18,6 +18,7 @@ import collections
 import os
 
 import numpy as np
+import six
 import tensorflow as tf
 
 from evaluation import coco_utils
@@ -145,7 +146,7 @@ class TpuExecutor(object):
         yield_single_examples=False)
     losses = collections.defaultdict(lambda: 0.0)
     for _ in range(eval_steps):
-      outputs = predictor.next()
+      outputs = six.next(predictor)
       predictions = {}
       groundtruths = {}
       for key, val in outputs.items():
