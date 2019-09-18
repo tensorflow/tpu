@@ -121,7 +121,7 @@ def main(argv):
       executor.prepare_evaluation()
       executor.evaluate(
           eval_input_fn,
-          params.eval.eval_samples // params.predict.predict_batch_size)
+          params.eval.eval_samples // params.eval.eval_batch_size)
 
   elif FLAGS.mode == 'eval':
     def terminate_eval():
@@ -142,7 +142,7 @@ def main(argv):
       try:
         executor.evaluate(
             eval_input_fn,
-            params.eval.eval_samples // params.predict.predict_batch_size, ckpt)
+            params.eval.eval_samples // params.eval.eval_batch_size, ckpt)
 
         if current_step >= params.train.total_steps:
           tf.logging.info('Evaluation finished after training step %d' %
@@ -167,7 +167,7 @@ def main(argv):
       executor.train(train_input_fn, current_cycle_last_train_step)
       executor.evaluate(
           eval_input_fn,
-          params.eval.eval_samples // params.predict.predict_batch_size)
+          params.eval.eval_samples // params.eval.eval_batch_size)
   else:
     tf.logging.info('Mode not found.')
 
