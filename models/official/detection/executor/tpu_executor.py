@@ -29,30 +29,42 @@ from hyperparameters import params_dict
 def write_summary(logs, summary_writer, current_step):
   """Write out summaries of current training step for the checkpoint."""
   with tf.Graph().as_default():
-    summaries = [tf.Summary.Value(tag=tag, simple_value=value)
-                 for tag, value in logs.items()]
+    summaries = [
+        tf.Summary.Value(tag=tag, simple_value=value)
+        for tag, value in logs.items()
+    ]
     tf_summary = tf.Summary(value=summaries)
     summary_writer.add_summary(tf_summary, current_step)
 
 
 class TpuExecutor(object):
-  """An executor class for running jobs on TPUs."""
+  """An executor class for running jobs on TPUs.
 
-  def __init__(self, model_fn, params):
+  Attributes:
+    model_fn: The Model function for `tf.estimator.Estimator`.
+    params: The (Retinanet) detecton parameter config.
+    tpu_cluster_resolver: The `TPUClusterResolver` instance. If set, it will be
+      directly passed to `tf.contrib.tpu.RunConfig`, otherwise, will need to
+      construct a new `TPUClusterResolver` during construction.
+  """
+
+  def __init__(self, model_fn, params, tpu_cluster_resolver=None):
     self._model_dir = params.model_dir
     self._params = params
     self._tpu_job_name = params.tpu_job_name
     self._evaluator = None
+    self._tpu_cluster_resolver = tpu_cluster_resolver
 
     input_partition_dims = None
     num_cores_per_replica = None
 
-    if params.use_tpu:
-      tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
-          params.platform.tpu,
-          zone=params.platform.tpu_zone,
-          project=params.platform.gcp_project)
-      tpu_grpc_url = tpu_cluster_resolver.get_master()
+    if params.use_tpu or self._tpu_cluster_resolver:
+      if not self._tpu_cluster_resolver:
+        self._tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
+            params.platform.tpu,
+            zone=params.platform.tpu_zone,
+            project=params.platform.gcp_project)
+      tpu_grpc_url = self._tpu_cluster_resolver.get_master()
       tf.Session.reset(tpu_grpc_url)
 
       # If the input image is transposed (from NHWC to HWCN), the partition
@@ -72,7 +84,7 @@ class TpuExecutor(object):
             for x in input_partition_dims
         ]
     else:
-      tpu_cluster_resolver = None
+      self._tpu_cluster_resolver = None
 
     # Sets up config for TPUEstimator.
     tpu_config = tf.contrib.tpu.TPUConfig(
@@ -80,13 +92,14 @@ class TpuExecutor(object):
         num_cores_per_replica=num_cores_per_replica,
         input_partition_dims=input_partition_dims,
         tpu_job_name=self._tpu_job_name,
-        per_host_input_for_training=tf.contrib.tpu.InputPipelineConfig.PER_HOST_V2  # pylint: disable=line-too-long
+        per_host_input_for_training=tf.contrib.tpu.InputPipelineConfig
+        .PER_HOST_V2  # pylint: disable=line-too-long
     )
 
     run_config = tf.contrib.tpu.RunConfig(
         session_config=tf.ConfigProto(
             isolate_session_state=params.isolate_session_state),
-        cluster=tpu_cluster_resolver,
+        cluster=self._tpu_cluster_resolver,
         evaluation_master=params.platform.eval_master,
         model_dir=params.model_dir,
         log_step_count_steps=params.train.iterations_per_loop,
@@ -107,11 +120,11 @@ class TpuExecutor(object):
 
   def prepare_evaluation(self):
     """Preapre for evaluation."""
-    val_json_file = os.path.join(
-        self._params.model_dir, 'eval_annotation_file.json')
+    val_json_file = os.path.join(self._params.model_dir,
+                                 'eval_annotation_file.json')
     if self._params.eval.val_json_file:
-      tf.gfile.Copy(self._params.eval.val_json_file, val_json_file,
-                    overwrite=True)
+      tf.gfile.Copy(
+          self._params.eval.val_json_file, val_json_file, overwrite=True)
     else:
       coco_utils.scan_and_generator_annotation_file(
           self._params.eval.eval_file_pattern,

@@ -21,6 +21,7 @@ from __future__ import print_function
 import numpy as np
 import tensorflow as tf
 
+
 EPSILON = 1e-8
 BBOX_XFORM_CLIP = np.log(1000. / 16.)
 
@@ -44,7 +45,7 @@ def jitter_boxes(boxes, noise_scale=0.025):
   """
   if boxes.shape[-1] != 4:
     raise ValueError(
-        'boxes.shape[1] is {:d}, but must be 4.'.format(boxes.shape[1]))
+        'boxes.shape[-1] is {:d}, but must be 4.'.format(boxes.shape[-1]))
 
   with tf.name_scope('jitter_boxes'):
     bbox_jitters = tf.random_normal([4], stddev=noise_scale)
@@ -86,7 +87,7 @@ def normalize_boxes(boxes, image_shape):
   """
   if boxes.shape[-1] != 4:
     raise ValueError(
-        'boxes.shape[1] is {:d}, but must be 4.'.format(boxes.shape[1]))
+        'boxes.shape[-1] is {:d}, but must be 4.'.format(boxes.shape[-1]))
 
   with tf.name_scope('normalize_boxes'):
     if isinstance(image_shape, list) or isinstance(image_shape, tuple):
@@ -158,9 +159,9 @@ def clip_boxes(boxes, image_shape):
   """
   if boxes.shape[-1] != 4:
     raise ValueError(
-        'boxes.shape[1] is {:d}, but must be 4.'.format(boxes.shape[1]))
+        'boxes.shape[-1] is {:d}, but must be 4.'.format(boxes.shape[-1]))
 
-  with tf.name_scope('crop_boxes'):
+  with tf.name_scope('clip_boxes'):
     if isinstance(image_shape, list) or isinstance(image_shape, tuple):
       height, width = image_shape
     else:
@@ -235,7 +236,7 @@ def encode_boxes(boxes, anchors, weights=None):
   """
   if boxes.shape[-1] != 4:
     raise ValueError(
-        'boxes.shape[1] is {:d}, but must be 4.'.format(boxes.shape[1]))
+        'boxes.shape[-1] is {:d}, but must be 4.'.format(boxes.shape[-1]))
 
   with tf.name_scope('encode_boxes'):
     boxes = tf.cast(boxes, dtype=anchors.dtype)
@@ -287,6 +288,11 @@ def decode_boxes(encoded_boxes, anchors, weights=None):
     encoded_boxes: a tensor whose shape is the same as `boxes` representing the
       decoded box targets.
   """
+  if encoded_boxes.shape[-1] != 4:
+    raise ValueError(
+        'encoded_boxes.shape[-1] is {:d}, but must be 4.'
+        .format(encoded_boxes.shape[-1]))
+
   with tf.name_scope('decode_boxes'):
     encoded_boxes = tf.cast(encoded_boxes, dtype=anchors.dtype)
     dy = encoded_boxes[..., 0:1]
@@ -325,3 +331,170 @@ def decode_boxes(encoded_boxes, anchors, weights=None):
          decoded_boxes_ymax, decoded_boxes_xmax],
         axis=-1)
     return decoded_boxes
+
+
+def filter_boxes(boxes, scores, image_shape, min_size_threshold):
+  """Filter and remove boxes that are too small or fall outside the image.
+
+  Args:
+    boxes: a tensor whose last dimension is 4 representing the
+      coordinates of boxes in ymin, xmin, ymax, xmax order.
+    scores: a tensor whose shape is the same as tf.shape(boxes)[:-1]
+      representing the original scores of the boxes.
+    image_shape: a tensor whose shape is the same as, or `broadcastable` to
+      `boxes` except the last dimension, which is 2, representing
+      [height, width] of the scaled image.
+    min_size_threshold: a float representing the minimal box size in each
+      side (w.r.t. the scaled image). Boxes whose sides are smaller than it will
+      be filtered out.
+
+  Returns:
+    filtered_boxes: a tensor whose shape is the same as `boxes` but with
+      the position of the filtered boxes are filled with 0.
+    filtered_scores: a tensor whose shape is the same as 'scores' but with
+      the positinon of the filtered boxes filled with 0.
+  """
+  if boxes.shape[-1] != 4:
+    raise ValueError(
+        'boxes.shape[1] is {:d}, but must be 4.'.format(boxes.shape[-1]))
+
+  with tf.name_scope('filter_boxes'):
+    if isinstance(image_shape, list) or isinstance(image_shape, tuple):
+      height, width = image_shape
+    else:
+      image_shape = tf.cast(image_shape, dtype=boxes.dtype)
+      height = image_shape[..., 0]
+      width = image_shape[..., 1]
+
+    ymin = boxes[..., 0]
+    xmin = boxes[..., 1]
+    ymax = boxes[..., 2]
+    xmax = boxes[..., 3]
+
+    h = ymax - ymin + 1.0
+    w = xmax - xmin + 1.0
+    yc = ymin + 0.5 * h
+    xc = xmin + 0.5 * w
+
+    min_size = tf.cast(tf.maximum(min_size_threshold, 1.0), dtype=boxes.dtype)
+
+    filtered_size_mask = tf.logical_and(
+        tf.greater(h, min_size), tf.greater(w, min_size))
+    filtered_center_mask = tf.logical_and(
+        tf.logical_and(tf.greater(yc, 0.0), tf.less(yc, height)),
+        tf.logical_and(tf.greater(xc, 0.0), tf.less(xc, width)))
+    filtered_mask = tf.logical_and(filtered_size_mask, filtered_center_mask)
+
+    filtered_scores = tf.where(filtered_mask, scores, tf.zeros_like(scores))
+    filtered_boxes = tf.cast(
+        tf.expand_dims(filtered_mask, axis=-1), dtype=boxes.dtype) * boxes
+
+    return filtered_boxes, filtered_scores
+
+
+def filter_boxes_by_scores(boxes, scores, min_score_threshold):
+  """Filter and remove boxes whose scores are smaller than the threshold.
+
+  Args:
+    boxes: a tensor whose last dimension is 4 representing the
+      coordinates of boxes in ymin, xmin, ymax, xmax order.
+    scores: a tensor whose shape is the same as tf.shape(boxes)[:-1]
+      representing the original scores of the boxes.
+    min_score_threshold: a float representing the minimal box score threshold.
+      Boxes whose score are smaller than it will be filtered out.
+
+  Returns:
+    filtered_boxes: a tensor whose shape is the same as `boxes` but with
+      the position of the filtered boxes are filled with 0.
+    filtered_scores: a tensor whose shape is the same as 'scores' but with
+      the
+  """
+  if boxes.shape[-1] != 4:
+    raise ValueError(
+        'boxes.shape[1] is {:d}, but must be 4.'.format(boxes.shape[-1]))
+
+  with tf.name_scope('filter_boxes_by_scores'):
+    filtered_mask = tf.greater(scores, min_score_threshold)
+    filtered_scores = tf.where(filtered_mask, scores, tf.zeros_like(scores))
+    filtered_boxes = tf.cast(
+        tf.expand_dims(filtered_mask, axis=-1), dtype=boxes.dtype) * boxes
+
+    return filtered_boxes, filtered_scores
+
+
+def top_k_boxes(boxes, scores, k):
+  """Sort and select top k boxes according to the scores.
+
+  Args:
+    boxes: a tensor of shape [batch_size, N, 4] representing the coordiante of
+      the boxes. N is the number of boxes per image.
+    scores: a tensor of shsape [batch_size, N] representing the socre of the
+      boxes.
+    k: an integer or a tensor indicating the top k number.
+
+  Returns:
+    selected_boxes: a tensor of shape [batch_size, k, 4] representing the
+      selected top k box coordinates.
+    selected_scores: a tensor of shape [batch_size, k] representing the selected
+      top k box scores.
+  """
+  with tf.name_scope('top_k_boxes'):
+    selected_scores, top_k_indices = tf.nn.top_k(scores, k=k, sorted=True)
+
+    batch_size, _ = scores.get_shape().as_list()
+    if batch_size == 1:
+      selected_boxes = tf.squeeze(
+          tf.gather(boxes, top_k_indices, axis=1), axis=1)
+    else:
+      top_k_indices_shape = tf.shape(top_k_indices)
+      batch_indices = (
+          tf.expand_dims(tf.range(top_k_indices_shape[0]), axis=-1) *
+          tf.ones([1, top_k_indices_shape[-1]], dtype=tf.int32))
+      gather_nd_indices = tf.stack([batch_indices, top_k_indices], axis=-1)
+      selected_boxes = tf.gather_nd(boxes, gather_nd_indices)
+
+    return selected_boxes, selected_scores
+
+
+def bbox_overlap(boxes, gt_boxes):
+  """Calculates the overlap between proposal and ground truth boxes.
+
+  Some `gt_boxes` may have been padded.  The returned `iou` tensor for these
+  boxes will be -1.
+
+  Args:
+    boxes: a tensor with a shape of [batch_size, N, 4]. N is the number of
+      proposals before groundtruth assignment (e.g., rpn_post_nms_topn). The
+      last dimension is the pixel coordinates in [ymin, xmin, ymax, xmax] form.
+    gt_boxes: a tensor with a shape of [batch_size, MAX_NUM_INSTANCES, 4]. This
+      tensor might have paddings with a negative value.
+  Returns:
+    iou: a tensor with as a shape of [batch_size, N, MAX_NUM_INSTANCES].
+  """
+  with tf.name_scope('bbox_overlap'):
+    bb_y_min, bb_x_min, bb_y_max, bb_x_max = tf.split(
+        value=boxes, num_or_size_splits=4, axis=2)
+    gt_y_min, gt_x_min, gt_y_max, gt_x_max = tf.split(
+        value=gt_boxes, num_or_size_splits=4, axis=2)
+
+    # Calculates the intersection area.
+    i_xmin = tf.maximum(bb_x_min, tf.transpose(gt_x_min, [0, 2, 1]))
+    i_xmax = tf.minimum(bb_x_max, tf.transpose(gt_x_max, [0, 2, 1]))
+    i_ymin = tf.maximum(bb_y_min, tf.transpose(gt_y_min, [0, 2, 1]))
+    i_ymax = tf.minimum(bb_y_max, tf.transpose(gt_y_max, [0, 2, 1]))
+    i_area = tf.maximum((i_xmax - i_xmin), 0) * tf.maximum((i_ymax - i_ymin), 0)
+
+    # Calculates the union area.
+    bb_area = (bb_y_max - bb_y_min) * (bb_x_max - bb_x_min)
+    gt_area = (gt_y_max - gt_y_min) * (gt_x_max - gt_x_min)
+    # Adds a small epsilon to avoid divide-by-zero.
+    u_area = bb_area + tf.transpose(gt_area, [0, 2, 1]) - i_area + 1e-8
+
+    # Calculates IoU.
+    iou = i_area / u_area
+
+    # Fills -1 for padded ground truth boxes.
+    padding_mask = tf.less(i_xmin, tf.zeros_like(i_xmin))
+    iou = tf.where(padding_mask, -tf.ones_like(iou), iou)
+
+    return iou
