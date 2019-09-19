@@ -52,7 +52,7 @@ Working configs on TPU V3-8:
 + tf-nightly, train_batch_size=32, use_batch_norm=true, use_bfloat16=true
 
 The following example shows how to train volumic UNet on TPU v3-8.
-The loss is *adaptive_dice32*. The training batch size is 32. For detail config, refer to `unet_config.py` and `DF2x2_params.yaml`.
+The loss is *adaptive_dice32*. The training batch size is 32. For detail config, refer to `unet_config.py` and `v3-8_128x128x128_ce.yaml`.
 
 **Example**:
 
@@ -72,7 +72,7 @@ python unet_main.py \
 --iterations_per_loop=10 \
 --mode=train \
 --num_cores=8 \
---config_file="./DF2x2_params.yaml" \
+--config_file="./configs/cloud/v3-8_128x128x128_ce.yaml" \
 --params_override="{\"optimizer\":\"momentum\",\"train_steps\":100}"
 ```
 
@@ -104,7 +104,7 @@ python unet_main.py \
 --mode=train \
 --num_cores=8 \
 --input_partition_dims=[1,8,1,1,1] \
---config_file="./DF2x2_params.yaml" \
+--config_file="./configs/cloud/v3-8_128x128x128_ce.yaml" \
 --params_override="{\"optimizer\":\"momentum\",\"train_steps\":100}"
 ```
 
@@ -126,7 +126,7 @@ python unet_main.py \
 --iterations_per_loop=10 \
 --mode="eval" \
 --num_cores=8 \
---config_file="./DF2x2_params.yaml" \
+--config_file="./configs/cloud/v3-8_128x128x128_ce.yaml" \
 --params_override="{\"optimizer\":\"momentum\",\"eval_steps\":10}"
 ```
 

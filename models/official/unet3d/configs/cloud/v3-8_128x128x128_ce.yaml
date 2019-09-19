@@ -1,0 +1,9 @@
+init_learning_rate: 0.0001
+loss: 'cross_entropy'
+train_batch_size: 16
+eval_batch_size: 8
+input_partition_dims: [1,8,1,1,1]
+use_index_label_in_train: true
+
+input_image_size: [128,128,128]
+label_dtype: 'float32'
