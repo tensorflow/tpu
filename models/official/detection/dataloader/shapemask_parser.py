@@ -259,9 +259,6 @@ class Parser(object):
     # Resizes and crops boxes and masks.
     boxes = input_utils.resize_and_crop_boxes(
         boxes, image_scale, self._output_size, offset)
-    masks = input_utils.resize_and_crop_masks(
-        tf.expand_dims(masks, axis=-1), image_scale, self._output_size, offset)
-    masks = tf.squeeze(masks, axis=-1)
 
     # Filters out ground truth boxes that are all zeros.
     indices = input_utils.get_non_empty_box_indices(boxes)
@@ -293,11 +290,12 @@ class Parser(object):
 
     # Randomly sample groundtruth masks for mask branch training. For the image
     # without groundtruth masks, it will sample the dummy padded tensors.
-    rand_indices = tf.random.uniform(
-        [self._num_sampled_masks],
-        minval=0,
-        maxval=tf.maximum(num_masks, 1),
-        dtype=tf.dtypes.int32)
+    rand_indices = tf.random.shuffle(
+        tf.range(tf.maximum(num_masks, self._num_sampled_masks)))
+    rand_indices = tf.mod(rand_indices, tf.maximum(num_masks, 1))
+    rand_indices = rand_indices[0:self._num_sampled_masks]
+    rand_indices = tf.reshape(rand_indices, [self._num_sampled_masks])
+
     sampled_boxes = tf.gather(padded_boxes, rand_indices)
     sampled_classes = tf.gather(padded_classes, rand_indices)
     sampled_masks = tf.gather(padded_masks, rand_indices)
@@ -308,15 +306,21 @@ class Parser(object):
     # Compute mask targets in feature crop. A feature crop fully contains a
     # sampled box.
     mask_outer_boxes = box_utils.compute_outer_boxes(
-        sampled_boxes, mask_shape, scale=self._outer_box_scale)
-    norm_mask_outer_boxes = box_utils.normalize_boxes(
-        mask_outer_boxes, mask_shape)
+        sampled_boxes, tf.shape(image)[0:2], scale=self._outer_box_scale)
+
+    # Compensate the offset of mask_outer_boxes to map it back to original image
+    # scale.
+    mask_outer_boxes_ori = mask_outer_boxes
+    mask_outer_boxes_ori += tf.tile(tf.expand_dims(offset, axis=0), [1, 2])
+    mask_outer_boxes_ori /= tf.tile(tf.expand_dims(image_scale, axis=0), [1, 2])
+    norm_mask_outer_boxes_ori = box_utils.normalize_boxes(
+        mask_outer_boxes_ori, mask_shape)
 
     # Set sampled_masks shape to [batch_size, height, width, 1].
-    sampled_masks = tf.expand_dims(sampled_masks, axis=-1)
+    sampled_masks = tf.cast(tf.expand_dims(sampled_masks, axis=-1), tf.float32)
     mask_targets = tf.image.crop_and_resize(
         sampled_masks,
-        norm_mask_outer_boxes,
+        norm_mask_outer_boxes_ori,
         box_ind=tf.range(self._num_sampled_masks),
         crop_size=[self._mask_crop_size, self._mask_crop_size],
         method='bilinear',
