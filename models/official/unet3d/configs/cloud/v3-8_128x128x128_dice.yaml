@@ -1,0 +1,9 @@
+init_learning_rate: 0.0001  # with 0.005 the network is unstable
+loss: 'adaptive_dice32'
+train_batch_size: 32
+eval_batch_size: 8
+input_partition_dims:  # Yaml reads None as a string. Instead, put empty string here for NoneType.
+use_index_label_in_train: false
+
+input_image_size: [128,128,128]
+label_dtype: 'float32'

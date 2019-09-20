@@ -1,0 +1,9 @@
+init_learning_rate: 0.0001  # with 0.005 the network is unstable
+loss: 'adaptive_dice32'
+train_batch_size: 32
+eval_batch_size: 1
+input_partition_dims: [1,16,1,1,1]
+use_index_label_in_train: false
+
+input_image_size: [256,256,256]
+label_dtype: 'float32'
