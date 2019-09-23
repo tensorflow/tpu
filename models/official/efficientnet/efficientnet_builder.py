@@ -21,7 +21,7 @@ from __future__ import print_function
 import functools
 import os
 import re
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 
 import efficientnet_model
 import utils

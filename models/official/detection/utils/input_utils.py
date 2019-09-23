@@ -15,7 +15,7 @@
 """Utility functions for input processing."""
 
 import math
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 
 from utils import box_utils
 from utils.object_detection import preprocessor

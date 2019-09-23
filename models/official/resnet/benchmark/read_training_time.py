@@ -21,7 +21,7 @@ import datetime
 from absl import app
 from absl import flags
 
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 
 FLAGS = flags.FLAGS
 

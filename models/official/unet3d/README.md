@@ -205,7 +205,7 @@ python saved_model_inference.py \
 To Visualize
 
 ```python
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 import matplotlib.pyplot as plt
 import numpy as np
 

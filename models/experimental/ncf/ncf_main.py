@@ -23,7 +23,7 @@ import json
 from absl import app as absl_app
 from absl import flags
 import numpy as np
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 
 from official.recommendation import constants as rconst
 from official.recommendation import movielens

@@ -21,7 +21,7 @@ from __future__ import print_function
 
 import os
 
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 
 try:
   import h5py as _  # pylint: disable=g-import-not-at-top
@@ -45,3 +45,4 @@ def save_model(model, model_dir, weights_file):
                   weights_file_path)
   tf.logging.info('This might take a while...')
   model.save(weights_file_path, overwrite=True, include_optimizer=True)
+

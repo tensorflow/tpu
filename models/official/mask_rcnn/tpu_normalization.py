@@ -19,7 +19,7 @@ from __future__ import division
 from __future__ import print_function
 
 import functools
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 
 from tensorflow.contrib.tpu.python.ops import tpu_ops
 from tensorflow.contrib.tpu.python.tpu import tpu_function

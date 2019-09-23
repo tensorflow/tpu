@@ -22,7 +22,7 @@ import io
 import numpy as np
 from PIL import Image
 import six
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 
 import coco_metric
 import coco_utils

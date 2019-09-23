@@ -27,7 +27,7 @@ import collections
 import numpy as np
 import six
 from six.moves import xrange  # pylint: disable=redefined-builtin
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 
 from mixnet import custom_layers
 
@@ -428,3 +428,4 @@ class MixnetModel(tf.keras.Model):
         outputs = self._fc(outputs)
         self.endpoints['head'] = outputs
     return outputs
+

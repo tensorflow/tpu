@@ -23,7 +23,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 
 
 def _leaky_relu(x):
@@ -97,3 +97,4 @@ def generator(x, is_training=True, scope='Generator'):
     return x
 
 # TODO(chrisying): objective score (e.g. MNIST score)
+

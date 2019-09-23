@@ -22,7 +22,7 @@ import abc
 import collections
 import functools
 import os
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 
 import preprocessing
 

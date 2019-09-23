@@ -23,7 +23,7 @@ Focal Loss for Dense Object Detection. arXiv:1708.02002
 """
 
 import time
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 
 import anchors
 from object_detection import preprocessor

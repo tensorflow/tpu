@@ -14,7 +14,7 @@
 # ==============================================================================
 """Input and model functions for serving/inference."""
 
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 
 from dataloader import anchor
 from dataloader import mode_keys

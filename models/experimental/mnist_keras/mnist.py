@@ -29,7 +29,7 @@ from __future__ import print_function
 from absl import app
 from absl import flags
 import numpy as np
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 
 # TODO(sourabhbajaj): Remove the need for this flag.
 flags.DEFINE_bool('use_tpu', True,

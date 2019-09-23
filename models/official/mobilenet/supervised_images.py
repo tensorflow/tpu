@@ -24,7 +24,7 @@ from __future__ import print_function
 
 import os
 from absl import flags
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 
 import vgg_preprocessing
 import inception_preprocessing
@@ -335,3 +335,4 @@ class InputPipeline(object):
       images = tensor_transform_fn(images, params['output_perm'])
 
     return images, labels
+

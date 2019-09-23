@@ -27,7 +27,7 @@ import time
 from absl import app
 from absl import flags
 
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 
 # For Cloud environment, add parent directory for imports
 sys.path.append(os.path.dirname(os.path.abspath(sys.path[0])))

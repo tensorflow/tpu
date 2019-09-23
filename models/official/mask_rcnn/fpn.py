@@ -24,7 +24,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 
 import spatial_transform_ops
 
@@ -94,3 +94,5 @@ def fpn(feats_bottom_up,
             name='p%d' % level)
 
   return feats
+
+

@@ -29,7 +29,7 @@ import numpy as np
 from PIL import Image
 from ratelimiter import RateLimiter
 import requests
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 
 from tensorflow_serving.apis import predict_pb2
 from tensorflow_serving.apis import prediction_service_pb2_grpc

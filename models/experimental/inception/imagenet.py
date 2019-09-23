@@ -34,7 +34,7 @@ from __future__ import division
 from __future__ import print_function
 
 import os
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 
 slim = tf.contrib.slim
 

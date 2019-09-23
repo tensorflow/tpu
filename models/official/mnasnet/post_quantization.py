@@ -20,7 +20,7 @@ from __future__ import print_function
 
 from absl import app
 from absl import flags
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 
 import imagenet_input
 
