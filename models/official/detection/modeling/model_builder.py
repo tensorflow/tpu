@@ -14,7 +14,7 @@
 # ==============================================================================
 """Model builder for detection model."""
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 from modeling import factory
 
@@ -51,4 +51,3 @@ class ModelFn(object):
       return self._model.predict(features)
     else:
       raise ValueError('%s mode is not supported.' % mode)
-

@@ -25,7 +25,7 @@ from __future__ import division
 #Standard imports
 from __future__ import print_function
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 import metrics
 from tensorflow.contrib import summary
 

@@ -21,7 +21,7 @@ from __future__ import print_function
 
 import subprocess
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 
 class TPUProfilerHook(tf.train.SessionRunHook):

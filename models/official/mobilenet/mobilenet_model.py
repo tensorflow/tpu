@@ -114,7 +114,7 @@ from collections import namedtuple
 import functools
 
 # Standard Imports
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 slim = tf.contrib.slim
 

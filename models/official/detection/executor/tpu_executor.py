@@ -19,7 +19,7 @@ import os
 
 import numpy as np
 import six
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 from evaluation import coco_utils
 from evaluation import factory

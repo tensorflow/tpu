@@ -30,7 +30,7 @@ import PIL.ImageColor as ImageColor
 import PIL.ImageDraw as ImageDraw
 import PIL.ImageFont as ImageFont
 import six
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 from object_detection import shape_utils
 

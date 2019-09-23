@@ -20,7 +20,7 @@ from __future__ import print_function
 
 import inspect
 import math
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 
 # This signifies the max integer that the controller RNN could predict for the
@@ -706,7 +706,7 @@ def _apply_multi_bbox_augmentation_wrapper(image, bboxes, prob, aug_func,
       # pylint:disable=g-long-lambda
       lambda: _apply_multi_bbox_augmentation(
           image, bboxes, prob, aug_func, func_changes_bbox, *args))
-      # pylint:enable=g-long-lambda
+  # pylint:enable=g-long-lambda
   return image, bboxes
 
 

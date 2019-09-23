@@ -26,7 +26,7 @@ from PIL import Image
 from pycocotools import coco
 from pycocotools import mask as mask_utils
 import six
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 from dataloader import tf_example_decoder
 from utils import box_utils

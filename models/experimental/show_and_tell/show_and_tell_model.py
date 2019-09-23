@@ -23,7 +23,7 @@ from __future__ import division
 from __future__ import print_function
 
 # Standard Imports
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 import image_embedding
 import image_processing

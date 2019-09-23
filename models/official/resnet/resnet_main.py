@@ -25,7 +25,7 @@ from absl import app
 from absl import flags
 import absl.logging as _logging  # pylint: disable=unused-import
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 from common import inference_warmup
 from common import tpu_profiler_hook

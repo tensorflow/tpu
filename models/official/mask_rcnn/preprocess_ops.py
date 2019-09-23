@@ -14,7 +14,7 @@
 # ==============================================================================
 """Preprocessing ops."""
 import math
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 from object_detection import preprocessor
 
@@ -182,5 +182,3 @@ def pad_to_fixed_size(data, pad_value, output_shape):
   padded_data = tf.concat([data, paddings], axis=0)
   padded_data = tf.reshape(padded_data, output_shape)
   return padded_data
-
-

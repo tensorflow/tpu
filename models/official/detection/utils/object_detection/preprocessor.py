@@ -40,7 +40,7 @@ back to rank 4.
 """
 import sys
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 from utils.object_detection import box_list
 from utils.object_detection import box_list_ops
@@ -733,4 +733,3 @@ def random_crop_image(image,
     result = tf.cond(do_a_crop_random, strict_random_crop_image_fn,
                      lambda: tuple(outputs))
   return result
-

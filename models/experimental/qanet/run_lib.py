@@ -22,7 +22,7 @@ import json
 import os
 import pprint
 from absl import flags
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 import data
 import model

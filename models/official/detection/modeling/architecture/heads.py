@@ -21,7 +21,7 @@ from __future__ import print_function
 import functools
 
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 from modeling.architecture import nn_ops
 from utils import spatial_transform
 
