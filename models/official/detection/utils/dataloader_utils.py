@@ -14,7 +14,7 @@
 # ==============================================================================
 """Utility functions for dataloader."""
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 from utils import input_utils
 
@@ -37,4 +37,3 @@ def pad_groundtruths_to_fixed_size(gt, n):
   gt['areas'] = input_utils.pad_to_fixed_size(gt['areas'], n, -1)
   gt['classes'] = input_utils.pad_to_fixed_size(gt['classes'], n, -1)
   return gt
-

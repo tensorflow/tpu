@@ -27,7 +27,7 @@ from absl import app
 from absl import flags
 import numpy as np
 import six
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 flags.DEFINE_bool('use_tpu', True, 'Use TPU model instead of CPU.')
 flags.DEFINE_string('tpu', None, 'Name of the TPU to use.')

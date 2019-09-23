@@ -23,7 +23,7 @@ import time
 from absl import app
 from absl import flags
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 from hyperparameters import common_hparams_flags
 from hyperparameters import common_tpu_flags

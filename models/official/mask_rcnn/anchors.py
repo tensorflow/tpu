@@ -20,7 +20,7 @@ from __future__ import print_function
 
 from collections import OrderedDict
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 from object_detection import argmax_matcher
 from object_detection import balanced_positive_negative_sampler
 from object_detection import box_list

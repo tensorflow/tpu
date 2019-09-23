@@ -22,7 +22,7 @@ import abc
 import json
 import os
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 from hyperparameters import params_dict
 import evaluation

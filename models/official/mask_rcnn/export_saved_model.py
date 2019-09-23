@@ -35,7 +35,7 @@ from __future__ import print_function
 
 import functools
 from absl import flags
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 from common import inference_warmup
 from hyperparameters import params_dict

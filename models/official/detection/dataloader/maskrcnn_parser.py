@@ -14,7 +14,7 @@
 # ==============================================================================
 """Data parser and processing for Mask R-CNN."""
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 from dataloader import anchor
 from dataloader import mode_keys as ModeKeys

@@ -25,7 +25,7 @@ import os
 from absl import app
 from absl import flags
 import absl.logging as _logging  # pylint: disable=unused-import
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 import densenet_model
 import vgg_preprocessing

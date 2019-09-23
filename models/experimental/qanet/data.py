@@ -21,7 +21,7 @@ import re
 import string
 # Standard Imports
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 
 def build_dataset(cfg, is_tpu):

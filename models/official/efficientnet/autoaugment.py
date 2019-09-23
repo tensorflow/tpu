@@ -22,7 +22,7 @@ from __future__ import print_function
 
 import inspect
 import math
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 
 # This signifies the max integer that the controller RNN could predict for the

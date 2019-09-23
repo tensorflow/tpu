@@ -31,7 +31,7 @@ import math
 from absl import app
 from absl import flags
 import absl.logging as _logging  # pylint: disable=unused-import
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 import amoeba_net_model as model_lib
 from common import inference_warmup
 

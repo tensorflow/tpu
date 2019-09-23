@@ -22,7 +22,7 @@ import abc
 from collections import namedtuple
 import functools
 import os
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 from official.resnet import resnet_preprocessing
 
 

@@ -15,7 +15,7 @@
 """Input and model functions for serving/inference."""
 
 import six
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 import box_utils
 import heads
