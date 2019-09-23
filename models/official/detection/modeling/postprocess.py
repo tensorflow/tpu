@@ -186,7 +186,7 @@ def _generate_detections_per_image(boxes,
   nmsed_boxes = tf.gather(nmsed_boxes, indices)
   nmsed_classes = tf.gather(nmsed_classes, indices)
   valid_detections = tf.reduce_sum(
-      tf.cast(tf.equal(nmsed_scores, -1), tf.int32))
+      tf.cast(tf.greater(nmsed_scores, -1), tf.int32))
   return nmsed_boxes, nmsed_scores, nmsed_classes, valid_detections
 
 
