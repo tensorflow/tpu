@@ -14,7 +14,7 @@
 # ==============================================================================
 """Functions to override model parameters from command-line flags."""
 
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 from hyperparameters import params_dict
 
 ESSENTIAL_FLAGS = ['tpu', 'data_dir', 'model_dir']

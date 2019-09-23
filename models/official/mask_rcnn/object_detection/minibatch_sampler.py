@@ -33,7 +33,7 @@ This is originally implemented in TensorFlow Object Detection API.
 from abc import ABCMeta
 from abc import abstractmethod
 
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 
 from object_detection import ops
 

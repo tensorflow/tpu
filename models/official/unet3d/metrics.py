@@ -19,7 +19,7 @@ from __future__ import division
 #Standard imports
 from __future__ import print_function
 
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 
 
 def dice(y_true, y_pred, axis=(1, 2, 3, 4)):

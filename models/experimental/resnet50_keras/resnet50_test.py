@@ -23,7 +23,7 @@ from __future__ import print_function
 from absl.testing import absltest
 
 import numpy as np
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 
 import resnet_model
 from tensorflow.python.keras import backend as K  # pylint: disable=g-direct-tensorflow-import

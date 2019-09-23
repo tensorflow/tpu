@@ -25,7 +25,7 @@ from __future__ import print_function
 import json
 import os
 from absl import app
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 
 import imagenet_input
 import resnet_model

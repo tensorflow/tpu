@@ -14,7 +14,7 @@
 
 """Module to generate Iris dataset for using in custom TPUEstimator."""
 import pandas as pd
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 
 TRAIN_URL = 'http://download.tensorflow.org/data/iris_training.csv'
 TEST_URL = 'http://download.tensorflow.org/data/iris_test.csv'

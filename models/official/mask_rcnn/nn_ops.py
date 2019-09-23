@@ -18,7 +18,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 
 import tpu_normalization
 
@@ -90,3 +90,5 @@ def batch_norm_relu(inputs,
   if relu:
     inputs = tf.nn.relu(inputs)
   return inputs
+
+

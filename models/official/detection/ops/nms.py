@@ -20,7 +20,7 @@ from __future__ import print_function
 
 # Standard Imports
 
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 
 from utils import box_utils
 

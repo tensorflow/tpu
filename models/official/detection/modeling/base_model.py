@@ -22,7 +22,7 @@ import abc
 import functools
 import re
 import six
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 
 from modeling import learning_rates
 

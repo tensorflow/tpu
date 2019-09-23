@@ -28,7 +28,7 @@ import functools
 import os
 from absl import app
 from absl import flags
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 
 import supervised_images
 from hyperparameters import common_hparams_flags

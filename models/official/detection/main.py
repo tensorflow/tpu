@@ -23,7 +23,7 @@ import os
 import pprint
 from absl import flags
 
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 
 from configs import factory
 from dataloader import input_reader

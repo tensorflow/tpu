@@ -21,7 +21,7 @@ from __future__ import print_function
 from absl import app
 from absl import flags
 import absl.logging as _logging  # pylint: disable=unused-import
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 
 
 # Cloud TPU Cluster Resolvers

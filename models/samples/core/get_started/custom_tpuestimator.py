@@ -18,7 +18,7 @@ from __future__ import division
 from __future__ import print_function
 
 import iris_data_tpu as iris_data
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 
 # Cloud TPU Cluster Resolver flags
 tf.flags.DEFINE_string(
