@@ -19,11 +19,12 @@ import (
 	"context"
 	"testing"
 
+	"github.com/google/subcommands"
 	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/tpu/v1alpha1"
 )
 
-func testDeleteWorkflow(t *testing.T, libs *testLibs, expectedGCEAction, expectedTPUAction string) {
+func testDeleteWorkflow(t *testing.T, libs *testLibs, expectedGCEAction, expectedTPUAction string, expectedExitCode subcommands.ExitStatus) {
 	t.Helper()
 	c := deleteCmd{
 		cfg: libs.cfg,
@@ -33,7 +34,7 @@ func testDeleteWorkflow(t *testing.T, libs *testLibs, expectedGCEAction, expecte
 	c.tpuCmd.skipConfirmation = true
 
 	exit := c.Execute(context.Background(), nil)
-	if exit != 0 {
+	if exit != expectedExitCode {
 		t.Fatalf("Exit code incorrect: %d", exit)
 	}
 
@@ -43,19 +44,19 @@ func testDeleteWorkflow(t *testing.T, libs *testLibs, expectedGCEAction, expecte
 
 func TestDeleteNotExistent(t *testing.T) {
 	libs := newTestLibs()
-	testDeleteWorkflow(t, libs, "", "")
+	testDeleteWorkflow(t, libs, "", "", subcommands.ExitFailure)
 }
 
 func TestDeleteNotRunning(t *testing.T) {
 	libs := newTestLibs()
 	libs.gce.instance = &compute.Instance{Status: "STOPPED"}
 	libs.tpu.instance = &tpu.Node{State: "CREATING"}
-	testDeleteWorkflow(t, libs, "DELETE", "DELETE")
+	testDeleteWorkflow(t, libs, "DELETE", "DELETE", subcommands.ExitSuccess)
 }
 
 func TestDelete(t *testing.T) {
 	libs := newTestLibs()
 	libs.gce.instance = &compute.Instance{Status: "RUNNING"}
 	libs.tpu.instance = &tpu.Node{State: "READY"}
-	testDeleteWorkflow(t, libs, "DELETE", "DELETE")
+	testDeleteWorkflow(t, libs, "DELETE", "DELETE", subcommands.ExitSuccess)
 }

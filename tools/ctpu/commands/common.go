@@ -67,18 +67,18 @@ func cleanUpVM(cfg *config.Config, gceCP gceInstanceFn, vmCommand cpCommand, dry
 		return nil, err
 	}
 	if vm == nil {
-		log.Printf("No Compute Engine VM %q found.\n", cfg.FlockName)
-		return nil, nil
-	} else if !vm.IsRunning() && requiresRunning {
+		return nil, fmt.Errorf("no Compute Engine VM %q found", cfg.FlockName)
+	}
+	if !vm.IsRunning() && requiresRunning {
 		log.Printf("Compute Engine VM %s not running.\n", cfg.FlockName)
 		return nil, nil
-	} else {
-		log.Printf("%s Compute Engine VM %q...\n", actionName, cfg.FlockName)
-		if !dryRun {
-			return vmCommand()
-		}
-		return nil, nil
 	}
+
+	log.Printf("%s Compute Engine VM %q...\n", actionName, cfg.FlockName)
+	if !dryRun {
+		return vmCommand()
+	}
+	return nil, nil
 }
 
 func cleanUpTPU(cfg *config.Config, tpuCP tpuInstanceFn, tpuCommand cpCommand, dryRun bool) (ctrl.LongRunningOperation, error) {
@@ -87,15 +87,14 @@ func cleanUpTPU(cfg *config.Config, tpuCP tpuInstanceFn, tpuCommand cpCommand, d
 		return nil, err
 	}
 	if tpu == nil {
-		log.Printf("No TPU %s found.\n", cfg.FlockName)
-		return nil, nil
-	} else {
-		log.Printf("Deleting TPU %s...\n", cfg.FlockName)
-		if !dryRun {
-			return tpuCommand()
-		}
-		return nil, nil
+		return nil, fmt.Errorf("no TPU %s found", cfg.FlockName)
 	}
+
+	log.Printf("Deleting TPU %s...\n", cfg.FlockName)
+	if !dryRun {
+		return tpuCommand()
+	}
+	return nil, nil
 }
 
 func waitForLongRunningOperations(operation string, skipWaiting bool, gceOp, tpuOp ctrl.LongRunningOperation) error {
