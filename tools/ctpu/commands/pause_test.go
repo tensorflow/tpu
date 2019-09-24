@@ -19,11 +19,12 @@ import (
 	"context"
 	"testing"
 
+	"github.com/google/subcommands"
 	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/tpu/v1alpha1"
 )
 
-func testPauseWorkflow(t *testing.T, libs *testLibs, expectedGCEAction, expectedTPUAction string) {
+func testPauseWorkflow(t *testing.T, libs *testLibs, expectedGCEAction, expectedTPUAction string, expectedExitCode subcommands.ExitStatus) {
 	t.Helper()
 	c := pauseCmd{
 		cfg: libs.cfg,
@@ -33,7 +34,7 @@ func testPauseWorkflow(t *testing.T, libs *testLibs, expectedGCEAction, expected
 	c.tpuCmd.skipConfirmation = true
 
 	exit := c.Execute(context.Background(), nil)
-	if exit != 0 {
+	if exit != expectedExitCode {
 		t.Fatalf("Exit code incorrect: %d", exit)
 	}
 
@@ -44,19 +45,19 @@ func testPauseWorkflow(t *testing.T, libs *testLibs, expectedGCEAction, expected
 
 func TestPauseNotExistent(t *testing.T) {
 	libs := newTestLibs()
-	testPauseWorkflow(t, libs, "", "")
+	testPauseWorkflow(t, libs, "", "", subcommands.ExitFailure)
 }
 
 func TestPauseNotRunning(t *testing.T) {
 	libs := newTestLibs()
 	libs.gce.instance = &compute.Instance{Status: "STOPPING"}
 	libs.tpu.instance = &tpu.Node{State: "CREATING"}
-	testPauseWorkflow(t, libs, "", "DELETE")
+	testPauseWorkflow(t, libs, "", "DELETE", subcommands.ExitSuccess)
 }
 
 func TestPause(t *testing.T) {
 	libs := newTestLibs()
 	libs.gce.instance = &compute.Instance{Status: "RUNNING"}
 	libs.tpu.instance = &tpu.Node{State: "READY"}
-	testPauseWorkflow(t, libs, "STOP", "DELETE")
+	testPauseWorkflow(t, libs, "STOP", "DELETE", subcommands.ExitSuccess)
 }
