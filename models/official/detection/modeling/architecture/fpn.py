@@ -29,7 +29,7 @@ import functools
 import tensorflow as tf
 
 from modeling.architecture import nn_ops
-from utils import spatial_transform
+from ops import spatial_transform_ops
 
 
 class Fpn(object):
@@ -96,7 +96,7 @@ class Fpn(object):
       # Adds top-down path.
       feats = {backbone_max_level: feats_lateral[backbone_max_level]}
       for level in range(backbone_max_level - 1, self._min_level - 1, -1):
-        feats[level] = spatial_transform.nearest_upsampling(
+        feats[level] = spatial_transform_ops.nearest_upsampling(
             feats[level + 1], 2) + feats_lateral[level]
 
       # Adds post-hoc 3x3 convolution kernel.

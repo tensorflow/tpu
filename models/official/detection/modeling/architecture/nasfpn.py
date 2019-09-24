@@ -27,9 +27,8 @@ import functools
 import enum
 import tensorflow as tf
 
-
 from modeling.architecture import nn_ops
-from utils import spatial_transform
+from ops import spatial_transform_ops
 
 
 COMBINATION_OPS = enum.Enum('COMBINATION_OPS', ['SUM', 'GLOBAL_ATTENTION'])
@@ -61,7 +60,7 @@ def resample_feature_map(feat, level, target_level, is_training,
           padding='SAME')
     elif level > target_level:
       scale = int(2**(level - target_level))
-      feat = spatial_transform.nearest_upsampling(feat, scale=scale)
+      feat = spatial_transform_ops.nearest_upsampling(feat, scale=scale)
   return feat
 
 
