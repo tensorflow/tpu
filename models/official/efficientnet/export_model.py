@@ -39,6 +39,7 @@ flags.DEFINE_integer(
     "Number of post-training quantization calibration steps to run.")
 flags.DEFINE_integer("image_size", 224, "Size of the input image.")
 flags.DEFINE_integer("batch_size", 1, "Batch size of input tensor.")
+flags.DEFINE_string("endpoint_name", None, "Endpoint name")
 flags.DEFINE_string("output_saved_model_dir", None,
                     "Directory in which to save the saved_model.")
 
@@ -122,15 +123,21 @@ def main(_):
         shape=(1, FLAGS.image_size, FLAGS.image_size, 3),
         name="images")
 
-    logits, _ = model_builder.build_model(images, FLAGS.model_name, False)
-    probs = tf.nn.softmax(logits)
+    logits, endpoints = model_builder.build_model(images, FLAGS.model_name,
+                                                  False)
+    if FLAGS.endpoint_name:
+      output_tensor = endpoints[FLAGS.endpoint_name]
+    else:
+      output_tensor = tf.nn.softmax(logits)
+
     restore_model(sess, FLAGS.ckpt_dir, FLAGS.enable_ema)
 
     if FLAGS.output_saved_model_dir:
       signature_def_map = {
           "serving_default":
               tf.compat.v1.saved_model.signature_def_utils
-              .predict_signature_def({"input": images}, {"output": probs})
+              .predict_signature_def({"input": images},
+                                     {"output": output_tensor})
       }
 
       builder = tf.compat.v1.saved_model.Builder(FLAGS.output_saved_model_dir)
@@ -139,7 +146,8 @@ def main(_):
       builder.save()
       print("Saved model written to %s" % FLAGS.output_saved_model_dir)
 
-    converter = tf.lite.TFLiteConverter.from_session(sess, [images], [probs])
+    converter = tf.lite.TFLiteConverter.from_session(sess, [images],
+                                                     [output_tensor])
     if FLAGS.quantize:
       if not FLAGS.data_dir:
         raise ValueError(
