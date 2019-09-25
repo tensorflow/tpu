@@ -698,11 +698,12 @@ class ShapemaskFinemaskHead(object):
     # Extract the foreground mean features
     with tf.variable_scope('fine_mask', reuse=tf.AUTO_REUSE):
       mask_probs = tf.nn.sigmoid(mask_logits)
-      # Compute instance embedding.
+      # Compute instance embedding for hard average.
+      binary_mask = tf.cast(tf.greater(mask_probs, 0.5), features.dtype)
       instance_embedding = tf.reduce_sum(
-          features * tf.expand_dims(mask_probs, axis=-1), axis=(2, 3))
+          features * tf.expand_dims(binary_mask, axis=-1), axis=(2, 3))
       instance_embedding /= tf.expand_dims(
-          tf.reduce_sum(mask_probs, axis=(2, 3)), axis=-1)
+          tf.reduce_sum(binary_mask, axis=(2, 3)) + 1e-20, axis=-1)
       # Take the difference between crop features and mean instance features.
       features -= tf.expand_dims(
           tf.expand_dims(instance_embedding, axis=2), axis=2)
