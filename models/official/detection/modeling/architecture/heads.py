@@ -22,8 +22,9 @@ import functools
 
 import numpy as np
 import tensorflow as tf
+
 from modeling.architecture import nn_ops
-from utils import spatial_transform
+from ops import spatial_transform_ops
 
 
 class RpnHead(object):
@@ -462,7 +463,7 @@ class ShapemaskPriorHead(object):
     """
     with tf.variable_scope('prior_mask', reuse=tf.AUTO_REUSE):
       batch_size, num_instances, _ = boxes.get_shape().as_list()
-      instance_features = spatial_transform.multilevel_crop_and_resize(
+      instance_features = spatial_transform_ops.multilevel_crop_and_resize(
           fpn_features, outer_boxes, output_size=self._mask_crop_size)
       instance_features = tf.layers.dense(instance_features,
                                           self._num_downsample_channels)
@@ -473,7 +474,7 @@ class ShapemaskPriorHead(object):
       uniform_priors = tf.ones(
           [batch_size, num_instances,
            self._mask_crop_size, self._mask_crop_size])
-      uniform_priors = spatial_transform.crop_mask_in_target_box(
+      uniform_priors = spatial_transform_ops.crop_mask_in_target_box(
           uniform_priors, boxes, outer_boxes, self._mask_crop_size)
       uniform_priors = tf.cast(uniform_priors, instance_features.dtype)
 
@@ -484,7 +485,7 @@ class ShapemaskPriorHead(object):
       instance_priors *= tf.expand_dims(
           tf.expand_dims(prior_distribution, axis=-1), axis=-1)
       instance_priors = tf.reduce_sum(instance_priors, axis=2)
-      detection_priors = spatial_transform.crop_mask_in_target_box(
+      detection_priors = spatial_transform_ops.crop_mask_in_target_box(
           instance_priors, boxes, outer_boxes, self._mask_crop_size)
 
       return instance_features, detection_priors

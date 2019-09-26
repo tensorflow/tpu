@@ -302,12 +302,12 @@ class Parser(object):
     # Jitter the sampled boxes to mimic the noisy detections.
     sampled_boxes = box_utils.jitter_boxes(
         sampled_boxes, noise_scale=self._box_jitter_scale)
-
+    sampled_boxes = box_utils.clip_boxes(sampled_boxes, self._output_size)
     # Compute mask targets in feature crop. A feature crop fully contains a
     # sampled box.
     mask_outer_boxes = box_utils.compute_outer_boxes(
         sampled_boxes, tf.shape(image)[0:2], scale=self._outer_box_scale)
-
+    mask_outer_boxes = box_utils.clip_boxes(mask_outer_boxes, self._output_size)
     # Compensate the offset of mask_outer_boxes to map it back to original image
     # scale.
     mask_outer_boxes_ori = mask_outer_boxes

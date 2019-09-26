@@ -48,17 +48,17 @@ def jitter_boxes(boxes, noise_scale=0.025):
         'boxes.shape[-1] is {:d}, but must be 4.'.format(boxes.shape[-1]))
 
   with tf.name_scope('jitter_boxes'):
-    bbox_jitters = tf.random_normal([4], stddev=noise_scale)
+    bbox_jitters = tf.random_normal(boxes.get_shape(), stddev=noise_scale)
     ymin = boxes[..., 0:1]
     xmin = boxes[..., 1:2]
     ymax = boxes[..., 2:3]
     xmax = boxes[..., 3:4]
     width = xmax - xmin
     height = ymax - ymin
-    new_center_x = (xmin + xmax) / 2.0 + bbox_jitters[0] * width
-    new_center_y = (ymin + ymax) / 2.0 + bbox_jitters[1] * height
-    new_width = width * tf.exp(bbox_jitters[2])
-    new_height = height * tf.exp(bbox_jitters[3])
+    new_center_x = (xmin + xmax) / 2.0 + bbox_jitters[..., 0:1] * width
+    new_center_y = (ymin + ymax) / 2.0 + bbox_jitters[..., 1:2] * height
+    new_width = width * tf.exp(bbox_jitters[..., 2:3])
+    new_height = height * tf.exp(bbox_jitters[..., 3:4])
     jittered_boxes = tf.concat([
         new_center_y - new_height * 0.5,
         new_center_x - new_width * 0.5,
