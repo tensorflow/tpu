@@ -25,6 +25,7 @@ from modeling import base_model
 from modeling import losses
 from modeling import postprocess
 from modeling.architecture import factory
+from utils import benchmark_utils
 
 
 class RetinanetModel(base_model.Model):
@@ -61,6 +62,12 @@ class RetinanetModel(base_model.Model):
         'cls_outputs': cls_outputs,
         'box_outputs': box_outputs,
     }
+
+    # Print number of parameters and FLOPS in model.
+    batch_size, _, _, _ = backbone_features.values()[0].get_shape().as_list()
+    benchmark_utils.compute_model_statistics(
+        batch_size, is_training=(mode == mode_keys.TRAIN))
+
     if mode != mode_keys.TRAIN:
       boxes, scores, classes, valid_detections = self._generate_detections_fn(
           box_outputs, cls_outputs, labels['anchor_boxes'],
