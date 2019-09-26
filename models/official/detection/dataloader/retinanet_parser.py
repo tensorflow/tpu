@@ -401,6 +401,7 @@ class Parser(object):
       # Filters out ground truth boxes that are all zeros.
       indices = input_utils.get_non_empty_box_indices(boxes)
       boxes = tf.gather(boxes, indices)
+      classes = tf.gather(classes, indices)
 
       # Assigns anchors.
       anchor_labeler = anchor.AnchorLabeler(

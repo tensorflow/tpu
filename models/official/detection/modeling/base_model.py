@@ -39,7 +39,8 @@ def filter_trainable_variables(variables, frozen_variable_prefix):
     filtered_variables: a list of tf.Variable filtered out the frozen ones.
   """
   filtered_variables = [
-      v for v in variables if not re.match(frozen_variable_prefix, v.name)
+      v for v in variables if frozen_variable_prefix is None or
+      not re.match(frozen_variable_prefix, v.name)
   ]
   return filtered_variables
 
