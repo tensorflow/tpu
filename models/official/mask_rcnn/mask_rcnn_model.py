@@ -26,6 +26,7 @@ from __future__ import print_function
 
 import math
 import re
+import numpy as np
 import six
 import tensorflow as tf
 
@@ -103,6 +104,25 @@ def remove_variables(variables, prefix):
 
   var_list = [v for v in variables if _is_kept(v)]
   return var_list
+
+
+def compute_model_statistics(batch_size, is_training=True):
+  """Compute number of parameters and FLOPS."""
+  num_trainable_params = np.sum(
+      [np.prod(var.get_shape().as_list()) for var in tf.trainable_variables()])
+  tf.logging.info('number of trainable params: {}'.format(num_trainable_params))
+
+  options = tf.profiler.ProfileOptionBuilder.float_operation()
+  options['output'] = 'none'
+  flops = tf.profiler.profile(
+      tf.get_default_graph(), options=options).total_float_ops
+  flops_per_image = flops / batch_size
+  if is_training:
+    tf.logging.info(
+        'number of FLOPS per image: {} in training'.format(flops_per_image))
+  else:
+    tf.logging.info(
+        'number of FLOPS per image: {} in eval'.format(flops_per_image))
 
 
 def build_model_graph(features, labels, is_training, params):
@@ -289,6 +309,9 @@ def build_model_graph(features, labels, is_training, params):
       num_classes=params['num_classes'],
       mrcnn_resolution=params['mrcnn_resolution'],
       is_gpu_inference=is_gpu_inference)
+
+  # Print #parameters and #FLOPs in model.
+  compute_model_statistics(batch_size, is_training=is_training)
 
   if is_training:
     mask_targets = training_ops.get_mask_targets(
