@@ -73,7 +73,8 @@ class BlockDecoder(object):
         se_ratio=float(options['se']) if 'se' in options else None,
         strides=[int(options['s'][0]), int(options['s'][1])],
         conv_type=int(options['c']) if 'c' in options else 0,
-        fused_conv=int(options['f']) if 'f' in options else 0
+        fused_conv=int(options['f']) if 'f' in options else 0,
+        super_pixel=int(options['p']) if 'p' in options else 0
         )
 
   def _encode_block_string(self, block):
@@ -87,6 +88,7 @@ class BlockDecoder(object):
         'o%d' % block.output_filters,
         'c%d' % block.conv_type,
         'f%d' % block.fused_conv,
+        'p%d' % block.super_pixel,
     ]
     if block.se_ratio > 0 and block.se_ratio <= 1:
       args.append('se%s' % block.se_ratio)
