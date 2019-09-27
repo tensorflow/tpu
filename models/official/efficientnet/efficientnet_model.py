@@ -463,6 +463,27 @@ class Model(tf.keras.Model):
   def _build(self):
     """Builds a model."""
     self._blocks = []
+    batch_norm_momentum = self._global_params.batch_norm_momentum
+    batch_norm_epsilon = self._global_params.batch_norm_epsilon
+    if self._global_params.data_format == 'channels_first':
+      channel_axis = 1
+    else:
+      channel_axis = -1
+
+    # Stem part.
+    self._conv_stem = tf.layers.Conv2D(
+        filters=round_filters(32, self._global_params),
+        kernel_size=[3, 3],
+        strides=[2, 2],
+        kernel_initializer=conv_kernel_initializer,
+        padding='same',
+        data_format=self._global_params.data_format,
+        use_bias=False)
+    self._bn0 = self._batch_norm(
+        axis=channel_axis,
+        momentum=batch_norm_momentum,
+        epsilon=batch_norm_epsilon)
+
     # Builds blocks.
     for block_args in self._blocks_args:
       assert block_args.num_repeat > 0
@@ -511,27 +532,6 @@ class Model(tf.keras.Model):
         # pylint: enable=protected-access
       for _ in xrange(block_args.num_repeat - 1):
         self._blocks.append(conv_block(block_args, self._global_params))
-
-    batch_norm_momentum = self._global_params.batch_norm_momentum
-    batch_norm_epsilon = self._global_params.batch_norm_epsilon
-    if self._global_params.data_format == 'channels_first':
-      channel_axis = 1
-    else:
-      channel_axis = -1
-
-    # Stem part.
-    self._conv_stem = tf.layers.Conv2D(
-        filters=round_filters(32, self._global_params),
-        kernel_size=[3, 3],
-        strides=[2, 2],
-        kernel_initializer=conv_kernel_initializer,
-        padding='same',
-        data_format=self._global_params.data_format,
-        use_bias=False)
-    self._bn0 = self._batch_norm(
-        axis=channel_axis,
-        momentum=batch_norm_momentum,
-        epsilon=batch_norm_epsilon)
 
     # Head part.
     self._conv_head = tf.layers.Conv2D(
