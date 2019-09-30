@@ -152,7 +152,12 @@ class TpuExecutor(object):
 
     if not checkpoint_path:
       checkpoint_path = self._estimator.latest_checkpoint()
-    current_step = int(os.path.basename(checkpoint_path).split('-')[1])
+
+    if checkpoint_path:
+      current_step = int(os.path.basename(checkpoint_path).split('-')[1])
+    else:
+      current_step = 0
+
     predictor = self._estimator.predict(
         input_fn=input_fn,
         checkpoint_path=checkpoint_path,

@@ -43,7 +43,7 @@ GlobalParams.__new__.__defaults__ = (None,) * len(GlobalParams._fields)
 BlockArgs = collections.namedtuple('BlockArgs', [
     'kernel_size', 'num_repeat', 'input_filters', 'output_filters',
     'expand_ratio', 'id_skip', 'strides', 'se_ratio', 'conv_type',
-    'fused_conv',
+    'fused_conv', 'super_pixel',
 ])
 # defaults will be a public argument for namedtuple in Python 3.7
 # https://docs.python.org/3/library/collections.html#collections.namedtuple
@@ -93,6 +93,41 @@ def dense_kernel_initializer(shape, dtype=None, partition_info=None):
   del partition_info
   init_range = 1.0 / np.sqrt(shape[1])
   return tf.random_uniform(shape, -init_range, init_range, dtype=dtype)
+
+
+def superpixel_kernel_initializer(shape, dtype='float32', partition_info=None):
+  """Initializes superpixel kernels.
+
+  This is inspired by space-to-depth transformation that is mathematically
+  equivalent before and after the transformation. But we do the space-to-depth
+  via a convolution. Moreover, we make the layer trainable instead of direct
+  transform, we can initialization it this way so that the model can learn not
+  to do anything but keep it mathematically equivalent, when improving
+  performance.
+
+
+  Args:
+    shape: shape of variable
+    dtype: dtype of variable
+    partition_info: unused
+
+  Returns:
+    an initialization for the variable
+  """
+  del partition_info
+  #  use input depth to make superpixel kernel.
+  depth = shape[-2]
+  filters = np.zeros([2, 2, depth, 4 * depth], dtype=dtype)
+  i = np.arange(2)
+  j = np.arange(2)
+  k = np.arange(depth)
+  mesh = np.array(np.meshgrid(i, j, k)).T.reshape(-1, 3).T
+  filters[
+      mesh[0],
+      mesh[1],
+      mesh[2],
+      4 * mesh[2] + 2 * mesh[0] + mesh[1]] = 1
+  return filters
 
 
 def round_filters(filters, global_params):
@@ -164,6 +199,19 @@ class MBConvBlock(tf.keras.layers.Layer):
 
   def _build(self):
     """Builds block according to the arguments."""
+    if self._block_args.super_pixel == 1:
+      self._superpixel = tf.layers.Conv2D(
+          self._block_args.input_filters,
+          kernel_size=[2, 2],
+          strides=[2, 2],
+          kernel_initializer=conv_kernel_initializer,
+          padding='same',
+          data_format=self._data_format,
+          use_bias=False)
+      self._bnsp = self._batch_norm(
+          axis=self._channel_axis,
+          momentum=self._batch_norm_momentum,
+          epsilon=self._batch_norm_epsilon)
     filters = self._block_args.input_filters * self._block_args.expand_ratio
     kernel_size = self._block_args.kernel_size
     if self._block_args.fused_conv:
@@ -270,7 +318,18 @@ class MBConvBlock(tf.keras.layers.Layer):
       A output tensor.
     """
     tf.logging.info('Block input: %s shape: %s' % (inputs.name, inputs.shape))
+    tf.logging.info('Block input depth: %s output depth: %s' % (
+        self._block_args.input_filters, self._block_args.output_filters))
+
     x = inputs
+    # creates conv 2x2 kernel
+    if self._block_args.super_pixel == 1:
+      with tf.variable_scope('super_pixel'):
+        x = self._relu_fn(
+            self._bnsp(self._superpixel(x), training=training))
+      tf.logging.info(
+          'Block start with SuperPixel: %s shape: %s' % (x.name, x.shape))
+
     if self._block_args.fused_conv:
       x = self._relu_fn(self._bn1(self._fused_conv(x), training=training))
       tf.logging.info('Conv2D: %s shape: %s' % (x.name, x.shape))
@@ -293,7 +352,7 @@ class MBConvBlock(tf.keras.layers.Layer):
     if self._block_args.id_skip:
       if all(
           s == 1 for s in self._block_args.strides
-      ) and self._block_args.input_filters == self._block_args.output_filters:
+      ) and inputs.get_shape().as_list()[-1] == x.get_shape().as_list()[-1]:
         # only apply drop_connect if skip presents.
         if drop_connect_rate:
           x = utils.drop_connect(x, training, drop_connect_rate)
@@ -404,28 +463,6 @@ class Model(tf.keras.Model):
   def _build(self):
     """Builds a model."""
     self._blocks = []
-    # Builds blocks.
-    for block_args in self._blocks_args:
-      assert block_args.num_repeat > 0
-      # Update block input and output filters based on depth multiplier.
-      block_args = block_args._replace(
-          input_filters=round_filters(block_args.input_filters,
-                                      self._global_params),
-          output_filters=round_filters(block_args.output_filters,
-                                       self._global_params),
-          num_repeat=round_repeats(block_args.num_repeat, self._global_params))
-
-      # The first block needs to take care of stride and filter size increase.
-      conv_block = self._get_conv_block(block_args.conv_type)
-      self._blocks.append(conv_block(block_args, self._global_params))
-      if block_args.num_repeat > 1:
-        # pylint: disable=protected-access
-        block_args = block_args._replace(
-            input_filters=block_args.output_filters, strides=[1, 1])
-        # pylint: enable=protected-access
-      for _ in xrange(block_args.num_repeat - 1):
-        self._blocks.append(conv_block(block_args, self._global_params))
-
     batch_norm_momentum = self._global_params.batch_norm_momentum
     batch_norm_epsilon = self._global_params.batch_norm_epsilon
     if self._global_params.data_format == 'channels_first':
@@ -446,6 +483,55 @@ class Model(tf.keras.Model):
         axis=channel_axis,
         momentum=batch_norm_momentum,
         epsilon=batch_norm_epsilon)
+
+    # Builds blocks.
+    for block_args in self._blocks_args:
+      assert block_args.num_repeat > 0
+      assert block_args.super_pixel in [0, 1, 2]
+      # Update block input and output filters based on depth multiplier.
+      input_filters = round_filters(block_args.input_filters,
+                                    self._global_params)
+      output_filters = round_filters(block_args.output_filters,
+                                     self._global_params)
+      kernel_size = block_args.kernel_size
+      block_args = block_args._replace(
+          input_filters=input_filters,
+          output_filters=output_filters,
+          num_repeat=round_repeats(block_args.num_repeat, self._global_params))
+
+      # The first block needs to take care of stride and filter size increase.
+      conv_block = self._get_conv_block(block_args.conv_type)
+      if not block_args.super_pixel:  #  no super_pixel at all
+        self._blocks.append(conv_block(block_args, self._global_params))
+      else:
+        # if superpixel, adjust filters, kernels, and strides.
+        depth_factor = 4 / block_args.strides[0] / block_args.strides[1]
+        block_args = block_args._replace(
+            input_filters=block_args.input_filters * depth_factor,
+            output_filters=block_args.output_filters * depth_factor,
+            kernel_size=((block_args.kernel_size + 1) // 2 if depth_factor > 1
+                         else block_args.kernel_size))
+        # if the first block has stride-2 and super_pixel trandformation
+        if (block_args.strides[0] == 2 and block_args.strides[1] == 2):
+          block_args = block_args._replace(strides=[1, 1])
+          self._blocks.append(conv_block(block_args, self._global_params))
+          block_args = block_args._replace(  # sp stops at stride-2
+              super_pixel=0,
+              input_filters=input_filters,
+              output_filters=output_filters,
+              kernel_size=kernel_size)
+        elif block_args.super_pixel == 1:
+          self._blocks.append(conv_block(block_args, self._global_params))
+          block_args = block_args._replace(super_pixel=2)
+        else:
+          self._blocks.append(conv_block(block_args, self._global_params))
+      if block_args.num_repeat > 1:  # rest of blocks with the same block_arg
+        # pylint: disable=protected-access
+        block_args = block_args._replace(
+            input_filters=block_args.output_filters, strides=[1, 1])
+        # pylint: enable=protected-access
+      for _ in xrange(block_args.num_repeat - 1):
+        self._blocks.append(conv_block(block_args, self._global_params))
 
     # Head part.
     self._conv_head = tf.layers.Conv2D(

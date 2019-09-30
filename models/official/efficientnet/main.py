@@ -374,6 +374,7 @@ def model_fn(features, labels, mode, params):
         tf.cast(global_step, tf.float32) / params['steps_per_epoch'])
 
     scaled_lr = FLAGS.base_learning_rate * (FLAGS.train_batch_size / 256.0)
+    tf.logging.info('base_learning_rate = %f', FLAGS.base_learning_rate)
     learning_rate = utils.build_learning_rate(scaled_lr, global_step,
                                               params['steps_per_epoch'])
     optimizer = utils.build_optimizer(learning_rate)
