@@ -90,13 +90,18 @@ def write_summary(logs, summary_writer, current_step):
 class TPUEstimatorExecuter(object):
   """An executor class for running jobs on TPUs."""
 
-  def __init__(self, model_fn, params, input_shapes):
+  def __init__(self, model_fn, params, train_input_shapes, eval_input_shapes):
     self._model_dir = params.model_dir
     self._params = params
-    self._input_shapes = input_shapes
+    self._train_input_shapes = train_input_shapes
+    self._eval_input_shapes = eval_input_shapes
 
-    self._estimator = self._build_estimator(
-        params.tpu_config, model_fn, params, input_shapes)
+    if train_input_shapes:
+      self._train_estimator = self._build_estimator(
+          params.tpu_config, model_fn, params, train_input_shapes)
+    if eval_input_shapes:
+      self._eval_estimator = self._build_estimator(
+          params.tpu_config, model_fn, params, eval_input_shapes)
 
   def _save_params(self):
     """Save parameters to config files if model_dir is defined."""
@@ -190,7 +195,8 @@ class TPUEstimatorExecuter(object):
   def train(self, input_fn):
     """Training the model with training data and labels in input_fn."""
     self._save_params()
-    self._estimator.train(input_fn=input_fn, max_steps=self._params.train_steps)
+    self._train_estimator.train(input_fn=input_fn,
+                                max_steps=self._params.train_steps)
 
   def evaluate(self, input_fn):
     """Evaluating the model with data and labels in input_fn."""
@@ -217,7 +223,7 @@ class TPUEstimatorExecuter(object):
 
       tf.logging.info('Starting to evaluate.')
       try:
-        eval_results = self._estimator.evaluate(
+        eval_results = self._eval_estimator.evaluate(
             input_fn=input_fn, steps=self._params.eval_steps)
         write_summary(eval_results, summary_writer, current_step)
 
@@ -247,20 +253,19 @@ class TPUEstimatorExecuter(object):
     num_cycles = int(self._params.train_steps / self._params.num_steps_per_eval)
     for cycle in range(num_cycles):
       tf.logging.info('Start training cycle %d.', cycle)
-      self._estimator.train(
+      self._train_estimator.train(
           input_fn=train_input_fn, steps=self._params.num_steps_per_eval)
-
       tf.logging.info('Start evaluation cycle %d.', cycle)
-      eval_results = self._estimator.evaluate(
+      eval_results = self._eval_estimator.evaluate(
           input_fn=eval_input_fn, steps=self._params.eval_steps)
 
       current_step = int(cycle * self._params.num_steps_per_eval)
       write_summary(eval_results, summary_writer, current_step)
 
     tf.logging.info('Starting training cycle %d.', num_cycles)
-    self._estimator.train(
+    self._train_estimator.train(
         input_fn=train_input_fn, steps=self._params.train_steps)
-    eval_results = self._estimator.evaluate(
+    eval_results = self._eval_estimator.evaluate(
         input_fn=eval_input_fn, steps=self._params.eval_steps)
     write_summary(eval_results, summary_writer, self._params.train_steps)
     summary_writer.close()
