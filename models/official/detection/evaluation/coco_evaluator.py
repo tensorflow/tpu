@@ -155,7 +155,12 @@ class COCOEvaluator(object):
   def _process_predictions(self, predictions):
     image_scale = np.tile(predictions['image_info'][:, 2:3, :], (1, 1, 2))
     predictions['detection_boxes'] = (
-        predictions['detection_boxes'] / image_scale)
+        predictions['detection_boxes'].astype(np.float32))
+    predictions['detection_boxes'] /= image_scale
+    if 'detection_outer_boxes' in predictions:
+      predictions['detection_outer_boxes'] = (
+          predictions['detection_outer_boxes'].astype(np.float32))
+      predictions['detection_outer_boxes'] /= image_scale
 
   def update(self, predictions, groundtruths=None):
     """Update and aggregate detection results and groundtruth data.
