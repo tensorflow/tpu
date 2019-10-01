@@ -52,6 +52,7 @@ class Parser(object):
                skip_crowd_during_training=True,
                max_num_instances=100,
                use_bfloat16=True,
+               regenerate_source_id=False,
                mode=None):
     """Initializes parameters for parsing annotations in the dataset.
 
@@ -90,8 +91,10 @@ class Parser(object):
       max_num_instances: `int` number of maximum number of instances in an
         image. The groundtruth data will be padded to `max_num_instances`.
       use_bfloat16: `bool`, if True, cast output image to tf.bfloat16.
-      mode: a ModeKeys. Specifies if this is training, evaluation, prediction
-        or prediction with groundtruths in the outputs.
+      regenerate_source_id: `bool`, if True TFExampleParser will use hashed
+        value of `image/encoded` for `image/source_id`.
+      mode: a ModeKeys. Specifies if this is training, evaluation, prediction or
+        prediction with groundtruths in the outputs.
     """
     self._mode = mode
     self._max_num_instances = max_num_instances
@@ -99,7 +102,7 @@ class Parser(object):
     self._is_training = (mode == ModeKeys.TRAIN)
 
     self._example_decoder = tf_example_decoder.TfExampleDecoder(
-        include_mask=False)
+        include_mask=False, regenerate_source_id=regenerate_source_id)
 
     # Anchor.
     self._output_size = output_size

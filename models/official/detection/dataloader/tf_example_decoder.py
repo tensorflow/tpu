@@ -21,34 +21,30 @@ protos for object detection.
 import tensorflow as tf
 
 
+def _get_source_id_from_encoded_image(parsed_tensors):
+  return tf.strings.as_string(
+      tf.strings.to_hash_bucket_fast(parsed_tensors['image/encoded'],
+                                     2**63 - 1))
+
+
 class TfExampleDecoder(object):
   """Tensorflow Example proto decoder."""
 
-  def __init__(self, include_mask=False):
+  def __init__(self, include_mask=False, regenerate_source_id=False):
     self._include_mask = include_mask
+    self._regenerate_source_id = regenerate_source_id
     self._keys_to_features = {
-        'image/encoded':
-            tf.FixedLenFeature((), tf.string),
-        'image/source_id':
-            tf.FixedLenFeature((), tf.string),
-        'image/height':
-            tf.FixedLenFeature((), tf.int64),
-        'image/width':
-            tf.FixedLenFeature((), tf.int64),
-        'image/object/bbox/xmin':
-            tf.VarLenFeature(tf.float32),
-        'image/object/bbox/xmax':
-            tf.VarLenFeature(tf.float32),
-        'image/object/bbox/ymin':
-            tf.VarLenFeature(tf.float32),
-        'image/object/bbox/ymax':
-            tf.VarLenFeature(tf.float32),
-        'image/object/class/label':
-            tf.VarLenFeature(tf.int64),
-        'image/object/area':
-            tf.VarLenFeature(tf.float32),
-        'image/object/is_crowd':
-            tf.VarLenFeature(tf.int64),
+        'image/encoded': tf.FixedLenFeature((), tf.string),
+        'image/source_id': tf.FixedLenFeature((), tf.string, ''),
+        'image/height': tf.FixedLenFeature((), tf.int64),
+        'image/width': tf.FixedLenFeature((), tf.int64),
+        'image/object/bbox/xmin': tf.VarLenFeature(tf.float32),
+        'image/object/bbox/xmax': tf.VarLenFeature(tf.float32),
+        'image/object/bbox/ymin': tf.VarLenFeature(tf.float32),
+        'image/object/bbox/ymax': tf.VarLenFeature(tf.float32),
+        'image/object/class/label': tf.VarLenFeature(tf.int64),
+        'image/object/area': tf.VarLenFeature(tf.float32),
+        'image/object/is_crowd': tf.VarLenFeature(tf.int64),
     }
     if include_mask:
       self._keys_to_features.update({
@@ -135,12 +131,19 @@ class TfExampleDecoder(object):
         tf.greater(tf.shape(parsed_tensors['image/object/is_crowd'])[0], 0),
         lambda: tf.cast(parsed_tensors['image/object/is_crowd'], dtype=tf.bool),
         lambda: tf.zeros_like(parsed_tensors['image/object/class/label'], dtype=tf.bool))  # pylint: disable=line-too-long
+    if self._regenerate_source_id:
+      source_id = _get_source_id_from_encoded_image(parsed_tensors)
+    else:
+      source_id = tf.cond(
+          tf.greater(tf.strings.length(parsed_tensors['image/source_id']),
+                     0), lambda: parsed_tensors['image/source_id'],
+          lambda: _get_source_id_from_encoded_image(parsed_tensors))
     if self._include_mask:
       masks = self._decode_masks(parsed_tensors)
 
     decoded_tensors = {
         'image': image,
-        'source_id': parsed_tensors['image/source_id'],
+        'source_id': source_id,
         'height': parsed_tensors['image/height'],
         'width': parsed_tensors['image/width'],
         'groundtruth_classes': parsed_tensors['image/object/class/label'],
