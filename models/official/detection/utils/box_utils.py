@@ -26,6 +26,33 @@ EPSILON = 1e-8
 BBOX_XFORM_CLIP = np.log(1000. / 16.)
 
 
+def yxyx_to_xywh(boxes):
+  """Converts boxes from ymin, xmin, ymax, xmax to xmin, ymin, width, height.
+
+  Args:
+    boxes: a numpy array whose last dimension is 4 representing the coordinates
+      of boxes in ymin, xmin, ymax, xmax order.
+
+  Returns:
+    boxes: a numpy array whose shape is the same as `boxes` in new format.
+
+  Raises:
+    ValueError: If the last dimension of boxes is not 4.
+  """
+  if boxes.shape[-1] != 4:
+    raise ValueError(
+        'boxes.shape[-1] is {:d}, but must be 4.'.format(boxes.shape[-1]))
+
+  boxes_ymin = boxes[..., 0]
+  boxes_xmin = boxes[..., 1]
+  boxes_width = boxes[..., 3] - boxes[..., 1]
+  boxes_height = boxes[..., 2] - boxes[..., 0]
+  new_boxes = np.stack(
+      [boxes_xmin, boxes_ymin, boxes_width, boxes_height], axis=-1)
+
+  return new_boxes
+
+
 def jitter_boxes(boxes, noise_scale=0.025):
   """Jitter the box coordinates by some noise distribution.
 

@@ -52,12 +52,13 @@ FLAGS = flags.FLAGS
 
 
 def run_executer(params,
-                 input_shapes,
+                 train_input_shapes=None, eval_input_shapes=None,
                  train_input_fn=None, eval_input_fn=None):
   """Runs Mask RCNN model on distribution strategy defined by the user."""
-
   executer = tpu_executor.TPUEstimatorExecuter(
-      unet_model.unet_model_fn, params, input_shapes)
+      unet_model.unet_model_fn, params,
+      train_input_shapes=train_input_shapes,
+      eval_input_shapes=eval_input_shapes)
 
   if FLAGS.mode == 'train':
     assert train_input_fn is not None
@@ -99,19 +100,23 @@ def main(argv):
 
   train_input_fn = None
   eval_input_fn = None
-  input_shapes = None
+  train_input_shapes = None
+  eval_input_shapes = None
   if FLAGS.mode in ('train', 'train_and_eval'):
     train_input_fn = input_reader.LiverInputFn(
         params.training_file_pattern, params, mode=tf.estimator.ModeKeys.TRAIN)
-    input_shapes = train_input_fn.get_input_shapes(params)
+    train_input_shapes = train_input_fn.get_input_shapes(params)
   if FLAGS.mode in ('eval', 'train_and_eval'):
     eval_input_fn = input_reader.LiverInputFn(
         params.eval_file_pattern, params, mode=tf.estimator.ModeKeys.EVAL)
-    input_shapes = eval_input_fn.get_input_shapes(params)
+    eval_input_shapes = eval_input_fn.get_input_shapes(params)
 
-  assert input_shapes is not None
-  run_executer(params, input_shapes,
-               train_input_fn=train_input_fn, eval_input_fn=eval_input_fn)
+  assert train_input_shapes is not None or eval_input_shapes is not None
+  run_executer(params,
+               train_input_shapes=train_input_shapes,
+               eval_input_shapes=eval_input_shapes,
+               train_input_fn=train_input_fn,
+               eval_input_fn=eval_input_fn)
 
 
 if __name__ == '__main__':

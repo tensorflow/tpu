@@ -36,7 +36,7 @@ GlobalParams = collections.namedtuple('GlobalParams', [
     'batch_norm_momentum', 'batch_norm_epsilon', 'dropout_rate', 'data_format',
     'num_classes', 'width_coefficient', 'depth_coefficient',
     'depth_divisor', 'min_depth', 'drop_connect_rate', 'relu_fn',
-    'batch_norm', 'use_se',
+    'batch_norm', 'use_se', 'local_pooling',
 ])
 GlobalParams.__new__.__defaults__ = (None,) * len(GlobalParams._fields)
 
@@ -467,8 +467,10 @@ class Model(tf.keras.Model):
     batch_norm_epsilon = self._global_params.batch_norm_epsilon
     if self._global_params.data_format == 'channels_first':
       channel_axis = 1
+      self._spatial_dims = [2, 3]
     else:
       channel_axis = -1
+      self._spatial_dims = [1, 2]
 
     # Stem part.
     self._conv_stem = tf.layers.Conv2D(
@@ -618,13 +620,30 @@ class Model(tf.keras.Model):
       with tf.variable_scope('head'):
         outputs = self._relu_fn(
             self._bn1(self._conv_head(outputs), training=training))
-        outputs = self._avg_pooling(outputs)
-        self.endpoints['pooled_features'] = outputs
-        if not pooled_features_only:
-          if self._dropout:
-            outputs = self._dropout(outputs, training=training)
-          self.endpoints['global_pool'] = outputs
-          if self._fc:
-            outputs = self._fc(outputs)
-          self.endpoints['head'] = outputs
+
+        if self._global_params.local_pooling:
+          shape = outputs.get_shape().as_list()
+          kernel_size = [
+              1, shape[self._spatial_dims[0]], shape[self._spatial_dims[1]], 1]
+          outputs = tf.nn.avg_pool(
+              outputs, ksize=kernel_size, strides=[1, 1, 1, 1], padding='VALID')
+          self.endpoints['pooled_features'] = outputs
+          if not pooled_features_only:
+            if self._dropout:
+              outputs = self._dropout(outputs, training=training)
+            self.endpoints['global_pool'] = outputs
+            if self._fc:
+              outputs = tf.squeeze(outputs, self._spatial_dims)
+              outputs = self._fc(outputs)
+            self.endpoints['head'] = outputs
+        else:
+          outputs = self._avg_pooling(outputs)
+          self.endpoints['pooled_features'] = outputs
+          if not pooled_features_only:
+            if self._dropout:
+              outputs = self._dropout(outputs, training=training)
+            self.endpoints['global_pool'] = outputs
+            if self._fc:
+              outputs = self._fc(outputs)
+            self.endpoints['head'] = outputs
     return outputs

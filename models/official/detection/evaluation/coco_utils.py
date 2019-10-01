@@ -222,20 +222,22 @@ def convert_predictions_to_coco_annotations(predictions):
   num_batches = len(predictions['source_id'])
   batch_size = predictions['source_id'][0].shape[0]
   max_num_detections = predictions['detection_classes'][0].shape[1]
+  use_outer_box = 'detection_outer_boxes' in predictions
   for i in range(num_batches):
-    boxes_ymin = predictions['detection_boxes'][i][..., 0]
-    boxes_xmin = predictions['detection_boxes'][i][..., 1]
-    boxes_width = (predictions['detection_boxes'][i][..., 3] -
-                   predictions['detection_boxes'][i][..., 1])
-    boxes_height = (predictions['detection_boxes'][i][..., 2] -
-                    predictions['detection_boxes'][i][..., 0])
-    predictions['detection_boxes'][i] = np.stack(
-        [boxes_xmin, boxes_ymin, boxes_width, boxes_height], axis=2)
+    predictions['detection_boxes'][i] = box_utils.yxyx_to_xywh(
+        predictions['detection_boxes'][i])
+    if use_outer_box:
+      predictions['detection_outer_boxes'][i] = box_utils.yxyx_to_xywh(
+          predictions['detection_outer_boxes'][i])
+      mask_boxes = predictions['detection_outer_boxes']
+    else:
+      mask_boxes = predictions['detection_boxes']
+
     for j in range(batch_size):
       if 'detection_masks' in predictions:
         image_masks = generate_segmentation_from_masks(
             predictions['detection_masks'][i][j],
-            predictions['detection_boxes'][i][j],
+            mask_boxes[i][j],
             int(predictions['image_info'][i][j, 0, 0]),
             int(predictions['image_info'][i][j, 0, 1]),
             is_image_mask=False)
