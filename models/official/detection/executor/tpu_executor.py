@@ -87,7 +87,7 @@ class TpuExecutor(object):
       self._tpu_cluster_resolver = None
 
     # Sets up config for TPUEstimator.
-    tpu_config = tf.contrib.tpu.TPUConfig(
+    tpu_config = tf.estimator.tpu.TPUConfig(
         params.train.iterations_per_loop,
         num_cores_per_replica=num_cores_per_replica,
         input_partition_dims=input_partition_dims,

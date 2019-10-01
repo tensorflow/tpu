@@ -43,7 +43,7 @@ from evaluation import coco_utils
 class COCOEvaluator(object):
   """COCO evaluation metric class."""
 
-  def __init__(self, annotation_file, include_mask):
+  def __init__(self, annotation_file, include_mask, need_rescale_bboxes=True):
     """Constructs COCO evaluation class.
 
     The class provides the interface to metrics_fn in TPUEstimator. The
@@ -57,6 +57,8 @@ class COCOEvaluator(object):
         from the dataloader.
       include_mask: a boolean to indicate whether or not to include the mask
         eval.
+      need_rescale_bboxes: If true bboxes in `predictions` will be rescaled back
+        to absolute values (`image_info` is needed in this case).
     """
     if annotation_file:
       if annotation_file.startswith('gs://'):
@@ -72,13 +74,20 @@ class COCOEvaluator(object):
           annotation_file=local_val_json)
     self._annotation_file = annotation_file
     self._include_mask = include_mask
-    self._metric_names = ['AP', 'AP50', 'AP75', 'APs', 'APm', 'APl', 'ARmax1',
-                          'ARmax10', 'ARmax100', 'ARs', 'ARm', 'ARl']
+    self._metric_names = [
+        'AP', 'AP50', 'AP75', 'APs', 'APm', 'APl', 'ARmax1', 'ARmax10',
+        'ARmax100', 'ARs', 'ARm', 'ARl'
+    ]
     self._required_prediction_fields = [
-        'source_id', 'image_info', 'num_detections', 'detection_classes',
-        'detection_scores', 'detection_boxes']
+        'source_id', 'num_detections', 'detection_classes', 'detection_scores',
+        'detection_boxes'
+    ]
+    self._need_rescale_bboxes = need_rescale_bboxes
+    if self._need_rescale_bboxes:
+      self._required_prediction_fields.append('image_info')
     self._required_groundtruth_fields = [
-        'source_id', 'height', 'width', 'classes', 'boxes']
+        'source_id', 'height', 'width', 'classes', 'boxes'
+    ]
     if self._include_mask:
       mask_metric_names = ['mask_' + x for x in self._metric_names]
       self._metric_names.extend(mask_metric_names)
@@ -101,12 +110,14 @@ class COCOEvaluator(object):
         coco-style evaluation metrics (box and mask).
     """
     if not self._annotation_file:
+      tf.logging.info('Thre is no annotation_file in COCOEvaluator.')
       gt_dataset = coco_utils.convert_groundtruths_to_coco_dataset(
           self._groundtruths)
       coco_gt = coco_utils.COCOWrapper(
           eval_type=('mask' if self._include_mask else 'box'),
           gt_dataset=gt_dataset)
     else:
+      tf.logging.info('Using annotation file: %s', self._annotation_file)
       coco_gt = self._coco_gt
     coco_predictions = coco_utils.convert_predictions_to_coco_annotations(
         self._predictions)
@@ -154,8 +165,10 @@ class COCOEvaluator(object):
         See different parsers under `../dataloader` for more details.
         Required fields:
           - source_id: a numpy array of int or string of shape [batch_size].
-          - image_info: a numpy array of float of shape [batch_size, 4, 2].
-          - num_detections: a numpy array of int of shape [batch_size].
+          - image_info [if `need_rescale_bboxes` is True]: a numpy array of
+            float of shape [batch_size, 4, 2].
+          - num_detections: a numpy array of
+            int of shape [batch_size].
           - detection_boxes: a numpy array of float of shape [batch_size, K, 4].
           - detection_classes: a numpy array of int of shape [batch_size, K].
           - detection_scores: a numpy array of float of shape [batch_size, K].
@@ -186,9 +199,10 @@ class COCOEvaluator(object):
     """
     for k in self._required_prediction_fields:
       if k not in predictions:
-        raise ValueError('Missing the required key `{}` in predictions!'
-                         .format(k))
-    self._process_predictions(predictions)
+        raise ValueError(
+            'Missing the required key `{}` in predictions!'.format(k))
+    if self._need_rescale_bboxes:
+      self._process_predictions(predictions)
     for k, v in six.iteritems(predictions):
       if k not in self._predictions:
         self._predictions[k] = [v]
@@ -199,8 +213,8 @@ class COCOEvaluator(object):
       assert groundtruths
       for k in self._required_groundtruth_fields:
         if k not in groundtruths:
-          raise ValueError('Missing the required key `{}` in groundtruths!'
-                           .format(k))
+          raise ValueError(
+              'Missing the required key `{}` in groundtruths!'.format(k))
       for k, v in six.iteritems(groundtruths):
         if k not in self._groundtruths:
           self._groundtruths[k] = [v]
