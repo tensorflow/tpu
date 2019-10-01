@@ -44,7 +44,8 @@ def parser_generator(params, mode):
         skip_crowd_during_training=parser_params.skip_crowd_during_training,
         max_num_instances=parser_params.max_num_instances,
         use_bfloat16=parser_params.use_bfloat16,
-        mode=mode)
+        mode=mode,
+        regenerate_source_id=parser_params.regenerate_source_id)
   elif params.architecture.parser == 'maskrcnn_parser':
     anchor_params = params.anchor
     parser_params = params.maskrcnn_parser
