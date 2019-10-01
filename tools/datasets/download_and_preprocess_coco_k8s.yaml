@@ -24,6 +24,7 @@ spec:
           - /bin/bash
           - -c
           - >
+            DEBIAN_FRONTEND=noninteractive apt-get update &&
             cd /tensorflow_tpu_models/tools/datasets &&
             bash download_and_preprocess_coco.sh /scratch-dir &&
             gsutil -m cp /scratch-dir/*.tfrecord ${DATA_BUCKET}/coco &&
