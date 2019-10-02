@@ -225,7 +225,6 @@ def build_model_graph(features, labels, is_training, params):
             rpn_box_rois,
             labels['gt_boxes'],
             labels['gt_classes'],
-            features['image_info'],
             batch_size_per_im=params['batch_size_per_im'],
             fg_fraction=params['fg_fraction'],
             fg_thresh=params['fg_thresh'],

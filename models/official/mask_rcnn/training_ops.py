@@ -28,17 +28,16 @@ from object_detection import balanced_positive_negative_sampler
 _EPSILON = 1e-8
 
 
-def _add_class_assignments(iou, scaled_gt_boxes, gt_labels):
+def _add_class_assignments(iou, gt_boxes, gt_labels):
   """Computes object category assignment for each box.
 
   Args:
     iou: a tensor for the iou matrix with a shape of
       [batch_size, K, MAX_NUM_INSTANCES]. K is the number of post-nms RoIs
       (i.e., rpn_post_nms_topn).
-    scaled_gt_boxes: a tensor with a shape of
-      [batch_size, MAX_NUM_INSTANCES, 4]. This tensor might have paddings with
-      negative values. The coordinates of gt_boxes are in the pixel coordinates
-      of the scaled image scale.
+    gt_boxes: a tensor with a shape of [batch_size, MAX_NUM_INSTANCES, 4].
+      This tensor might have paddings with negative values. The coordinates
+      of gt_boxes are in the pixel coordinates of the scaled image scale.
     gt_labels: a tensor with a shape of [batch_size, MAX_NUM_INSTANCES]. This
       tensor might have paddings with a value of -1.
   Returns:
@@ -64,7 +63,7 @@ def _add_class_assignments(iou, scaled_gt_boxes, gt_labels):
     max_classes = tf.where(bg_mask, tf.zeros_like(max_classes), max_classes)
 
     max_boxes = tf.reshape(
-        tf.gather(tf.reshape(scaled_gt_boxes, [-1, 4]), indices),
+        tf.gather(tf.reshape(gt_boxes, [-1, 4]), indices),
         [batch_size, -1, 4])
     max_boxes = tf.where(
         tf.tile(tf.expand_dims(bg_mask, axis=2), [1, 1, 4]),
@@ -85,9 +84,14 @@ def encode_box_targets(boxes, gt_boxes, gt_labels, bbox_reg_weights):
   return box_targets
 
 
-def proposal_label_op(boxes, gt_boxes, gt_labels, image_info,
-                      batch_size_per_im=512, fg_fraction=0.25, fg_thresh=0.5,
-                      bg_thresh_hi=0.5, bg_thresh_lo=0.):
+def proposal_label_op(boxes,
+                      gt_boxes,
+                      gt_labels,
+                      batch_size_per_im=512,
+                      fg_fraction=0.25,
+                      fg_thresh=0.5,
+                      bg_thresh_hi=0.5,
+                      bg_thresh_lo=0.):
   """Assigns the proposals with ground truth labels and performs subsmpling.
 
   Given proposal `boxes`, `gt_boxes`, and `gt_labels`, the function uses the
@@ -107,16 +111,9 @@ def proposal_label_op(boxes, gt_boxes, gt_labels, image_info,
       [ymin, xmin, ymax, xmax] form.
     gt_boxes: a tensor with a shape of [batch_size, MAX_NUM_INSTANCES, 4]. This
       tensor might have paddings with a value of -1. The coordinates of gt_boxes
-      are in the pixel coordinates of the original image scale.
+      are in the pixel coordinates of the scaled image.
     gt_labels: a tensor with a shape of [batch_size, MAX_NUM_INSTANCES]. This
       tensor might have paddings with a value of -1.
-    image_info: a tensor of shape [batch_size, 5] where the three columns
-      encode the input image's [height, width, scale,
-      original_height, original_width]. Height and width are for
-      the input to the network, not the original image; scale is the scale
-      factor used to scale the network input size to the original image size.
-      See dataloader.DetectionInputProcessor for details. The last two are
-      original height and width.
     batch_size_per_im: a integer represents RoI minibatch size per image.
     fg_fraction: a float represents the target fraction of RoI minibatch that
       is labeled foreground (i.e., class > 0).
@@ -140,18 +137,15 @@ def proposal_label_op(boxes, gt_boxes, gt_labels, image_info,
   """
   with tf.name_scope('proposal_label'):
     batch_size = boxes.shape[0]
-    # Scales ground truth boxes to the scaled image coordinates.
-    image_scale = 1 / image_info[:, 2]
-    scaled_gt_boxes = gt_boxes * tf.reshape(image_scale, [batch_size, 1, 1])
 
     # The reference implementation intentionally includes ground truth boxes in
     # the proposals. see https://github.com/facebookresearch/Detectron/blob/master/detectron/datasets/json_dataset.py#L359.  # pylint: disable=line-too-long
-    boxes = tf.concat([boxes, scaled_gt_boxes], axis=1)
-    iou = box_utils.bbox_overlap(boxes, scaled_gt_boxes)
+    boxes = tf.concat([boxes, gt_boxes], axis=1)
+    iou = box_utils.bbox_overlap(boxes, gt_boxes)
 
     (pre_sample_box_targets, pre_sample_class_targets, max_overlap,
      proposal_to_label_map) = _add_class_assignments(
-         iou, scaled_gt_boxes, gt_labels)
+         iou, gt_boxes, gt_labels)
 
     # Generates a random sample of RoIs comprising foreground and background
     # examples. reference: https://github.com/facebookresearch/Detectron/blob/master/detectron/roi_data/fast_rcnn.py#L132  # pylint: disable=line-too-long
