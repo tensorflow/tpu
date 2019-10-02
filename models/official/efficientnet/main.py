@@ -29,6 +29,7 @@ import efficientnet_builder
 import imagenet_input
 import utils
 from edgetpu import efficientnet_edgetpu_builder
+from tpu import efficientnet_tpu_builder
 from tensorflow.contrib.tpu.python.tpu import async_checkpoint
 from tensorflow.contrib.training.python.training import evaluation
 from tensorflow.core.protobuf import rewriter_config_pb2
@@ -310,11 +311,13 @@ def model_fn(features, labels, mode, params):
     model_builder = None
     if FLAGS.model_name.startswith('efficientnet-edgetpu'):
       model_builder = efficientnet_edgetpu_builder
+    elif FLAGS.model_name.startswith('efficientnet-tpu'):
+      model_builder = efficientnet_tpu_builder
     elif FLAGS.model_name.startswith('efficientnet'):
       model_builder = efficientnet_builder
     else:
-      raise ValueError(
-          'Model must be either efficientnet-b* or efficientnet-edgetpu*')
+      raise ValueError('Model must be efficientnet-b*, efficientnet-edgetpu* '
+                       'or, efficientnet-tpu*')
 
     normalized_features = normalize_features(features, model_builder.MEAN_RGB,
                                              model_builder.STDDEV_RGB)
@@ -584,6 +587,9 @@ def main(unused_argv):
   if not input_image_size:
     if FLAGS.model_name.startswith('efficientnet-edgetpu'):
       _, _, input_image_size, _ = efficientnet_edgetpu_builder.efficientnet_edgetpu_params(
+          FLAGS.model_name)
+    elif FLAGS.model_name.startswith('efficientnet-tpu'):
+      _, _, input_image_size, _ = efficientnet_tpu_builder.efficientnet_tpu_params(
           FLAGS.model_name)
     elif FLAGS.model_name.startswith('efficientnet'):
       _, _, input_image_size, _ = efficientnet_builder.efficientnet_params(
