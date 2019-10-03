@@ -146,4 +146,5 @@ def finemask_head_generator(params):
       params.num_classes,
       params.num_downsample_channels,
       params.mask_crop_size,
+      params.use_category_for_mask,
       params.num_convs)

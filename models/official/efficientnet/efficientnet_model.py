@@ -507,7 +507,7 @@ class Model(tf.keras.Model):
         self._blocks.append(conv_block(block_args, self._global_params))
       else:
         # if superpixel, adjust filters, kernels, and strides.
-        depth_factor = 4 / block_args.strides[0] / block_args.strides[1]
+        depth_factor = int(4 / block_args.strides[0] / block_args.strides[1])
         block_args = block_args._replace(
             input_filters=block_args.input_filters * depth_factor,
             output_filters=block_args.output_filters * depth_factor,
@@ -582,6 +582,7 @@ class Model(tf.keras.Model):
     """
     outputs = None
     self.endpoints = {}
+    reduction_idx = 0
     # Calls Stem layers
     with tf.variable_scope('stem'):
       outputs = self._relu_fn(
@@ -590,11 +591,16 @@ class Model(tf.keras.Model):
     self.endpoints['stem'] = outputs
 
     # Calls blocks.
-    reduction_idx = 0
     for idx, block in enumerate(self._blocks):
-      is_reduction = False
-      if ((idx == len(self._blocks) - 1) or
-          self._blocks[idx + 1].block_args().strides[0] > 1):
+      is_reduction = False  # reduction flag for blocks after the stem layer
+      # If the first block has super-pixel (space-to-depth) layer, then stem is
+      # the first reduction point.
+      if (block.block_args().super_pixel == 1 and idx == 0):
+        reduction_idx += 1
+        self.endpoints['reduction_%s' % reduction_idx] = outputs
+
+      elif ((idx == len(self._blocks) - 1) or
+            self._blocks[idx + 1].block_args().strides[0] > 1):
         is_reduction = True
         reduction_idx += 1
 

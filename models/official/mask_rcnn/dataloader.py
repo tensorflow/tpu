@@ -251,7 +251,6 @@ class InputReader(object):
               boxes, classes)
 
           # Pad groundtruth data.
-          boxes *= image_info[2]
           boxes = preprocess_ops.pad_to_fixed_size(
               boxes, -1, [self._max_num_instances, 4])
           classes = preprocess_ops.pad_to_fixed_size(
@@ -260,7 +259,7 @@ class InputReader(object):
           # Pads cropped_gt_masks.
           if self._use_instance_mask:
             cropped_gt_masks = tf.reshape(
-                cropped_gt_masks, [self._max_num_instances, -1])
+                cropped_gt_masks, tf.stack([tf.shape(cropped_gt_masks)[0], -1]))
             cropped_gt_masks = preprocess_ops.pad_to_fixed_size(
                 cropped_gt_masks, -1,
                 [self._max_num_instances, (params['gt_mask_size'] + 4) ** 2])

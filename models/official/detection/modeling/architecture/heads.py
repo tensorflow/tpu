@@ -436,6 +436,7 @@ class ShapemaskPriorHead(object):
     self._num_downsample_channels = num_downsample_channels
     self._mask_crop_size = mask_crop_size
     self._shape_prior_path = shape_prior_path
+    self._use_category_for_mask = use_category_for_mask
 
   def __call__(self, fpn_features, boxes, outer_boxes, classes,
                is_training):
@@ -538,8 +539,12 @@ class ShapemaskPriorHead(object):
     logits = tf.reshape(logits,
                         [batch_size, num_instances,
                          self._mask_num_classes, self._num_clusters])
-    logits = tf.gather(logits, tf.expand_dims(classes, axis=-1), batch_dims=2)
-    logits = tf.squeeze(logits, axis=2)
+    if self._use_category_for_mask:
+      logits = tf.gather(logits, tf.expand_dims(classes, axis=-1), batch_dims=2)
+      logits = tf.squeeze(logits, axis=2)
+    else:
+      logits = logits[:, :, 0, :]
+
     distribution = tf.nn.softmax(logits, name='shape_prior_weights')
     return distribution
 
@@ -564,6 +569,7 @@ class ShapemaskCoarsemaskHead(object):
         layer.
     """
     self._mask_num_classes = num_classes if use_category_for_mask else 1
+    self._use_category_for_mask = use_category_for_mask
     self._num_downsample_channels = num_downsample_channels
     self._mask_crop_size = mask_crop_size
     self._num_convs = num_convs
@@ -575,10 +581,10 @@ class ShapemaskCoarsemaskHead(object):
     https://arxiv.org/pdf/1904.03239.pdf
 
     Args:
-      features: a float Tensor of shape [batch_size * num_instances,
+      features: a float Tensor of shape [batch_size, num_instances,
         mask_crop_size, mask_crop_size, num_downsample_channels]. This is the
         instance feature crop.
-      detection_priors: a float Tensor of shape [batch_size * num_instances,
+      detection_priors: a float Tensor of shape [batch_size, num_instances,
         mask_crop_size, mask_crop_size, 1]. This is the detection prior for
         the instance.
       classes: a int Tensor of shape [batch_size, num_instances]
@@ -587,7 +593,7 @@ class ShapemaskCoarsemaskHead(object):
 
     Returns:
       mask_outputs: instance mask prediction as a float Tensor of shape
-        [batch_size * num_instances, mask_size, mask_size, num_classes].
+        [batch_size, num_instances, mask_size, mask_size].
     """
     with tf.variable_scope('coarse_mask', reuse=tf.AUTO_REUSE):
       # Transform detection priors to have the same dimension as features.
@@ -598,9 +604,14 @@ class ShapemaskCoarsemaskHead(object):
       features += detection_priors
       mask_logits = self.decoder_net(features, is_training)
       # Gather the logits with right input class.
-      mask_logits = tf.batch_gather(tf.transpose(mask_logits, [0, 1, 4, 2, 3]),
-                                    tf.expand_dims(classes, -1))
-      mask_logits = tf.squeeze(mask_logits, axis=2)
+      if self._use_category_for_mask:
+        mask_logits = tf.transpose(mask_logits, [0, 1, 4, 2, 3])
+        mask_logits = tf.gather(mask_logits,
+                                tf.expand_dims(classes, -1), batch_dims=2)
+        mask_logits = tf.squeeze(mask_logits, axis=2)
+      else:
+        mask_logits = mask_logits[..., 0]
+
       return mask_logits
 
   def decoder_net(self,
@@ -659,6 +670,7 @@ class ShapemaskFinemaskHead(object):
                num_classes,
                num_downsample_channels,
                mask_crop_size,
+               use_category_for_mask,
                num_convs):
     """Initialize params to build ShapeMask coarse and fine prediction head.
 
@@ -666,10 +678,12 @@ class ShapemaskFinemaskHead(object):
       num_classes: `int` number of mask classification categories.
       num_downsample_channels: `int` number of filters at mask head.
       mask_crop_size: feature crop size.
+      use_category_for_mask: use class information in mask branch.
       num_convs: `int` number of stacked convolution before the last prediction
         layer.
     """
-    self._mask_num_classes = num_classes
+    self._use_category_for_mask = use_category_for_mask
+    self._mask_num_classes = num_classes if use_category_for_mask else 1
     self._num_downsample_channels = num_downsample_channels
     self._mask_crop_size = mask_crop_size
     self._num_convs = num_convs
@@ -682,10 +696,10 @@ class ShapemaskFinemaskHead(object):
 
     Args:
       features: a float Tensor of shape
-        [batch_size * num_instances, mask_crop_size, mask_crop_size,
+        [batch_size, num_instances, mask_crop_size, mask_crop_size,
         num_downsample_channels]. This is the instance feature crop.
       mask_logits: a float Tensor of shape
-        [batch_size * num_instances, mask_crop_size, mask_crop_size] indicating
+        [batch_size, num_instances, mask_crop_size, mask_crop_size] indicating
         predicted mask logits.
       classes: a int Tensor of shape [batch_size, num_instances]
         of instance classes.
@@ -693,7 +707,7 @@ class ShapemaskFinemaskHead(object):
 
     Returns:
       mask_outputs: instance mask prediction as a float Tensor of shape
-        [batch_size * num_instances, mask_size, mask_size, num_classes].
+        [batch_size, num_instances, mask_size, mask_size].
     """
     # Extract the foreground mean features
     with tf.variable_scope('fine_mask', reuse=tf.AUTO_REUSE):
@@ -715,10 +729,14 @@ class ShapemaskFinemaskHead(object):
 
       # Decoder to generate upsampled segmentation mask.
       mask_logits = self.decoder_net(features, is_training)
-      # Gather the logits with right input class.
-      mask_logits = tf.batch_gather(tf.transpose(mask_logits, [0, 1, 4, 2, 3]),
-                                    tf.expand_dims(classes, -1))
-      mask_logits = tf.squeeze(mask_logits, axis=2)
+      if self._use_category_for_mask:
+        mask_logits = tf.transpose(mask_logits, [0, 1, 4, 2, 3])
+        mask_logits = tf.gather(mask_logits,
+                                tf.expand_dims(classes, -1), batch_dims=2)
+        mask_logits = tf.squeeze(mask_logits, axis=2)
+      else:
+        mask_logits = mask_logits[..., 0]
+
     return mask_logits
 
   def decoder_net(self,
