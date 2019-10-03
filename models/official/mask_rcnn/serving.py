@@ -50,7 +50,7 @@ def convert_image(image):
 def preprocess_image(image, desired_image_size, padding_stride):
   """Preprocess a decode image tensor."""
   image = preprocess_ops.normalize_image(image)
-  image, image_info, _ = preprocess_ops.resize_and_pad(
+  image, image_info, _, _, _ = preprocess_ops.resize_crop_pad(
       image, desired_image_size, padding_stride)
   return image, image_info
 
