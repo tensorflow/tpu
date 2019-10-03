@@ -49,6 +49,7 @@ class Parser(object):
                mask_crop_size=32,
                mask_min_level=3,
                mask_max_level=5,
+               upsample_factor=4,
                match_threshold=0.5,
                unmatched_threshold=0.5,
                aug_rand_hflip=False,
@@ -87,6 +88,7 @@ class Parser(object):
         obtain instance features.
       mask_max_level: `int` number indicating the maximum feature level to
         obtain instance features.
+      upsample_factor: `int` factor of upsampling the fine mask predictions.
       match_threshold: `float` number between 0 and 1 representing the
         lower-bound threshold to assign positive labels for anchors. An anchor
         with a score over the threshold is labeled positive.
@@ -142,6 +144,7 @@ class Parser(object):
     self._mask_max_level = mask_max_level
     self._outer_box_scale = outer_box_scale
     self._box_jitter_scale = box_jitter_scale
+    self._up_sample_factor = upsample_factor
 
     # Data is parsed depending on the model Modekey.
     if mode == ModeKeys.TRAIN:
@@ -330,6 +333,20 @@ class Parser(object):
                             tf.ones_like(mask_targets),
                             tf.zeros_like(mask_targets))
     mask_targets = tf.squeeze(mask_targets, axis=-1)
+    if self._up_sample_factor > 1:
+      fine_mask_targets = tf.image.crop_and_resize(
+          sampled_masks,
+          norm_mask_outer_boxes_ori,
+          box_ind=tf.range(self._num_sampled_masks),
+          crop_size=[self._mask_crop_size * self._up_sample_factor,
+                     self._mask_crop_size * self._up_sample_factor],
+          method='bilinear',
+          extrapolation_value=0,
+          name='train_mask_targets')
+      fine_mask_targets = tf.where(
+          tf.greater_equal(fine_mask_targets, 0.5),
+          tf.ones_like(fine_mask_targets), tf.zeros_like(fine_mask_targets))
+      fine_mask_targets = tf.squeeze(fine_mask_targets, axis=-1)
 
     # If bfloat16 is used, casts input image to tf.bfloat16.
     if self._use_bfloat16:
@@ -346,6 +363,7 @@ class Parser(object):
         'mask_boxes': sampled_boxes,
         'mask_outer_boxes': mask_outer_boxes,
         'mask_targets': mask_targets,
+        'fine_mask_targets': fine_mask_targets,
         'mask_classes': sampled_classes,
         'mask_is_valid': tf.cast(tf.not_equal(num_masks, 0), tf.int32)
     }

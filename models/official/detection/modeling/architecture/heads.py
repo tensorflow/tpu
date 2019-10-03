@@ -671,7 +671,8 @@ class ShapemaskFinemaskHead(object):
                num_downsample_channels,
                mask_crop_size,
                use_category_for_mask,
-               num_convs):
+               num_convs,
+               upsample_factor):
     """Initialize params to build ShapeMask coarse and fine prediction head.
 
     Args:
@@ -681,12 +682,14 @@ class ShapemaskFinemaskHead(object):
       use_category_for_mask: use class information in mask branch.
       num_convs: `int` number of stacked convolution before the last prediction
         layer.
+      upsample_factor: `int` number of fine mask upsampling factor.
     """
     self._use_category_for_mask = use_category_for_mask
     self._mask_num_classes = num_classes if use_category_for_mask else 1
     self._num_downsample_channels = num_downsample_channels
     self._mask_crop_size = mask_crop_size
     self._num_convs = num_convs
+    self.up_sample_factor = upsample_factor
 
   def __call__(self, features, mask_logits, classes, is_training):
     """Generate instance masks from FPN features and detection priors.
@@ -775,6 +778,11 @@ class ShapemaskFinemaskHead(object):
           is_training=is_training,
           name='class-%d-bn' % i)
 
+    if self.up_sample_factor > 1:
+      features = tf.layers.conv2d_transpose(
+          features, self._num_downsample_channels,
+          (self.up_sample_factor, self.up_sample_factor),
+          (self.up_sample_factor, self.up_sample_factor))
     # Predict per-class instance masks.
     mask_logits = tf.layers.conv2d(
         features,
@@ -786,6 +794,9 @@ class ShapemaskFinemaskHead(object):
         padding='same',
         name='class-predict')
 
-    mask_logits = tf.reshape(mask_logits, [batch_size, num_instances, height,
-                                           width, self._mask_num_classes])
+    mask_logits = tf.reshape(mask_logits,
+                             [batch_size, num_instances,
+                              height * self.up_sample_factor,
+                              width * self.up_sample_factor,
+                              self._mask_num_classes])
     return mask_logits
