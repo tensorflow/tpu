@@ -106,8 +106,6 @@ def safe_mean(losses):
 
 def main(unused_argv):
   tf.enable_v2_behavior()
-  num_workers = 1
-  is_tpu_pod = num_workers > 1
   model_dir = FLAGS.model_dir if FLAGS.model_dir else DEFAULT_MODEL_DIR
   batch_size = PER_CORE_BATCH_SIZE * FLAGS.num_cores
   steps_per_epoch = FLAGS.steps_per_epoch or (int(
@@ -128,6 +126,7 @@ def main(unused_argv):
   # `strategy.experimental_distribute_datasets_from_function`, we should use
   # per core batch size instead of global batch size, because no re-batch is
   # happening in this case.
+  is_tpu_pod = strategy.extended._input_workers.num_workers > 1  # pylint: disable=protected-access
   if is_tpu_pod:
     imagenet_train = imagenet_input.ImageNetInput(
         is_training=True,
