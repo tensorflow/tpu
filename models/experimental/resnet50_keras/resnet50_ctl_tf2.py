@@ -55,7 +55,7 @@ NUM_CLASSES = 1000
 
 # Training hyperparameters.
 _EPOCHS = 90
-_USE_BFLOAT16 = False
+_USE_BFLOAT16 = True
 _BASE_LEARNING_RATE = 0.1
 DEFAULT_MODEL_DIR = '/tmp/resnet50'
 
@@ -158,6 +158,10 @@ def main(unused_argv):
     test_dataset = strategy.experimental_distribute_dataset(
         imagenet_eval.input_fn())
 
+  if _USE_BFLOAT16:
+    policy = tf.keras.mixed_precision.experimental.Policy('mixed_bfloat16')
+    tf.keras.mixed_precision.experimental.set_policy(policy)
+
   with strategy.scope():
     logging.info('Building Keras ResNet-50 model')
     model = resnet_model.ResNet50(num_classes=NUM_CLASSES)
@@ -198,6 +202,8 @@ def main(unused_argv):
       images, labels = inputs
       with tf.GradientTape() as tape:
         predictions = model(images, training=True)
+        if _USE_BFLOAT16:
+          predictions = tf.cast(predictions, tf.float32)
 
         # Loss calculations.
         #
@@ -225,6 +231,8 @@ def main(unused_argv):
     def step_fn(inputs):
       images, labels = inputs
       predictions = model(images, training=False)
+      if _USE_BFLOAT16:
+        predictions = tf.cast(predictions, tf.float32)
       loss = tf.keras.losses.sparse_categorical_crossentropy(labels,
                                                              predictions)
       loss = safe_mean(loss)
