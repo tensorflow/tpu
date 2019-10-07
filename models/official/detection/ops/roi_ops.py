@@ -95,6 +95,7 @@ def multilevel_propose_rois(rpn_boxes,
   with tf.name_scope('multilevel_propose_rois'):
     rois = []
     roi_scores = []
+    image_shape = tf.expand_dims(image_shape, axis=1)
     for level in sorted(rpn_scores.keys()):
       with tf.name_scope('level_%d' % level):
         _, feature_h, feature_w, num_anchors_per_location = (
@@ -110,7 +111,6 @@ def multilevel_propose_rois(rpn_boxes,
         if apply_sigmoid_to_score:
           this_level_scores = tf.sigmoid(this_level_scores)
 
-        image_shape = tf.expand_dims(image_shape, axis=1)
         if decode_boxes:
           this_level_boxes = box_utils.decode_boxes(
               this_level_boxes, this_level_anchors)
