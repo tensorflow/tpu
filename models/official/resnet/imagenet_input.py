@@ -19,10 +19,11 @@ from __future__ import division
 from __future__ import print_function
 
 import abc
-from collections import namedtuple
+import collections
 import functools
 import os
-import tensorflow as tf
+from absl import logging
+import tensorflow.compat.v1 as tf
 from official.resnet import resnet_preprocessing
 
 
@@ -48,10 +49,12 @@ def image_serving_input_fn():
 class ImageNetTFExampleInput(object):
   """Base class for ImageNet input_fn generator.
 
-  Args:
+  Attributes:
+    image_preprocessing_fn: function to preprocess images
     is_training: `bool` for whether the input is for training
     use_bfloat16: If True, use bfloat16 precision; else use float32.
     transpose_input: 'bool' for whether to use the double transpose trick
+    image_size: size of images
     num_parallel_calls: `int` for the number of parallel threads.
     include_background_label: `bool` for whether to include the background label
   """
@@ -154,7 +157,7 @@ class ImageNetTFExampleInput(object):
 
     # Retrieves the batch size for the current shard. The # of shards is
     # computed according to the input pipeline deployment. See
-    # tf.contrib.tpu.RunConfig for details.
+    # tf.estimator.tpu.RunConfig for details.
     batch_size = params['batch_size']
 
     # TODO(dehao): Replace the following with params['context'].current_host
@@ -178,7 +181,7 @@ class ImageNetTFExampleInput(object):
     # batch size. As long as this validation is done with consistent batch size,
     # exactly the same images will be used.
     dataset = dataset.apply(
-        tf.contrib.data.map_and_batch(
+        tf.data.experimental.map_and_batch(
             self.dataset_parser,
             batch_size=batch_size,
             num_parallel_batches=self.num_parallel_calls,
@@ -194,7 +197,7 @@ class ImageNetTFExampleInput(object):
     dataset = dataset.map(functools.partial(self.set_shapes, batch_size))
 
     # Prefetch overlaps in-feed with training
-    dataset = dataset.prefetch(tf.contrib.data.AUTOTUNE)
+    dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
     return dataset
 
 
@@ -316,19 +319,19 @@ class ImageNetInput(ImageNetTFExampleInput):
 
     # Read the data from disk in parallel
     dataset = dataset.apply(
-        tf.contrib.data.parallel_interleave(
+        tf.data.experimental.parallel_interleave(
             fetch_dataset, cycle_length=64, sloppy=True))
 
     if self.cache:
       dataset = dataset.cache().apply(
-          tf.contrib.data.shuffle_and_repeat(1024 * 16))
+          tf.data.experimental.shuffle_and_repeat(1024 * 16))
     else:
       dataset = dataset.shuffle(1024)
     return dataset
 
 
 # Defines a selection of data from a Cloud Bigtable.
-BigtableSelection = namedtuple('BigtableSelection', [
+BigtableSelection = collections.namedtuple('BigtableSelection', [
     'project',
     'instance',
     'table',
@@ -358,8 +361,14 @@ class ImageNetBigtableInput(ImageNetTFExampleInput):
 
   def make_source_dataset(self, index, num_hosts):
     """See base class."""
+    try:
+      from tensorflow.contrib.cloud import BigtableClient  # pylint: disable=g-import-not-at-top
+    except ImportError as e:
+      logging.exception('Bigtable is not supported in TensorFlow 2.x.')
+      raise e
+
     data = self.selection
-    client = tf.contrib.cloud.BigtableClient(data.project, data.instance)
+    client = BigtableClient(data.project, data.instance)
     table = client.table(data.table)
     ds = table.parallel_scan_prefix(
         data.prefix, columns=[(data.column_family, data.column_qualifier)])

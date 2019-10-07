@@ -17,7 +17,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 IMAGE_SIZE = 224
 CROP_PADDING = 32
@@ -170,7 +170,7 @@ def preprocess_for_eval(image_bytes, use_bfloat16, image_size=IMAGE_SIZE):
 
 
 def preprocess_image(image_bytes, is_training=False, use_bfloat16=False,
-      image_size=IMAGE_SIZE):
+                     image_size=IMAGE_SIZE):
   """Preprocesses the given image.
 
   Args:
