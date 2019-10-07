@@ -216,6 +216,7 @@ class Parser(object):
       image, boxes = input_utils.random_horizontal_flip(image, boxes)
 
     # Converts boxes from normalized coordinates to pixel coordinates.
+    # Now the coordinates of boxes are w.r.t. the original image.
     boxes = box_utils.denormalize_boxes(boxes, image_shape)
 
     # Resizes and crops image.
@@ -229,16 +230,20 @@ class Parser(object):
     image_height, image_width, _ = image.get_shape().as_list()
 
     # Resizes and crops boxes.
+    # Now the coordinates of boxes are w.r.t the scaled image.
     image_scale = image_info[2, :]
     offset = image_info[3, :]
     boxes = input_utils.resize_and_crop_boxes(
         boxes, image_scale, (image_height, image_width), offset)
+
     # Filters out ground truth boxes that are all zeros.
     indices = input_utils.get_non_empty_box_indices(boxes)
     boxes = tf.gather(boxes, indices)
     classes = tf.gather(classes, indices)
 
-    # Assigns anchors.
+    # Assigns anchor targets.
+    # Note that after the target assignment, box targets are absolute pixel
+    # offsets w.r.t. the scaled image.
     input_anchor = anchor.Anchor(
         self._min_level, self._max_level, self._num_scales,
         self._aspect_ratios, self._anchor_size, (image_height, image_width))
