@@ -127,7 +127,8 @@ def shapeprior_head_generator(params):
       params.num_downsample_channels,
       params.mask_crop_size,
       params.use_category_for_mask,
-      params.shape_prior_path)
+      params.shape_prior_path,
+      batch_norm_relu=batch_norm_relu_generator(params.batch_norm))
 
 
 def coarsemask_head_generator(params):
@@ -137,7 +138,8 @@ def coarsemask_head_generator(params):
       params.num_downsample_channels,
       params.mask_crop_size,
       params.use_category_for_mask,
-      params.num_convs)
+      params.num_convs,
+      batch_norm_relu=batch_norm_relu_generator(params.batch_norm))
 
 
 def finemask_head_generator(params):
@@ -148,4 +150,5 @@ def finemask_head_generator(params):
       params.mask_crop_size,
       params.use_category_for_mask,
       params.num_convs,
-      params.upsample_factor)
+      params.upsample_factor,
+      batch_norm_relu=batch_norm_relu_generator(params.batch_norm))
