@@ -23,6 +23,8 @@ MASK_RCNN_CFG = {
     # input preprocessing parameters
     'image_size': [1024, 1024],
     'input_rand_hflip': True,
+    'aug_scale_min': 1.0,
+    'aug_scale_max': 1.0,
     'gt_mask_size': 112,
     # dataset specific parameters
     'num_classes': 91,

@@ -52,7 +52,7 @@ NUM_CLASSES = 1000
 
 # Training hyperparameters.
 _EPOCHS = 90
-_USE_BFLOAT16 = True
+_USE_BFLOAT16 = False
 _BASE_LEARNING_RATE = 0.4
 DEFAULT_MODEL_DIR = '/tmp/resnet50'
 _WEIGHTS_TXT = 'resnet50_weights'

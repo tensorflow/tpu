@@ -163,7 +163,7 @@ class InputReader(object):
 
         if self._mode == tf.estimator.ModeKeys.PREDICT:
           image = preprocess_ops.normalize_image(image)
-          image, image_info, _ = preprocess_ops.resize_and_pad(
+          image, image_info, _, _, _ = preprocess_ops.resize_crop_pad(
               image, params['image_size'], 2 ** params['max_level'])
           if params['precision'] == 'bfloat16':
             image = tf.cast(image, dtype=tf.bfloat16)
@@ -217,20 +217,27 @@ class InputReader(object):
               image, boxes, instance_masks = flipped_results
             else:
               image, boxes = flipped_results
-          normalized_boxes = boxes
-          # Scaling and padding.
-          image, image_info, boxes = (
-              preprocess_ops.resize_and_pad(
+          # Scaling, jittering and padding.
+          image, image_info, boxes, classes, cropped_gt_masks = (
+              preprocess_ops.resize_crop_pad(
                   image,
                   params['image_size'],
                   2 ** params['max_level'],
-                  boxes=normalized_boxes))
+                  aug_scale_min=params['aug_scale_min'],
+                  aug_scale_max=params['aug_scale_max'],
+                  boxes=boxes,
+                  classes=classes,
+                  masks=instance_masks,
+                  crop_mask_size=params['gt_mask_size']))
+          if cropped_gt_masks is not None:
+            cropped_gt_masks = tf.pad(
+                cropped_gt_masks,
+                paddings=tf.constant([[0, 0,], [2, 2,], [2, 2]]),
+                mode='CONSTANT',
+                constant_values=0.)
+
           padded_height, padded_width, _ = image.get_shape().as_list()
           padded_image_size = (padded_height, padded_width)
-          if self._use_instance_mask:
-            cropped_gt_masks = preprocess_ops.crop_gt_masks(
-                instance_masks, normalized_boxes, params['gt_mask_size'])
-
           input_anchors = anchors.Anchors(
               params['min_level'],
               params['max_level'],
