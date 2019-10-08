@@ -61,6 +61,8 @@ class ImageNetTFExampleInput(object):
     autoaugment_name: `string` that is the name of the autoaugment policy
         to apply to the image. If the value is `None` autoaugment will not be
         applied.
+    mixup_alpha: float to control the strength of Mixup regularization, set
+        to 0.0 to disable.
   """
   __metaclass__ = abc.ABCMeta
 
@@ -71,7 +73,8 @@ class ImageNetTFExampleInput(object):
                image_size=224,
                transpose_input=False,
                include_background_label=False,
-               autoaugment_name=None):
+               autoaugment_name=None,
+               mixup_alpha=0.0):
     self.image_preprocessing_fn = preprocessing.preprocess_image
     self.is_training = is_training
     self.use_bfloat16 = use_bfloat16
@@ -79,7 +82,9 @@ class ImageNetTFExampleInput(object):
     self.transpose_input = transpose_input
     self.image_size = image_size
     self.include_background_label = include_background_label
+    self.num_label_classes = 1001 if include_background_label else 1000
     self.autoaugment_name = autoaugment_name
+    self.mixup_alpha = mixup_alpha
 
   def set_shapes(self, batch_size, images, labels):
     """Statically set the batch_size dimension."""
@@ -87,14 +92,41 @@ class ImageNetTFExampleInput(object):
       images.set_shape(images.get_shape().merge_with(
           tf.TensorShape([None, None, None, batch_size])))
       labels.set_shape(labels.get_shape().merge_with(
-          tf.TensorShape([batch_size])))
+          tf.TensorShape([batch_size, None])))
     else:
       images.set_shape(images.get_shape().merge_with(
           tf.TensorShape([batch_size, None, None, None])))
       labels.set_shape(labels.get_shape().merge_with(
-          tf.TensorShape([batch_size])))
+          tf.TensorShape([batch_size, None])))
 
     return images, labels
+
+  def mixup(self, batch_size, alpha, images, labels):
+    """Applies Mixup regularization to a batch of images and labels.
+
+    [1] Hongyi Zhang, Moustapha Cisse, Yann N. Dauphin, David Lopez-Paz
+      Mixup: Beyond Empirical Risk Minimization.
+      ICLR'18, https://arxiv.org/abs/1710.09412
+
+    Arguments:
+      batch_size: The input batch size for images and labels.
+      alpha: Float that controls the strength of Mixup regularization.
+      images: A batch of images of shape [batch_size, ...]
+      labels: A batch of labels of shape [batch_size, num_classes]
+
+    Returns:
+      A tuple of (images, labels) with the same dimensions as the input with
+      Mixup regularization applied.
+    """
+    mix_weight = tf.distributions.Beta(alpha, alpha).sample([batch_size, 1])
+    mix_weight = tf.maximum(mix_weight, 1. - mix_weight)
+    images_mix_weight = tf.reshape(mix_weight, [batch_size, 1, 1, 1])
+    # Mixup on a single batch is implemented by taking a weighted sum with the
+    # same batch in reverse.
+    images_mix = (
+        images * images_mix_weight + images[::-1] * (1. - images_mix_weight))
+    labels_mix = labels * mix_weight + labels[::-1] * (1. - mix_weight)
+    return images_mix, labels_mix
 
   def dataset_parser(self, value):
     """Parses an image and its label from a serialized ResNet-50 TFExample.
@@ -128,7 +160,9 @@ class ImageNetTFExampleInput(object):
       # Subtract 1 if the background label is discarded.
       label -= 1
 
-    return image, label
+    onehot_label = tf.one_hot(label, self.num_label_classes)
+
+    return image, onehot_label
 
   @abc.abstractmethod
   def make_source_dataset(self, index, num_hosts):
@@ -188,6 +222,12 @@ class ImageNetTFExampleInput(object):
             self.dataset_parser, batch_size=batch_size,
             num_parallel_batches=self.num_cores, drop_remainder=True))
 
+    # Apply Mixup
+    if self.is_training and self.mixup_alpha > 0.0:
+      dataset = dataset.map(
+          functools.partial(self.mixup, batch_size, self.mixup_alpha),
+          num_parallel_calls=self.num_cores)
+
     # Transpose for performance on TPU
     if self.transpose_input:
       dataset = dataset.map(
@@ -228,7 +268,8 @@ class ImageNetInput(ImageNetTFExampleInput):
                num_parallel_calls=64,
                cache=False,
                include_background_label=False,
-               autoaugment_name=None):
+               autoaugment_name=None,
+               mixup_alpha=0.0):
     """Create an input from TFRecord files.
 
     Args:
@@ -246,6 +287,8 @@ class ImageNetInput(ImageNetTFExampleInput):
       autoaugment_name: `string` that is the name of the autoaugment policy
           to apply to the image. If the value is `None` autoaugment will not be
           applied.
+      mixup_alpha: float to control the strength of Mixup regularization, set
+          to 0.0 to disable.
     """
     super(ImageNetInput, self).__init__(
         is_training=is_training,
@@ -253,7 +296,8 @@ class ImageNetInput(ImageNetTFExampleInput):
         use_bfloat16=use_bfloat16,
         transpose_input=transpose_input,
         include_background_label=include_background_label,
-        autoaugment_name=autoaugment_name)
+        autoaugment_name=autoaugment_name,
+        mixup_alpha=mixup_alpha)
     self.data_dir = data_dir
     if self.data_dir == 'null' or not self.data_dir:
       self.data_dir = None
@@ -277,7 +321,7 @@ class ImageNetInput(ImageNetTFExampleInput):
   def dataset_parser(self, value):
     """See base class."""
     if not self.data_dir:
-      return value, tf.constant(0, tf.int32)
+      return value, tf.constant(0., tf.float32, (1000,))
     return super(ImageNetInput, self).dataset_parser(value)
 
   def make_source_dataset(self, index, num_hosts):
@@ -334,7 +378,8 @@ class ImageNetBigtableInput(ImageNetTFExampleInput):
                transpose_input,
                selection,
                autoaugment_name,
-               include_background_label=False):
+               include_background_label=False,
+               mixup_alpha=0.0):
     """Constructs an ImageNet input from a BigtableSelection.
 
     Args:
@@ -346,13 +391,16 @@ class ImageNetBigtableInput(ImageNetTFExampleInput):
           to apply to the image. If the value is `None` autoaugment will not be
           applied.
       include_background_label: if true, label #0 is reserved for background.
+      mixup_alpha: float to control the strength of Mixup regularization, set
+          to 0.0 to disable.
     """
     super(ImageNetBigtableInput, self).__init__(
         is_training=is_training,
         use_bfloat16=use_bfloat16,
         transpose_input=transpose_input,
         include_background_label=include_background_label,
-        autoaugment_name=autoaugment_name)
+        autoaugment_name=autoaugment_name,
+        mixup_alpha=mixup_alpha)
     self.selection = selection
 
   def make_source_dataset(self, index, num_hosts):

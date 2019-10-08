@@ -422,7 +422,8 @@ class ShapemaskPriorHead(object):
                num_downsample_channels,
                mask_crop_size,
                use_category_for_mask,
-               shape_prior_path=None):
+               shape_prior_path,
+               batch_norm_relu):
     """Initialize params to build RetinaNet head.
 
     Args:
@@ -431,11 +432,14 @@ class ShapemaskPriorHead(object):
       mask_crop_size: feature crop size.
       use_category_for_mask: use class information in mask branch.
       shape_prior_path: the path to load shape priors.
+      batch_norm_relu: an operation that includes a batch normalization layer
+        followed by a relu layer(optional).
     """
     self._mask_num_classes = num_classes if use_category_for_mask else 1
     self._num_downsample_channels = num_downsample_channels
     self._mask_crop_size = mask_crop_size
     self._shape_prior_path = shape_prior_path
+    self._batch_norm_relu = batch_norm_relu
     self._use_category_for_mask = use_category_for_mask
 
   def __call__(self, fpn_features, boxes, outer_boxes, classes,
@@ -557,7 +561,8 @@ class ShapemaskCoarsemaskHead(object):
                num_downsample_channels,
                mask_crop_size,
                use_category_for_mask,
-               num_convs):
+               num_convs,
+               batch_norm_relu):
     """Initialize params to build ShapeMask coarse and fine prediction head.
 
     Args:
@@ -567,12 +572,15 @@ class ShapemaskCoarsemaskHead(object):
       use_category_for_mask: use class information in mask branch.
       num_convs: `int` number of stacked convolution before the last prediction
         layer.
+      batch_norm_relu: an operation that includes a batch normalization layer
+        followed by a relu layer(optional).
     """
     self._mask_num_classes = num_classes if use_category_for_mask else 1
     self._use_category_for_mask = use_category_for_mask
     self._num_downsample_channels = num_downsample_channels
     self._mask_crop_size = mask_crop_size
     self._num_convs = num_convs
+    self._batch_norm_relu = batch_norm_relu
 
   def __call__(self, features, detection_priors, classes, is_training):
     """Generate instance masks from FPN features and detection priors.
@@ -616,15 +624,13 @@ class ShapemaskCoarsemaskHead(object):
 
   def decoder_net(self,
                   features,
-                  is_training=False,
-                  batch_norm_relu=nn_ops.BatchNormRelu()):
+                  is_training=False):
     """Coarse mask decoder network architecture.
 
     Args:
       features: A tensor of size [batch, height_in, width_in, channels_in].
       is_training: Whether batch_norm layers are in training mode.
-      batch_norm_relu: an operation that includes a batch normalization layer
-        followed by a relu layer(optional).
+
     Returns:
       images: A feature tensor of size [batch, output_size, output_size,
         num_channels]
@@ -643,7 +649,7 @@ class ShapemaskCoarsemaskHead(object):
           activation=None,
           padding='same',
           name='class-%d' % i)
-      features = batch_norm_relu(
+      features = self._batch_norm_relu(
           features,
           is_training=is_training,
           name='class-%d-bn' % i)
@@ -672,7 +678,8 @@ class ShapemaskFinemaskHead(object):
                mask_crop_size,
                use_category_for_mask,
                num_convs,
-               upsample_factor):
+               upsample_factor,
+               batch_norm_relu):
     """Initialize params to build ShapeMask coarse and fine prediction head.
 
     Args:
@@ -683,6 +690,8 @@ class ShapemaskFinemaskHead(object):
       num_convs: `int` number of stacked convolution before the last prediction
         layer.
       upsample_factor: `int` number of fine mask upsampling factor.
+      batch_norm_relu: an operation that includes a batch normalization layer
+        followed by a relu layer(optional).
     """
     self._use_category_for_mask = use_category_for_mask
     self._mask_num_classes = num_classes if use_category_for_mask else 1
@@ -690,6 +699,7 @@ class ShapemaskFinemaskHead(object):
     self._mask_crop_size = mask_crop_size
     self._num_convs = num_convs
     self.up_sample_factor = upsample_factor
+    self._batch_norm_relu = batch_norm_relu
 
   def __call__(self, features, mask_logits, classes, is_training):
     """Generate instance masks from FPN features and detection priors.
@@ -744,15 +754,12 @@ class ShapemaskFinemaskHead(object):
 
   def decoder_net(self,
                   features,
-                  is_training=False,
-                  batch_norm_relu=nn_ops.BatchNormRelu()):
+                  is_training=False):
     """Fine mask decoder network architecture.
 
     Args:
       features: A tensor of size [batch, height_in, width_in, channels_in].
       is_training: Whether batch_norm layers are in training mode.
-      batch_norm_relu: an operation that includes a batch normalization layer
-        followed by a relu layer(optional).
 
     Returns:
       images: A feature tensor of size [batch, output_size, output_size,
@@ -773,7 +780,7 @@ class ShapemaskFinemaskHead(object):
           activation=None,
           padding='same',
           name='class-%d' % i)
-      features = batch_norm_relu(
+      features = self._batch_norm_relu(
           features,
           is_training=is_training,
           name='class-%d-bn' % i)

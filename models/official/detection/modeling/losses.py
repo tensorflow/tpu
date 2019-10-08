@@ -36,6 +36,7 @@ def focal_loss(logits, targets, alpha, gamma, normalizer):
       and (1-alpha) to the loss from negative examples.
     gamma: A float32 scalar modulating loss from hard and easy examples.
     normalizer: A float32 scalar normalizes the total loss from all examples.
+
   Returns:
     loss: A float32 Tensor of size [batch, height_in, width_in, num_predictions]
       representing normalized loss on the prediction map.
@@ -94,6 +95,7 @@ class RpnScoreLoss(object):
     """Computes total RPN detection loss.
 
     Computes total RPN detection loss including box and score from all levels.
+
     Args:
       score_outputs: an OrderDict with keys representing levels and values
         representing scores in [batch_size, height, width, num_anchors].
@@ -107,11 +109,10 @@ class RpnScoreLoss(object):
 
       score_losses = []
       for level in levels:
-        score_targets_l = labels['score_targets_%d' % level]
         score_losses.append(
             self._rpn_score_loss(
                 score_outputs[level],
-                score_targets_l,
+                labels[level],
                 normalizer=tf.to_float(
                     self._batch_size * self._rpn_batch_size_per_im)))
 
@@ -146,12 +147,14 @@ class RpnBoxLoss(object):
     """Computes total RPN detection loss.
 
     Computes total RPN detection loss including box and score from all levels.
+
     Args:
       box_outputs: an OrderDict with keys representing levels and values
         representing box regression targets in
         [batch_size, height, width, num_anchors * 4].
       labels: the dictionary that returned from dataloader that includes
         groundturth targets.
+
     Returns:
       rpn_box_loss: a scalar tensor representing total box regression loss.
     """
@@ -160,10 +163,9 @@ class RpnBoxLoss(object):
 
       box_losses = []
       for level in levels:
-        box_targets_l = labels['box_targets_%d' % level]
         box_losses.append(
             self._rpn_box_loss(
-                box_outputs[level], box_targets_l, delta=self._delta))
+                box_outputs[level], labels[level], delta=self._delta))
 
       # Sum per level losses to total loss.
       return tf.add_n(box_losses)
@@ -203,11 +205,12 @@ class FastrcnnClassLoss(object):
         with a shape of [batch_size, num_boxes, num_classes].
       class_targets: a float tensor representing the class label for each box
         with a shape of [batch_size, num_boxes].
+
     Returns:
       a scalar tensor representing total class loss.
     """
     with tf.name_scope('fast_rcnn_loss'):
-      _, _, _, num_classes = class_outputs.get_shape().as_list()
+      _, _, num_classes = class_outputs.get_shape().as_list()
       class_targets = tf.to_int32(class_targets)
       class_targets_one_hot = tf.one_hot(class_targets, num_classes)
       return self._fast_rcnn_class_loss(class_outputs, class_targets_one_hot)
@@ -251,6 +254,7 @@ class FastrcnnBoxLoss(object):
         with a shape of [batch_size, num_boxes].
       box_targets: a float tensor representing the box label for each box
         with a shape of [batch_size, num_boxes, 4].
+
     Returns:
       box_loss: a scalar tensor representing total box regression loss.
     """
@@ -327,6 +331,7 @@ class MaskrcnnLoss(object):
         [batch_size, num_masks, mask_height, mask_width].
       select_class_targets: a tensor with a shape of [batch_size, num_masks],
         representing the foreground mask targets.
+
     Returns:
       mask_loss: a float tensor representing total mask loss.
     """
@@ -355,6 +360,7 @@ class RetinanetClassLoss(object):
     """Computes total detection loss.
 
     Computes total detection loss including box and class loss from all levels.
+
     Args:
       cls_outputs: an OrderDict with keys representing levels and values
         representing logits in [batch_size, height, width,
@@ -408,6 +414,7 @@ class RetinanetBoxLoss(object):
     """Computes box detection loss.
 
     Computes total detection loss including box and class loss from all levels.
+
     Args:
       box_outputs: an OrderDict with keys representing levels and values
         representing box regression targets in [batch_size, height, width,
@@ -463,6 +470,7 @@ class ShapemaskMseLoss(object):
           mask_crop_size * gt_upsample_scale for fine mask, or mask_crop_size
           for coarse masks and shape priors.
       valid_mask: a binary mask indicating valid training masks.
+
     Returns:
       loss: an float tensor representing total mask classification loss.
     """
@@ -488,6 +496,7 @@ class ShapemaskLoss(object):
           mask_crop_size * gt_upsample_scale for fine mask, or mask_crop_size
           for coarse masks and shape priors.
       valid_mask: a binary mask indicating valid training masks.
+
     Returns:
       loss: an float tensor representing total mask classification loss.
     """

@@ -25,7 +25,8 @@ from absl import app
 from absl import flags
 import absl.logging as _logging  # pylint: disable=unused-import
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+import tensorflow.compat.v2 as tf2
 
 from common import inference_warmup
 from common import tpu_profiler_hook
@@ -37,11 +38,7 @@ from official.resnet import imagenet_input
 from official.resnet import lars_util
 from official.resnet import resnet_model
 from official.resnet.configs import resnet_config
-from tensorflow.contrib import summary
-from tensorflow.contrib.tpu.python.tpu import async_checkpoint
-from tensorflow.contrib.training.python.training import evaluation
-from tensorflow.core.protobuf import rewriter_config_pb2
-from tensorflow.python.estimator import estimator
+from tensorflow.core.protobuf import rewriter_config_pb2  # pylint: disable=g-direct-tensorflow-import
 
 common_tpu_flags.define_common_tpu_flags()
 common_hparams_flags.define_common_hparams_flags()
@@ -322,7 +319,7 @@ def resnet_model_fn(features, labels, mode, params):
         inputs=features, is_training=(mode == tf.estimator.ModeKeys.TRAIN))
 
   if params['precision'] == 'bfloat16':
-    with tf.contrib.tpu.bfloat16_scope():
+    with tf.tpu.bfloat16_scope():
       logits = build_network()
     logits = tf.cast(logits, tf.float32)
   elif params['precision'] == 'float32':
@@ -383,7 +380,7 @@ def resnet_model_fn(features, labels, mode, params):
       # When using TPU, wrap the optimizer with CrossShardOptimizer which
       # handles synchronization details between different TPU cores. To the
       # user, this should look like regular synchronous training.
-      optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
+      optimizer = tf.tpu.CrossShardOptimizer(optimizer)
 
     # Batch normalization requires UPDATE_OPS to be added as a dependency to
     # the train operation.
@@ -398,7 +395,7 @@ def resnet_model_fn(features, labels, mode, params):
         This function is executed on the CPU and should not directly reference
         any Tensors in the rest of the `model_fn`. To pass Tensors from the
         model to the `metric_fn`, provide as part of the `host_call`. See
-        https://www.tensorflow.org/api_docs/python/tf/contrib/tpu/TPUEstimatorSpec
+        https://www.tensorflow.org/api_docs/python/tf/estimator/tpu/TPUEstimatorSpec
         for more information.
 
         Arguments should match the list of `Tensor` objects passed as the second
@@ -418,15 +415,15 @@ def resnet_model_fn(features, labels, mode, params):
         # one TPU loop is finished, setting max_queue value to the same as
         # number of iterations will make the summary writer only flush the data
         # to storage once per loop.
-        with summary.create_file_writer(
+        with tf2.summary.create_file_writer(
             FLAGS.model_dir,
             max_queue=params['iterations_per_loop']).as_default():
-          with summary.always_record_summaries():
-            summary.scalar('loss', loss[0], step=gs)
-            summary.scalar('learning_rate', lr[0], step=gs)
-            summary.scalar('current_epoch', ce[0], step=gs)
+          with tf2.summary.record_if(True):
+            tf2.summary.scalar('loss', loss[0], step=gs)
+            tf2.summary.scalar('learning_rate', lr[0], step=gs)
+            tf2.summary.scalar('current_epoch', ce[0], step=gs)
 
-            return summary.all_summary_ops()
+          return tf.summary.all_v2_summary_ops()
 
       # To log the loss, current learning rate, and epoch for Tensorboard, the
       # summary op needs to be run on the host CPU via host_call. host_call
@@ -451,7 +448,7 @@ def resnet_model_fn(features, labels, mode, params):
       This function is executed on the CPU and should not directly reference
       any Tensors in the rest of the `model_fn`. To pass Tensors from the model
       to the `metric_fn`, provide as part of the `eval_metrics`. See
-      https://www.tensorflow.org/api_docs/python/tf/contrib/tpu/TPUEstimatorSpec
+      https://www.tensorflow.org/api_docs/python/tf/estimator/tpu/TPUEstimatorSpec
       for more information.
 
       Arguments should match the list of `Tensor` objects passed as the second
@@ -476,7 +473,7 @@ def resnet_model_fn(features, labels, mode, params):
 
     eval_metrics = (metric_fn, [labels, logits])
 
-  return tf.contrib.tpu.TPUEstimatorSpec(
+  return tf.estimator.tpu.TPUEstimatorSpec(
       mode=mode,
       loss=loss,
       train_op=train_op,
@@ -525,7 +522,7 @@ def _select_tables_from_flags():
                                            'column_family')
   column_qualifier = _verify_non_empty_string(FLAGS.bigtable_column_qualifier,
                                               'column_qualifier')
-  return [
+  return [  # pylint: disable=g-complex-comprehension
       imagenet_input.BigtableSelection(
           project=project,
           instance=instance,
@@ -550,7 +547,7 @@ def main(unused_argv):
   params.validate()
   params.lock()
 
-  tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
+  tpu_cluster_resolver = tf.distribute.cluster_resolver.TPUClusterResolver(
       FLAGS.tpu if (FLAGS.tpu or params.use_tpu) else '',
       zone=FLAGS.tpu_zone,
       project=FLAGS.gcp_project)
@@ -559,7 +556,7 @@ def main(unused_argv):
     save_checkpoints_steps = None
   else:
     save_checkpoints_steps = max(5000, params.iterations_per_loop)
-  config = tf.contrib.tpu.RunConfig(
+  config = tf.estimator.tpu.RunConfig(
       cluster=tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
       save_checkpoints_steps=save_checkpoints_steps,
@@ -568,13 +565,13 @@ def main(unused_argv):
           graph_options=tf.GraphOptions(
               rewrite_options=rewriter_config_pb2.RewriterConfig(
                   disable_meta_optimizer=True))),
-      tpu_config=tf.contrib.tpu.TPUConfig(
+      tpu_config=tf.estimator.tpu.TPUConfig(
           iterations_per_loop=params.iterations_per_loop,
           num_shards=params.num_cores,
-          per_host_input_for_training=tf.contrib.tpu.InputPipelineConfig
+          per_host_input_for_training=tf.estimator.tpu.InputPipelineConfig
           .PER_HOST_V2))  # pylint: disable=line-too-long
 
-  resnet_classifier = tf.contrib.tpu.TPUEstimator(
+  resnet_classifier = tf.estimator.tpu.TPUEstimator(
       use_tpu=params.use_tpu,
       model_fn=resnet_model_fn,
       config=config,
@@ -595,20 +592,22 @@ def main(unused_argv):
   if FLAGS.bigtable_instance:
     tf.logging.info('Using Bigtable dataset, table %s', FLAGS.bigtable_table)
     select_train, select_eval = _select_tables_from_flags()
-    imagenet_train, imagenet_eval = [imagenet_input.ImageNetBigtableInput(
-        is_training=is_training,
-        use_bfloat16=use_bfloat16,
-        transpose_input=params.transpose_input,
-        selection=selection) for (is_training, selection) in
-                                     [(True, select_train),
-                                      (False, select_eval)]]
+    imagenet_train, imagenet_eval = [
+        imagenet_input.ImageNetBigtableInput(  # pylint: disable=g-complex-comprehension
+            is_training=is_training,
+            use_bfloat16=use_bfloat16,
+            transpose_input=params.transpose_input,
+            selection=selection)
+        for (is_training, selection) in [(True,
+                                          select_train), (False, select_eval)]
+    ]
   else:
     if FLAGS.data_dir == FAKE_DATA_DIR:
       tf.logging.info('Using fake dataset.')
     else:
       tf.logging.info('Using dataset: %s', FLAGS.data_dir)
     imagenet_train, imagenet_eval = [
-        imagenet_input.ImageNetInput(
+        imagenet_input.ImageNetInput(  # pylint: disable=g-complex-comprehension
             is_training=is_training,
             data_dir=FLAGS.data_dir,
             transpose_input=params.transpose_input,
@@ -625,7 +624,7 @@ def main(unused_argv):
   if FLAGS.mode == 'eval':
 
     # Run evaluation when there's a new checkpoint
-    for ckpt in evaluation.checkpoints_iterator(
+    for ckpt in tf.train.checkpoints_iterator(
         FLAGS.model_dir, timeout=FLAGS.eval_timeout):
       tf.logging.info('Starting to evaluate.')
       try:
@@ -654,7 +653,11 @@ def main(unused_argv):
             'Checkpoint %s no longer exists, skipping checkpoint', ckpt)
 
   else:   # FLAGS.mode == 'train' or FLAGS.mode == 'train_and_eval'
-    current_step = estimator._load_global_step_from_checkpoint_dir(FLAGS.model_dir)  # pylint: disable=protected-access,line-too-long
+    try:
+      current_step = tf.train.load_variable(FLAGS.model_dir,
+                                            tf.GraphKeys.GLOBAL_STEP)
+    except (TypeError, ValueError, tf.errors.NotFoundError):
+      current_step = 0
     steps_per_epoch = params.num_train_images // params.train_batch_size
     tf.logging.info('Training for %d steps (%.2f epochs in total). Current'
                     ' step %d.',
@@ -666,11 +669,6 @@ def main(unused_argv):
 
     if FLAGS.mode == 'train':
       hooks = []
-      if params.use_async_checkpointing:
-        hooks.append(
-            async_checkpoint.AsyncCheckpointSaverHook(
-                checkpoint_dir=FLAGS.model_dir,
-                save_steps=max(5000, params.iterations_per_loop)))
       if FLAGS.profile_every_n_steps > 0:
         hooks.append(
             tpu_profiler_hook.TPUProfilerHook(
@@ -729,4 +727,5 @@ def main(unused_argv):
 
 if __name__ == '__main__':
   tf.logging.set_verbosity(tf.logging.INFO)
+  tf.disable_v2_behavior()
   app.run(main)

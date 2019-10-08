@@ -55,7 +55,7 @@ NUM_CLASSES = 1000
 
 # Training hyperparameters.
 _EPOCHS = 90
-_USE_BFLOAT16 = False
+_USE_BFLOAT16 = True
 _BASE_LEARNING_RATE = 0.1
 DEFAULT_MODEL_DIR = '/tmp/resnet50'
 
@@ -106,8 +106,6 @@ def safe_mean(losses):
 
 def main(unused_argv):
   tf.enable_v2_behavior()
-  num_workers = 1
-  is_tpu_pod = num_workers > 1
   model_dir = FLAGS.model_dir if FLAGS.model_dir else DEFAULT_MODEL_DIR
   batch_size = PER_CORE_BATCH_SIZE * FLAGS.num_cores
   steps_per_epoch = FLAGS.steps_per_epoch or (int(
@@ -128,6 +126,7 @@ def main(unused_argv):
   # `strategy.experimental_distribute_datasets_from_function`, we should use
   # per core batch size instead of global batch size, because no re-batch is
   # happening in this case.
+  is_tpu_pod = strategy.extended._input_workers.num_workers > 1  # pylint: disable=protected-access
   if is_tpu_pod:
     imagenet_train = imagenet_input.ImageNetInput(
         is_training=True,
@@ -158,6 +157,10 @@ def main(unused_argv):
         imagenet_train.input_fn())
     test_dataset = strategy.experimental_distribute_dataset(
         imagenet_eval.input_fn())
+
+  if _USE_BFLOAT16:
+    policy = tf.keras.mixed_precision.experimental.Policy('mixed_bfloat16')
+    tf.keras.mixed_precision.experimental.set_policy(policy)
 
   with strategy.scope():
     logging.info('Building Keras ResNet-50 model')
@@ -199,6 +202,8 @@ def main(unused_argv):
       images, labels = inputs
       with tf.GradientTape() as tape:
         predictions = model(images, training=True)
+        if _USE_BFLOAT16:
+          predictions = tf.cast(predictions, tf.float32)
 
         # Loss calculations.
         #
@@ -226,6 +231,8 @@ def main(unused_argv):
     def step_fn(inputs):
       images, labels = inputs
       predictions = model(images, training=False)
+      if _USE_BFLOAT16:
+        predictions = tf.cast(predictions, tf.float32)
       loss = tf.keras.losses.sparse_categorical_crossentropy(labels,
                                                              predictions)
       loss = safe_mean(loss)

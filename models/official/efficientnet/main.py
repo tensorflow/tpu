@@ -227,6 +227,10 @@ flags.DEFINE_float(
     'drop_connect_rate', default=None,
     help=('Drop connect rate for the network.'))
 
+flags.DEFINE_float(
+    'mixup_alpha',
+    default=0.0,
+    help=('Alpha parameter for mixup regularization, 0.0 to disable.'))
 
 flags.DEFINE_integer('log_step_count_steps', 64, 'The number of steps at '
                      'which the global step information is logged.')
@@ -251,7 +255,7 @@ def model_fn(features, labels, mode, params):
 
   Args:
     features: `Tensor` of batched images.
-    labels: `Tensor` of labels for the data samples
+    labels: `Tensor` of one hot labels for the data samples
     mode: one of `tf.estimator.ModeKeys.{TRAIN,EVAL,PREDICT}`
     params: `dict` of parameters passed to the model from the TPUEstimator,
         `params['batch_size']` is always provided and should be used as the
@@ -352,10 +356,9 @@ def model_fn(features, labels, mode, params):
   batch_size = params['batch_size']   # pylint: disable=unused-variable
 
   # Calculate loss, which includes softmax cross entropy and L2 regularization.
-  one_hot_labels = tf.one_hot(labels, FLAGS.num_label_classes)
   cross_entropy = tf.losses.softmax_cross_entropy(
       logits=logits,
-      onehot_labels=one_hot_labels,
+      onehot_labels=labels,
       label_smoothing=FLAGS.label_smoothing)
 
   # Add weight decay to the loss for non-batch-normalization variables.
@@ -463,12 +466,13 @@ def model_fn(features, labels, mode, params):
       element in the tuple passed to `eval_metrics`.
 
       Args:
-        labels: `Tensor` with shape `[batch]`.
+        labels: `Tensor` with shape `[batch, num_classes]`.
         logits: `Tensor` with shape `[batch, num_classes]`.
 
       Returns:
         A dict of the metrics to return from evaluation.
       """
+      labels = tf.argmax(labels, axis=1)
       predictions = tf.argmax(logits, axis=1)
       top_1_accuracy = tf.metrics.accuracy(labels, predictions)
       in_top_5 = tf.cast(tf.nn.in_top_k(logits, labels, 5), tf.float32)
@@ -652,7 +656,8 @@ def main(unused_argv):
           transpose_input=FLAGS.transpose_input,
           selection=select_train if is_training else select_eval,
           include_background_label=include_background_label,
-          autoaugment_name=FLAGS.autoaugment_name)
+          autoaugment_name=FLAGS.autoaugment_name,
+          mixup_alpha=FLAGS.mixup_alpha)
     else:
       if FLAGS.data_dir == FAKE_DATA_DIR:
         tf.logging.info('Using fake dataset.')
@@ -668,7 +673,8 @@ def main(unused_argv):
           num_parallel_calls=FLAGS.num_parallel_calls,
           use_bfloat16=FLAGS.use_bfloat16,
           include_background_label=include_background_label,
-          autoaugment_name=FLAGS.autoaugment_name)
+          autoaugment_name=FLAGS.autoaugment_name,
+          mixup_alpha=FLAGS.mixup_alpha)
 
   imagenet_train = build_imagenet_input(is_training=True)
   imagenet_eval = build_imagenet_input(is_training=False)

@@ -33,7 +33,6 @@ MOBILENET_CFG = {
     'learning_rate_decay': 0.94,
     'learning_rate_decay_epochs': 3,
     'use_logits': True,
-    'clear_update_collections': True,
     'transpose_enabled': False,
     'serving_image_size': 224,
     'post_quantize': True,

@@ -28,18 +28,16 @@ import functools
 import os
 from absl import app
 from absl import flags
-import tensorflow as tf
+
+import absl.logging
+import tensorflow.compat.v1 as tf
 
 import supervised_images
 from hyperparameters import common_hparams_flags
 from hyperparameters import common_tpu_flags
 from hyperparameters import flags_to_params
 from hyperparameters import params_dict
-import mobilenet_model as mobilenet_v1
 from configs import mobilenet_config
-
-from tensorflow.contrib.framework.python.ops import arg_scope
-from tensorflow.contrib.training.python.training import evaluation
 
 common_tpu_flags.define_common_tpu_flags()
 common_hparams_flags.define_common_hparams_flags()
@@ -148,10 +146,6 @@ flags.DEFINE_bool(
     'Whether to dump prediction tensors for comparison')
 
 flags.DEFINE_bool(
-    'clear_update_collections', None,
-    'Set batchnorm update_collections to None if true, else use default value')
-
-flags.DEFINE_bool(
     'transpose_enabled', None,
     'Boolean to enable/disable explicit I/O transpose')
 
@@ -234,21 +228,13 @@ def model_fn(features, labels, mode, params):
   features = supervised_images.tensor_transform_fn(
       features, params['input_perm'])
 
-  if params['clear_update_collections']:
-    # updates_collections must be set to None in order to use fused batchnorm
-    with arg_scope(mobilenet_v1.mobilenet_v1_arg_scope()):
-      logits, end_points = mobilenet_v1.mobilenet_v1(
-          features,
-          num_classes,
-          is_training=training_active,
-          depth_multiplier=params['depth_multiplier'])
-  else:
-    with arg_scope(mobilenet_v1.mobilenet_v1_arg_scope()):
-      logits, end_points = mobilenet_v1.mobilenet_v1(
-          features,
-          num_classes,
-          is_training=training_active,
-          depth_multiplier=params['depth_multiplier'])
+  model = tf.keras.applications.MobileNet(
+      input_tensor=features,
+      include_top=True,
+      weights=None,
+      classes=num_classes)
+
+  logits = model(features, training=training_active)
 
   predictions = {
       'classes': tf.argmax(input=logits, axis=1),
@@ -304,27 +290,27 @@ def model_fn(features, labels, mode, params):
         learning_rate, final_learning_rate, name='learning_rate')
 
     if params['optimizer'] == 'sgd':
-      tf.logging.info('Using SGD optimizer')
+      absl.logging.info('Using SGD optimizer')
       optimizer = tf.train.GradientDescentOptimizer(
           learning_rate=learning_rate)
     elif params['optimizer'] == 'momentum':
-      tf.logging.info('Using Momentum optimizer')
+      absl.logging.info('Using Momentum optimizer')
       optimizer = tf.train.MomentumOptimizer(
           learning_rate=learning_rate, momentum=0.9)
     elif params['optimizer'] == 'RMS':
-      tf.logging.info('Using RMS optimizer')
+      absl.logging.info('Using RMS optimizer')
       optimizer = tf.train.RMSPropOptimizer(
           learning_rate,
           RMSPROP_DECAY,
           momentum=RMSPROP_MOMENTUM,
           epsilon=RMSPROP_EPSILON)
     else:
-      tf.logging.fatal('Unknown optimizer:', params['optimizer'])
+      absl.logging.fatal('Unknown optimizer:', params['optimizer'])
 
     if params['use_tpu']:
-      optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
+      optimizer = tf.tpu.CrossShardOptimizer(optimizer)
 
-    update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+    update_ops = model.updates
     with tf.control_dependencies(update_ops):
       train_op = optimizer.minimize(loss, global_step=global_step)
     if params['moving_average']:
@@ -344,12 +330,10 @@ def model_fn(features, labels, mode, params):
 
     if params['use_logits']:
       eval_predictions = logits
-    else:
-      eval_predictions = end_points['Predictions']
 
     eval_metrics = (metric_fn, [labels, eval_predictions])
 
-  return tf.contrib.tpu.TPUEstimatorSpec(
+  return tf.estimator.tpu.TPUEstimatorSpec(
       mode=mode, loss=loss, train_op=train_op, eval_metrics=eval_metrics)
 
 
@@ -367,7 +351,7 @@ class LoadEMAHook(tf.train.SessionRunHook):
         tf.train.latest_checkpoint(self._model_dir), variables_to_restore)
 
   def after_create_session(self, sess, coord):
-    tf.logging.info('Reloading EMA...')
+    absl.logging.info('Reloading EMA...')
     self._load_ema(sess)
 
 
@@ -408,7 +392,7 @@ def main(unused_argv):
   params.validate()
   params.lock()
 
-  tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
+  tpu_cluster_resolver = tf.distribute.cluster_resolver.TPUClusterResolver(
       FLAGS.tpu if (FLAGS.tpu or params.use_tpu) else '',
       zone=FLAGS.tpu_zone,
       project=FLAGS.gcp_project)
@@ -428,7 +412,7 @@ def main(unused_argv):
   per_host_input_for_training = (params.num_cores <= 8 if
                                  FLAGS.mode == 'train' else True)
 
-  run_config = tf.contrib.tpu.RunConfig(
+  run_config = tf.estimator.tpu.RunConfig(
       cluster=tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
       save_checkpoints_secs=FLAGS.save_checkpoints_secs,
@@ -436,11 +420,11 @@ def main(unused_argv):
       session_config=tf.ConfigProto(
           allow_soft_placement=True,
           log_device_placement=FLAGS.log_device_placement),
-      tpu_config=tf.contrib.tpu.TPUConfig(
+      tpu_config=tf.estimator.tpu.TPUConfig(
           iterations_per_loop=iterations,
           per_host_input_for_training=per_host_input_for_training))
 
-  inception_classifier = tf.contrib.tpu.TPUEstimator(
+  inception_classifier = tf.estimator.tpu.TPUEstimator(
       model_fn=model_fn,
       use_tpu=params.use_tpu,
       config=run_config,
@@ -465,59 +449,59 @@ def main(unused_argv):
 
   if FLAGS.mode == 'eval':
     def terminate_eval():
-      tf.logging.info('%d seconds without new checkpoints have elapsed '
-                      '... terminating eval' % FLAGS.eval_timeout)
+      absl.logging.info('%d seconds without new checkpoints have elapsed '
+                        '... terminating eval' % FLAGS.eval_timeout)
       return True
 
     def get_next_checkpoint():
-      return evaluation.checkpoints_iterator(
+      return tf.train.checkpoints_iterator(
           FLAGS.model_dir,
           min_interval_secs=params.min_eval_interval,
           timeout=FLAGS.eval_timeout,
           timeout_fn=terminate_eval)
 
     for checkpoint in get_next_checkpoint():
-      tf.logging.info('Starting to evaluate.')
+      absl.logging.info('Starting to evaluate.')
       try:
         eval_results = inception_classifier.evaluate(
             input_fn=imagenet_eval.input_fn,
             steps=eval_steps,
             hooks=eval_hooks,
             checkpoint_path=checkpoint)
-        tf.logging.info('Evaluation results: %s' % eval_results)
+        absl.logging.info('Evaluation results: %s' % eval_results)
       except tf.errors.NotFoundError:
         # skip checkpoint if it gets deleted prior to evaluation
-        tf.logging.info('Checkpoint %s no longer exists ... skipping')
+        absl.logging.info('Checkpoint %s no longer exists ... skipping')
 
   elif FLAGS.mode == 'train_and_eval':
     for cycle in range(params.train_steps // params.train_steps_per_eval):
-      tf.logging.info('Starting training cycle %d.' % cycle)
+      absl.logging.info('Starting training cycle %d.' % cycle)
       inception_classifier.train(
           input_fn=imagenet_train.input_fn,
           steps=params.train_steps_per_eval)
 
-      tf.logging.info('Starting evaluation cycle %d .' % cycle)
+      absl.logging.info('Starting evaluation cycle %d .' % cycle)
       eval_results = inception_classifier.evaluate(
           input_fn=imagenet_eval.input_fn, steps=eval_steps, hooks=eval_hooks)
-      tf.logging.info('Evaluation results: %s' % eval_results)
+      absl.logging.info('Evaluation results: %s' % eval_results)
 
   else:
-    tf.logging.info('Starting training ...')
+    absl.logging.info('Starting training ...')
     inception_classifier.train(
         input_fn=imagenet_train.input_fn, steps=params.train_steps)
 
   if FLAGS.export_dir:
-    tf.logging.info('Starting to export model with image input.')
+    absl.logging.info('Starting to export model with image input.')
     inception_classifier.export_saved_model(
         export_dir_base=FLAGS.export_dir,
         serving_input_receiver_fn=image_serving_input_fn)
 
   if FLAGS.tflite_export_dir:
-    tf.logging.info('Starting to export default TensorFlow model.')
+    absl.logging.info('Starting to export default TensorFlow model.')
     savedmodel_dir = inception_classifier.export_saved_model(
         export_dir_base=FLAGS.tflite_export_dir,
         serving_input_receiver_fn=functools.partial(tensor_serving_input_fn, params))  # pylint: disable=line-too-long
-    tf.logging.info('Starting to export TFLite.')
+    absl.logging.info('Starting to export TFLite.')
     converter = tf.lite.TFLiteConverter.from_saved_model(
         savedmodel_dir,
         output_arrays=['softmax_tensor'])
@@ -531,5 +515,5 @@ def main(unused_argv):
 
 
 if __name__ == '__main__':
-  tf.logging.set_verbosity(tf.logging.INFO)
+  absl.logging.set_verbosity(absl.logging.INFO)
   app.run(main)

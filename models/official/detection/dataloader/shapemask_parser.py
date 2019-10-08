@@ -347,6 +347,8 @@ class Parser(object):
           tf.greater_equal(fine_mask_targets, 0.5),
           tf.ones_like(fine_mask_targets), tf.zeros_like(fine_mask_targets))
       fine_mask_targets = tf.squeeze(fine_mask_targets, axis=-1)
+    else:
+      fine_mask_targets = mask_targets
 
     # If bfloat16 is used, casts input image to tf.bfloat16.
     if self._use_bfloat16:
