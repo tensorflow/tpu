@@ -14,76 +14,18 @@
 # ==============================================================================
 """Config template to train Retinanet."""
 
+from configs import base_config
+from hyperparameters import params_dict
+
 # pylint: disable=line-too-long
-
-# For ResNet-50, this freezes the variables of the first conv1 and conv2_x
-# layers [1], which leads to higher training speed and slightly better testing
-# accuracy. The intuition is that the low-level architecture (e.g., ResNet-50)
-# is able to capture low-level features such as edges; therefore, it does not
-# need to be fine-tuned for the detection task.
-# Note that we need to trailing `/` to avoid the incorrect match.
-# [1]: https://github.com/facebookresearch/Detectron/blob/master/detectron/core/config.py#L198
-RESNET50_FROZEN_VAR_PREFIX = r'(resnet\d+/)conv2d(|_([1-9]|10))\/'
-
-RETINANET_CFG = {
+RETINANET_CFG = params_dict.ParamsDict(base_config.BASE_CFG)
+RETINANET_CFG.override({
     'type': 'retinanet',
-    'model_dir': '',
-    'use_tpu': True,
-    'isolate_session_state': False,
-    'train': {
-        'iterations_per_loop': 100,
-        'train_batch_size': 64,
-        'total_steps': 22500,
-        'num_cores_per_replica': None,
-        'input_partition_dims': None,
-        'optimizer': {
-            'type': 'momentum',
-            'momentum': 0.9,
-        },
-        'learning_rate': {
-            'type': 'step',
-            'warmup_learning_rate': 0.0067,
-            'warmup_steps': 500,
-            'init_learning_rate': 0.08,
-            'learning_rate_levels': [0.008, 0.0008],
-            'learning_rate_steps': [15000, 20000],
-            'total_steps': 22500,
-        },
-        'checkpoint': {
-            'path': '',
-            'prefix': '',
-        },
-        'frozen_variable_prefix': RESNET50_FROZEN_VAR_PREFIX,
-        'train_file_pattern': '',
-        'transpose_input': True,
-        'l2_weight_decay': 0.0001,
-        'gradient_clip_norm': 0.0,
-    },
-    'eval': {
-        'eval_batch_size': 8,
-        'eval_samples': 5000,
-        'min_eval_interval': 180,
-        'eval_timeout': None,
-        'num_steps_per_eval': 1000,
-        'type': 'box',
-        'val_json_file': '',
-        'eval_file_pattern': '',
-    },
-    'predict': {
-        'predict_batch_size': 8,
-    },
     'architecture': {
         'parser': 'retinanet_parser',
         'backbone': 'resnet',
         'multilevel_features': 'fpn',
         'use_bfloat16': True,
-    },
-    'anchor': {
-        'min_level': 3,
-        'max_level': 7,
-        'num_scales': 3,
-        'aspect_ratios': [1.0, 2.0, 0.5],
-        'anchor_size': 4.0,
     },
     'retinanet_parser': {
         'use_bfloat16': True,
@@ -98,45 +40,6 @@ RETINANET_CFG = {
         'skip_crowd_during_training': True,
         'max_num_instances': 100,
         'regenerate_source_id': False,
-    },
-    'resnet': {
-        'resnet_depth': 50,
-        'dropblock': {
-            'dropblock_keep_prob': None,
-            'dropblock_size': None,
-        },
-        'batch_norm': {
-            'batch_norm_momentum': 0.997,
-            'batch_norm_epsilon': 1e-4,
-            'batch_norm_trainable': True,
-        },
-    },
-    'fpn': {
-        'min_level': 3,
-        'max_level': 7,
-        'fpn_feat_dims': 256,
-        'use_separable_conv': False,
-        'batch_norm': {
-            'batch_norm_momentum': 0.997,
-            'batch_norm_epsilon': 1e-4,
-            'batch_norm_trainable': True,
-        },
-    },
-    'nasfpn': {
-        'min_level': 3,
-        'max_level': 7,
-        'fpn_feat_dims': 256,
-        'num_repeats': 5,
-        'use_separable_conv': False,
-        'dropblock': {
-            'dropblock_keep_prob': None,
-            'dropblock_size': None,
-        },
-        'batch_norm': {
-            'batch_norm_momentum': 0.997,
-            'batch_norm_epsilon': 1e-4,
-            'batch_norm_trainable': True,
-        },
     },
     'retinanet_head': {
         'min_level': 3,
@@ -171,15 +74,12 @@ RETINANET_CFG = {
         'score_threshold': 0.05,
         'pre_nms_num_boxes': 5000,
     },
-    'enable_summary': False,
-}
+}, is_strict=False)
 
 RETINANET_RESTRICTIONS = [
     'architecture.use_bfloat16 == retinanet_parser.use_bfloat16',
     'anchor.min_level == fpn.min_level',
     'anchor.max_level == fpn.max_level',
-    'anchor.min_level == nasfpn.min_level',
-    'anchor.max_level == nasfpn.max_level',
     'anchor.min_level == retinanet_head.min_level',
     'anchor.max_level == retinanet_head.max_level',
     'anchor.min_level == postprocess.min_level',
@@ -187,5 +87,4 @@ RETINANET_RESTRICTIONS = [
     'retinanet_head.num_classes == retinanet_loss.num_classes',
     'retinanet_head.num_classes == postprocess.num_classes',
 ]
-
 # pylint: enable=line-too-long
