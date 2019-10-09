@@ -21,8 +21,9 @@ from __future__ import print_function
 
 import os
 from absl import flags
+from absl import logging
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 import params_dict
 
@@ -128,9 +129,9 @@ class TPUEstimatorExecuter(object):
       TFEstimator or TPUEstimator instance.
     """
     eval_master = tpu_flags.eval_master
-    tf.logging.info('debug tpu_flags %s', tpu_flags.as_dict())
+    logging.info('debug tpu_flags %s', tpu_flags.as_dict())
     if tpu_flags.use_tpu:
-      tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
+      tpu_cluster_resolver = tf.distribute.cluster_resolver.TPUClusterResolver(
           tpu_flags.tpu, zone=tpu_flags.tpu_zone, project=tpu_flags.gcp_project)
       tpu_grpc_url = tpu_cluster_resolver.get_master()
       if not eval_master:
@@ -162,15 +163,15 @@ class TPUEstimatorExecuter(object):
       num_shards = tpu_flags.num_cores
 
     # Sets up config for TPUEstimator.
-    tpu_config = tf.contrib.tpu.TPUConfig(
+    tpu_config = tf.estimator.tpu.TPUConfig(
         tpu_flags.iterations_per_loop,
         num_shards=num_shards,
         num_cores_per_replica=num_cores_per_replica,
         input_partition_dims=input_partition_dims,
-        per_host_input_for_training=tf.contrib.tpu.InputPipelineConfig.PER_HOST_V2  # pylint: disable=line-too-long
+        per_host_input_for_training=tf.estimator.tpu.InputPipelineConfig.PER_HOST_V2  # pylint: disable=line-too-long
     )
 
-    run_config = tf.contrib.tpu.RunConfig(
+    run_config = tf.estimator.tpu.RunConfig(
         cluster=tpu_cluster_resolver,
         evaluation_master=eval_master,
         model_dir=self._model_dir,
@@ -183,7 +184,7 @@ class TPUEstimatorExecuter(object):
         use_tpu=tpu_flags.use_tpu,
     )
 
-    return tf.contrib.tpu.TPUEstimator(
+    return tf.estimator.tpu.TPUEstimator(
         model_fn=model_fn,
         use_tpu=tpu_flags.use_tpu,
         train_batch_size=params.train_batch_size,
@@ -207,13 +208,13 @@ class TPUEstimatorExecuter(object):
     summary_writer = tf.summary.FileWriter(output_dir)
 
     def _terminate_eval():
-      tf.logging.info('Terminating eval after %d seconds of '
-                      'no checkpoints', self._params.eval_timeout)
+      logging.info('Terminating eval after %d seconds of '
+                   'no checkpoints', self._params.eval_timeout)
       return True
 
     eval_results = None
     # Run evaluation when there's a new checkpoint
-    for ckpt in tf.contrib.training.checkpoints_iterator(
+    for ckpt in tf.train.checkpoints_iterator(
         self._model_dir,
         min_interval_secs=self._params.min_eval_interval,
         timeout=self._params.eval_timeout,
@@ -221,25 +222,25 @@ class TPUEstimatorExecuter(object):
       # Terminate eval job when final checkpoint is reached
       current_step = int(os.path.basename(ckpt).split('-')[1])
 
-      tf.logging.info('Starting to evaluate.')
+      logging.info('Starting to evaluate.')
       try:
         eval_results = self._eval_estimator.evaluate(
             input_fn=input_fn, steps=self._params.eval_steps)
         write_summary(eval_results, summary_writer, current_step)
 
         if current_step >= self._params.train_steps:
-          tf.logging.info('Evaluation finished after training step %d',
-                          current_step)
+          logging.info('Evaluation finished after training step %d',
+                       current_step)
           break
       except tf.errors.NotFoundError:
         # Since the coordinator is on a different job than the TPU worker,
         # sometimes the TPU worker does not finish initializing until long after
         # the CPU job tells it to start evaluating. In this case, the checkpoint
         # file could have been deleted already.
-        tf.logging.info('Checkpoint %s no longer exists, skipping checkpoint',
-                        ckpt)
+        logging.info('Checkpoint %s no longer exists, skipping checkpoint',
+                     ckpt)
     summary_writer.close()
-    tf.logging.info('Evaluation results %s.', eval_results)
+    logging.info('Evaluation results %s.', eval_results)
     return eval_results
 
   def train_and_eval(self, train_input_fn, eval_input_fn):
@@ -252,22 +253,22 @@ class TPUEstimatorExecuter(object):
 
     num_cycles = int(self._params.train_steps / self._params.num_steps_per_eval)
     for cycle in range(num_cycles):
-      tf.logging.info('Start training cycle %d.', cycle)
+      logging.info('Start training cycle %d.', cycle)
       self._train_estimator.train(
           input_fn=train_input_fn, steps=self._params.num_steps_per_eval)
-      tf.logging.info('Start evaluation cycle %d.', cycle)
+      logging.info('Start evaluation cycle %d.', cycle)
       eval_results = self._eval_estimator.evaluate(
           input_fn=eval_input_fn, steps=self._params.eval_steps)
 
       current_step = int(cycle * self._params.num_steps_per_eval)
       write_summary(eval_results, summary_writer, current_step)
 
-    tf.logging.info('Starting training cycle %d.', num_cycles)
+    logging.info('Starting training cycle %d.', num_cycles)
     self._train_estimator.train(
         input_fn=train_input_fn, steps=self._params.train_steps)
     eval_results = self._eval_estimator.evaluate(
         input_fn=eval_input_fn, steps=self._params.eval_steps)
     write_summary(eval_results, summary_writer, self._params.train_steps)
     summary_writer.close()
-    tf.logging.info('Evaluation results %s.', eval_results)
+    logging.info('Evaluation results %s.', eval_results)
     return eval_results

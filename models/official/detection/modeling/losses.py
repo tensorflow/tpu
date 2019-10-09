@@ -475,9 +475,10 @@ class ShapemaskMseLoss(object):
       loss: an float tensor representing total mask classification loss.
     """
     with tf.name_scope('shapemask_prior_loss'):
-      batch_size = valid_mask.get_shape().as_list()[0]
+      batch_size, num_instances = valid_mask.get_shape().as_list()[:2]
       diff = labels - probs
-      diff *= tf.cast(tf.reshape(valid_mask, [batch_size, 1, 1, 1]), diff.dtype)
+      diff *= tf.cast(tf.reshape(
+          valid_mask, [batch_size, num_instances, 1, 1]), diff.dtype)
       loss = tf.nn.l2_loss(diff) / tf.reduce_sum(labels)
     return loss
 
@@ -489,21 +490,23 @@ class ShapemaskLoss(object):
     """ShapeMask mask cross entropy loss function wrapper.
 
     Args:
-      logits: A Tensor of shape [batch_size * num_points, height, width,
+      logits: A Tensor of shape [batch_size * num_instances, height, width,
         num_classes]. The logits are not necessarily between 0 and 1.
       labels: A float16 Tensor of shape [batch_size, num_instances,
-          mask_size, mask_size], where mask_size =
-          mask_crop_size * gt_upsample_scale for fine mask, or mask_crop_size
-          for coarse masks and shape priors.
-      valid_mask: a binary mask indicating valid training masks.
-
+        mask_size, mask_size], where mask_size =
+        mask_crop_size * gt_upsample_scale for fine mask, or mask_crop_size
+        for coarse masks and shape priors.
+      valid_mask: a binary mask of shape [batch_size, num_instances]
+        indicating valid training masks.
     Returns:
       loss: an float tensor representing total mask classification loss.
     """
     with tf.name_scope('shapemask_loss'):
-      batch_size = valid_mask.get_shape().as_list()[0]
+      batch_size, num_instances = valid_mask.get_shape().as_list()[:2]
       loss = tf.nn.sigmoid_cross_entropy_with_logits(
           labels=labels, logits=logits)
-      loss *= tf.cast(tf.reshape(valid_mask, [batch_size, 1, 1, 1]), loss.dtype)
+      loss *= tf.cast(tf.reshape(
+          valid_mask, [batch_size, num_instances, 1, 1]), loss.dtype)
       loss = tf.reduce_sum(loss) / tf.reduce_sum(labels)
     return loss
+

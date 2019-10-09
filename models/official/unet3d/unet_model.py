@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Model defination for the UNet 3D Model.
+"""Model definition for the UNet 3D Model.
 
 Defines model_fn of UNet 3D for TF Estimator. The model_fn includes UNet 3D
 model architecture, loss function, learning rate schedule, and evaluation
@@ -25,9 +25,9 @@ from __future__ import division
 #Standard imports
 from __future__ import print_function
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+import tensorflow.compat.v2 as tf2
 import metrics
-from tensorflow.contrib import summary
 
 
 def create_optimizer(learning_rate, params):
@@ -46,8 +46,6 @@ def create_optimizer(learning_rate, params):
         learning_rate, momentum=params['momentum'])
   elif params['optimizer'] == 'sgd':
     optimizer = tf.train.GradientDescentOptimizer(learning_rate=learning_rate)
-  elif params['optimizer'] == 'nadam':
-    optimizer = tf.contrib.opt.NadamOptimizer(learning_rate=learning_rate)
   else:
     raise ValueError('Unsupported optimizer type %s.' % params['optimizer'])
   return optimizer
@@ -60,7 +58,7 @@ def create_convolution_block(input_layer,
                              activation=tf.nn.relu,
                              padding='SAME',
                              strides=(1, 1, 1),
-                             data_format='NDHWC',
+                             data_format='channels_last',
                              instance_normalization=False):
   """UNet convolution block.
 
@@ -72,26 +70,26 @@ def create_convolution_block(input_layer,
     activation: Tensorflow activation layer to use. (default is 'relu')
     padding: padding type of the convolution.
     strides: strides of the convolution.
-    data_format: data format of the convolution. One of 'NDHWC' and 'NCDHW'.
+    data_format: data format of the convolution. One of 'channels_first' or
+      'channels_last'.
     instance_normalization: use Instance normalization. Exclusive with batch
       normalization.
 
   Returns:
     The Tensor after apply the convolution block to the input.
   """
-  layer = tf.contrib.layers.conv3d(
-      input_layer,
-      n_filters,
-      kernel,
-      stride=strides,
+  layer = tf.layers.Conv3D(
+      filters=n_filters,
+      kernel_size=kernel,
+      strides=strides,
       padding=padding,
       data_format=data_format,
-      activation_fn=None,
-  )
+      activation=None,
+  )(inputs=input_layer)
   if batch_normalization:
     layer = tf.layers.batch_normalization(inputs=layer, axis=1)
   elif instance_normalization:
-    layer = tf.contrib.layers.instance_norm(layer)
+    layer = tf.layers.instance_norm(layer)
   return activation(layer)
 
 
@@ -115,8 +113,10 @@ def apply_up_convolution(inputs,
     The tensor of the up-scaled features.
   """
   if deconvolution:
-    return tf.contrib.layers.conv3d_transpose(
-        inputs, num_filters, kernel_size, stride=strides)
+    return tf.layers.Conv3DTranspose(
+        filters=num_filters,
+        kernel_size=kernel_size,
+        strides=strides)(inputs=inputs)
   else:
     return tf.keras.layers.UpSampling3D(size=pool_size)(inputs)
 
@@ -157,10 +157,8 @@ def unet3d_base(inputs,
 
   if data_format == 'channels_last':
     channel_dim = -1
-    data_format = 'NDHWC'
   else:
     channel_dim = 1
-    data_format = 'NCDHW'
 
   # add levels with max pooling
   for layer_depth in range(depth):
@@ -185,12 +183,11 @@ def unet3d_base(inputs,
         data_format=data_format,
         instance_normalization=False)
     if layer_depth < depth - 1:
-      current_layer = tf.contrib.layers.max_pool3d(
-          layer2,
-          kernel_size=pool_size,
-          stride=2,
+      current_layer = tf.keras.layers.MaxPool3D(
+          pool_size=pool_size,
+          strides=(2, 2, 2),
           padding='VALID',
-          data_format=data_format)
+          data_format=data_format)(inputs=layer2)
       levels.append([layer1, layer2, current_layer])
     else:
       current_layer = layer2
@@ -226,9 +223,12 @@ def unet3d_base(inputs,
         data_format=data_format,
         instance_normalization=False)
 
-  final_convolution = tf.contrib.layers.conv3d(
-      current_layer, n_labels, (1, 1, 1),
-      data_format=data_format, activation_fn=None)
+  final_convolution = tf.layers.Conv3D(
+      filters=n_labels,
+      kernel_size=(1, 1, 1),
+      padding='VALID',
+      data_format=data_format,
+      activation=None)(current_layer)
   return final_convolution
 
 
@@ -283,7 +283,7 @@ def _unet_model_fn(image, labels, mode, params):
   """
   with tf.variable_scope('base', reuse=tf.AUTO_REUSE):
     if params['use_bfloat16']:
-      with tf.contrib.tpu.bfloat16_scope():
+      with tf.tpu.bfloat16_scope():
         logits = unet3d_base(
             image,
             pool_size=(2, 2, 2),
@@ -346,7 +346,7 @@ def _unet_model_fn(image, labels, mode, params):
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
     optimizer = create_optimizer(learning_rate, params)
     if params['use_tpu']:
-      optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
+      optimizer = tf.tpu.CrossShardOptimizer(optimizer)
 
     minimize_op = optimizer.minimize(loss, tf.train.get_global_step())
     with tf.control_dependencies(update_ops):
@@ -363,10 +363,10 @@ def _unet_model_fn(image, labels, mode, params):
           List of summary ops to run on the CPU host.
         """
         gs = gs[0]
-        with summary.create_file_writer(params['model_dir']).as_default():
-          with summary.always_record_summaries():
-            summary.scalar('learning_rate', lr[0], step=gs)
-            return summary.all_summary_ops()
+        with tf2.summary.create_file_writer(params['model_dir']).as_default():
+          with tf2.summary.record_if(True):
+            tf2.summary.scalar('learning_rate', lr[0], step=gs)
+            return tf.summary.all_v2_summary_ops()
 
       # To log the loss, current learning rate, and epoch for Tensorboard, the
       # summary op needs to be run on the host CPU via host_call. host_call
@@ -379,7 +379,7 @@ def _unet_model_fn(image, labels, mode, params):
       host_call = (host_call_fn, [gs_t, lr_t])
 
     if params['use_tpu']:
-      return tf.contrib.tpu.TPUEstimatorSpec(
+      return tf.estimator.tpu.TPUEstimatorSpec(
           mode=mode, loss=loss, train_op=train_op, host_call=host_call)
     # Note: hook cannot accesss tensors defined in model_fn in TPUEstimator.
     logging_hook = tf.train.LoggingTensorHook({'loss': loss}, every_n_iter=10)
@@ -395,7 +395,7 @@ def _unet_model_fn(image, labels, mode, params):
     original_shape = [params['eval_batch_size']] + (
         params['input_image_size'] + [-1])
     if params['use_tpu']:
-      return tf.contrib.tpu.TPUEstimatorSpec(
+      return tf.estimator.tpu.TPUEstimatorSpec(
           mode=mode, loss=loss,
           eval_metrics=(get_metric_fn(original_shape), [labels_r2, logits_r2]))
     return tf.estimator.EstimatorSpec(
@@ -408,7 +408,7 @@ def _unet_model_fn(image, labels, mode, params):
         'scores': tf.identity(tf.nn.softmax(logits, axis=-1), 'Scores'),
     }
     if params['use_tpu']:
-      return tf.contrib.tpu.TPUEstimatorSpec(
+      return tf.estimator.tpu.TPUEstimatorSpec(
           mode=mode,
           predictions=predictions,
           export_outputs={

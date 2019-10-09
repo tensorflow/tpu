@@ -19,7 +19,7 @@ from __future__ import division
 #Standard imports
 from __future__ import print_function
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 
 def dice(y_true, y_pred, axis=(1, 2, 3, 4)):
@@ -85,7 +85,8 @@ def hamming(y_true, y_pred, axis=(1, 2, 3)):
     y_true: the ground truth matrix. Shape [batch_size, x, y, z].
     y_pred: the prediction matrix. Shape [batch_size, x, y, z].
     axis: a list, axises of the feature dimensions.
-  Return: Hamming distance value.
+  Returns:
+    Hamming distance value.
   """
   y_true = tf.cast(y_true, y_pred.dtype)
   return tf.reduce_mean(tf.not_equal(y_pred, y_true), axis=axis)

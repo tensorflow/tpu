@@ -24,7 +24,7 @@ from __future__ import print_function
 
 import functools
 from absl import flags
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 import params_dict
 import unet_config
@@ -94,14 +94,15 @@ def tf_example_input(batch_size, params):
 def serving_input_fn(batch_size, input_type, params, input_name='input'):
   """Input function for SavedModels and TF serving.
 
-  Returns a `tf.estimator.export.ServingInputReceiver` for a SavedModel.
-
   Args:
     batch_size: The batch size.
     input_type: a string of 'image_tensor', 'image_bytes' or 'tf_example',
       specifying which type of input will be used in serving.
     params: ParamsDisct object of the model (check unet_config.py).
     input_name: name of the input Node.
+
+  Returns:
+    A `tf.estimator.export.ServingInputReceiver` for a SavedModel.
   """
   if input_type == 'image_tensor':
     placeholder, features = image_tensor_input(batch_size, params)
@@ -145,11 +146,11 @@ def main(_):
       transpose_input=False)
 
   print(' - Setting up TPUEstimator...')
-  estimator = tf.contrib.tpu.TPUEstimator(
+  estimator = tf.estimator.tpu.TPUEstimator(
       model_fn=serving_model_fn,
       model_dir=FLAGS.model_dir,
-      config=tf.contrib.tpu.RunConfig(
-          tpu_config=tf.contrib.tpu.TPUConfig(
+      config=tf.estimator.tpu.RunConfig(
+          tpu_config=tf.estimator.tpu.TPUConfig(
               iterations_per_loop=FLAGS.iterations_per_loop),
           master='local',
           evaluation_master='local'),

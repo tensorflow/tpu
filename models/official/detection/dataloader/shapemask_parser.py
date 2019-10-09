@@ -28,6 +28,7 @@ from dataloader import anchor
 from dataloader import mode_keys as ModeKeys
 from dataloader import tf_example_decoder
 from utils import box_utils
+from utils import class_utils
 from utils import dataloader_utils
 from utils import input_utils
 
@@ -58,6 +59,7 @@ class Parser(object):
                skip_crowd_during_training=True,
                max_num_instances=100,
                use_bfloat16=True,
+               mask_train_class='all',
                mode=None):
     """Initializes parameters for parsing annotations in the dataset.
 
@@ -106,10 +108,12 @@ class Parser(object):
       max_num_instances: `int` number of maximum number of instances in an
         image. The groundtruth data will be padded to `max_num_instances`.
       use_bfloat16: `bool`, if True, cast output image to tf.bfloat16.
+      mask_train_class: a string of experiment mode: `all`, `voc` or `nonvoc`.
       mode: a ModeKeys. Specifies if this is training, evaluation, prediction
         or prediction with groundtruths in the outputs.
     """
     self._mode = mode
+    self._mask_train_class = mask_train_class
     self._max_num_instances = max_num_instances
     self._skip_crowd_during_training = skip_crowd_during_training
     self._is_training = (mode == ModeKeys.TRAIN)
@@ -354,6 +358,19 @@ class Parser(object):
     if self._use_bfloat16:
       image = tf.cast(image, dtype=tf.bfloat16)
 
+    valid_image = tf.cast(tf.not_equal(num_masks, 0), tf.int32)
+    if self._mask_train_class == 'all':
+      mask_is_valid = valid_image * tf.ones_like(sampled_classes, tf.int32)
+    else:
+      # Get the intersection of sampled classes with training splits.
+      mask_valid_classes = tf.cast(
+          tf.expand_dims(
+              class_utils.coco_split_class_ids(self._mask_train_class),
+              1), sampled_classes.dtype)
+      match = tf.reduce_any(tf.equal(
+          tf.expand_dims(sampled_classes, 0), mask_valid_classes), 0)
+      mask_is_valid = valid_image * tf.cast(match, tf.int32)
+
     # Packs labels for model_fn outputs.
     labels = {
         'cls_targets': cls_targets,
@@ -367,7 +384,7 @@ class Parser(object):
         'mask_targets': mask_targets,
         'fine_mask_targets': fine_mask_targets,
         'mask_classes': sampled_classes,
-        'mask_is_valid': tf.cast(tf.not_equal(num_masks, 0), tf.int32)
+        'mask_is_valid': mask_is_valid,
     }
     return image, labels
 

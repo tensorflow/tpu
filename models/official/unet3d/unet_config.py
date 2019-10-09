@@ -37,7 +37,7 @@ UNET_CONFIG = {
     'num_steps_per_eval': 100,
     'min_eval_interval': 180,
     'eval_timeout': None,
-    'optimizer': 'nadam',
+    'optimizer': 'adam',
     'momentum': 0.9,
     # Spatial dimension of input image.
     'input_image_size': [128, 128, 128],

@@ -21,7 +21,7 @@ from __future__ import print_function
 
 from absl import app
 from absl import flags
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 import input_reader
 import params_dict
@@ -120,4 +120,5 @@ def main(argv):
 
 
 if __name__ == '__main__':
+  tf.disable_v2_behavior()
   app.run(main)
