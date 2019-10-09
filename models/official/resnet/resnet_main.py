@@ -23,7 +23,7 @@ import time
 
 from absl import app
 from absl import flags
-import absl.logging as _logging  # pylint: disable=unused-import
+from absl import logging
 import numpy as np
 import tensorflow.compat.v1 as tf
 import tensorflow.compat.v2 as tf2
@@ -669,6 +669,18 @@ def main(unused_argv):
 
     if FLAGS.mode == 'train':
       hooks = []
+      if params.use_async_checkpointing:
+        try:
+          from tensorflow.contrib.tpu.python.tpu import async_checkpoint  # pylint: disable=g-import-not-at-top
+        except ImportError as e:
+          logging.exception(
+              'Async checkpointing is not supported in TensorFlow 2.x')
+          raise e
+
+        hooks.append(
+            async_checkpoint.AsyncCheckpointSaverHook(
+                checkpoint_dir=FLAGS.model_dir,
+                save_steps=max(5000, params.iterations_per_loop)))
       if FLAGS.profile_every_n_steps > 0:
         hooks.append(
             tpu_profiler_hook.TPUProfilerHook(
