@@ -58,11 +58,17 @@ class ImageNetTFExampleInput(object):
     image_size: `int` for image size (both width and height).
     transpose_input: 'bool' for whether to use the double transpose trick
     include_background_label: If true, label #0 is reserved for background.
-    autoaugment_name: `string` that is the name of the autoaugment policy
-        to apply to the image. If the value is `None` autoaugment will not be
-        applied.
+    augment_name: `string` that is the name of the augmentation method
+        to apply to the image. `autoaugment` if AutoAugment is to be used or
+        `randaugment` if RandAugment is to be used. If the value is `None` no
+        no augmentation method will be applied applied. See autoaugment.py
+        for more details.
     mixup_alpha: float to control the strength of Mixup regularization, set
         to 0.0 to disable.
+    randaug_num_layers: 'int', if RandAug is used, what should the number of
+      layers be. See autoaugment.py for detailed description.
+    randaug_magnitude: 'int', if RandAug is used, what should the magnitude
+      be. See autoaugment.py for detailed description.
   """
   __metaclass__ = abc.ABCMeta
 
@@ -73,8 +79,10 @@ class ImageNetTFExampleInput(object):
                image_size=224,
                transpose_input=False,
                include_background_label=False,
-               autoaugment_name=None,
-               mixup_alpha=0.0):
+               augment_name=None,
+               mixup_alpha=0.0,
+               randaug_num_layers=None,
+               randaug_magnitude=None):
     self.image_preprocessing_fn = preprocessing.preprocess_image
     self.is_training = is_training
     self.use_bfloat16 = use_bfloat16
@@ -83,8 +91,10 @@ class ImageNetTFExampleInput(object):
     self.image_size = image_size
     self.include_background_label = include_background_label
     self.num_label_classes = 1001 if include_background_label else 1000
-    self.autoaugment_name = autoaugment_name
+    self.augment_name = augment_name
     self.mixup_alpha = mixup_alpha
+    self.randaug_num_layers = randaug_num_layers
+    self.randaug_magnitude = randaug_magnitude
 
   def set_shapes(self, batch_size, images, labels):
     """Statically set the batch_size dimension."""
@@ -150,7 +160,9 @@ class ImageNetTFExampleInput(object):
         is_training=self.is_training,
         image_size=self.image_size,
         use_bfloat16=self.use_bfloat16,
-        autoaugment_name=self.autoaugment_name)
+        augment_name=self.augment_name,
+        randaug_num_layers=self.randaug_num_layers,
+        randaug_magnitude=self.randaug_magnitude)
 
     # The labels will be in range [1,1000], 0 is reserved for background
     label = tf.cast(
@@ -268,8 +280,10 @@ class ImageNetInput(ImageNetTFExampleInput):
                num_parallel_calls=64,
                cache=False,
                include_background_label=False,
-               autoaugment_name=None,
-               mixup_alpha=0.0):
+               augment_name=None,
+               mixup_alpha=0.0,
+               randaug_num_layers=None,
+               randaug_magnitude=None):
     """Create an input from TFRecord files.
 
     Args:
@@ -284,11 +298,17 @@ class ImageNetInput(ImageNetTFExampleInput):
       num_parallel_calls: concurrency level to use when reading data from disk.
       cache: if true, fill the dataset by repeating from its cache.
       include_background_label: if true, label #0 is reserved for background.
-      autoaugment_name: `string` that is the name of the autoaugment policy
-          to apply to the image. If the value is `None` autoaugment will not be
-          applied.
+      augment_name: `string` that is the name of the augmentation method
+          to apply to the image. `autoaugment` if AutoAugment is to be used or
+          `randaugment` if RandAugment is to be used. If the value is `None` no
+          no augmentation method will be applied applied. See autoaugment.py
+          for more details.
       mixup_alpha: float to control the strength of Mixup regularization, set
           to 0.0 to disable.
+      randaug_num_layers: 'int', if RandAug is used, what should the number of
+        layers be. See autoaugment.py for detailed description.
+      randaug_magnitude: 'int', if RandAug is used, what should the magnitude
+        be. See autoaugment.py for detailed description.
     """
     super(ImageNetInput, self).__init__(
         is_training=is_training,
@@ -296,8 +316,10 @@ class ImageNetInput(ImageNetTFExampleInput):
         use_bfloat16=use_bfloat16,
         transpose_input=transpose_input,
         include_background_label=include_background_label,
-        autoaugment_name=autoaugment_name,
-        mixup_alpha=mixup_alpha)
+        augment_name=augment_name,
+        mixup_alpha=mixup_alpha,
+        randaug_num_layers=randaug_num_layers,
+        randaug_magnitude=randaug_magnitude)
     self.data_dir = data_dir
     if self.data_dir == 'null' or not self.data_dir:
       self.data_dir = None
@@ -377,9 +399,11 @@ class ImageNetBigtableInput(ImageNetTFExampleInput):
                use_bfloat16,
                transpose_input,
                selection,
-               autoaugment_name,
+               augment_name=None,
                include_background_label=False,
-               mixup_alpha=0.0):
+               mixup_alpha=0.0,
+               randaug_num_layers=None,
+               randaug_magnitude=None):
     """Constructs an ImageNet input from a BigtableSelection.
 
     Args:
@@ -387,20 +411,28 @@ class ImageNetBigtableInput(ImageNetTFExampleInput):
       use_bfloat16: If True, use bfloat16 precision; else use float32.
       transpose_input: 'bool' for whether to use the double transpose trick
       selection: a BigtableSelection specifying a part of a Bigtable.
-      autoaugment_name: `string` that is the name of the autoaugment policy
-          to apply to the image. If the value is `None` autoaugment will not be
-          applied.
+      augment_name: `string` that is the name of the augmentation method
+          to apply to the image. `autoaugment` if AutoAugment is to be used or
+          `randaugment` if RandAugment is to be used. If the value is `None` no
+          no augmentation method will be applied applied. See autoaugment.py
+          for more details.
       include_background_label: if true, label #0 is reserved for background.
       mixup_alpha: float to control the strength of Mixup regularization, set
           to 0.0 to disable.
+      randaug_num_layers: 'int', if RandAug is used, what should the number of
+        layers be. See autoaugment.py for detailed description.
+      randaug_magnitude: 'int', if RandAug is used, what should the magnitude
+        be. See autoaugment.py for detailed description.s
     """
     super(ImageNetBigtableInput, self).__init__(
         is_training=is_training,
         use_bfloat16=use_bfloat16,
         transpose_input=transpose_input,
         include_background_label=include_background_label,
-        autoaugment_name=autoaugment_name,
-        mixup_alpha=mixup_alpha)
+        augment_name=augment_name,
+        mixup_alpha=mixup_alpha,
+        randaug_num_layers=randaug_num_layers,
+        randaug_magnitude=randaug_magnitude)
     self.selection = selection
 
   def make_source_dataset(self, index, num_hosts):

@@ -5,7 +5,9 @@
 
 Updates
 
-  - **[Aug 2019] Released EfficientNet-EdgeTPU models: [README](edgetpu/README.md) and [blog post](https://ai.googleblog.com/2019/08/efficientnet-edgetpu-creating.html).**
+  - **[Oct 2019] Released new EfficientNet models trained with RandAugment: [paper](https://arxiv.org/abs/1909.13719).**
+
+  - [Aug 2019] Released EfficientNet-EdgeTPU models: [README](edgetpu/README.md) and [blog post](https://ai.googleblog.com/2019/08/efficientnet-edgetpu-creating.html).
 
   - [Jul 2019] Released new EfficientNet checkpoints trained with AutoAugment (better accuracy than paper).
 
@@ -42,18 +44,22 @@ EfficientNets achieve state-of-the-art accuracy on ImageNet with an order of mag
 We have provided a list of EfficientNet checkpoints for EfficientNet checkpoints: both w/ and w/o AutoAugment.
 
   * With standard ResNet preprocessing, we achieved similar accuracy as the original ICML paper.
-  * WIth [AutoAugment](https://arxiv.org/abs/1805.09501) preprocessing, we achieved higher accuracy than the original ICML paper.
+  * With [AutoAugment](https://arxiv.org/abs/1805.09501) preprocessing, we achieved higher accuracy than the original ICML paper.
+  * With [RandAugment](https://arxiv.org/abs/1909.13719) preprocessing,  state-of-the-art results are achieved.
 
 |               |   B0    |  B1   |  B2    |  B3   |  B4   |  B5    | B6 | B7 |
 |----------     |--------  | ------| ------|------ |------ |------ | --- | --- |
 | Standard preprocessing |  76.8% ([ckpt](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckpts/efficientnet-b0.tar.gz))   | 78.8% ([ckpt](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckpts/efficientnet-b1.tar.gz))  | 79.8% ([ckpt](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckpts/efficientnet-b2.tar.gz)) | 81.0% ([ckpt](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckpts/efficientnet-b3.tar.gz)) | 82.6% ([ckpt](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckpts/efficientnet-b4.tar.gz)) | 83.2% ([ckpt](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckpts/efficientnet-b5.tar.gz)) | | |
 | AutoAugment |  77.3% ([ckpt](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckptsaug/efficientnet-b0.tar.gz))   | 79.2% ([ckpt](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckptsaug/efficientnet-b1.tar.gz))  | 80.3% ([ckpt](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckptsaug/efficientnet-b2.tar.gz)) | 81.7% ([ckpt](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckptsaug/efficientnet-b3.tar.gz)) | 83.0% ([ckpt](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckptsaug/efficientnet-b4.tar.gz)) | 83.7% ([ckpt](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckptsaug/efficientnet-b5.tar.gz)) |  84.2% ([ckpt](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckptsaug/efficientnet-b6.tar.gz)) | 84.5% ([ckpt](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/ckptsaug/efficientnet-b7.tar.gz))  |
+| RandAugment |  |  |  |  |  | 83.9%  ([ckpt](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/randaug/efficientnet-b5-randaug.tar.gz)) |  | 85.0%  ([ckpt](https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/randaug/efficientnet-b7-randaug.tar.gz)) |
 
 <!--
 | Acc. from paper        |  76.3%   | 78.8% | 79.8% | 81.1% | 82.6% | 83.3% |
 -->
 
 <sup>**To train EfficientNets with AutoAugment ([code](https://github.com/tensorflow/tpu/blob/master/models/official/efficientnet/autoaugment.py)), simply add option "--autoaugment_name=v0". If you use these checkpoints, you can cite this [paper](https://arxiv.org/abs/1805.09501).</sup>
+
+<sup>***To train EfficientNets with RandAugment ([code](https://github.com/tensorflow/tpu/blob/master/models/official/efficientnet/autoaugment.py)), simply add option "--use_randaug=true". For EfficientNet-B5 also add "--randaug_num_layers=2 --randaug_magnitude=17". For EfficientNet-B7 also add "--randaug_num_layers=2 --randaug_magnitude=28". If you use these checkpoints, you can cite this [paper](https://arxiv.org/abs/1909.13719).</sup>
 
 A quick way to use these checkpoints is to run:
 
