@@ -21,7 +21,10 @@ MASK_RCNN_CFG = {
     'num_cores': 8,
     'use_tpu': True,
     # input preprocessing parameters
+    'resize_method': 'retinanet',  # or 'faster_rcnn'
     'image_size': [1024, 1024],
+    'short_side': 800,
+    'long_side': 1333,
     'input_rand_hflip': True,
     'aug_scale_min': 1.0,
     'aug_scale_max': 1.0,

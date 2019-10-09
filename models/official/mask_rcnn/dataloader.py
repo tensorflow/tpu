@@ -163,8 +163,13 @@ class InputReader(object):
 
         if self._mode == tf.estimator.ModeKeys.PREDICT:
           image = preprocess_ops.normalize_image(image)
-          image, image_info, _, _, _ = preprocess_ops.resize_crop_pad(
-              image, params['image_size'], 2 ** params['max_level'])
+          if params['resize_method'] == 'retinanet':
+            image, image_info, _, _, _ = preprocess_ops.resize_crop_pad(
+                image, params['image_size'], 2 ** params['max_level'])
+          else:
+            image, image_info, _, _, _ = preprocess_ops.resize_crop_pad_v2(
+                image, params['short_side'], params['long_side'],
+                2 ** params['max_level'])
           if params['precision'] == 'bfloat16':
             image = tf.cast(image, dtype=tf.bfloat16)
 
@@ -218,17 +223,31 @@ class InputReader(object):
             else:
               image, boxes = flipped_results
           # Scaling, jittering and padding.
-          image, image_info, boxes, classes, cropped_gt_masks = (
-              preprocess_ops.resize_crop_pad(
-                  image,
-                  params['image_size'],
-                  2 ** params['max_level'],
-                  aug_scale_min=params['aug_scale_min'],
-                  aug_scale_max=params['aug_scale_max'],
-                  boxes=boxes,
-                  classes=classes,
-                  masks=instance_masks,
-                  crop_mask_size=params['gt_mask_size']))
+          if params['resize_method'] == 'retinanet':
+            image, image_info, boxes, classes, cropped_gt_masks = (
+                preprocess_ops.resize_crop_pad(
+                    image,
+                    params['image_size'],
+                    2 ** params['max_level'],
+                    aug_scale_min=params['aug_scale_min'],
+                    aug_scale_max=params['aug_scale_max'],
+                    boxes=boxes,
+                    classes=classes,
+                    masks=instance_masks,
+                    crop_mask_size=params['gt_mask_size']))
+          else:
+            image, image_info, boxes, classes, cropped_gt_masks = (
+                preprocess_ops.resize_crop_pad_v2(
+                    image,
+                    params['short_side'],
+                    params['long_side'],
+                    2 ** params['max_level'],
+                    aug_scale_min=params['aug_scale_min'],
+                    aug_scale_max=params['aug_scale_max'],
+                    boxes=boxes,
+                    classes=classes,
+                    masks=instance_masks,
+                    crop_mask_size=params['gt_mask_size']))
           if cropped_gt_masks is not None:
             cropped_gt_masks = tf.pad(
                 cropped_gt_masks,
