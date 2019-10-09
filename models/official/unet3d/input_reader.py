@@ -20,7 +20,8 @@ from __future__ import division
 from __future__ import print_function
 
 import functools
-import tensorflow as tf
+from absl import logging
+import tensorflow.compat.v1 as tf
 
 
 class InputFn(object):
@@ -62,7 +63,7 @@ class InputFn(object):
       if params.use_bfloat16:
         image = tf.cast(image, dtype=tf.bfloat16)
         gt_mask = tf.cast(gt_mask, dtype=tf.bfloat16)
-      tf.logging.info('debug input %s %s', image, gt_mask)
+      logging.info('debug input %s %s', image, gt_mask)
       return image, gt_mask
 
     return _parser
@@ -104,7 +105,7 @@ class InputFn(object):
     # Parses the fetched records to input tensors for model function.
     dataset = dataset.map(self._parser_fn, num_parallel_calls=64)
     dataset = dataset.batch(batch_size, drop_remainder=True)
-    dataset = dataset.prefetch(tf.contrib.data.AUTOTUNE)
+    dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
 
     return dataset
 

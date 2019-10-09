@@ -23,10 +23,11 @@ import os
 
 from absl import app
 from absl import flags
+from absl import logging
 import numpy as np
 from PIL import Image
 from scipy import ndimage
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 flags.DEFINE_string("image_file_pattern", None,
                     "path pattern to an input image npy file.")
@@ -114,9 +115,9 @@ def rand_crop_liver(image, label, res_s, out_s,
   """
   if image.shape != (res_s, res_s, res_s) or \
       label.shape != (res_s, res_s, res_s):
-    tf.logging.info("Unexpected shapes. "
-                    "image.shape: %s, label.shape: %s",
-                    image.shape, label.shape)
+    logging.info("Unexpected shapes. "
+                 "image.shape: %s, label.shape: %s",
+                 image.shape, label.shape)
     return
 
   rough_liver_label = 1
@@ -169,9 +170,9 @@ def rand_crop_whole_ct(image, label, res_s, out_s,
   """
   if image.shape != (res_s, res_s, res_s) or \
       label.shape != (res_s, res_s, res_s):
-    tf.logging.info("Unexpected shapes. "
-                    "image.shape: %s, label.shape: %s",
-                    image.shape, label.shape)
+    logging.info("Unexpected shapes. "
+                 "image.shape: %s, label.shape: %s",
+                 image.shape, label.shape)
     return
 
   if not apply_data_aug:
@@ -252,8 +253,8 @@ def main(argv):
     image_path = FLAGS.image_file_pattern.format(im_id)
     label_path = FLAGS.label_file_pattern.format(im_id)
     if not tf.gfile.Exists(image_path):
-      tf.logging.info("Reached the end. Image does not exist: %s. "
-                      "Process finish.", image_path)
+      logging.info("Reached the end. Image does not exist: %s. "
+                   "Process finish.", image_path)
       break
     process_one_file(image_path, label_path, im_id,
                      output_path, res_s, out_s,
