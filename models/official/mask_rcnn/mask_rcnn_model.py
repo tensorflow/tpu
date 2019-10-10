@@ -662,7 +662,7 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
                    [global_step_t, total_loss_t, total_rpn_loss_t,
                     rpn_score_loss_t, rpn_box_loss_t, total_fast_rcnn_loss_t,
                     fast_rcnn_class_loss_t, fast_rcnn_box_loss_t,
-                    mask_loss_t, learning_rate_t])
+                    mask_loss_t, l2_regularization_loss, learning_rate_t])
   else:
     train_op = None
     scaffold_fn = None
