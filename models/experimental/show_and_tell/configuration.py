@@ -42,8 +42,8 @@ class ModelConfig(object):
 
     # Name of the context feature containing image data.
     self.image_feature_name = "image/encoded"
-    # Name of the feature containing string captions.
-    self.caption_feature_name = "image/caption"
+    # Name of the feature containing caption ids.
+    self.caption_feature_name = "image/caption_ids"
 
     # Number of unique words in the vocab (plus 1, for <UNK>).
     # The default value is larger than the expected actual vocab size to allow
