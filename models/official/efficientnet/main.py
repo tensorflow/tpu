@@ -22,16 +22,16 @@ import os
 import time
 from absl import app
 from absl import flags
+from absl import logging
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+import tensorflow.compat.v2 as tf2  # used for summaries only.
 
 import efficientnet_builder
 import imagenet_input
 import utils
 from edgetpu import efficientnet_edgetpu_builder
 from tpu import efficientnet_tpu_builder
-from tensorflow.contrib.tpu.python.tpu import async_checkpoint
-from tensorflow.contrib.training.python.training import evaluation
 from tensorflow.core.protobuf import rewriter_config_pb2
 from tensorflow.python.estimator import estimator
 
@@ -259,7 +259,7 @@ flags.DEFINE_float(
 
 flags.DEFINE_float(
     'width_coefficient', default=None,
-    help=('WIdth coefficient for scaling channel size.'))
+    help=('Width coefficient for scaling channel size.'))
 
 flags.DEFINE_bool(
     'use_async_checkpointing', default=False, help=('Enable async checkpoint'))
@@ -300,7 +300,7 @@ def model_fn(features, labels, mode, params):
   has_moving_average_decay = (FLAGS.moving_average_decay > 0)
   # This is essential, if using a keras-derived model.
   tf.keras.backend.set_learning_phase(is_training)
-  tf.logging.info('Using open-source implementation.')
+  logging.info('Using open-source implementation.')
   override_params = {}
   if FLAGS.batch_norm_momentum is not None:
     override_params['batch_norm_momentum'] = FLAGS.batch_norm_momentum
@@ -349,7 +349,7 @@ def model_fn(features, labels, mode, params):
     return logits
 
   if params['use_bfloat16']:
-    with tf.contrib.tpu.bfloat16_scope():
+    with tf.tpu.bfloat16_scope():
       logits = tf.cast(build_model(), tf.float32)
   else:
     logits = build_model()
@@ -395,7 +395,7 @@ def model_fn(features, labels, mode, params):
         tf.cast(global_step, tf.float32) / params['steps_per_epoch'])
 
     scaled_lr = FLAGS.base_learning_rate * (FLAGS.train_batch_size / 256.0)
-    tf.logging.info('base_learning_rate = %f', FLAGS.base_learning_rate)
+    logging.info('base_learning_rate = %f', FLAGS.base_learning_rate)
     learning_rate = utils.build_learning_rate(scaled_lr, global_step,
                                               params['steps_per_epoch'])
     optimizer = utils.build_optimizer(learning_rate)
@@ -403,7 +403,7 @@ def model_fn(features, labels, mode, params):
       # When using TPU, wrap the optimizer with CrossShardOptimizer which
       # handles synchronization details between different TPU cores. To the
       # user, this should look like regular synchronous training.
-      optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
+      optimizer = tf.tpu.CrossShardOptimizer(optimizer)
 
     # Batch normalization requires UPDATE_OPS to be added as a dependency to
     # the train operation.
@@ -422,7 +422,7 @@ def model_fn(features, labels, mode, params):
         This function is executed on the CPU and should not directly reference
         any Tensors in the rest of the `model_fn`. To pass Tensors from the
         model to the `metric_fn`, provide as part of the `host_call`. See
-        https://www.tensorflow.org/api_docs/python/tf/contrib/tpu/TPUEstimatorSpec
+        https://www.tensorflow.org/api_docs/python/tf/estimator/tpu/TPUEstimatorSpec
         for more information.
 
         Arguments should match the list of `Tensor` objects passed as the second
@@ -441,13 +441,13 @@ def model_fn(features, labels, mode, params):
         # TPU loop is finished, setting max_queue value to the same as number of
         # iterations will make the summary writer only flush the data to storage
         # once per loop.
-        with tf.contrib.summary.create_file_writer(
+        with tf2.summary.create_file_writer(
             FLAGS.model_dir, max_queue=FLAGS.iterations_per_loop).as_default():
-          with tf.contrib.summary.always_record_summaries():
-            tf.contrib.summary.scalar('learning_rate', lr[0], step=gs)
-            tf.contrib.summary.scalar('current_epoch', ce[0], step=gs)
+          with tf2.summary.record_if(True):
+            tf2.summary.scalar('learning_rate', lr[0], step=gs)
+            tf2.summary.scalar('current_epoch', ce[0], step=gs)
 
-            return tf.contrib.summary.all_summary_ops()
+            return tf.summary.all_v2_summary_ops()
 
       # To log the loss, current learning rate, and epoch for Tensorboard, the
       # summary op needs to be run on the host CPU via host_call. host_call
@@ -474,7 +474,7 @@ def model_fn(features, labels, mode, params):
       This function is executed on the CPU and should not directly reference
       any Tensors in the rest of the `model_fn`. To pass Tensors from the model
       to the `metric_fn`, provide as part of the `eval_metrics`. See
-      https://www.tensorflow.org/api_docs/python/tf/contrib/tpu/TPUEstimatorSpec
+      https://www.tensorflow.org/api_docs/python/tf/estimator/tpu/TPUEstimatorSpec
       for more information.
 
       Arguments should match the list of `Tensor` objects passed as the second
@@ -501,7 +501,7 @@ def model_fn(features, labels, mode, params):
     eval_metrics = (metric_fn, [labels, logits])
 
   num_params = np.sum([np.prod(v.shape) for v in tf.trainable_variables()])
-  tf.logging.info('number of trainable parameters: {}'.format(num_params))
+  logging.info('number of trainable parameters: %d', num_params)
 
   def _scaffold_fn():
     saver = tf.train.Saver(restore_vars_dict)
@@ -513,7 +513,7 @@ def model_fn(features, labels, mode, params):
   else:
     scaffold_fn = None
 
-  return tf.contrib.tpu.TPUEstimatorSpec(
+  return tf.estimator.tpu.TPUEstimatorSpec(
       mode=mode,
       loss=loss,
       train_op=train_op,
@@ -592,7 +592,7 @@ def export(est, export_dir, input_image_size=None):
   if not input_image_size:
     input_image_size = FLAGS.input_image_size
 
-  tf.logging.info('Starting to export model.')
+  logging.info('Starting to export model.')
   image_serving_input_fn = imagenet_input.build_image_serving_input_fn(
       input_image_size)
   est.export_saved_model(
@@ -621,7 +621,7 @@ def main(unused_argv):
   include_background_label = (FLAGS.num_label_classes == 1001)
 
   if FLAGS.tpu or FLAGS.use_tpu:
-    tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
+    tpu_cluster_resolver = tf.distribute.cluster_resolver.TPUClusterResolver(
         FLAGS.tpu,
         zone=FLAGS.tpu_zone,
         project=FLAGS.gcp_project)
@@ -632,7 +632,7 @@ def main(unused_argv):
     save_checkpoints_steps = None
   else:
     save_checkpoints_steps = max(100, FLAGS.iterations_per_loop)
-  config = tf.contrib.tpu.RunConfig(
+  config = tf.estimator.tpu.RunConfig(
       cluster=tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
       save_checkpoints_steps=save_checkpoints_steps,
@@ -641,15 +641,15 @@ def main(unused_argv):
           graph_options=tf.GraphOptions(
               rewrite_options=rewriter_config_pb2.RewriterConfig(
                   disable_meta_optimizer=True))),
-      tpu_config=tf.contrib.tpu.TPUConfig(
+      tpu_config=tf.estimator.tpu.TPUConfig(
           iterations_per_loop=FLAGS.iterations_per_loop,
-          per_host_input_for_training=tf.contrib.tpu.InputPipelineConfig
+          per_host_input_for_training=tf.estimator.tpu.InputPipelineConfig
           .PER_HOST_V2))  # pylint: disable=line-too-long
   # Initializes model parameters.
   params = dict(
       steps_per_epoch=FLAGS.num_train_images / FLAGS.train_batch_size,
       use_bfloat16=FLAGS.use_bfloat16)
-  est = tf.contrib.tpu.TPUEstimator(
+  est = tf.estimator.tpu.TPUEstimator(
       use_tpu=FLAGS.use_tpu,
       model_fn=model_fn,
       config=config,
@@ -663,7 +663,7 @@ def main(unused_argv):
   def build_imagenet_input(is_training):
     """Generate ImageNetInput for training and eval."""
     if FLAGS.bigtable_instance:
-      tf.logging.info('Using Bigtable dataset, table %s', FLAGS.bigtable_table)
+      logging.info('Using Bigtable dataset, table %s', FLAGS.bigtable_table)
       select_train, select_eval = _select_tables_from_flags()
       return imagenet_input.ImageNetBigtableInput(
           is_training=is_training,
@@ -678,9 +678,9 @@ def main(unused_argv):
           randaug_magnitude=FLAGS.randaug_magnitude)
     else:
       if FLAGS.data_dir == FAKE_DATA_DIR:
-        tf.logging.info('Using fake dataset.')
+        logging.info('Using fake dataset.')
       else:
-        tf.logging.info('Using dataset: %s', FLAGS.data_dir)
+        logging.info('Using dataset: %s', FLAGS.data_dir)
 
       return imagenet_input.ImageNetInput(
           is_training=is_training,
@@ -702,9 +702,9 @@ def main(unused_argv):
   if FLAGS.mode == 'eval':
     eval_steps = FLAGS.num_eval_images // FLAGS.eval_batch_size
     # Run evaluation when there's a new checkpoint
-    for ckpt in evaluation.checkpoints_iterator(
+    for ckpt in tf.train.checkpoints_iterator(
         FLAGS.model_dir, timeout=FLAGS.eval_timeout):
-      tf.logging.info('Starting to evaluate.')
+      logging.info('Starting to evaluate.')
       try:
         start_timestamp = time.time()  # This time will include compilation time
         eval_results = est.evaluate(
@@ -712,14 +712,14 @@ def main(unused_argv):
             steps=eval_steps,
             checkpoint_path=ckpt)
         elapsed_time = int(time.time() - start_timestamp)
-        tf.logging.info('Eval results: %s. Elapsed seconds: %d',
-                        eval_results, elapsed_time)
+        logging.info('Eval results: %s. Elapsed seconds: %d',
+                     eval_results, elapsed_time)
         utils.archive_ckpt(eval_results, eval_results['top_1_accuracy'], ckpt)
 
         # Terminate eval job when final checkpoint is reached
         current_step = int(os.path.basename(ckpt).split('-')[1])
         if current_step >= FLAGS.train_steps:
-          tf.logging.info(
+          logging.info(
               'Evaluation finished after training step %d', current_step)
           break
 
@@ -728,12 +728,12 @@ def main(unused_argv):
         # sometimes the TPU worker does not finish initializing until long after
         # the CPU job tells it to start evaluating. In this case, the checkpoint
         # file could have been deleted already.
-        tf.logging.info(
+        logging.info(
             'Checkpoint %s no longer exists, skipping checkpoint', ckpt)
   else:   # FLAGS.mode == 'train' or FLAGS.mode == 'train_and_eval'
     current_step = estimator._load_global_step_from_checkpoint_dir(FLAGS.model_dir)  # pylint: disable=protected-access,line-too-long
 
-    tf.logging.info(
+    logging.info(
         'Training for %d steps (%.2f epochs in total). Current'
         ' step %d.', FLAGS.train_steps,
         FLAGS.train_steps / params['steps_per_epoch'], current_step)
@@ -743,6 +743,13 @@ def main(unused_argv):
     if FLAGS.mode == 'train':
       hooks = []
       if FLAGS.use_async_checkpointing:
+        try:
+          from tensorflow.contrib.tpu.python.tpu import async_checkpoint  # pylint: disable=g-import-not-at-top
+        except ImportError as e:
+          logging.exception(
+              'Async checkpointing is not supported in TensorFlow 2.x')
+          raise e
+
         hooks.append(
             async_checkpoint.AsyncCheckpointSaverHook(
                 checkpoint_dir=FLAGS.model_dir,
@@ -762,29 +769,29 @@ def main(unused_argv):
         est.train(input_fn=imagenet_train.input_fn, max_steps=next_checkpoint)
         current_step = next_checkpoint
 
-        tf.logging.info('Finished training up to step %d. Elapsed seconds %d.',
-                        next_checkpoint, int(time.time() - start_timestamp))
+        logging.info('Finished training up to step %d. Elapsed seconds %d.',
+                     next_checkpoint, int(time.time() - start_timestamp))
 
         # Evaluate the model on the most recent model in --model_dir.
         # Since evaluation happens in batches of --eval_batch_size, some images
         # may be excluded modulo the batch size. As long as the batch size is
         # consistent, the evaluated images are also consistent.
-        tf.logging.info('Starting to evaluate.')
+        logging.info('Starting to evaluate.')
         eval_results = est.evaluate(
             input_fn=imagenet_eval.input_fn,
             steps=FLAGS.num_eval_images // FLAGS.eval_batch_size)
-        tf.logging.info('Eval results at step %d: %s',
-                        next_checkpoint, eval_results)
+        logging.info('Eval results at step %d: %s',
+                     next_checkpoint, eval_results)
         ckpt = tf.train.latest_checkpoint(FLAGS.model_dir)
         utils.archive_ckpt(eval_results, eval_results['top_1_accuracy'], ckpt)
 
       elapsed_time = int(time.time() - start_timestamp)
-      tf.logging.info('Finished training up to step %d. Elapsed seconds %d.',
-                      FLAGS.train_steps, elapsed_time)
+      logging.info('Finished training up to step %d. Elapsed seconds %d.',
+                   FLAGS.train_steps, elapsed_time)
   if FLAGS.export_dir:
     export(est, FLAGS.export_dir, input_image_size)
 
 
 if __name__ == '__main__':
-  tf.logging.set_verbosity(tf.logging.INFO)
+  logging.set_verbosity(logging.INFO)
   app.run(main)
