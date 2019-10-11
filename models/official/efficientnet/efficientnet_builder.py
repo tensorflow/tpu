@@ -21,6 +21,7 @@ from __future__ import print_function
 import functools
 import os
 import re
+import numpy as np
 import tensorflow as tf
 
 import efficientnet_model
@@ -125,30 +126,33 @@ class BlockDecoder(object):
     return block_strings
 
 
-def swish(features, use_native=True):
+def swish(features, use_native=True, use_hard=False):
   """Computes the Swish activation function.
 
-  The tf.nn.swish operation uses a custom gradient to reduce memory usage.
-  Since saving custom gradients in SavedModel is currently not supported, and
-  one would not be able to use an exported TF-Hub module for fine-tuning, we
-  provide this wrapper that can allow to select whether to use the native
-  TensorFlow swish operation, or whether to use a customized operation that
-  has uses default TensorFlow gradient computation.
+  We provide three alternnatives:
+    - Native tf.nn.swish, use less memory during training than compsible swish.
+    - Quantization friendly hard swish.
+    - A composible swish, equavilant to tf.nn.swish, but more general for
+      finetuning and TF-Hub.
 
   Args:
     features: A `Tensor` representing preactivation values.
     use_native: Whether to use the native swish from tf.nn that uses a custom
       gradient to reduce memory usage, or to use customized swish that uses
       default TensorFlow gradient computation.
+    use_hard: Whether to use quantization-friendly hard swish.
 
   Returns:
     The activation value.
   """
   if use_native:
     return tf.nn.swish(features)
-  else:
-    features = tf.convert_to_tensor(features, name='features')
-    return features * tf.nn.sigmoid(features)
+
+  if use_hard:
+    return features * tf.nn.relu6(features + np.float32(3)) * (1. / 6.)
+
+  features = tf.convert_to_tensor(features, name='features')
+  return features * tf.nn.sigmoid(features)
 
 
 def efficientnet(width_coefficient=None,

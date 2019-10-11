@@ -510,3 +510,27 @@ class ShapemaskLoss(object):
       loss = tf.reduce_sum(loss) / tf.reduce_sum(labels)
     return loss
 
+
+class SegmentationLoss(object):
+  """Semantic segmentationloss function."""
+
+  def __init__(self, params):
+    self._ignore_label = params.ignore_label
+
+  def __call__(self, logits, labels):
+    _, height, width, _ = logits.get_shape().as_list()
+    labels = tf.image.resize_images(
+        labels, (height, width), method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
+    valid_mask = tf.not_equal(labels, self._ignore_label)
+    normalizer = tf.reduce_sum(tf.to_float(valid_mask))
+    # Assign pixel with ignore label to class 0 (background). The loss on the
+    # pixel will later be masked out.
+    labels = tf.where(valid_mask, labels, tf.zeros_like(labels))
+
+    labels = tf.squeeze(tf.cast(labels, tf.int32), axis=3)
+    valid_mask = tf.squeeze(tf.cast(valid_mask, tf.float32), axis=3)
+    cross_entropy_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(
+        labels=labels, logits=logits)
+    cross_entropy_loss *= tf.to_float(valid_mask)
+    loss = tf.reduce_sum(cross_entropy_loss) / normalizer
+    return loss

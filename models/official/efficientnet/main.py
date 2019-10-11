@@ -82,9 +82,24 @@ flags.DEFINE_string(
     help='One of {"train_and_eval", "train", "eval"}.')
 
 flags.DEFINE_string(
-    'autoaugment_name', default=None,
-    help='If value is None, then AutoAugment will not be used. Available '
-    'options are: v0.')
+    'augment_name', default=None,
+    help='`string` that is the name of the augmentation method'
+         'to apply to the image. `autoaugment` if AutoAugment is to be used or'
+         '`randaugment` if RandAugment is to be used. If the value is `None` no'
+         'augmentation method will be applied applied. See autoaugment.py for  '
+         'more details.')
+
+
+flags.DEFINE_integer(
+    'randaug_num_layers', default=2,
+    help='If RandAug is used, what should the number of layers be.'
+         'See autoaugment.py for detailed description.')
+
+flags.DEFINE_integer(
+    'randaug_magnitude', default=10,
+    help='If RandAug is used, what should the magnitude be. '
+         'See autoaugment.py for detailed description.')
+
 
 flags.DEFINE_integer(
     'train_steps', default=218949,
@@ -656,8 +671,11 @@ def main(unused_argv):
           transpose_input=FLAGS.transpose_input,
           selection=select_train if is_training else select_eval,
           include_background_label=include_background_label,
-          autoaugment_name=FLAGS.autoaugment_name,
-          mixup_alpha=FLAGS.mixup_alpha)
+          augment_name=FLAGS.augment_name,
+          mixup_alpha=FLAGS.mixup_alpha,
+          use_randaug=FLAGS.use_randaug,
+          randaug_num_layers=FLAGS.randaug_num_layers,
+          randaug_magnitude=FLAGS.randaug_magnitude)
     else:
       if FLAGS.data_dir == FAKE_DATA_DIR:
         tf.logging.info('Using fake dataset.')
@@ -673,8 +691,10 @@ def main(unused_argv):
           num_parallel_calls=FLAGS.num_parallel_calls,
           use_bfloat16=FLAGS.use_bfloat16,
           include_background_label=include_background_label,
-          autoaugment_name=FLAGS.autoaugment_name,
-          mixup_alpha=FLAGS.mixup_alpha)
+          augment_name=FLAGS.augment_name,
+          mixup_alpha=FLAGS.mixup_alpha,
+          randaug_num_layers=FLAGS.randaug_num_layers,
+          randaug_magnitude=FLAGS.randaug_magnitude)
 
   imagenet_train = build_imagenet_input(is_training=True)
   imagenet_eval = build_imagenet_input(is_training=False)

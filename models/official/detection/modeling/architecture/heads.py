@@ -807,3 +807,66 @@ class ShapemaskFinemaskHead(object):
                               width * self.up_sample_factor,
                               self._mask_num_classes])
     return mask_logits
+
+
+class SegmentationHead(object):
+  """Semantic segmentation head."""
+
+  def __init__(self, num_classes, level, num_convs):
+    """Initialize params to build segmentation head.
+
+    Args:
+      num_classes: `int` number of mask classification categories. The number of
+        classes does not include background class.
+      level: `int` feature level used for prediction.
+      num_convs: `int` number of stacked convolution before the last prediction
+        layer.
+    """
+    self._num_classes = num_classes
+    self._level = level
+    self._num_convs = num_convs
+
+  def __call__(self,
+               features,
+               is_training,
+               batch_norm_relu=nn_ops.BatchNormRelu()):
+    """Generate logits for semantic segmentation.
+
+    Args:
+      features: a float Tensor of shape [batch_size, num_instances,
+        mask_crop_size, mask_crop_size, num_downsample_channels]. This is the
+        instance feature crop.
+      is_training: a bool indicating whether in training mode.
+      batch_norm_relu: an operation that includes a batch normalization layer
+        followed by a relu layer(optional).
+
+    Returns:
+      logits: semantic segmentation logits as a float Tensor of shape
+        [batch_size, height, width, num_classes].
+    """
+    features = features[self._level]
+    feat_dim = features.get_shape().as_list()[-1]
+    with tf.variable_scope('segmentation', reuse=tf.AUTO_REUSE):
+      for i in range(self._num_convs):
+        features = tf.layers.conv2d(
+            features,
+            feat_dim,
+            kernel_size=(3, 3),
+            bias_initializer=tf.zeros_initializer(),
+            kernel_initializer=tf.random_normal_initializer(stddev=0.01),
+            activation=None,
+            padding='same',
+            name='class-%d' % i)
+        features = batch_norm_relu(
+            features,
+            is_training=is_training,
+            name='class-%d-bn' % i)
+      logits = tf.layers.conv2d(
+          features,
+          self._num_classes,  # This include background class 0.
+          kernel_size=(1, 1),
+          bias_initializer=tf.zeros_initializer(),
+          kernel_initializer=tf.random_normal_initializer(stddev=0.01),
+          activation=None,
+          padding='same')
+      return logits
