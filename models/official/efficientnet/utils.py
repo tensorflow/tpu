@@ -21,11 +21,12 @@ from __future__ import print_function
 import json
 import os
 import sys
-import numpy as np
-import tensorflow as tf
 
-from tensorflow.contrib.tpu.python.ops import tpu_ops
-from tensorflow.contrib.tpu.python.tpu import tpu_function
+from absl import logging
+import numpy as np
+import tensorflow.compat.v1 as tf
+
+from tensorflow.python.tpu import tpu_function  # pylint:disable=g-direct-tensorflow-import
 
 
 def build_learning_rate(initial_lr,
@@ -52,7 +53,7 @@ def build_learning_rate(initial_lr,
     assert False, 'Unknown lr_decay_type : %s' % lr_decay_type
 
   if warmup_epochs:
-    tf.logging.info('Learning rate warmup_epochs: %d' % warmup_epochs)
+    logging.info('Learning rate warmup_epochs: %d', warmup_epochs)
     warmup_steps = int(warmup_epochs * steps_per_epoch)
     warmup_lr = (
         initial_lr * tf.cast(global_step, tf.float32) / tf.cast(
@@ -69,18 +70,18 @@ def build_optimizer(learning_rate,
                     momentum=0.9):
   """Build optimizer."""
   if optimizer_name == 'sgd':
-    tf.logging.info('Using SGD optimizer')
+    logging.info('Using SGD optimizer')
     optimizer = tf.train.GradientDescentOptimizer(learning_rate=learning_rate)
   elif optimizer_name == 'momentum':
-    tf.logging.info('Using Momentum optimizer')
+    logging.info('Using Momentum optimizer')
     optimizer = tf.train.MomentumOptimizer(
         learning_rate=learning_rate, momentum=momentum)
   elif optimizer_name == 'rmsprop':
-    tf.logging.info('Using RMSProp optimizer')
+    logging.info('Using RMSProp optimizer')
     optimizer = tf.train.RMSPropOptimizer(learning_rate, decay, momentum,
                                           epsilon)
   else:
-    tf.logging.fatal('Unknown optimizer:', optimizer_name)
+    logging.fatal('Unknown optimizer: %s', optimizer_name)
 
   return optimizer
 
@@ -106,7 +107,7 @@ class TpuBatchNormalization(tf.layers.BatchNormalization):
       group_assignment = [[
           x for x in range(num_shards) if x // num_shards_per_group == y
       ] for y in range(num_groups)]
-    return tpu_ops.cross_replica_sum(t, group_assignment) / tf.cast(
+    return tf.tpu.cross_replica_sum(t, group_assignment) / tf.cast(
         num_shards_per_group, t.dtype)
 
   def _moments(self, inputs, reduction_axes, keep_dims):
@@ -119,8 +120,8 @@ class TpuBatchNormalization(tf.layers.BatchNormalization):
       num_shards_per_group = 1
     else:
       num_shards_per_group = max(8, num_shards // 8)
-    tf.logging.info('TpuBatchNormalization with num_shards_per_group %s',
-                    num_shards_per_group)
+    logging.info('TpuBatchNormalization with num_shards_per_group %s',
+                 num_shards_per_group)
     if num_shards_per_group > 1:
       # Compute variance using: Var[X]= E[X^2] - E[X]^2.
       shard_square_of_mean = tf.math.square(shard_mean)
@@ -170,12 +171,12 @@ def archive_ckpt(ckpt_eval, ckpt_objective, ckpt_path):
     with tf.gfile.GFile(saved_objective_path, 'r') as f:
       saved_objective = float(f.read())
   if saved_objective > ckpt_objective:
-    tf.logging.info('Ckpt %s is worse than %s', ckpt_objective, saved_objective)
+    logging.info('Ckpt %s is worse than %s', ckpt_objective, saved_objective)
     return False
 
   filenames = tf.gfile.Glob(ckpt_path + '.*')
   if filenames is None:
-    tf.logging.info('No files to copy for checkpoint %s', ckpt_path)
+    logging.info('No files to copy for checkpoint %s', ckpt_path)
     return False
 
   # Clear the old folder.
@@ -201,7 +202,7 @@ def archive_ckpt(ckpt_eval, ckpt_objective, ckpt_path):
   with tf.gfile.GFile(saved_objective_path, 'w') as f:
     f.write('%f' % ckpt_objective)
 
-  tf.logging.info('Copying checkpoint %s to %s', ckpt_path, dst_dir)
+  logging.info('Copying checkpoint %s to %s', ckpt_path, dst_dir)
   return True
 
 

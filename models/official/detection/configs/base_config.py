@@ -16,14 +16,14 @@
 
 # pylint: disable=line-too-long
 
-# For ResNet-50, this freezes the variables of the first conv1 and conv2_x
+# For ResNet, this freezes the variables of the first conv1 and conv2_x
 # layers [1], which leads to higher training speed and slightly better testing
 # accuracy. The intuition is that the low-level architecture (e.g., ResNet-50)
 # is able to capture low-level features such as edges; therefore, it does not
 # need to be fine-tuned for the detection task.
 # Note that we need to trailing `/` to avoid the incorrect match.
 # [1]: https://github.com/facebookresearch/Detectron/blob/master/detectron/core/config.py#L198
-RESNET50_FROZEN_VAR_PREFIX = r'(resnet\d+/)conv2d(|_([1-9]|10))\/'
+RESNET_FROZEN_VAR_PREFIX = r'(resnet\d+)\/(conv2d(|_([1-9]|10))|batch_normalization(|_([1-9]|10)))\/'
 
 BASE_CFG = {
     'model_dir': '',
@@ -52,7 +52,7 @@ BASE_CFG = {
             'path': '',
             'prefix': '',
         },
-        'frozen_variable_prefix': RESNET50_FROZEN_VAR_PREFIX,
+        'frozen_variable_prefix': RESNET_FROZEN_VAR_PREFIX,
         'train_file_pattern': '',
         'transpose_input': True,
         'l2_weight_decay': 0.0001,

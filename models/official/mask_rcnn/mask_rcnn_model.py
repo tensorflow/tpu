@@ -563,7 +563,8 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
     if params['use_host_call']:
       def host_call_fn(global_step, total_loss, total_rpn_loss, rpn_score_loss,
                        rpn_box_loss, total_fast_rcnn_loss, fast_rcnn_class_loss,
-                       fast_rcnn_box_loss, mask_loss, learning_rate):
+                       fast_rcnn_box_loss, mask_loss, l2_regularization_loss,
+                       learning_rate):
         """Training host call. Creates scalar summaries for training metrics.
 
         This function is executed on the CPU and should not directly reference
@@ -592,6 +593,8 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
             training Mask-RCNN box loss.
           mask_loss: `Tensor` with shape `[batch, ]` for the training Mask-RCNN
             mask loss.
+          l2_regularization_loss: `Tensor` with shape `[batch, ]` for the
+            regularization loss.
           learning_rate: `Tensor` with shape `[batch, ]` for the learning_rate.
 
         Returns:
@@ -630,6 +633,10 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
               tf.contrib.summary.scalar(
                   'mask_loss', tf.reduce_mean(mask_loss), step=global_step)
             tf.contrib.summary.scalar(
+                'l2_regularization_loss',
+                tf.reduce_mean(l2_regularization_loss),
+                step=global_step)
+            tf.contrib.summary.scalar(
                 'learning_rate', tf.reduce_mean(learning_rate),
                 step=global_step)
 
@@ -649,12 +656,13 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
       fast_rcnn_class_loss_t = tf.reshape(fast_rcnn_class_loss, [1])
       fast_rcnn_box_loss_t = tf.reshape(fast_rcnn_box_loss, [1])
       mask_loss_t = tf.reshape(mask_loss, [1])
+      l2_regularization_loss = tf.reshape(l2_regularization_loss, [1])
       learning_rate_t = tf.reshape(learning_rate, [1])
       host_call = (host_call_fn,
                    [global_step_t, total_loss_t, total_rpn_loss_t,
                     rpn_score_loss_t, rpn_box_loss_t, total_fast_rcnn_loss_t,
                     fast_rcnn_class_loss_t, fast_rcnn_box_loss_t,
-                    mask_loss_t, learning_rate_t])
+                    mask_loss_t, l2_regularization_loss, learning_rate_t])
   else:
     train_op = None
     scaffold_fn = None

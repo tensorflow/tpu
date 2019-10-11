@@ -25,7 +25,8 @@ from __future__ import print_function
 
 from absl import app
 from absl import flags
-import tensorflow as tf
+from absl import logging
+import tensorflow.compat.v1 as tf
 
 import efficientnet_builder
 import preprocessing
@@ -104,7 +105,7 @@ FLAGS = flags.FLAGS
 
 
 def main(unused_argv):
-  tf.logging.set_verbosity(tf.logging.ERROR)
+  logging.set_verbosity(logging.ERROR)
   driver = get_eval_driver(FLAGS.model_name, FLAGS.include_background_label)
   if FLAGS.runmode == 'examples':
     # Run inference for an example image.

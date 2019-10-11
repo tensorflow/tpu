@@ -154,19 +154,16 @@ class ShowAndTellModel(object):
       target_seqs = None
       input_mask = None
     else:
-
       def _load_example(serialized_example):
         encoded_image, caption = input_ops.parse_example(
             serialized_example,
             image_feature=self.config.image_feature_name,
             caption_feature=self.config.caption_feature_name)
         image = self.load_image(encoded_image)
+
         # strings.split expects a batch
-        words = tf.strings.split(tf.reshape(caption, [1]), sep=" ")
-        words = tf.sparse_tensor_to_dense(words, default_value="")[0]
-        word_idx = tf.strings.to_hash_bucket(words, self.config.vocab_size)
         input_seqs, target_seqs, input_mask = input_ops.pad_caption_to_input(
-            word_idx)
+            caption)
         return image, input_seqs, target_seqs, input_mask
 
       def _load_dataset(filename):
@@ -198,14 +195,7 @@ class ShowAndTellModel(object):
     self.input_mask = input_mask
 
   def build_image_embeddings(self, images):
-    """Builds the image model subgraph and generates image embeddings.
-
-    Inputs:
-      images
-
-    Outputs:
-      self.image_embeddings
-    """
+    """Builds the image model subgraph and generates image embeddings."""
     images = self.distort_images(images, tf.train.get_or_create_global_step())
     inception_output = image_embedding.inception_v3(
         images,

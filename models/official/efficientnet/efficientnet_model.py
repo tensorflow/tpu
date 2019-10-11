@@ -25,10 +25,12 @@ from __future__ import print_function
 
 import collections
 import math
+
+from absl import logging
 import numpy as np
 import six
-from six.moves import xrange  # pylint: disable=redefined-builtin
-import tensorflow as tf
+from six.moves import xrange
+import tensorflow.compat.v1 as tf
 
 import utils
 
@@ -56,7 +58,7 @@ def conv_kernel_initializer(shape, dtype=None, partition_info=None):
   The main difference with tf.variance_scaling_initializer is that
   tf.variance_scaling_initializer uses a truncated normal with an uncorrected
   standard deviation, whereas here we use a normal distribution. Similarly,
-  tf.contrib.layers.variance_scaling_initializer uses a truncated normal with
+  tf.initializers.variance_scaling uses a truncated normal with
   a corrected standard deviation.
 
   Args:
@@ -145,7 +147,7 @@ def round_filters(filters, global_params):
   # Make sure that round down does not go down by more than 10%.
   if new_filters < 0.9 * filters:
     new_filters += divisor
-  tf.logging.info('round_filter input={} output={}'.format(orig_f, new_filters))
+  logging.info('round_filter input=%s output=%s', orig_f, new_filters)
   return int(new_filters)
 
 
@@ -302,8 +304,8 @@ class MBConvBlock(tf.keras.layers.Layer):
     """
     se_tensor = tf.reduce_mean(input_tensor, self._spatial_dims, keepdims=True)
     se_tensor = self._se_expand(self._relu_fn(self._se_reduce(se_tensor)))
-    tf.logging.info('Built Squeeze and Excitation with tensor shape: %s' %
-                    (se_tensor.shape))
+    logging.info('Built Squeeze and Excitation with tensor shape: %s',
+                 (se_tensor.shape))
     return tf.sigmoid(se_tensor) * input_tensor
 
   def call(self, inputs, training=True, drop_connect_rate=None):
@@ -317,9 +319,10 @@ class MBConvBlock(tf.keras.layers.Layer):
     Returns:
       A output tensor.
     """
-    tf.logging.info('Block input: %s shape: %s' % (inputs.name, inputs.shape))
-    tf.logging.info('Block input depth: %s output depth: %s' % (
-        self._block_args.input_filters, self._block_args.output_filters))
+    logging.info('Block input: %s shape: %s', inputs.name, inputs.shape)
+    logging.info('Block input depth: %s output depth: %s',
+                 self._block_args.input_filters,
+                 self._block_args.output_filters)
 
     x = inputs
     # creates conv 2x2 kernel
@@ -327,20 +330,20 @@ class MBConvBlock(tf.keras.layers.Layer):
       with tf.variable_scope('super_pixel'):
         x = self._relu_fn(
             self._bnsp(self._superpixel(x), training=training))
-      tf.logging.info(
-          'Block start with SuperPixel: %s shape: %s' % (x.name, x.shape))
+      logging.info(
+          'Block start with SuperPixel: %s shape: %s', x.name, x.shape)
 
     if self._block_args.fused_conv:
       x = self._relu_fn(self._bn1(self._fused_conv(x), training=training))
-      tf.logging.info('Conv2D: %s shape: %s' % (x.name, x.shape))
+      logging.info('Conv2D: %s shape: %s', x.name, x.shape)
     else:
       if self._block_args.expand_ratio != 1:
         x = self._relu_fn(self._bn0(self._expand_conv(x),
                                     training=training))
-        tf.logging.info('Expand: %s shape: %s' % (x.name, x.shape))
+        logging.info('Expand: %s shape: %s', x.name, x.shape)
 
       x = self._relu_fn(self._bn1(self._depthwise_conv(x), training=training))
-      tf.logging.info('DWConv: %s shape: %s' % (x.name, x.shape))
+      logging.info('DWConv: %s shape: %s', x.name, x.shape)
 
     if self._has_se:
       with tf.variable_scope('se'):
@@ -357,7 +360,7 @@ class MBConvBlock(tf.keras.layers.Layer):
         if drop_connect_rate:
           x = utils.drop_connect(x, training, drop_connect_rate)
         x = tf.add(x, inputs)
-    tf.logging.info('Project: %s shape: %s' % (x.name, x.shape))
+    logging.info('Project: %s shape: %s', x.name, x.shape)
     return x
 
 
@@ -406,12 +409,12 @@ class MBConvBlockWithoutDepthwise(MBConvBlock):
     Returns:
       A output tensor.
     """
-    tf.logging.info('Block input: %s shape: %s' % (inputs.name, inputs.shape))
+    logging.info('Block input: %s shape: %s', inputs.name, inputs.shape)
     if self._block_args.expand_ratio != 1:
       x = self._relu_fn(self._bn0(self._expand_conv(inputs), training=training))
     else:
       x = inputs
-    tf.logging.info('Expand: %s shape: %s' % (x.name, x.shape))
+    logging.info('Expand: %s shape: %s', x.name, x.shape)
 
     self.endpoints = {'expansion_output': x}
 
@@ -424,7 +427,7 @@ class MBConvBlockWithoutDepthwise(MBConvBlock):
         if drop_connect_rate:
           x = utils.drop_connect(x, training, drop_connect_rate)
         x = tf.add(x, inputs)
-    tf.logging.info('Project: %s shape: %s' % (x.name, x.shape))
+    logging.info('Project: %s shape: %s', x.name, x.shape)
     return x
 
 
@@ -587,7 +590,7 @@ class Model(tf.keras.Model):
     with tf.variable_scope('stem'):
       outputs = self._relu_fn(
           self._bn0(self._conv_stem(inputs), training=training))
-    tf.logging.info('Built stem layers with output shape: %s' % outputs.shape)
+    logging.info('Built stem layers with output shape: %s', outputs.shape)
     self.endpoints['stem'] = outputs
 
     # Calls blocks.
@@ -608,7 +611,7 @@ class Model(tf.keras.Model):
         drop_rate = self._global_params.drop_connect_rate
         if drop_rate:
           drop_rate *= float(idx) / len(self._blocks)
-          tf.logging.info('block_%s drop_connect_rate: %s' % (idx, drop_rate))
+          logging.info('block_%s drop_connect_rate: %s', idx, drop_rate)
         outputs = block.call(
             outputs, training=training, drop_connect_rate=drop_rate)
         self.endpoints['block_%s' % idx] = outputs

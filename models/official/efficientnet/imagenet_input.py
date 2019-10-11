@@ -22,7 +22,9 @@ import abc
 import collections
 import functools
 import os
-import tensorflow as tf
+
+from absl import logging
+import tensorflow.compat.v1 as tf
 
 import preprocessing
 
@@ -207,7 +209,7 @@ class ImageNetTFExampleInput(object):
     """
     # Retrieves the batch size for the current shard. The # of shards is
     # computed according to the input pipeline deployment. See
-    # tf.contrib.tpu.RunConfig for details.
+    # tf.estimator.tpu.RunConfig for details.
     batch_size = params['batch_size']
 
     if 'context' in params:
@@ -230,7 +232,7 @@ class ImageNetTFExampleInput(object):
     # batch size. As long as this validation is done with consistent batch size,
     # exactly the same images will be used.
     dataset = dataset.apply(
-        tf.contrib.data.map_and_batch(
+        tf.data.experimental.map_and_batch(
             self.dataset_parser, batch_size=batch_size,
             num_parallel_batches=self.num_cores, drop_remainder=True))
 
@@ -250,7 +252,7 @@ class ImageNetTFExampleInput(object):
     dataset = dataset.map(functools.partial(self.set_shapes, batch_size))
 
     # Prefetch overlaps in-feed with training
-    dataset = dataset.prefetch(tf.contrib.data.AUTOTUNE)
+    dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
     return dataset
 
 
@@ -349,7 +351,7 @@ class ImageNetInput(ImageNetTFExampleInput):
   def make_source_dataset(self, index, num_hosts):
     """See base class."""
     if not self.data_dir:
-      tf.logging.info('Undefined data_dir implies null input')
+      logging.info('Undefined data_dir implies null input')
       return tf.data.Dataset.range(1).repeat().map(self._get_null_input)
 
     # Shuffle the filenames to ensure better randomization.
@@ -372,12 +374,12 @@ class ImageNetInput(ImageNetTFExampleInput):
 
     # Read the data from disk in parallel
     dataset = dataset.apply(
-        tf.contrib.data.parallel_interleave(
+        tf.data.experimental.parallel_interleave(
             fetch_dataset, cycle_length=self.num_parallel_calls, sloppy=True))
 
     if self.cache:
       dataset = dataset.cache().apply(
-          tf.contrib.data.shuffle_and_repeat(1024 * 16))
+          tf.data.experimental.shuffle_and_repeat(1024 * 16))
     else:
       dataset = dataset.shuffle(1024)
     return dataset
@@ -437,8 +439,14 @@ class ImageNetBigtableInput(ImageNetTFExampleInput):
 
   def make_source_dataset(self, index, num_hosts):
     """See base class."""
+    try:
+      from tensorflow.contrib.cloud import BigtableClient  # pylint: disable=g-import-not-at-top
+    except ImportError as e:
+      logging.exception('Bigtable is not supported in TensorFlow 2.x.')
+      raise e
+
     data = self.selection
-    client = tf.contrib.cloud.BigtableClient(data.project, data.instance)
+    client = BigtableClient(data.project, data.instance)
     table = client.table(data.table)
     ds = table.parallel_scan_prefix(data.prefix,
                                     columns=[(data.column_family,

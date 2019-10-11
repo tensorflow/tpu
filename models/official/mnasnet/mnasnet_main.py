@@ -22,8 +22,10 @@ import os
 import time
 from absl import app
 from absl import flags
+from absl import logging
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+import tensorflow.compat.v2 as tf2
 
 from hyperparameters import common_hparams_flags
 from hyperparameters import common_tpu_flags
@@ -34,11 +36,7 @@ import mnas_utils
 import mnasnet_models
 from configs import mnasnet_config
 from mixnet import mixnet_builder
-from tensorflow.contrib.tpu.python.tpu import async_checkpoint
-from tensorflow.contrib.training.python.training import evaluation
-from tensorflow.core.protobuf import rewriter_config_pb2
-from tensorflow.python.estimator import estimator
-from tensorflow.python.keras import backend as K
+from tensorflow.core.protobuf import rewriter_config_pb2  # pylint: disable=g-direct-tensorflow-import
 
 common_tpu_flags.define_common_tpu_flags()
 common_hparams_flags.define_common_hparams_flags()
@@ -278,7 +276,7 @@ def build_model_fn(features, labels, mode, params):
   """
   is_training = (mode == tf.estimator.ModeKeys.TRAIN)
   # This is essential, if using a keras-derived model.
-  K.set_learning_phase(is_training)
+  tf.keras.backend.set_learning_phase(is_training)
 
   if isinstance(features, dict):
     features = features['feature']
@@ -347,21 +345,27 @@ def build_model_fn(features, labels, mode, params):
       raise ValueError('Unknown model name {}'.format(model_name))
 
   if params['precision'] == 'bfloat16':
-    with tf.contrib.tpu.bfloat16_scope():
+    with tf.tpu.bfloat16_scope():
       logits, _ = _build_model(params['model_name'])
     logits = tf.cast(logits, tf.float32)
   else:  # params['precision'] == 'float32'
     logits, _ = _build_model(params['model_name'])
 
   if params['quantized_training']:
+    try:
+      from tensorflow.contrib import quantize  # pylint: disable=g-import-not-at-top
+    except ImportError as e:
+      logging.exception('Quantized training is not supported in TensorFlow 2.x')
+      raise e
+
     if is_training:
       tf.logging.info('Adding fake quantization ops for training.')
-      tf.contrib.quantize.create_training_graph(
+      quantize.create_training_graph(
           quant_delay=int(params['steps_per_epoch'] *
                           FLAGS.quantization_delay_epochs))
     else:
       tf.logging.info('Adding fake quantization ops for evaluation.')
-      tf.contrib.quantize.create_eval_graph()
+      quantize.create_eval_graph()
 
   if mode == tf.estimator.ModeKeys.PREDICT:
     scaffold_fn = None
@@ -385,7 +389,7 @@ def build_model_fn(features, labels, mode, params):
         'classes': tf.argmax(logits, axis=1),
         'probabilities': tf.nn.softmax(logits, name='softmax_tensor')
     }
-    return tf.contrib.tpu.TPUEstimatorSpec(
+    return tf.estimator.tpu.TPUEstimatorSpec(
         mode=mode,
         predictions=predictions,
         export_outputs={
@@ -431,7 +435,7 @@ def build_model_fn(features, labels, mode, params):
       # When using TPU, wrap the optimizer with CrossShardOptimizer which
       # handles synchronization details between different TPU cores. To the
       # user, this should look like regular synchronous training.
-      optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
+      optimizer = tf.tpu.CrossShardOptimizer(optimizer)
 
     # Batch normalization requires UPDATE_OPS to be added as a dependency to
     # the train operation.
@@ -453,7 +457,7 @@ def build_model_fn(features, labels, mode, params):
         This function is executed on the CPU and should not directly reference
         any Tensors in the rest of the `model_fn`. To pass Tensors from the
         model to the `metric_fn`, provide as part of the `host_call`. See
-        https://www.tensorflow.org/api_docs/python/tf/contrib/tpu/TPUEstimatorSpec
+        https://www.tensorflow.org/api_docs/python/tf/estimator/tpu/TPUEstimatorSpec
         for more information.
 
         Arguments should match the list of `Tensor` objects passed as the second
@@ -473,15 +477,15 @@ def build_model_fn(features, labels, mode, params):
         # one TPU loop is finished, setting max_queue value to the same as
         # number of iterations will make the summary writer only flush the
         # data to storage once per loop.
-        with tf.contrib.summary.create_file_writer(
+        with tf2.summary.create_file_writer(
             FLAGS.model_dir,
             max_queue=params['iterations_per_loop']).as_default():
-          with tf.contrib.summary.always_record_summaries():
-            tf.contrib.summary.scalar('loss', loss[0], step=gs)
-            tf.contrib.summary.scalar('learning_rate', lr[0], step=gs)
-            tf.contrib.summary.scalar('current_epoch', ce[0], step=gs)
+          with tf2.summary.record_if(True):
+            tf2.summary.scalar('loss', loss[0], step=gs)
+            tf2.summary.scalar('learning_rate', lr[0], step=gs)
+            tf2.summary.scalar('current_epoch', ce[0], step=gs)
 
-            return tf.contrib.summary.all_summary_ops()
+            return tf.summary.all_v2_summary_ops()
 
       # To log the loss, current learning rate, and epoch for Tensorboard, the
       # summary op needs to be run on the host CPU via host_call. host_call
@@ -509,7 +513,7 @@ def build_model_fn(features, labels, mode, params):
       This function is executed on the CPU and should not directly reference
       any Tensors in the rest of the `model_fn`. To pass Tensors from the model
       to the `metric_fn`, provide as part of the `eval_metrics`. See
-      https://www.tensorflow.org/api_docs/python/tf/contrib/tpu/TPUEstimatorSpec
+      https://www.tensorflow.org/api_docs/python/tf/estimator/tpu/TPUEstimatorSpec
       for more information.
 
       Arguments should match the list of `Tensor` objects passed as the second
@@ -566,7 +570,7 @@ def build_model_fn(features, labels, mode, params):
 
     scaffold_fn = eval_scaffold
 
-  return tf.contrib.tpu.TPUEstimatorSpec(
+  return tf.estimator.tpu.TPUEstimatorSpec(
       mode=mode,
       loss=loss,
       train_op=train_op,
@@ -692,10 +696,8 @@ def main(unused_argv):
   params.lock()
 
   if FLAGS.tpu or params.use_tpu:
-    tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
-        FLAGS.tpu,
-        zone=FLAGS.tpu_zone,
-        project=FLAGS.gcp_project)
+    tpu_cluster_resolver = tf.distribute.cluster_resolver.TPUClusterResolver(
+        FLAGS.tpu, zone=FLAGS.tpu_zone, project=FLAGS.gcp_project)
   else:
     tpu_cluster_resolver = None
 
@@ -703,7 +705,7 @@ def main(unused_argv):
     save_checkpoints_steps = None
   else:
     save_checkpoints_steps = max(100, params.iterations_per_loop)
-  config = tf.contrib.tpu.RunConfig(
+  config = tf.estimator.tpu.RunConfig(
       cluster=tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
       save_checkpoints_steps=save_checkpoints_steps,
@@ -712,9 +714,9 @@ def main(unused_argv):
           graph_options=tf.GraphOptions(
               rewrite_options=rewriter_config_pb2.RewriterConfig(
                   disable_meta_optimizer=True))),
-      tpu_config=tf.contrib.tpu.TPUConfig(
+      tpu_config=tf.estimator.tpu.TPUConfig(
           iterations_per_loop=params.iterations_per_loop,
-          per_host_input_for_training=tf.contrib.tpu.InputPipelineConfig
+          per_host_input_for_training=tf.estimator.tpu.InputPipelineConfig
           .PER_HOST_V2))  # pylint: disable=line-too-long
 
   # Validates Flags.
@@ -725,7 +727,7 @@ def main(unused_argv):
         (params.precision, params.use_keras))
 
   # Initializes model parameters.
-  mnasnet_est = tf.contrib.tpu.TPUEstimator(
+  mnasnet_est = tf.estimator.tpu.TPUEstimator(
       use_tpu=params.use_tpu,
       model_fn=build_model_fn,
       config=config,
@@ -769,7 +771,7 @@ def main(unused_argv):
   if FLAGS.mode == 'eval':
     eval_steps = params.num_eval_images // params.eval_batch_size
     # Run evaluation when there's a new checkpoint
-    for ckpt in evaluation.checkpoints_iterator(
+    for ckpt in tf.train.checkpoints_iterator(
         FLAGS.model_dir, timeout=FLAGS.eval_timeout):
       tf.logging.info('Starting to evaluate.')
       try:
@@ -801,8 +803,11 @@ def main(unused_argv):
     if FLAGS.export_dir:
       export(mnasnet_est, FLAGS.export_dir, params, FLAGS.post_quantize)
   else:  # FLAGS.mode == 'train' or FLAGS.mode == 'train_and_eval'
-    current_step = estimator._load_global_step_from_checkpoint_dir(  # pylint: disable=protected-access
-        FLAGS.model_dir)
+    try:
+      current_step = tf.train.load_variable(FLAGS.model_dir,
+                                            tf.GraphKeys.GLOBAL_STEP)
+    except (TypeError, ValueError, tf.errors.NotFoundError):
+      current_step = 0
 
     tf.logging.info(
         'Training for %d steps (%.2f epochs in total). Current'
@@ -814,6 +819,13 @@ def main(unused_argv):
     if FLAGS.mode == 'train':
       hooks = []
       if params.use_async_checkpointing:
+        try:
+          from tensorflow.contrib.tpu.python.tpu import async_checkpoint  # pylint: disable=g-import-not-at-top
+        except ImportError as e:
+          logging.exception(
+              'Async checkpointing is not supported in TensorFlow 2.x')
+          raise e
+
         hooks.append(
             async_checkpoint.AsyncCheckpointSaverHook(
                 checkpoint_dir=FLAGS.model_dir,
@@ -859,4 +871,5 @@ def main(unused_argv):
 
 if __name__ == '__main__':
   tf.logging.set_verbosity(tf.logging.INFO)
+  tf.disable_v2_behavior()
   app.run(main)
