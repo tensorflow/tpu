@@ -158,10 +158,6 @@ class ImageNetInput(object):
 
     options = tf.data.Options()
     if self.is_training:
-      # Use a private thread pool and limit intra-op parallelism. Enable
-      # non-determinism only for training.
-      options.experimental_threading.max_intra_op_parallelism = 1
-      options.experimental_threading.private_threadpool_size = 16
       options.experimental_deterministic = False
 
     # Few ops are marked stateful because they introduce randomness in the
