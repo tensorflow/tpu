@@ -110,15 +110,18 @@ def main(argv):
   # Prepares input functions for train and eval.
   train_input_fn = input_reader.InputFn(
       params.train.train_file_pattern, params, mode=ModeKeys.TRAIN)
-  eval_input_fn = input_reader.InputFn(
-      params.eval.eval_file_pattern, params, mode=ModeKeys.PREDICT_WITH_GT)
+  if params.eval.type == 'customized':
+    eval_input_fn = input_reader.InputFn(
+        params.eval.eval_file_pattern, params, mode=ModeKeys.EVAL)
+  else:
+    eval_input_fn = input_reader.InputFn(
+        params.eval.eval_file_pattern, params, mode=ModeKeys.PREDICT_WITH_GT)
 
   # Runs the model.
   if FLAGS.mode == 'train':
     save_config(params, params.model_dir)
     executor.train(train_input_fn, params.train.total_steps)
     if FLAGS.eval_after_training:
-      executor.prepare_evaluation()
       executor.evaluate(
           eval_input_fn,
           params.eval.eval_samples // params.eval.eval_batch_size)
@@ -128,7 +131,6 @@ def main(argv):
       tf.logging.info('Terminating eval after %d seconds of no checkpoints' %
                       params.eval.eval_timeout)
       return True
-    executor.prepare_evaluation()
     # Runs evaluation when there's a new checkpoint.
     for ckpt in tf.contrib.training.checkpoints_iterator(
         params.model_dir,
@@ -158,7 +160,6 @@ def main(argv):
 
   elif FLAGS.mode == 'train_and_eval':
     save_config(params, params.model_dir)
-    executor.prepare_evaluation()
     num_cycles = int(params.train.total_steps / params.eval.num_steps_per_eval)
     for cycle in range(num_cycles):
       tf.logging.info('Start training cycle %d.' % cycle)

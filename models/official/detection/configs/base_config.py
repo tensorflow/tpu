@@ -88,6 +88,7 @@ BASE_CFG = {
             'batch_norm_momentum': 0.997,
             'batch_norm_epsilon': 1e-4,
             'batch_norm_trainable': True,
+            'use_sync_bn': False,
         },
     },
     'fpn': {
@@ -99,6 +100,7 @@ BASE_CFG = {
             'batch_norm_momentum': 0.997,
             'batch_norm_epsilon': 1e-4,
             'batch_norm_trainable': True,
+            'use_sync_bn': False,
         },
     },
     'nasfpn': {
@@ -115,6 +117,7 @@ BASE_CFG = {
             'batch_norm_momentum': 0.997,
             'batch_norm_epsilon': 1e-4,
             'batch_norm_trainable': True,
+            'use_sync_bn': False,
         },
     },
     'enable_summary': False,

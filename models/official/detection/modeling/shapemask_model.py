@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Model definition for the RetinaNet Model."""
+"""Model definition for the ShapeMask Model."""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -25,66 +25,99 @@ from modeling import base_model
 from modeling import losses
 from modeling.architecture import factory
 from ops import postprocess_ops
-from utils import benchmark_utils
+from utils import box_utils
 
 
-class RetinanetModel(base_model.Model):
-  """RetinaNet model function."""
+class ShapeMaskModel(base_model.Model):
+  """ShapeMask model function."""
 
   def __init__(self, params):
-    super(RetinanetModel, self).__init__(params)
+    super(ShapeMaskModel, self).__init__(params)
 
     # Architecture generators.
     self._backbone_fn = factory.backbone_generator(params)
     self._fpn_fn = factory.multilevel_features_generator(params)
-    self._head_fn = factory.retinanet_head_generator(params.retinanet_head)
+    self._retinanet_head_fn = factory.retinanet_head_generator(
+        params.retinanet_head)
+    self._shape_prior_head_fn = factory.shapeprior_head_generator(
+        params.shapemask_head)
+    self._coarse_mask_fn = factory.coarsemask_head_generator(
+        params.shapemask_head)
+    self._fine_mask_fn = factory.finemask_head_generator(params.shapemask_head)
+    self._outer_box_scale = params.shapemask_parser.outer_box_scale
 
     # Loss function.
     self._cls_loss_fn = losses.RetinanetClassLoss(params.retinanet_loss)
     self._box_loss_fn = losses.RetinanetBoxLoss(params.retinanet_loss)
     self._box_loss_weight = params.retinanet_loss.box_loss_weight
-
+    # Mask loss function.
+    self._shapemask_prior_loss_fn = losses.ShapemaskMseLoss()
+    self._shapemask_loss_fn = losses.ShapemaskLoss()
+    self._shape_prior_loss_weight = (
+        params.shapemask_loss.shape_prior_loss_weight)
+    self._coarse_mask_loss_weight = (
+        params.shapemask_loss.coarse_mask_loss_weight)
+    self._fine_mask_loss_weight = (
+        params.shapemask_loss.fine_mask_loss_weight)
     # Predict function.
     self._generate_detections_fn = postprocess_ops.GenerateOneStageDetections(
         params.postprocess)
 
-    self._transpose_input = params.train.transpose_input
-
   def build_outputs(self, features, labels, mode):
-    backbone_features = self._backbone_fn(
-        features, is_training=(mode == mode_keys.TRAIN))
-    fpn_features = self._fpn_fn(
-        backbone_features, is_training=(mode == mode_keys.TRAIN))
-    cls_outputs, box_outputs = self._head_fn(
-        fpn_features, is_training=(mode == mode_keys.TRAIN))
-    model_outputs = {
-        'cls_outputs': cls_outputs,
-        'box_outputs': box_outputs,
-    }
-
-    # Print number of parameters and FLOPS in model.
-    batch_size, _, _, _ = backbone_features.values()[0].get_shape().as_list()
-    benchmark_utils.compute_model_statistics(
-        batch_size, is_training=(mode == mode_keys.TRAIN))
-
-    if mode != mode_keys.TRAIN:
+    is_training = (mode == mode_keys.TRAIN)
+    backbone_features = self._backbone_fn(features, is_training=is_training)
+    fpn_features = self._fpn_fn(backbone_features, is_training=is_training)
+    cls_outputs, box_outputs = self._retinanet_head_fn(
+        fpn_features, is_training=is_training)
+    # Shapemask mask prediction.
+    if is_training:
+      boxes = labels['mask_boxes']
+      outer_boxes = labels['mask_outer_boxes']
+      classes = labels['mask_classes']
+    else:
       boxes, scores, classes, valid_detections = self._generate_detections_fn(
           box_outputs, cls_outputs, labels['anchor_boxes'],
           labels['image_info'][:, 1:2, :])
+      # Use list as input to avoide segmentation fault on TPU.
+      feature_size = features.get_shape().as_list()[1:3]
+      outer_boxes = box_utils.compute_outer_boxes(
+          tf.reshape(boxes, [-1, 4]), feature_size, scale=self._outer_box_scale)
+      outer_boxes = tf.reshape(outer_boxes, tf.shape(boxes))
+      classes = tf.cast(classes, tf.int32)
+
+    instance_features, prior_masks = self._shape_prior_head_fn(
+        fpn_features,
+        boxes,
+        outer_boxes,
+        classes,
+        is_training)
+    coarse_mask_logits = self._coarse_mask_fn(instance_features,
+                                              prior_masks,
+                                              classes,
+                                              is_training)
+    fine_mask_logits = self._fine_mask_fn(instance_features,
+                                          coarse_mask_logits,
+                                          classes,
+                                          is_training)
+    model_outputs = {
+        'cls_outputs': cls_outputs,
+        'box_outputs': box_outputs,
+        'fine_mask_logits': fine_mask_logits,
+        'coarse_mask_logits': coarse_mask_logits,
+        'prior_masks': prior_masks,
+    }
+    if not is_training:
       model_outputs.update({
           'num_detections': valid_detections,
           'detection_boxes': boxes,
+          'detection_outer_boxes': outer_boxes,
+          'detection_masks': fine_mask_logits,
           'detection_classes': classes,
           'detection_scores': scores,
       })
     return model_outputs
 
   def train(self, features, labels):
-    # If the input image is transposed (from NHWC to HWCN), we need to revert it
-    # back to the original shape before it's used in the computation.
-    if self._transpose_input:
-      features = tf.transpose(features, [3, 0, 1, 2])
-
     outputs = self.model_outputs(features, labels, mode=mode_keys.TRAIN)
 
     # Adds RetinaNet model losses.
@@ -92,10 +125,32 @@ class RetinanetModel(base_model.Model):
         outputs['cls_outputs'], labels['cls_targets'], labels['num_positives'])
     box_loss = self._box_loss_fn(
         outputs['box_outputs'], labels['box_targets'], labels['num_positives'])
-    model_loss = cls_loss + self._box_loss_weight * box_loss
 
-    self.add_scalar_summary('cls_loss', cls_loss)
-    self.add_scalar_summary('box_loss', box_loss)
+    # Adds Shapemask model losses.
+    shape_prior_loss = self._shapemask_prior_loss_fn(
+        outputs['prior_masks'],
+        labels['mask_targets'],
+        labels['mask_is_valid'])
+    coarse_mask_loss = self._shapemask_loss_fn(
+        outputs['coarse_mask_logits'],
+        labels['mask_targets'],
+        labels['mask_is_valid'])
+    fine_mask_loss = self._shapemask_loss_fn(
+        outputs['fine_mask_logits'],
+        labels['fine_mask_targets'],
+        labels['mask_is_valid'])
+
+    model_loss = (
+        cls_loss + self._box_loss_weight * box_loss +
+        shape_prior_loss * self._shape_prior_loss_weight +
+        coarse_mask_loss * self._coarse_mask_loss_weight +
+        fine_mask_loss * self._fine_mask_loss_weight)
+
+    self.add_scalar_summary('retinanet_cls_loss', cls_loss)
+    self.add_scalar_summary('retinanet_box_loss', box_loss)
+    self.add_scalar_summary('shapemask_prior_loss', shape_prior_loss)
+    self.add_scalar_summary('shapemask_coarse_mask_loss', coarse_mask_loss)
+    self.add_scalar_summary('shapemask_fine_mask_loss', fine_mask_loss)
     self.add_scalar_summary('model_loss', model_loss)
 
     total_loss, train_op = self.optimize(model_loss)
@@ -126,6 +181,8 @@ class RetinanetModel(base_model.Model):
         'pred_image_info': labels['image_info'],
         'pred_num_detections': outputs['num_detections'],
         'pred_detection_boxes': outputs['detection_boxes'],
+        'pred_detection_outer_boxes': outputs['detection_outer_boxes'],
+        'pred_detection_masks': tf.sigmoid(outputs['detection_masks']),
         'pred_detection_classes': outputs['detection_classes'],
         'pred_detection_scores': outputs['detection_scores'],
     }
@@ -133,13 +190,13 @@ class RetinanetModel(base_model.Model):
     if 'groundtruths' in labels:
       predictions['pred_source_id'] = labels['groundtruths']['source_id']
       predictions['gt_source_id'] = labels['groundtruths']['source_id']
-      predictions['gt_image_info'] = labels['image_info']
-      predictions['gt_num_detections'] = (
-          labels['groundtruths']['num_detections'])
       predictions['gt_boxes'] = labels['groundtruths']['boxes']
       predictions['gt_classes'] = labels['groundtruths']['classes']
       predictions['gt_areas'] = labels['groundtruths']['areas']
       predictions['gt_is_crowds'] = labels['groundtruths']['is_crowds']
+      predictions['gt_num_detections'] = labels[
+          'groundtruths']['num_detections']
+      predictions['gt_image_info'] = labels['image_info']
 
       # Computes model loss for logging.
       cls_loss = self._cls_loss_fn(

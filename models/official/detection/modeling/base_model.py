@@ -77,6 +77,8 @@ class Model(object):
   def __init__(self, params):
     self._use_bfloat16 = params.architecture.use_bfloat16
 
+    self._l2_weight_decay = params.train.l2_weight_decay
+
     # Optimization.
     self._optimizer_fn = OptimizerFactory(params.train.optimizer)
     self._learning_rate_fn = learning_rates.learning_rate_generator(
@@ -137,8 +139,8 @@ class Model(object):
     """Given features and labels, returns a TPUEstimatorSpec for prediction."""
     pass
 
-  def optimize(self, total_loss):
-    """Returns train_op to optimize total loss."""
+  def optimize(self, model_loss):
+    """Returns total_loss and train_op for optimization."""
     global_step = tf.train.get_global_step()
     learning_rate = self._learning_rate_fn(global_step)
     self.add_scalar_summary('learning_rate', learning_rate)
@@ -155,6 +157,15 @@ class Model(object):
     train_var_list = filter_trainable_variables(
         tf.trainable_variables(), self._frozen_variable_prefix)
 
+    l2_regularization_loss = self._l2_weight_decay * tf.add_n([
+        tf.nn.l2_loss(v)
+        for v in train_var_list
+        if 'batch_normalization' not in v.name and 'bias' not in v.name
+    ])
+    self.add_scalar_summary('l2_regularization_loss', l2_regularization_loss)
+
+    total_loss = model_loss + l2_regularization_loss
+
     grads_and_vars = optimizer.compute_gradients(total_loss, train_var_list)
     if self._gradient_clip_norm > 0.0:
       grads = [gv[0] for gv in grads_and_vars]
@@ -164,14 +175,7 @@ class Model(object):
 
     with tf.control_dependencies(update_ops):
       minimize_op = optimizer.apply_gradients(grads_and_vars, global_step)
-    return minimize_op
-
-  def weight_decay_loss(self, l2_weight_decay):
-    return l2_weight_decay * tf.add_n([
-        tf.nn.l2_loss(v)
-        for v in tf.trainable_variables()
-        if 'batch_normalization' not in v.name
-    ])
+    return total_loss, minimize_op
 
   def restore_from_checkpoint(self):
     """Returns scaffold function to restore parameters from checkpoint."""

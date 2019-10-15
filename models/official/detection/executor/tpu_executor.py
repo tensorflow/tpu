@@ -114,6 +114,10 @@ class TpuExecutor(object):
         config=run_config,
         params=params.as_dict())
 
+    # Set up evaluator for coco evaluation API.
+    if params.eval.type != 'customized':
+      self.prepare_evaluation()
+
   def train(self, input_fn, steps):
     """Training the model with training data and labels in input_fn."""
     self._estimator.train(input_fn=input_fn, max_steps=steps)
@@ -147,44 +151,46 @@ class TpuExecutor(object):
     Returns:
       A dictionary as evaluation metrics.
     """
-    if not self._evaluator:
-      self.prepare_evaluation()
-
     if not checkpoint_path:
       checkpoint_path = self._estimator.latest_checkpoint()
 
-    if checkpoint_path:
-      current_step = int(os.path.basename(checkpoint_path).split('-')[1])
+    if self._params.eval.type == 'customized':
+      metrics = self._estimator.evaluate(input_fn, steps=eval_steps,
+                                         checkpoint_path=checkpoint_path)
     else:
-      current_step = 0
+      if not self._evaluator:
+        self.prepare_evaluation()
+      if checkpoint_path:
+        current_step = int(os.path.basename(checkpoint_path).split('-')[1])
+      else:
+        current_step = 0
+      predictor = self._estimator.predict(
+          input_fn=input_fn,
+          checkpoint_path=checkpoint_path,
+          yield_single_examples=False)
+      losses = collections.defaultdict(lambda: 0.0)
+      for _ in range(eval_steps):
+        outputs = six.next(predictor)
+        predictions = {}
+        groundtruths = {}
+        for key, val in outputs.items():
+          if key[0:5] == 'pred_':
+            predictions[key[5::]] = val
+          if key[0:3] == 'gt_':
+            groundtruths[key[3::]] = val
+          if key[0:5] == 'loss_':
+            losses[key[5::]] += (np.mean(val) / eval_steps)
+        self._evaluator.update(predictions)
+      metrics = self._evaluator.evaluate()
+      tf.logging.info('Eval result: {}'.format(metrics))
 
-    predictor = self._estimator.predict(
-        input_fn=input_fn,
-        checkpoint_path=checkpoint_path,
-        yield_single_examples=False)
-    losses = collections.defaultdict(lambda: 0.0)
-    for _ in range(eval_steps):
-      outputs = six.next(predictor)
-      predictions = {}
-      groundtruths = {}
-      for key, val in outputs.items():
-        if key[0:5] == 'pred_':
-          predictions[key[5::]] = val
-        if key[0:3] == 'gt_':
-          groundtruths[key[3::]] = val
-        if key[0:5] == 'loss_':
-          losses[key[5::]] += (np.mean(val) / eval_steps)
-      self._evaluator.update(predictions)
-    metrics = self._evaluator.evaluate()
-    tf.logging.info('Eval result: {}'.format(metrics))
-
-    # Summary writer writes out eval metrics.
-    output_dir = os.path.join(self._model_dir, 'eval')
-    tf.gfile.MakeDirs(output_dir)
-    summary_writer = tf.summary.FileWriter(output_dir)
-    write_summary(metrics, summary_writer, current_step)
-    write_summary(losses, summary_writer, current_step)
-    summary_writer.close()
+      # Summary writer writes out eval metrics.
+      output_dir = os.path.join(self._model_dir, 'eval')
+      tf.gfile.MakeDirs(output_dir)
+      summary_writer = tf.summary.FileWriter(output_dir)
+      write_summary(metrics, summary_writer, current_step)
+      write_summary(losses, summary_writer, current_step)
+      summary_writer.close()
     return metrics
 
   def predict(self, input_fn):
