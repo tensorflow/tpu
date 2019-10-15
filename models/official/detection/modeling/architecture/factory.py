@@ -30,7 +30,8 @@ def batch_norm_relu_generator(params):
   return nn_ops.BatchNormRelu(
       momentum=params.batch_norm_momentum,
       epsilon=params.batch_norm_epsilon,
-      trainable=params.batch_norm_trainable)
+      trainable=params.batch_norm_trainable,
+      use_sync_bn=params.use_sync_bn)
 
 
 def dropblock_generator(params):

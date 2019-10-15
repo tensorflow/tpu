@@ -15,6 +15,8 @@
 """Factory to provide model configs."""
 
 from configs import retinanet_config
+from configs import segmentation_config
+from configs import shapemask_config
 from hyperparameters import params_dict
 
 
@@ -26,6 +28,9 @@ def config_generator(model):
   elif model == 'shapemask':
     default_config = shapemask_config.SHAPEMASK_CFG
     restrictions = shapemask_config.SHAPEMASK_RESTRICTIONS
+  elif model == 'segmentation':
+    default_config = segmentation_config.SEGMENTATION_CFG
+    restrictions = segmentation_config.SEGMENTATION_RESTRICTIONS
   else:
     raise ValueError('Model %s is not supported.' % model)
 

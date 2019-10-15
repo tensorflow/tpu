@@ -36,6 +36,6 @@ def define_common_tpu_flags():
       'will attempt to automatically detect the GCE project from metadata.')
 
   flags.DEFINE_string(
-      'eval_master', default='',
+      'eval_master', default=None,
       help='GRPC URL of the eval master. Set to an appropiate value when running '
       'on CPU/GPU.')

@@ -16,12 +16,15 @@
 
 
 from modeling import retinanet_model
+from modeling import shapemask_model
 
 
 def model_generator(params):
   """Model function generator."""
   if params.type == 'retinanet':
     model_fn = retinanet_model.RetinanetModel(params)
+  elif params.type == 'shapemask':
+    model_fn = shapemask_model.ShapeMaskModel(params)
   else:
     raise ValueError('Model %s is not supported.'% params.type)
 
