@@ -29,7 +29,7 @@ import tensorflow.compat.v1 as tf
 import preprocessing
 
 
-def build_image_serving_input_fn(image_size):
+def build_image_serving_input_fn(image_size, batch_size=None):
   """Builds a serving input fn for raw images."""
   def _image_serving_input_fn():
     """Serving input fn for raw images."""
@@ -40,7 +40,7 @@ def build_image_serving_input_fn(image_size):
       return image
 
     image_bytes_list = tf.placeholder(
-        shape=[None],
+        shape=[batch_size],
         dtype=tf.string,
     )
     images = tf.map_fn(

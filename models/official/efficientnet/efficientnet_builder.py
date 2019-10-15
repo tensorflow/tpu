@@ -72,11 +72,12 @@ class BlockDecoder(object):
         expand_ratio=int(options['e']),
         id_skip=('noskip' not in block_string),
         se_ratio=float(options['se']) if 'se' in options else None,
-        strides=[int(options['s'][0]), int(options['s'][1])],
+        strides=[int(options['s'][0]),
+                 int(options['s'][1])],
         conv_type=int(options['c']) if 'c' in options else 0,
         fused_conv=int(options['f']) if 'f' in options else 0,
-        super_pixel=int(options['p']) if 'p' in options else 0
-        )
+        super_pixel=int(options['p']) if 'p' in options else 0,
+        condconv=('cc' in block_string))
 
   def _encode_block_string(self, block):
     """Encodes a block to a string."""
@@ -95,6 +96,8 @@ class BlockDecoder(object):
       args.append('se%s' % block.se_ratio)
     if block.id_skip is False:  # pylint: disable=g-bool-id-comparison
       args.append('noskip')
+    if block.condconv:
+      args.append('cc')
     return '_'.join(args)
 
   def decode(self, string_list):

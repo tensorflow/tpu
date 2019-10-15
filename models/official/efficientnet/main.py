@@ -30,6 +30,7 @@ import tensorflow.compat.v2 as tf2  # used for summaries only.
 import efficientnet_builder
 import imagenet_input
 import utils
+from condconv import efficientnet_condconv_builder
 from edgetpu import efficientnet_edgetpu_builder
 from tpu import efficientnet_tpu_builder
 from tensorflow.core.protobuf import rewriter_config_pb2
@@ -332,11 +333,13 @@ def model_fn(features, labels, mode, params):
       model_builder = efficientnet_edgetpu_builder
     elif FLAGS.model_name.startswith('efficientnet-tpu'):
       model_builder = efficientnet_tpu_builder
+    elif FLAGS.model_name.startswith('efficientnet-condconv'):
+      model_builder = efficientnet_condconv_builder
     elif FLAGS.model_name.startswith('efficientnet'):
       model_builder = efficientnet_builder
     else:
       raise ValueError('Model must be efficientnet-b*, efficientnet-edgetpu* '
-                       'or, efficientnet-tpu*')
+                       'efficientnet-tpu*, or efficientnet-condconv*')
 
     normalized_features = normalize_features(features, model_builder.MEAN_RGB,
                                              model_builder.STDDEV_RGB)
@@ -591,10 +594,12 @@ def export(est, export_dir, input_image_size=None):
 
   if not input_image_size:
     input_image_size = FLAGS.input_image_size
+  is_cond_conv = FLAGS.model_name.startswith('efficientnet-condconv')
+  batch_size = 1 if is_cond_conv else None  # Use fixed batch size for condconv.
 
   logging.info('Starting to export model.')
   image_serving_input_fn = imagenet_input.build_image_serving_input_fn(
-      input_image_size)
+      input_image_size, batch_size=batch_size)
   est.export_saved_model(
       export_dir_base=export_dir,
       serving_input_receiver_fn=image_serving_input_fn)
@@ -609,6 +614,9 @@ def main(unused_argv):
           FLAGS.model_name)
     elif FLAGS.model_name.startswith('efficientnet-tpu'):
       _, _, input_image_size, _ = efficientnet_tpu_builder.efficientnet_tpu_params(
+          FLAGS.model_name)
+    elif FLAGS.model_name.startswith('efficientnet-condconv'):
+      _, _, input_image_size, _, _ = efficientnet_condconv_builder.efficientnet_condconv_params(
           FLAGS.model_name)
     elif FLAGS.model_name.startswith('efficientnet'):
       _, _, input_image_size, _ = efficientnet_builder.efficientnet_params(

@@ -24,6 +24,7 @@ from __future__ import division
 from __future__ import print_function
 
 import collections
+import functools
 import math
 
 from absl import logging
@@ -33,19 +34,20 @@ from six.moves import xrange
 import tensorflow.compat.v1 as tf
 
 import utils
+from condconv import condconv_layers
 
 GlobalParams = collections.namedtuple('GlobalParams', [
     'batch_norm_momentum', 'batch_norm_epsilon', 'dropout_rate', 'data_format',
-    'num_classes', 'width_coefficient', 'depth_coefficient',
-    'depth_divisor', 'min_depth', 'drop_connect_rate', 'relu_fn',
-    'batch_norm', 'use_se', 'local_pooling',
+    'num_classes', 'width_coefficient', 'depth_coefficient', 'depth_divisor',
+    'min_depth', 'drop_connect_rate', 'relu_fn', 'batch_norm', 'use_se',
+    'local_pooling', 'condconv_num_experts'
 ])
 GlobalParams.__new__.__defaults__ = (None,) * len(GlobalParams._fields)
 
 BlockArgs = collections.namedtuple('BlockArgs', [
     'kernel_size', 'num_repeat', 'input_filters', 'output_filters',
-    'expand_ratio', 'id_skip', 'strides', 'se_ratio', 'conv_type',
-    'fused_conv', 'super_pixel',
+    'expand_ratio', 'id_skip', 'strides', 'se_ratio', 'conv_type', 'fused_conv',
+    'super_pixel', 'condconv'
 ])
 # defaults will be a public argument for namedtuple in Python 3.7
 # https://docs.python.org/3/library/collections.html#collections.namedtuple
@@ -178,6 +180,7 @@ class MBConvBlock(tf.keras.layers.Layer):
     self._batch_norm_momentum = global_params.batch_norm_momentum
     self._batch_norm_epsilon = global_params.batch_norm_epsilon
     self._batch_norm = global_params.batch_norm
+    self._condconv_num_experts = global_params.condconv_num_experts
     self._data_format = global_params.data_format
     if self._data_format == 'channels_first':
       self._channel_axis = 1
@@ -192,6 +195,15 @@ class MBConvBlock(tf.keras.layers.Layer):
         0 < self._block_args.se_ratio <= 1)
 
     self.endpoints = None
+
+    self.conv_cls = tf.layers.Conv2D
+    self.depthwise_conv_cls = utils.DepthwiseConv2D
+    if self._block_args.condconv:
+      self.conv_cls = functools.partial(
+          condconv_layers.CondConv2D, num_experts=self._condconv_num_experts)
+      self.depthwise_conv_cls = functools.partial(
+          condconv_layers.DepthwiseCondConv2D,
+          num_experts=self._condconv_num_experts)
 
     # Builds the block accordings to arguments.
     self._build()
@@ -214,43 +226,50 @@ class MBConvBlock(tf.keras.layers.Layer):
           axis=self._channel_axis,
           momentum=self._batch_norm_momentum,
           epsilon=self._batch_norm_epsilon)
+
+    if self._block_args.condconv:
+      # Add the example-dependent routing function
+      self._avg_pooling = tf.keras.layers.GlobalAveragePooling2D(
+          data_format=self._data_format)
+      self._routing_fn = tf.layers.Dense(
+          self._condconv_num_experts, activation=tf.nn.sigmoid)
+
     filters = self._block_args.input_filters * self._block_args.expand_ratio
     kernel_size = self._block_args.kernel_size
-    if self._block_args.fused_conv:
-      # If use fused mbconv, skip expansion and use regular conv.
-      self._fused_conv = tf.layers.Conv2D(
-          filters,
-          [kernel_size, kernel_size],
-          strides=self._block_args.strides,
-          kernel_initializer=conv_kernel_initializer,
-          padding='same',
-          data_format=self._data_format,
-          use_bias=False)
-    else:
-      # Otherwise, first apply expansion and then apply depthwise conv.
-      if self._block_args.expand_ratio != 1:
-        # Expansion phase.
-        self._expand_conv = tf.layers.Conv2D(
-            filters,
-            kernel_size=[1, 1],
-            strides=[1, 1],
-            kernel_initializer=conv_kernel_initializer,
-            padding='same',
-            data_format=self._data_format,
-            use_bias=False)
-        self._bn0 = self._batch_norm(
-            axis=self._channel_axis,
-            momentum=self._batch_norm_momentum,
-            epsilon=self._batch_norm_epsilon)
 
-      # Depth-wise convolution phase:
-      self._depthwise_conv = utils.DepthwiseConv2D(
-          [kernel_size, kernel_size],
-          strides=self._block_args.strides,
-          depthwise_initializer=conv_kernel_initializer,
-          padding='same',
-          data_format=self._data_format,
-          use_bias=False)
+    # Fused expansion phase. Called if using fused convolutions.
+    self._fused_conv = self.conv_cls(
+        filters=filters,
+        kernel_size=[kernel_size, kernel_size],
+        strides=self._block_args.strides,
+        kernel_initializer=conv_kernel_initializer,
+        padding='same',
+        data_format=self._data_format,
+        use_bias=False)
+
+    # Expansion phase. Called if not using fused convolutions and expansion
+    # phase is necessary.
+    self._expand_conv = self.conv_cls(
+        filters=filters,
+        kernel_size=[1, 1],
+        strides=[1, 1],
+        kernel_initializer=conv_kernel_initializer,
+        padding='same',
+        data_format=self._data_format,
+        use_bias=False)
+    self._bn0 = self._batch_norm(
+        axis=self._channel_axis,
+        momentum=self._batch_norm_momentum,
+        epsilon=self._batch_norm_epsilon)
+
+    # Depth-wise convolution phase. Called if not using fused convolutions.
+    self._depthwise_conv = self.depthwise_conv_cls(
+        kernel_size=[kernel_size, kernel_size],
+        strides=self._block_args.strides,
+        depthwise_initializer=conv_kernel_initializer,
+        padding='same',
+        data_format=self._data_format,
+        use_bias=False)
 
     self._bn1 = self._batch_norm(
         axis=self._channel_axis,
@@ -278,10 +297,10 @@ class MBConvBlock(tf.keras.layers.Layer):
           data_format=self._data_format,
           use_bias=True)
 
-    # Output phase:
+    # Output phase.
     filters = self._block_args.output_filters
-    self._project_conv = tf.layers.Conv2D(
-        filters,
+    self._project_conv = self.conv_cls(
+        filters=filters,
         kernel_size=[1, 1],
         strides=[1, 1],
         kernel_initializer=conv_kernel_initializer,
@@ -325,6 +344,25 @@ class MBConvBlock(tf.keras.layers.Layer):
                  self._block_args.output_filters)
 
     x = inputs
+
+    fused_conv_fn = self._fused_conv
+    expand_conv_fn = self._expand_conv
+    depthwise_conv_fn = self._depthwise_conv
+    project_conv_fn = self._project_conv
+
+    if self._block_args.condconv:
+      pooled_inputs = self._avg_pooling(inputs)
+      routing_weights = self._routing_fn(pooled_inputs)
+      # Capture routing weights as additional input to CondConv layers
+      fused_conv_fn = functools.partial(
+          self._fused_conv, routing_weights=routing_weights)
+      expand_conv_fn = functools.partial(
+          self._expand_conv, routing_weights=routing_weights)
+      depthwise_conv_fn = functools.partial(
+          self._depthwise_conv, routing_weights=routing_weights)
+      project_conv_fn = functools.partial(
+          self._project_conv, routing_weights=routing_weights)
+
     # creates conv 2x2 kernel
     if self._block_args.super_pixel == 1:
       with tf.variable_scope('super_pixel'):
@@ -334,15 +372,16 @@ class MBConvBlock(tf.keras.layers.Layer):
           'Block start with SuperPixel: %s shape: %s', x.name, x.shape)
 
     if self._block_args.fused_conv:
-      x = self._relu_fn(self._bn1(self._fused_conv(x), training=training))
+      # If use fused mbconv, skip expansion and use regular conv.
+      x = self._relu_fn(self._bn1(fused_conv_fn(x), training=training))
       logging.info('Conv2D: %s shape: %s', x.name, x.shape)
     else:
+      # Otherwise, first apply expansion and then apply depthwise conv.
       if self._block_args.expand_ratio != 1:
-        x = self._relu_fn(self._bn0(self._expand_conv(x),
-                                    training=training))
+        x = self._relu_fn(self._bn0(expand_conv_fn(x), training=training))
         logging.info('Expand: %s shape: %s', x.name, x.shape)
 
-      x = self._relu_fn(self._bn1(self._depthwise_conv(x), training=training))
+      x = self._relu_fn(self._bn1(depthwise_conv_fn(x), training=training))
       logging.info('DWConv: %s shape: %s', x.name, x.shape)
 
     if self._has_se:
@@ -351,7 +390,7 @@ class MBConvBlock(tf.keras.layers.Layer):
 
     self.endpoints = {'expansion_output': x}
 
-    x = self._bn2(self._project_conv(x), training=training)
+    x = self._bn2(project_conv_fn(x), training=training)
     if self._block_args.id_skip:
       if all(
           s == 1 for s in self._block_args.strides
