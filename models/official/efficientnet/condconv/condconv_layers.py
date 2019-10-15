@@ -393,7 +393,8 @@ class DepthwiseCondConv2D(tf.keras.layers.DepthwiseConv2D):
                                              self.depthwise_kernel_shape),
         name='depthwise_condconv_kernel',
         regularizer=self.depthwise_regularizer,
-        constraint=self.depthwise_constraint)
+        constraint=self.depthwise_constraint,
+        trainable=True)
 
     if self.use_bias:
       bias_dim = input_dim * self.depth_multiplier
