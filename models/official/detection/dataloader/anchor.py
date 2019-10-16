@@ -19,7 +19,8 @@ from __future__ import division
 from __future__ import print_function
 
 import collections
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+
 from utils.object_detection import argmax_matcher
 from utils.object_detection import balanced_positive_negative_sampler
 from utils.object_detection import box_list
@@ -204,10 +205,15 @@ class AnchorLabeler(object):
 class RpnAnchorLabeler(AnchorLabeler):
   """Labeler for Region Proposal Network."""
 
-  def __init__(self, anchor, match_threshold=0.7,
-               unmatched_threshold=0.3, rpn_batch_size_per_im=256,
+  def __init__(self,
+               anchor,
+               match_threshold=0.7,
+               unmatched_threshold=0.3,
+               rpn_batch_size_per_im=256,
                rpn_fg_fraction=0.5):
-    AnchorLabeler.__init__(self, anchor, match_threshold=0.7,
+    AnchorLabeler.__init__(self,
+                           anchor,
+                           match_threshold=0.7,
                            unmatched_threshold=0.3)
     self._rpn_batch_size_per_im = rpn_batch_size_per_im
     self._rpn_fg_fraction = rpn_fg_fraction
