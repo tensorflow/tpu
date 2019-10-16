@@ -29,7 +29,7 @@ import tensorflow.compat.v1 as tf
 import preprocessing
 
 
-def build_image_serving_input_fn(image_size):
+def build_image_serving_input_fn(image_size, batch_size=None):
   """Builds a serving input fn for raw images."""
   def _image_serving_input_fn():
     """Serving input fn for raw images."""
@@ -40,7 +40,7 @@ def build_image_serving_input_fn(image_size):
       return image
 
     image_bytes_list = tf.placeholder(
-        shape=[None],
+        shape=[batch_size],
         dtype=tf.string,
     )
     images = tf.map_fn(
@@ -59,6 +59,7 @@ class ImageNetTFExampleInput(object):
     num_cores: `int` for the number of TPU cores
     image_size: `int` for image size (both width and height).
     transpose_input: 'bool' for whether to use the double transpose trick
+    num_label_classes: number of label classes. Default to 1000 for ImageNet.
     include_background_label: If true, label #0 is reserved for background.
     augment_name: `string` that is the name of the augmentation method
         to apply to the image. `autoaugment` if AutoAugment is to be used or
@@ -80,6 +81,7 @@ class ImageNetTFExampleInput(object):
                num_cores=8,
                image_size=224,
                transpose_input=False,
+               num_label_classes=1000,
                include_background_label=False,
                augment_name=None,
                mixup_alpha=0.0,
@@ -92,7 +94,9 @@ class ImageNetTFExampleInput(object):
     self.transpose_input = transpose_input
     self.image_size = image_size
     self.include_background_label = include_background_label
-    self.num_label_classes = 1001 if include_background_label else 1000
+    self.num_label_classes = num_label_classes
+    if include_background_label:
+      self.num_label_classes += 1
     self.augment_name = augment_name
     self.mixup_alpha = mixup_alpha
     self.randaug_num_layers = randaug_num_layers
@@ -281,6 +285,7 @@ class ImageNetInput(ImageNetTFExampleInput):
                image_size=224,
                num_parallel_calls=64,
                cache=False,
+               num_label_classes=1000,
                include_background_label=False,
                augment_name=None,
                mixup_alpha=0.0,
@@ -299,6 +304,7 @@ class ImageNetInput(ImageNetTFExampleInput):
       image_size: `int` for image size (both width and height).
       num_parallel_calls: concurrency level to use when reading data from disk.
       cache: if true, fill the dataset by repeating from its cache.
+      num_label_classes: number of label classes. Default to 1000 for ImageNet.
       include_background_label: if true, label #0 is reserved for background.
       augment_name: `string` that is the name of the augmentation method
           to apply to the image. `autoaugment` if AutoAugment is to be used or
@@ -317,6 +323,7 @@ class ImageNetInput(ImageNetTFExampleInput):
         image_size=image_size,
         use_bfloat16=use_bfloat16,
         transpose_input=transpose_input,
+        num_label_classes=num_label_classes,
         include_background_label=include_background_label,
         augment_name=augment_name,
         mixup_alpha=mixup_alpha,
@@ -402,6 +409,7 @@ class ImageNetBigtableInput(ImageNetTFExampleInput):
                transpose_input,
                selection,
                augment_name=None,
+               num_label_classes=1000,
                include_background_label=False,
                mixup_alpha=0.0,
                randaug_num_layers=None,
@@ -418,6 +426,7 @@ class ImageNetBigtableInput(ImageNetTFExampleInput):
           `randaugment` if RandAugment is to be used. If the value is `None` no
           no augmentation method will be applied applied. See autoaugment.py
           for more details.
+      num_label_classes: number of label classes. Default to 1000 for ImageNet.
       include_background_label: if true, label #0 is reserved for background.
       mixup_alpha: float to control the strength of Mixup regularization, set
           to 0.0 to disable.
@@ -430,6 +439,7 @@ class ImageNetBigtableInput(ImageNetTFExampleInput):
         is_training=is_training,
         use_bfloat16=use_bfloat16,
         transpose_input=transpose_input,
+        num_label_classes=num_label_classes,
         include_background_label=include_background_label,
         augment_name=augment_name,
         mixup_alpha=mixup_alpha,
