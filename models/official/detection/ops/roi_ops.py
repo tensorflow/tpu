@@ -18,7 +18,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 from ops import nms
 from utils import box_utils
@@ -86,11 +86,11 @@ def multilevel_propose_rois(rpn_boxes,
       `rpn_scores` before applying NMS. Default: True.
 
   Returns:
-    selected_rois: a tensor of shape [batch_size, rpn_post_nms_top_k, 1],
-      representing the scores of the selected proposals.
-    selected_roi_scores: a tensor of shape [batch_size, rpn_post_nms_top_k, 4],
+    selected_rois: a tensor of shape [batch_size, rpn_post_nms_top_k, 4],
       representing the box coordinates of the selected proposals w.r.t. the
       scaled image.
+    selected_roi_scores: a tensor of shape [batch_size, rpn_post_nms_top_k, 1],
+      representing the scores of the selected proposals.
   """
   with tf.name_scope('multilevel_propose_rois'):
     rois = []
