@@ -14,7 +14,7 @@
 # ==============================================================================
 """Data parser and processing for Mask R-CNN."""
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 from dataloader import anchor
 from dataloader import mode_keys as ModeKeys
@@ -213,6 +213,7 @@ class Parser(object):
             image, boxes)
 
     # Converts boxes from normalized coordinates to pixel coordinates.
+    # Now the coordinates of boxes are w.r.t. the original image.
     boxes = box_utils.denormalize_boxes(boxes, image_shape)
 
     # Resizes and crops image.
@@ -226,6 +227,7 @@ class Parser(object):
     image_height, image_width, _ = image.get_shape().as_list()
 
     # Resizes and crops boxes.
+    # Now the coordinates of boxes are w.r.t the scaled image.
     image_scale = image_info[2, :]
     offset = image_info[3, :]
     boxes = input_utils.resize_and_crop_boxes(
@@ -251,7 +253,9 @@ class Parser(object):
           method='bilinear')
       masks = tf.squeeze(masks, axis=-1)
 
-    # Assigns anchors.
+    # Assigns anchor targets.
+    # Note that after the target assignment, box targets are absolute pixel
+    # offsets w.r.t. the scaled image.
     input_anchor = anchor.Anchor(
         self._min_level,
         self._max_level,
@@ -265,10 +269,8 @@ class Parser(object):
         self._rpn_unmatched_threshold,
         self._rpn_batch_size_per_im,
         self._rpn_fg_fraction)
-
     rpn_score_targets, rpn_box_targets = anchor_labeler.label_anchors(
-        boxes,
-        tf.cast(tf.expand_dims(classes, axis=1), tf.float32))
+        boxes, tf.cast(tf.expand_dims(classes, axis=-1), dtype=tf.float32))
 
     # If bfloat16 is used, casts input image to tf.bfloat16.
     if self._use_bfloat16:
@@ -319,6 +321,7 @@ class Parser(object):
     """
     # Gets original image and its size.
     image = data['image']
+    image_shape = tf.shape(image)[0:2]
 
     # Normalizes image with mean and std pixel values.
     image = input_utils.normalize_image(image)
@@ -351,6 +354,26 @@ class Parser(object):
         'anchor_boxes': input_anchor.multilevel_boxes,
         'image_info': image_info,
     }
+
+    if self._mode == ModeKeys.PREDICT_WITH_GT:
+      # Converts boxes from normalized coordinates to pixel coordinates.
+      boxes = box_utils.denormalize_boxes(
+          data['groundtruth_boxes'], image_shape)
+      groundtruths = {
+          'source_id': data['source_id'],
+          'height': data['height'],
+          'width': data['width'],
+          'num_detections': tf.shape(data['groundtruth_classes']),
+          'boxes': boxes,
+          'classes': data['groundtruth_classes'],
+          'areas': data['groundtruth_area'],
+          'is_crowds': tf.cast(data['groundtruth_is_crowd'], tf.int32),
+      }
+      groundtruths['source_id'] = dataloader_utils.process_source_id(
+          groundtruths['source_id'])
+      groundtruths = dataloader_utils.pad_groundtruths_to_fixed_size(
+          groundtruths, self._max_num_instances)
+      labels['groundtruths'] = groundtruths
 
     return {
         'images': image,
