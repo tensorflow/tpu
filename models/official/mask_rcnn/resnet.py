@@ -368,7 +368,7 @@ def conv0_space_to_depth(inputs, filters, kernel_size, strides,
   conv0.build([batch_size,
                h * space_to_depth_block_size,
                w * space_to_depth_block_size,
-               c / (space_to_depth_block_size ** 2)])
+               c // (space_to_depth_block_size ** 2)])
 
   kernel = conv0.weights[0]
   kernel = transform_space_to_depth_kernel(
