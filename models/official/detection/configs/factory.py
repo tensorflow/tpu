@@ -15,7 +15,6 @@
 """Factory to provide model configs."""
 
 from configs import retinanet_config
-from configs import segmentation_config
 from configs import shapemask_config
 from hyperparameters import params_dict
 
