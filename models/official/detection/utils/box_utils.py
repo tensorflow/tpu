@@ -19,7 +19,7 @@ from __future__ import division
 from __future__ import print_function
 
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 
 EPSILON = 1e-8
@@ -495,6 +495,7 @@ def bbox_overlap(boxes, gt_boxes):
       last dimension is the pixel coordinates in [ymin, xmin, ymax, xmax] form.
     gt_boxes: a tensor with a shape of [batch_size, MAX_NUM_INSTANCES, 4]. This
       tensor might have paddings with a negative value.
+
   Returns:
     iou: a tensor with as a shape of [batch_size, N, MAX_NUM_INSTANCES].
   """
@@ -520,8 +521,12 @@ def bbox_overlap(boxes, gt_boxes):
     # Calculates IoU.
     iou = i_area / u_area
 
-    # Fills -1 for padded ground truth boxes.
-    padding_mask = tf.less(i_xmin, tf.zeros_like(i_xmin))
+    # Fills -1 for IoU entries between the padded ground truth boxes.
+    gt_invalid_mask = tf.less(
+        tf.reduce_max(gt_boxes, axis=-1, keepdims=True), 0.0)
+    padding_mask = tf.logical_or(
+        tf.zeros_like(bb_x_min, dtype=tf.bool),
+        tf.transpose(gt_invalid_mask, [0, 2, 1]))
     iou = tf.where(padding_mask, -tf.ones_like(iou), iou)
 
     return iou
