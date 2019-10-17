@@ -18,7 +18,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 
 def focal_loss(logits, targets, alpha, gamma, normalizer):
@@ -88,7 +88,6 @@ class RpnScoreLoss(object):
   """Region Proposal Network score loss function."""
 
   def __init__(self, params):
-    self._batch_size = params.batch_size
     self._rpn_batch_size_per_im = params.rpn_batch_size_per_im
 
   def __call__(self, score_outputs, labels):
@@ -101,6 +100,7 @@ class RpnScoreLoss(object):
         representing scores in [batch_size, height, width, num_anchors].
       labels: the dictionary that returned from dataloader that includes
         groundturth targets.
+
     Returns:
       rpn_score_loss: a scalar tensor representing total score loss.
     """
@@ -113,8 +113,9 @@ class RpnScoreLoss(object):
             self._rpn_score_loss(
                 score_outputs[level],
                 labels[level],
-                normalizer=tf.to_float(
-                    self._batch_size * self._rpn_batch_size_per_im)))
+                normalizer=tf.cast(
+                    tf.shape(score_outputs[level])[0] *
+                    self._rpn_batch_size_per_im, dtype=tf.float32)))
 
       # Sums per level losses to total loss.
       return tf.add_n(score_losses)

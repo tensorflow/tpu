@@ -114,10 +114,6 @@ class TpuExecutor(object):
         config=run_config,
         params=params.as_dict())
 
-    # Set up evaluator for coco evaluation API.
-    if params.eval.type != 'customized':
-      self.prepare_evaluation()
-
   def train(self, input_fn, steps):
     """Training the model with training data and labels in input_fn."""
     self._estimator.train(input_fn=input_fn, max_steps=steps)
