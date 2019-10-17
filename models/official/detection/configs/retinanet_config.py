@@ -66,14 +66,8 @@ RETINANET_CFG.override({
         'box_loss_weight': 50,
     },
     'postprocess': {
-        'use_batched_nms': False,
         'min_level': 3,
         'max_level': 7,
-        'num_classes': 91,
-        'max_total_size': 100,
-        'nms_iou_threshold': 0.5,
-        'score_threshold': 0.05,
-        'pre_nms_num_boxes': 5000,
     },
 }, is_strict=False)
 
