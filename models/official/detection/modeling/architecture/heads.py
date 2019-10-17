@@ -58,20 +58,17 @@ class RpnHead(object):
 
       def shared_rpn_heads(features, anchors_per_location, level):
         """Shared RPN heads."""
-        # TODO(chiachenc): check the channel depth of the first convoultion.
+        del level
         features = tf.layers.conv2d(
             features,
             256,
             kernel_size=(3, 3),
             strides=(1, 1),
-            activation=None,
+            activation=tf.nn.relu,
             bias_initializer=tf.zeros_initializer(),
             kernel_initializer=tf.random_normal_initializer(stddev=0.01),
             padding='same',
             name='rpn')
-        # The batch normalization layers are not shared between levels.
-        features = self._batch_norm_relu(features, name='rpn%d-bn' % level,
-                                         is_training=is_training)
         # Proposal classification scores
         scores = tf.layers.conv2d(
             features,
@@ -92,7 +89,6 @@ class RpnHead(object):
             kernel_initializer=tf.random_normal_initializer(stddev=0.01),
             padding='valid',
             name='rpn-box')
-
         return scores, bboxes
 
       for level in range(self._min_level, self._max_level + 1):
@@ -144,22 +140,26 @@ class FastrcnnHead(object):
     with tf.variable_scope('fast_rcnn_head'):
       # reshape inputs beofre FC.
       _, num_rois, height, width, filters = roi_features.get_shape().as_list()
-      roi_features = tf.reshape(roi_features,
-                                [-1, num_rois, height * width * filters])
-      net = tf.layers.dense(roi_features, units=self._mlp_head_dim,
-                            activation=None, name='fc6')
-      net = self._batch_norm_relu(net, is_training=is_training)
-      net = tf.layers.dense(net, units=self._mlp_head_dim,
-                            activation=None, name='fc7')
-      net = self._batch_norm_relu(net, is_training=is_training)
+      roi_features = tf.reshape(
+          roi_features, [-1, num_rois, height * width * filters])
+      net = tf.layers.dense(roi_features,
+                            units=self._mlp_head_dim,
+                            activation=tf.nn.relu,
+                            name='fc6')
+      net = tf.layers.dense(net,
+                            units=self._mlp_head_dim,
+                            activation=tf.nn.relu,
+                            name='fc7')
 
       class_outputs = tf.layers.dense(
-          net, self._num_classes,
+          net,
+          self._num_classes,
           kernel_initializer=tf.random_normal_initializer(stddev=0.01),
           bias_initializer=tf.zeros_initializer(),
           name='class-predict')
       box_outputs = tf.layers.dense(
-          net, self._num_classes * 4,
+          net,
+          self._num_classes * 4,
           kernel_initializer=tf.random_normal_initializer(stddev=0.001),
           bias_initializer=tf.zeros_initializer(),
           name='box-predict')
@@ -227,11 +227,10 @@ class MaskrcnnHead(object):
             strides=(1, 1),
             padding='same',
             dilation_rate=(1, 1),
-            activation=None,
+            activation=tf.nn.relu,
             kernel_initializer=tf.random_normal_initializer(stddev=init_stddev),
             bias_initializer=tf.zeros_initializer(),
             name='mask-conv-l%d' % i)
-        net = self._batch_norm_relu(net, is_training=is_training)
 
       kernel_size = (2, 2)
       fan_out = 256
@@ -242,11 +241,10 @@ class MaskrcnnHead(object):
           kernel_size=kernel_size,
           strides=(2, 2),
           padding='valid',
-          activation=None,
+          activation=tf.nn.relu,
           kernel_initializer=tf.random_normal_initializer(stddev=init_stddev),
           bias_initializer=tf.zeros_initializer(),
           name='conv5-mask')
-      net = self._batch_norm_relu(net, is_training=is_training)
 
       kernel_size = (1, 1)
       fan_out = self._num_classes
