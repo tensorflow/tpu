@@ -96,6 +96,7 @@ BASE_CFG = {
         'max_level': 7,
         'fpn_feat_dims': 256,
         'use_separable_conv': False,
+        'use_batch_norm': True,
         'batch_norm': {
             'batch_norm_momentum': 0.997,
             'batch_norm_epsilon': 1e-4,
@@ -122,7 +123,6 @@ BASE_CFG = {
     },
     'postprocess': {
         'use_batched_nms': False,
-        'num_classes': 91,
         'max_total_size': 100,
         'nms_iou_threshold': 0.5,
         'score_threshold': 0.05,

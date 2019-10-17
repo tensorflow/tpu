@@ -60,7 +60,7 @@ class ShapeMaskModel(base_model.Model):
     self._fine_mask_loss_weight = (
         params.shapemask_loss.fine_mask_loss_weight)
     # Predict function.
-    self._generate_detections_fn = postprocess_ops.GenerateOneStageDetections(
+    self._generate_detections_fn = postprocess_ops.MultilevelDetectionGenerator(
         params.postprocess)
 
   def build_outputs(self, features, labels, mode):
