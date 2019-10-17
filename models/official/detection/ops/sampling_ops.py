@@ -106,9 +106,9 @@ def assign_and_sample_proposals(proposed_boxes,
                                 num_samples_per_image=512,
                                 mix_gt_boxes=True,
                                 fg_fraction=0.25,
-                                fg_thresh=0.5,
-                                bg_thresh_hi=0.5,
-                                bg_thresh_lo=0.0):
+                                fg_iou_thresh=0.5,
+                                bg_iou_thresh_hi=0.5,
+                                bg_iou_thresh_lo=0.0):
   """Assigns the proposals with groundtruth classes and performs subsmpling.
 
   Given `proposed_boxes`, `gt_boxes`, and `gt_classes`, the function uses the
@@ -122,7 +122,8 @@ def assign_and_sample_proposals(proposed_boxes,
   Args:
     proposed_boxes: a tensor of shape of [batch_size, N, 4]. N is the number
       of proposals before groundtruth assignment. The last dimension is the
-      box coordinates w.r.t. the scaled images in [ymin, xmin, ymax, xmax] form.
+      box coordinates w.r.t. the scaled images in [ymin, xmin, ymax, xmax]
+      format.
     gt_boxes: a tensor of shape of [batch_size, MAX_NUM_INSTANCES, 4].
       The coordinates of gt_boxes are in the pixel coordinates of the scaled
       image. This tensor might have padding of values -1 indicating the invalid
@@ -135,12 +136,12 @@ def assign_and_sample_proposals(proposed_boxes,
       sampling proposals.
     fg_fraction: a float represents the target fraction of RoI minibatch that
       is labeled foreground (i.e., class > 0).
-    fg_thresh: a float represents the IoU overlap threshold for an RoI to be
-      considered foreground (if >= fg_thresh).
-    bg_thresh_hi: a float represents the IoU overlap threshold for an RoI to be
-      considered background (class = 0 if overlap in [LO, HI)).
-    bg_thresh_lo: a float represents the IoU overlap threshold for an RoI to be
-      considered background (class = 0 if overlap in [LO, HI)).
+    fg_iou_thresh: a float represents the IoU overlap threshold for an RoI to be
+      considered foreground (if >= fg_iou_thresh).
+    bg_iou_thresh_hi: a float represents the IoU overlap threshold for an RoI to
+      be considered background (class = 0 if overlap in [LO, HI)).
+    bg_iou_thresh_lo: a float represents the IoU overlap threshold for an RoI to
+      be considered background (class = 0 if overlap in [LO, HI)).
 
   Returns:
     sampled_rois: a tensor of shape of [batch_size, K, 4], representing the
@@ -161,10 +162,10 @@ def assign_and_sample_proposals(proposed_boxes,
     (matched_gt_boxes, matched_gt_classes, matched_gt_indices,
      matched_iou, _) = box_matching(boxes, gt_boxes, gt_classes)
 
-    positive_match = tf.greater(matched_iou, fg_thresh)
+    positive_match = tf.greater(matched_iou, fg_iou_thresh)
     negative_match = tf.logical_and(
-        tf.greater_equal(matched_iou, bg_thresh_lo),
-        tf.less(matched_iou, bg_thresh_hi))
+        tf.greater_equal(matched_iou, bg_iou_thresh_lo),
+        tf.less(matched_iou, bg_iou_thresh_hi))
     ignored_match = tf.less(matched_iou, 0.0)
 
     # re-assign negatively matched boxes to the background class.
@@ -204,4 +205,54 @@ def assign_and_sample_proposals(proposed_boxes,
     sampled_gt_classes = tf.gather_nd(
         matched_gt_classes, gather_nd_indices)
 
+    return sampled_rois, sampled_gt_boxes, sampled_gt_classes
+
+
+class ROISampler(object):
+  """Samples RoIs and creates training targets."""
+
+  def __init__(self, params):
+    self._num_samples_per_image = params.num_samples_per_image
+    self._fg_fraction = params.fg_fraction
+    self._fg_iou_thresh = params.fg_iou_thresh
+    self._bg_iou_thresh_hi = params.bg_iou_thresh_hi
+    self._bg_iou_thresh_lo = params.bg_iou_thresh_lo
+    self._mix_gt_boxes = params.mix_gt_boxes
+
+  def __call__(self, rois, gt_boxes, gt_classes):
+    """Sample and assign RoIs for training.
+
+    Args:
+      rois: a tensor of shape of [batch_size, N, 4]. N is the number
+        of proposals before groundtruth assignment. The last dimension is the
+        box coordinates w.r.t. the scaled images in [ymin, xmin, ymax, xmax]
+        format.
+      gt_boxes: a tensor of shape of [batch_size, MAX_NUM_INSTANCES, 4].
+        The coordinates of gt_boxes are in the pixel coordinates of the scaled
+        image. This tensor might have padding of values -1 indicating the
+        invalid box coordinates.
+      gt_classes: a tensor with a shape of [batch_size, MAX_NUM_INSTANCES]. This
+        tensor might have paddings with values of -1 indicating the invalid
+        classes.
+
+    Returns:
+      sampled_rois: a tensor of shape of [batch_size, K, 4], representing the
+        coordinates of the sampled RoIs, where K is the number of the sampled
+        RoIs, i.e. K = num_samples_per_image.
+      sampled_gt_boxes: a tensor of shape of [batch_size, K, 4], storing the
+        box coordinates of the matched groundtruth boxes of the samples RoIs.
+      sampled_gt_classes: a tensor of shape of [batch_size, K], storing the
+        classes of the matched groundtruth boxes of the sampled RoIs.
+    """
+    sampled_rois, sampled_gt_boxes, sampled_gt_classes = (
+        assign_and_sample_proposals(
+            rois,
+            gt_boxes,
+            gt_classes,
+            num_samples_per_image=self._num_samples_per_image,
+            mix_gt_boxes=self._mix_gt_boxes,
+            fg_fraction=self._fg_fraction,
+            fg_iou_thresh=self._fg_iou_thresh,
+            bg_iou_thresh_hi=self._bg_iou_thresh_hi,
+            bg_iou_thresh_lo=self._bg_iou_thresh_lo))
     return sampled_rois, sampled_gt_boxes, sampled_gt_classes
