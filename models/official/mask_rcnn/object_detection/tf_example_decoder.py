@@ -46,6 +46,9 @@ class TfExampleDecoder(object):
         'image/object/area': tf.VarLenFeature(tf.float32),
         'image/object/is_crowd': tf.VarLenFeature(tf.int64),
         'image/object/polygon': tf.VarLenFeature(tf.float32),
+        'image/object/attribute/label': tf.VarLenFeature(tf.int64),
+        'image/object/difficult': tf.VarLenFeature(tf.int64),
+        'image/object/group_of': tf.VarLenFeature(tf.int64),
     }
     if use_instance_mask:
       self._keys_to_features.update({
@@ -112,7 +115,16 @@ class TfExampleDecoder(object):
         - groundtruth_boxes: a float32 tensor of shape [None, 4].
         - groundtruth_instance_masks: a float32 tensor of shape
             [None, None, None].
-        - groundtruth_instance_masks_png: a string tensor of shape [None].
+
+      Optional:
+        - groundtruth_difficult - 1D bool tensor of shape
+            [None] indicating if the boxes represent `difficult` instances.
+        - groundtruth_group_of - 1D bool tensor of shape
+            [None] indicating if the boxes represent `group_of` instances.
+        - groundtruth_instance_masks - 3D float32 tensor of
+            shape [None, None, None] containing instance masks.
+        - groundtruth_attributes - 1D int64 tensor of shape [None]
+        - groundtruth_polygons - 1D float tensor of shape [None]
     """
     parsed_tensors = tf.io.parse_single_example(
         serialized_example, self._keys_to_features)
@@ -148,11 +160,16 @@ class TfExampleDecoder(object):
                                         dtype=tf.bool),
         'groundtruth_area': areas,
         'groundtruth_boxes': boxes,
-        'groundtruth_polygons': parsed_tensors['image/object/polygon'],
     }
     if self._use_instance_mask:
       decoded_tensors.update({
           'groundtruth_instance_masks': masks,
-          'groundtruth_instance_masks_png': parsed_tensors['image/object/mask'],
+          'groundtruth_polygons': parsed_tensors['image/object/polygon'],
+          'groundtruth_attributes':
+              parsed_tensors['image/object/attribute/label'],
+          'groundtruth_difficult':
+              parsed_tensors['image/object/difficult'],
+          'groundtruth_group_of':
+              parsed_tensors['image/object/group_of'],
       })
     return decoded_tensors
