@@ -391,6 +391,9 @@ class MBConvBlock(tf.keras.layers.Layer):
     self.endpoints = {'expansion_output': x}
 
     x = self._bn2(project_conv_fn(x), training=training)
+    # Add identity so that quantization-aware training can insert quantization
+    # ops correctly.
+    x = tf.identity(x)
     if self._block_args.id_skip:
       if all(
           s == 1 for s in self._block_args.strides
@@ -458,6 +461,10 @@ class MBConvBlockWithoutDepthwise(MBConvBlock):
     self.endpoints = {'expansion_output': x}
 
     x = self._bn1(self._project_conv(x), training=training)
+    # Add identity so that quantization-aware training can insert quantization
+    # ops correctly.
+    x = tf.identity(x)
+
     if self._block_args.id_skip:
       if all(
           s == 1 for s in self._block_args.strides
