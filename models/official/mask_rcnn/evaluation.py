@@ -19,10 +19,11 @@ from __future__ import division
 from __future__ import print_function
 
 import io
+from absl import logging
 import numpy as np
 from PIL import Image
 import six
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 import coco_metric
 import coco_utils
@@ -75,9 +76,9 @@ def compute_coco_eval_metric(predictor,
   while True:
     try:
       prediction = six.next(predictor)
-      tf.logging.info('Running inference on batch %d...' % (batch_idx + 1))
+      logging.info('Running inference on batch %d...', (batch_idx + 1))
     except StopIteration:
-      tf.logging.info('Finished the eval set at %d batch.' % (batch_idx + 1))
+      logging.info('Finished the eval set at %d batch.', (batch_idx + 1))
       break
 
     prediction = process_prediction_for_eval(prediction)
@@ -108,7 +109,7 @@ def compute_coco_eval_metric(predictor,
         filename=None, include_mask=include_mask)
     eval_results = eval_metric.predict_metric_fn(
         predictions, groundtruth_data=dataset)
-  tf.logging.info('Eval results: %s' % eval_results)
+  logging.info('Eval results: %s', eval_results)
   return eval_results, predictions
 
 
@@ -192,8 +193,8 @@ def write_image_summary(predictions, summary_writer, current_step):
   if not predictions or not isinstance(predictions, dict):
     return
   if 'orig_images' not in predictions:
-    tf.logging.info('Missing orig_images in predictions: %s',
-                    predictions.keys())
+    logging.info('Missing orig_images in predictions: %s',
+                 predictions.keys())
     return
   predictions['orig_images'] = predictions['orig_images'] * 255
   predictions['orig_images'] = predictions['orig_images'].astype(np.uint8)

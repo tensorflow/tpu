@@ -35,13 +35,13 @@ from __future__ import print_function
 
 import functools
 from absl import flags
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 from common import inference_warmup
 from hyperparameters import params_dict
 import serving
 from configs import mask_rcnn_config
-from tensorflow.contrib.tpu.python.tpu import tpu_config
+from tensorflow.python.tpu import tpu_config  # pylint: disable=g-direct-tensorflow-import
 
 FLAGS = flags.FLAGS
 
@@ -100,7 +100,7 @@ def main(_):
       transpose_input=False)
 
   print(' - Setting up TPUEstimator...')
-  estimator = tf.contrib.tpu.TPUEstimator(
+  estimator = tf.estimator.tpu.TPUEstimator(
       model_fn=serving.serving_model_fn_builder(
           FLAGS.output_source_id, FLAGS.output_image_info,
           FLAGS.output_box_features, FLAGS.output_normalized_coordinates,

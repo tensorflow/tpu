@@ -19,7 +19,8 @@ from __future__ import division
 from __future__ import print_function
 
 from absl import flags
-import tensorflow as tf
+from absl import logging
+import tensorflow.compat.v1 as tf
 
 from hyperparameters import common_hparams_flags
 from hyperparameters import common_tpu_flags
@@ -151,5 +152,5 @@ def main(argv):
 
 
 if __name__ == '__main__':
-  tf.logging.set_verbosity(tf.logging.INFO)
+  logging.set_verbosity(logging.INFO)
   tf.app.run(main)

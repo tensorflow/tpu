@@ -26,7 +26,7 @@ This matcher is used in Fast(er)-RCNN.
 Note: matchers are used in TargetAssigners. There is a create_target_assigner
 factory function for popular implementations.
 """
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 from object_detection import matcher
 from object_detection import shape_utils
@@ -94,8 +94,8 @@ class ArgMaxMatcher(matcher.Matcher):
       if self._unmatched_threshold == self._matched_threshold:
         raise ValueError('When negatives are in between matched and '
                          'unmatched thresholds, these cannot be of equal '
-                         'value. matched: %s, unmatched: %s',
-                         self._matched_threshold, self._unmatched_threshold)
+                         'value. matched: %s, unmatched: %s' %
+                         (self._matched_threshold, self._unmatched_threshold))
     self._force_match_for_each_row = force_match_for_each_row
     self._negatives_lower_than_unmatched = negatives_lower_than_unmatched
 

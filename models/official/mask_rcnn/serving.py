@@ -15,7 +15,7 @@
 """Input and model functions for serving/inference."""
 
 import six
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 import box_utils
 import heads
@@ -170,8 +170,6 @@ def serving_input_fn(batch_size,
                      input_name='input'):
   """Input function for SavedModels and TF serving.
 
-  Returns a `tf.estimator.export.ServingInputReceiver` for a SavedModel.
-
   Args:
     batch_size: The batch size.
     desired_image_size: The tuple/list of two integers, specifying the desired
@@ -181,6 +179,10 @@ def serving_input_fn(batch_size,
     input_type: a string of 'image_tensor', 'image_bytes' or 'tf_example',
       specifying which type of input will be used in serving.
     input_name: a string to specify the name of the input signature.
+
+  Returns:
+    a `tf.estimator.export.ServingInputReceiver` for a SavedModel.
+
   """
   if input_type == 'image_tensor':
     placeholder, features = image_tensor_input(
@@ -276,7 +278,7 @@ def serving_model_graph_builder(output_source_id,
   def _serving_model_graph_wrapper(features, params):
     """Builds the model graph with outputs casted to bfloat16 if nessarary."""
     if params['precision'] == 'bfloat16':
-      with tf.contrib.tpu.bfloat16_scope():
+      with tf.tpu.bfloat16_scope():
         model_outputs = _serving_model_graph(features, params)
         def _cast_outputs_to_float(d):
           for k, v in sorted(six.iteritems(d)):
@@ -353,7 +355,8 @@ def serving_model_fn_builder(output_source_id,
           model_outputs['detection_features'], 'DetectionFeatures')
 
     if params['use_tpu']:
-      return tf.contrib.tpu.TPUEstimatorSpec(mode=mode, predictions=predictions)
+      return tf.estimator.tpu.TPUEstimatorSpec(mode=mode,
+                                               predictions=predictions)
     return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions)
 
   return _serving_model_fn
