@@ -22,6 +22,8 @@ from absl import flags
 from absl import logging
 import tensorflow.compat.v1 as tf
 
+import sys
+sys.path.insert(0, 'tpu/models')
 from hyperparameters import common_hparams_flags
 from hyperparameters import common_tpu_flags
 from hyperparameters import flags_to_params
