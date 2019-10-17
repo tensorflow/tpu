@@ -118,7 +118,6 @@ SHAPEMASK_RESTRICTIONS = [
     'anchor.min_level == postprocess.min_level',
     'anchor.max_level == postprocess.max_level',
     'retinanet_head.num_classes == retinanet_loss.num_classes',
-    'retinanet_head.num_classes == postprocess.num_classes',
     'shapemask_head.mask_crop_size == shapemask_parser.mask_crop_size',
     'shapemask_head.upsample_factor == shapemask_parser.upsample_factor',
 ]

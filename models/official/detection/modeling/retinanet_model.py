@@ -45,7 +45,7 @@ class RetinanetModel(base_model.Model):
     self._box_loss_weight = params.retinanet_loss.box_loss_weight
 
     # Predict function.
-    self._generate_detections_fn = postprocess_ops.GenerateOneStageDetections(
+    self._generate_detections_fn = postprocess_ops.MultilevelDetectionGenerator(
         params.postprocess)
 
     self._transpose_input = params.train.transpose_input

@@ -80,6 +80,5 @@ RETINANET_RESTRICTIONS = [
     'anchor.min_level == postprocess.min_level',
     'anchor.max_level == postprocess.max_level',
     'retinanet_head.num_classes == retinanet_loss.num_classes',
-    'retinanet_head.num_classes == postprocess.num_classes',
 ]
 # pylint: enable=line-too-long
