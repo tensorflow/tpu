@@ -5,8 +5,8 @@ To get started, make sure to use Tensorflow 1.13+ on Google Cloud. Also here are
 
 ```bash
 sudo apt-get install -y python-tk && \
-pip install Cython matplotlib opencv-python-headless pyyaml Pillow && \
-pip install 'git+https://github.com/cocodataset/cocoapi#egg=pycocotools&subdirectory=PythonAPI'
+pip install --user Cython matplotlib opencv-python-headless pyyaml Pillow && \
+pip install --user 'git+https://github.com/cocodataset/cocoapi#egg=pycocotools&subdirectory=PythonAPI'
 ```
 
 Next, download the code from tpu github repository or use the pre-installed Google Cloud VM.
