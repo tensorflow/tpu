@@ -169,3 +169,66 @@ def multilevel_propose_rois(rpn_boxes,
           rois, roi_scores, k=overall_top_k)
 
     return selected_rois, selected_roi_scores
+
+
+class ROIGenerator(object):
+  """Proposes RoIs for the second stage processing."""
+
+  def __init__(self, params):
+    self._rpn_pre_nms_top_k = params.rpn_pre_nms_top_k
+    self._rpn_post_nms_top_k = params.rpn_post_nms_top_k
+    self._rpn_nms_threshold = params.rpn_nms_threshold
+    self._rpn_score_threshold = params.rpn_score_threshold
+    self._rpn_min_size_threshold = params.rpn_min_size_threshold
+    self._test_rpn_pre_nms_top_k = params.test_rpn_pre_nms_top_k
+    self._test_rpn_post_nms_top_k = params.test_rpn_post_nms_top_k
+    self._test_rpn_nms_threshold = params.test_rpn_nms_threshold
+    self._test_rpn_score_threshold = params.test_rpn_score_threshold
+    self._test_rpn_min_size_threshold = params.test_rpn_min_size_threshold
+    self._use_batched_nms = params.use_batched_nms
+
+  def __call__(self, boxes, scores, anchor_boxes, image_shape, is_training):
+    """Generates RoI proposals.
+
+    Args:
+      boxes: a dict with keys representing FPN levels and values representing
+        box tenors of shape [batch_size, feature_h, feature_w, num_anchors * 4].
+      scores: a dict with keys representing FPN levels and values representing
+        logit tensors of shape [batch_size, feature_h, feature_w, num_anchors].
+      anchor_boxes: a dict with keys representing FPN levels and values
+        representing anchor box tensors of shape
+        [batch_size, feature_h, feature_w, num_anchors * 4].
+      image_shape: a tensor of shape [batch_size, 2] where the last dimension
+        are [height, width] of the scaled image.
+      is_training: a bool indicating whether it is in training or inference
+        mode.
+
+    Returns:
+      proposed_rois: a tensor of shape [batch_size, rpn_post_nms_top_k, 4],
+        representing the box coordinates of the proposed RoIs w.r.t. the
+        scaled image.
+      proposed_roi_scores: a tensor of shape
+        [batch_size, rpn_post_nms_top_k, 1], representing the scores of the
+        proposed RoIs.
+
+    """
+    proposed_rois, proposed_roi_scores = multilevel_propose_rois(
+        boxes,
+        scores,
+        anchor_boxes,
+        image_shape,
+        rpn_pre_nms_top_k=(self._rpn_pre_nms_top_k if is_training
+                           else self._test_rpn_pre_nms_top_k),
+        rpn_post_nms_top_k=(self._rpn_post_nms_top_k if is_training
+                            else self._test_rpn_post_nms_top_k),
+        rpn_nms_threshold=(self._rpn_nms_threshold if is_training
+                           else self._test_rpn_nms_threshold),
+        rpn_score_threshold=(self._rpn_score_threshold if is_training
+                             else self._test_rpn_score_threshold),
+        rpn_min_size_threshold=(self._rpn_min_size_threshold if is_training
+                                else self._test_rpn_min_size_threshold),
+        decode_boxes=True,
+        clip_boxes=True,
+        use_batched_nms=self._use_batched_nms,
+        apply_sigmoid_to_score=True)
+    return proposed_rois, proposed_roi_scores
