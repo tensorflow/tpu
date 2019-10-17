@@ -56,7 +56,7 @@ class InputFn(object):
             batch_size=batch_size,
             num_parallel_batches=64,
             drop_remainder=True))
-    dataset = dataset.prefetch(tf.contrib.data.AUTOTUNE)
+    dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
 
     # Transpose the input images from [N,H,W,C] to [H,W,C,N] since reshape on
     # TPU is expensive.

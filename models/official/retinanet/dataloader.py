@@ -389,7 +389,7 @@ class InputReader(object):
 
     # Parse the fetched records to input tensors for model function.
     dataset = dataset.map(_dataset_parser, num_parallel_calls=64)
-    dataset = dataset.prefetch(tf.contrib.data.AUTOTUNE)
+    dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
     dataset = dataset.batch(batch_size, drop_remainder=True)
 
     def _process_example(images, cls_targets, box_targets, num_positives,
@@ -418,7 +418,7 @@ class InputReader(object):
       return images, labels
 
     dataset = dataset.map(_process_example)
-    dataset = dataset.prefetch(tf.contrib.data.AUTOTUNE)
+    dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
     if self._num_examples > 0:
       dataset = dataset.take(self._num_examples)
     return dataset
@@ -491,5 +491,5 @@ class SegmentationInputReader(object):
     dataset = dataset.map(_dataset_parser, num_parallel_calls=64)
     dataset = dataset.prefetch(batch_size)
     dataset = dataset.batch(batch_size, drop_remainder=True)
-    dataset = dataset.prefetch(tf.contrib.data.AUTOTUNE)
+    dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
     return dataset
