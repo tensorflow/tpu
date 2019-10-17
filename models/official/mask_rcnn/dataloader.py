@@ -19,7 +19,7 @@ data for category classification, bounding box regression, and number of
 positive examples to normalize the loss during training.
 
 """
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 import anchors
 import coco_utils
@@ -327,7 +327,7 @@ class InputReader(object):
       dataset = dataset.repeat()
 
     dataset = dataset.apply(
-        tf.contrib.data.parallel_interleave(
+        tf.data.experimental.parallel_interleave(
             dataset_fn,
             cycle_length=32,
             sloppy=(self._mode == tf.estimator.ModeKeys.TRAIN)))
@@ -336,7 +336,7 @@ class InputReader(object):
 
     # Parse the fetched records to input tensors for model function.
     dataset = dataset.apply(
-        tf.contrib.data.map_and_batch(
+        tf.data.experimental.map_and_batch(
             dataset_parser_fn,
             batch_size=batch_size,
             num_parallel_batches=64,
@@ -367,7 +367,7 @@ class InputReader(object):
 
       dataset = dataset.map(_transform_images, num_parallel_calls=16)
 
-    dataset = dataset.prefetch(tf.contrib.data.AUTOTUNE)
+    dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
 
     if self._num_examples > 0:
       dataset = dataset.take(self._num_examples)

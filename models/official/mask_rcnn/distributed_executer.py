@@ -21,8 +21,9 @@ from __future__ import print_function
 import abc
 import json
 import os
+from absl import logging
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 from hyperparameters import params_dict
 import evaluation
@@ -31,7 +32,7 @@ import evaluation
 class DistributedExecuter(object):
   """Interface to run Mask RCNN model in TPUs/GPUs.
 
-  Arguments:
+  Attributes:
     flags: FLAGS object passed from the user.
     model_params: Model configuration needed to run distribution strategy.
     model_fn: Model function to be passed to Estimator.
@@ -107,7 +108,7 @@ class DistributedExecuter(object):
     self._save_config()
     run_config = self.build_strategy_configuration()
     params = self.build_model_parameters('train', run_config)
-    tf.logging.info(params)
+    logging.info(params)
     train_estimator = self.build_mask_rcnn_estimator(params, run_config,
                                                      'train')
     if self._model_params.use_tpu:
@@ -161,13 +162,13 @@ class DistributedExecuter(object):
                                                     'eval')
 
     def _terminate_eval():
-      tf.logging.info('Terminating eval after %d seconds of '
-                      'no checkpoints' % self._flags.eval_timeout)
+      logging.info('Terminating eval after %d seconds of '
+                   'no checkpoints', self._flags.eval_timeout)
       return True
 
     eval_results = None
     # Run evaluation when there's a new checkpoint
-    for ckpt in tf.contrib.training.checkpoints_iterator(
+    for ckpt in tf.train.checkpoints_iterator(
         self._flags.model_dir,
         min_interval_secs=self._flags.min_eval_interval,
         timeout=self._flags.eval_timeout,
@@ -175,7 +176,7 @@ class DistributedExecuter(object):
       # Terminate eval job when final checkpoint is reached
       current_step = int(os.path.basename(ckpt).split('-')[1])
 
-      tf.logging.info('Starting to evaluate.')
+      logging.info('Starting to evaluate.')
       try:
         eval_results, predictions = evaluation.evaluate(
             eval_estimator, eval_input_fn, self._model_params.eval_samples,
@@ -185,16 +186,16 @@ class DistributedExecuter(object):
                             current_step)
 
         if current_step >= self._model_params.total_steps:
-          tf.logging.info('Evaluation finished after training step %d' %
-                          current_step)
+          logging.info('Evaluation finished after training step %d',
+                       current_step)
           break
       except tf.errors.NotFoundError:
         # Since the coordinator is on a different job than the TPU worker,
         # sometimes the TPU worker does not finish initializing until long after
         # the CPU job tells it to start evaluating. In this case, the checkpoint
         # file could have been deleted already.
-        tf.logging.info('Checkpoint %s no longer exists, skipping checkpoint' %
-                        ckpt)
+        logging.info('Checkpoint %s no longer exists, skipping checkpoint',
+                     ckpt)
     summary_writer.close()
     return eval_results
 
@@ -217,11 +218,11 @@ class DistributedExecuter(object):
     num_cycles = int(self._model_params.total_steps /
                      self._model_params.num_steps_per_eval)
     for cycle in range(num_cycles):
-      tf.logging.info('Start training cycle %d.' % cycle)
+      logging.info('Start training cycle %d.', cycle)
       train_estimator.train(
           input_fn=train_input_fn, steps=self._model_params.num_steps_per_eval)
 
-      tf.logging.info('Start evaluation cycle %d.' % cycle)
+      logging.info('Start evaluation cycle %d.', cycle)
       eval_results, predictions = evaluation.evaluate(
           eval_estimator, eval_input_fn, self._model_params.eval_samples,
           self._model_params.eval_batch_size, self._model_params.include_mask,
@@ -231,7 +232,7 @@ class DistributedExecuter(object):
       self._write_summary(summary_writer, eval_results, predictions,
                           current_step)
 
-    tf.logging.info('Starting training cycle %d.' % num_cycles)
+    logging.info('Starting training cycle %d.', num_cycles)
     train_estimator.train(
         input_fn=train_input_fn, max_steps=self._model_params.total_steps)
     eval_results, predictions = evaluation.evaluate(
@@ -251,7 +252,7 @@ class TPUEstimatorExecuter(DistributedExecuter):
     """Retrieves model configuration for running tpu estimator."""
 
     if self._model_params.use_tpu:
-      tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
+      tpu_cluster_resolver = tf.distribute.cluster_resolver.TPUClusterResolver(
           self._flags.tpu,
           zone=self._flags.tpu_zone,
           project=self._flags.gcp_project)
@@ -322,14 +323,14 @@ class TPUEstimatorExecuter(DistributedExecuter):
       input_partition_dims = None
       num_shards = num_cores
 
-    tpu_config = tf.contrib.tpu.TPUConfig(
+    tpu_config = tf.estimator.tpu.TPUConfig(
         self._model_params.iterations_per_loop,
         num_shards=num_shards,
         num_cores_per_replica=num_cores_per_replica,
         input_partition_dims=input_partition_dims,
-        per_host_input_for_training=tf.contrib.tpu.InputPipelineConfig
+        per_host_input_for_training=tf.estimator.tpu.InputPipelineConfig
         .PER_HOST_V2)
-    run_config = tf.contrib.tpu.RunConfig(
+    run_config = tf.estimator.tpu.RunConfig(
         cluster=tpu_cluster_resolver,
         evaluation_master=self._flags.eval_master,
         model_dir=self._flags.model_dir,
@@ -359,7 +360,7 @@ class TPUEstimatorExecuter(DistributedExecuter):
     return params
 
   def build_mask_rcnn_estimator(self, params, run_config, unused_mode):
-    estimator = tf.contrib.tpu.TPUEstimator(
+    estimator = tf.estimator.tpu.TPUEstimator(
         model_fn=self._model_fn,
         use_tpu=params['use_tpu'],
         train_batch_size=self._model_params.train_batch_size,
@@ -375,7 +376,7 @@ class MultiWorkerExecuter(DistributedExecuter):
 
   @staticmethod
   def is_eval_task():
-    return tf.contrib.cluster_resolver.TFConfigClusterResolver(
+    return tf.distribute.cluster_resolver.TFConfigClusterResolver(
     ).task_type == 'evaluator'
 
   def build_strategy_configuration(self):

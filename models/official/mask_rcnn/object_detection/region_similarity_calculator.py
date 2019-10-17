@@ -18,10 +18,9 @@
 Region Similarity Calculators compare a pairwise measure of similarity
 between the boxes in two BoxLists.
 """
-from abc import ABCMeta
-from abc import abstractmethod
+import abc
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 
 def area(boxlist, scope=None):
@@ -89,7 +88,7 @@ def iou(boxlist1, boxlist2, scope=None):
 
 class RegionSimilarityCalculator(object):
   """Abstract base class for region similarity calculator."""
-  __metaclass__ = ABCMeta
+  __metaclass__ = abc.ABCMeta
 
   def compare(self, boxlist1, boxlist2, scope=None):
     """Computes matrix of pairwise similarity between BoxLists.
@@ -111,7 +110,7 @@ class RegionSimilarityCalculator(object):
     with tf.name_scope(scope, 'Compare', [boxlist1, boxlist2]) as scope:
       return self._compare(boxlist1, boxlist2)
 
-  @abstractmethod
+  @abc.abstractmethod
   def _compare(self, boxlist1, boxlist2):
     pass
 

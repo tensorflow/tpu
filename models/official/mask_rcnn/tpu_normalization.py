@@ -19,11 +19,10 @@ from __future__ import division
 from __future__ import print_function
 
 import functools
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
-from tensorflow.contrib.tpu.python.ops import tpu_ops
-from tensorflow.contrib.tpu.python.tpu import tpu_function
-from tensorflow.python.ops import math_ops
+from tensorflow.python.ops import math_ops  # pylint:disable=g-direct-tensorflow-import
+from tensorflow.python.tpu import tpu_function  # pylint:disable=g-direct-tensorflow-import
 
 
 def cross_replica_average(t, num_groups=1):
@@ -39,7 +38,7 @@ def cross_replica_average(t, num_groups=1):
     group_assignment = [[
         x for x in range(num_shards) if x // num_shards_per_group == y
     ] for y in range(num_groups)]
-  return tpu_ops.cross_replica_sum(t, group_assignment) / math_ops.cast(
+  return tf.tpu.cross_replica_sum(t, group_assignment) / math_ops.cast(
       num_shards_per_group, t.dtype)
 
 
@@ -53,7 +52,7 @@ class BatchNormalization(tf.layers.BatchNormalization):
   For detailed information of arguments and implementation, refer to:
   https://www.tensorflow.org/api_docs/python/tf/keras/layers/BatchNormalization
 
-  Arguments:
+  Attributes:
     fused: if `None` or `True`, use a faster, fused implementation if possible.
       If `False`, use the system recommended implementation.
     cross_replica_average_fn:  A function takes a tensor and outputs the mean

@@ -1,4 +1,4 @@
-# Copyright 2017 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,167 +18,141 @@
 A decoder to decode string tensors containing serialized tensorflow.Example
 protos for object detection.
 """
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 
-slim_example_decoder = tf.contrib.slim.tfexample_decoder
+def _get_source_id_from_encoded_image(parsed_tensors):
+  return tf.strings.as_string(
+      tf.strings.to_hash_bucket_fast(parsed_tensors['image/encoded'],
+                                     2**63 - 1))
 
 
 class TfExampleDecoder(object):
   """Tensorflow Example proto decoder."""
 
-  def __init__(self, use_instance_mask=False):
-    """Constructor sets keys_to_features and items_to_handlers."""
-    self.keys_to_features = {
-        'image/encoded': tf.FixedLenFeature((), tf.string, default_value=''),
-        'image/format': tf.FixedLenFeature((), tf.string, default_value='jpeg'),
-        'image/filename': tf.FixedLenFeature((), tf.string, default_value=''),
-        'image/key/sha256': tf.FixedLenFeature((), tf.string, default_value=''),
-        'image/source_id': tf.FixedLenFeature((), tf.string, default_value=''),
-        'image/height': tf.FixedLenFeature((), tf.int64, 1),
-        'image/width': tf.FixedLenFeature((), tf.int64, 1),
-        # Object boxes and classes.
+  def __init__(self, use_instance_mask=False, regenerate_source_id=False):
+    self._use_instance_mask = use_instance_mask
+    self._regenerate_source_id = regenerate_source_id
+    self._keys_to_features = {
+        'image/encoded': tf.FixedLenFeature((), tf.string),
+        'image/source_id': tf.FixedLenFeature((), tf.string, ''),
+        'image/height': tf.FixedLenFeature((), tf.int64),
+        'image/width': tf.FixedLenFeature((), tf.int64),
         'image/object/bbox/xmin': tf.VarLenFeature(tf.float32),
         'image/object/bbox/xmax': tf.VarLenFeature(tf.float32),
         'image/object/bbox/ymin': tf.VarLenFeature(tf.float32),
         'image/object/bbox/ymax': tf.VarLenFeature(tf.float32),
         'image/object/class/label': tf.VarLenFeature(tf.int64),
-        'image/object/class/text': tf.VarLenFeature(tf.string),
         'image/object/area': tf.VarLenFeature(tf.float32),
         'image/object/is_crowd': tf.VarLenFeature(tf.int64),
-        'image/object/difficult': tf.VarLenFeature(tf.int64),
-        'image/object/group_of': tf.VarLenFeature(tf.int64),
-        'image/object/weight': tf.VarLenFeature(tf.float32),
-        'image/segmentation/object': tf.VarLenFeature(tf.int64),
-        'image/segmentation/object/class': tf.VarLenFeature(tf.int64),
-        'image/object/mask': tf.VarLenFeature(tf.string),
-        'image/object/attribute/label': tf.VarLenFeature(tf.int64),
         'image/object/polygon': tf.VarLenFeature(tf.float32),
     }
-    self.items_to_handlers = {
-        'image':
-            slim_example_decoder.Image(
-                image_key='image/encoded',
-                format_key='image/format',
-                channels=3),
-        'source_id': (slim_example_decoder.Tensor('image/source_id')),
-        'key': (slim_example_decoder.Tensor('image/key/sha256')),
-        'filename': (slim_example_decoder.Tensor('image/filename')),
-        # Object boxes and classes.
-        'groundtruth_boxes': (slim_example_decoder.BoundingBox(
-            ['ymin', 'xmin', 'ymax', 'xmax'], 'image/object/bbox/')),
-        'groundtruth_area':
-            slim_example_decoder.Tensor('image/object/area'),
-        'groundtruth_is_crowd': (
-            slim_example_decoder.Tensor('image/object/is_crowd')),
-        'groundtruth_difficult': (
-            slim_example_decoder.Tensor('image/object/difficult')),
-        'groundtruth_group_of': (
-            slim_example_decoder.Tensor('image/object/group_of')),
-        'groundtruth_weights': (
-            slim_example_decoder.Tensor('image/object/weight')),
-        'groundtruth_classes': (
-            slim_example_decoder.Tensor('image/object/class/label')),
-        'groundtruth_attributes': (
-            slim_example_decoder.Tensor('image/object/attribute/label')),
-        'groundtruth_polygons': (
-            slim_example_decoder.Tensor('image/object/polygon')),
-    }
     if use_instance_mask:
-      mask_decoder = slim_example_decoder.ItemHandlerCallback(
-          ['image/object/mask', 'image/height', 'image/width'],
-          self._decode_png_instance_masks)
-      self.items_to_handlers.update({
-          'groundtruth_instance_masks':
-              mask_decoder,
-          'groundtruth_instance_class':
-              slim_example_decoder.Tensor('image/segmentation/object/class'),
-          'groundtruth_polygons': (
-              slim_example_decoder.Tensor('image/object/polygon')),
+      self._keys_to_features.update({
+          'image/object/mask':
+              tf.VarLenFeature(tf.string),
       })
 
-  def _decode_png_instance_masks(self, keys_to_tensors):
-    """Decode PNG instance segmentation masks and stack into dense tensor.
+  def _decode_image(self, parsed_tensors):
+    """Decodes the image and set its static shape."""
+    image = tf.io.decode_image(parsed_tensors['image/encoded'], channels=3)
+    image.set_shape([None, None, 3])
+    return image
 
-    The instance segmentation masks are reshaped to [num_instances, height,
-    width].
+  def _decode_boxes(self, parsed_tensors):
+    """Concat box coordinates in the format of [ymin, xmin, ymax, xmax]."""
+    xmin = parsed_tensors['image/object/bbox/xmin']
+    xmax = parsed_tensors['image/object/bbox/xmax']
+    ymin = parsed_tensors['image/object/bbox/ymin']
+    ymax = parsed_tensors['image/object/bbox/ymax']
+    return tf.stack([ymin, xmin, ymax, xmax], axis=-1)
 
-    Args:
-      keys_to_tensors: a dictionary from keys to tensors.
+  def _decode_masks(self, parsed_tensors):
+    """Decode a set of PNG masks to the tf.float32 tensors."""
+    def _decode_png_mask(png_bytes):
+      mask = tf.squeeze(
+          tf.io.decode_png(png_bytes, channels=1, dtype=tf.uint8), axis=-1)
+      mask = tf.cast(mask, dtype=tf.float32)
+      mask.set_shape([None, None])
+      return mask
 
-    Returns:
-      A 3-D float tensor of shape [num_instances, height, width] with values
-        in {0, 1}.
-    """
-
-    def decode_png_mask(image_buffer):
-      image = tf.squeeze(
-          tf.image.decode_image(image_buffer, channels=1), axis=2)
-      image.set_shape([None, None])
-      image = tf.to_float(tf.greater(image, 0))
-      return image
-
-    png_masks = keys_to_tensors['image/object/mask']
-    height = keys_to_tensors['image/height']
-    width = keys_to_tensors['image/width']
-    if isinstance(png_masks, tf.SparseTensor):
-      png_masks = tf.sparse_tensor_to_dense(png_masks, default_value='')
+    height = parsed_tensors['image/height']
+    width = parsed_tensors['image/width']
+    masks = parsed_tensors['image/object/mask']
     return tf.cond(
-        tf.greater(tf.size(png_masks), 0),
-        lambda: tf.map_fn(decode_png_mask, png_masks, dtype=tf.float32),
-        lambda: tf.zeros(tf.to_int32(tf.stack([0, height, width]))))
+        tf.greater(tf.size(masks), 0),
+        lambda: tf.map_fn(_decode_png_mask, masks, dtype=tf.float32),
+        lambda: tf.zeros([0, height, width], dtype=tf.float32))
 
-  def decode(self, tf_example_string_tensor):
-    """Decodes serialized tensorflow example and returns a tensor dictionary.
+  def _decode_areas(self, parsed_tensors):
+    xmin = parsed_tensors['image/object/bbox/xmin']
+    xmax = parsed_tensors['image/object/bbox/xmax']
+    ymin = parsed_tensors['image/object/bbox/ymin']
+    ymax = parsed_tensors['image/object/bbox/ymax']
+    return tf.cond(
+        tf.greater(tf.shape(parsed_tensors['image/object/area'])[0], 0),
+        lambda: parsed_tensors['image/object/area'],
+        lambda: (xmax - xmin) * (ymax - ymin))
+
+  def decode(self, serialized_example):
+    """Decode the serialized example.
 
     Args:
-      tf_example_string_tensor: a string tensor holding a serialized tensorflow
-        example proto.
+      serialized_example: a single serialized tf.Example string.
 
     Returns:
-      A dictionary of the following tensors.
-      image - 3D uint8 tensor of shape [None, None, 3]
-        containing image.
-      source_id - string tensor containing original
-        image id.
-      key - string tensor with unique sha256 hash key.
-      filename - string tensor with original dataset
-        filename.
-      groundtruth_boxes - 2D float32 tensor of shape
-        [None, 4] containing box corners.
-      groundtruth_classes - 1D int64 tensor of shape [None]
-      groundtruth_weights - 1D float32 tensor of
-        shape [None] indicating the weights of groundtruth boxes.
-        [None] containing classes for the boxes.
-      groundtruth_area - 1D float32 tensor of shape
-        [None] containing containing object mask area in pixel squared.
-      groundtruth_is_crowd - 1D bool tensor of shape
-        [None] indicating if the boxes enclose a crowd.
-
-    Optional:
-      groundtruth_difficult - 1D bool tensor of shape
-        [None] indicating if the boxes represent `difficult` instances.
-      groundtruth_group_of - 1D bool tensor of shape
-        [None] indicating if the boxes represent `group_of` instances.
-      groundtruth_instance_masks - 3D float32 tensor of
-        shape [None, None, None] containing instance masks.
-      groundtruth_attributes - 1D int64 tensor of shape [None]
-      groundtruth_polygons - 1D float tensor of shape [None]
+      decoded_tensors: a dictionary of tensors with the following fields:
+        - image: a uint8 tensor of shape [None, None, 3].
+        - source_id: a string scalar tensor.
+        - height: an integer scalar tensor.
+        - width: an integer scalar tensor.
+        - groundtruth_classes: a int64 tensor of shape [None].
+        - groundtruth_is_crowd: a bool tensor of shape [None].
+        - groundtruth_area: a float32 tensor of shape [None].
+        - groundtruth_boxes: a float32 tensor of shape [None, 4].
+        - groundtruth_instance_masks: a float32 tensor of shape
+            [None, None, None].
+        - groundtruth_instance_masks_png: a string tensor of shape [None].
     """
-    serialized_example = tf.reshape(tf_example_string_tensor, shape=[])
-    decoder = slim_example_decoder.TFExampleDecoder(self.keys_to_features,
-                                                    self.items_to_handlers)
-    keys = sorted(decoder.list_items())
+    parsed_tensors = tf.io.parse_single_example(
+        serialized_example, self._keys_to_features)
+    for k in parsed_tensors:
+      if isinstance(parsed_tensors[k], tf.SparseTensor):
+        if parsed_tensors[k].dtype == tf.string:
+          parsed_tensors[k] = tf.sparse_tensor_to_dense(
+              parsed_tensors[k], default_value='')
+        else:
+          parsed_tensors[k] = tf.sparse_tensor_to_dense(
+              parsed_tensors[k], default_value=0)
 
-    tensors = decoder.decode(serialized_example, items=keys)
-    tensor_dict = dict(zip(keys, tensors))
-    is_crowd = 'groundtruth_is_crowd'
-    tensor_dict[is_crowd] = tf.cast(tensor_dict[is_crowd], dtype=tf.bool)
-    tensor_dict['image'].set_shape([None, None, 3])
-    if 'groundtruth_instance_masks' not in tensor_dict:
-      tensor_dict['groundtruth_instance_masks'] = None
-    if 'groundtruth_polygons' not in tensor_dict:
-      tensor_dict['groundtruth_polygons'] = None
+    image = self._decode_image(parsed_tensors)
+    boxes = self._decode_boxes(parsed_tensors)
+    areas = self._decode_areas(parsed_tensors)
+    if self._regenerate_source_id:
+      source_id = _get_source_id_from_encoded_image(parsed_tensors)
+    else:
+      source_id = tf.cond(
+          tf.greater(tf.strings.length(parsed_tensors['image/source_id']),
+                     0), lambda: parsed_tensors['image/source_id'],
+          lambda: _get_source_id_from_encoded_image(parsed_tensors))
+    if self._use_instance_mask:
+      masks = self._decode_masks(parsed_tensors)
 
-    return tensor_dict
-
+    decoded_tensors = {
+        'image': image,
+        'source_id': source_id,
+        'height': parsed_tensors['image/height'],
+        'width': parsed_tensors['image/width'],
+        'groundtruth_classes': parsed_tensors['image/object/class/label'],
+        'groundtruth_is_crowd': tf.cast(parsed_tensors['image/object/is_crowd'],
+                                        dtype=tf.bool),
+        'groundtruth_area': areas,
+        'groundtruth_boxes': boxes,
+        'groundtruth_polygons': parsed_tensors['image/object/polygon'],
+    }
+    if self._use_instance_mask:
+      decoded_tensors.update({
+          'groundtruth_instance_masks': masks,
+          'groundtruth_instance_masks_png': parsed_tensors['image/object/mask'],
+      })
+    return decoded_tensors

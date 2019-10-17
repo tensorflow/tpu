@@ -30,23 +30,22 @@ Subclasses should implement the Subsample function and can make use of the
 This is originally implemented in TensorFlow Object Detection API.
 """
 
-from abc import ABCMeta
-from abc import abstractmethod
+import abc
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 from object_detection import ops
 
 
 class MinibatchSampler(object):
   """Abstract base class for subsampling minibatches."""
-  __metaclass__ = ABCMeta
+  __metaclass__ = abc.ABCMeta
 
   def __init__(self):
     """Constructs a minibatch sampler."""
     pass
 
-  @abstractmethod
+  @abc.abstractmethod
   def subsample(self, indicator, batch_size, **params):
     """Returns subsample of entries in indicator.
 

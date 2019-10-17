@@ -26,9 +26,11 @@ from __future__ import print_function
 
 import math
 import re
+from absl import logging
 import numpy as np
 import six
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+import tensorflow.compat.v2 as tf2
 
 import anchors
 import fpn
@@ -60,11 +62,19 @@ def create_optimizer(learning_rate, params):
     optimizer = tf.train.RMSPropOptimizer(
         learning_rate, momentum=params['momentum'])
   elif params['optimizer'] == 'lars':
-    optimizer = tf.contrib.opt.LARSOptimizer(
-        learning_rate,
-        momentum=params['momentum'],
-        weight_decay=params['lars_weight_decay'],
-        skip_list=['batch_normalization', 'bias'])
+    try:
+      from tensorflow.contrib.opt import LARSOptimizer  # pylint: disable=g-import-not-at-top
+
+      optimizer = LARSOptimizer(
+          learning_rate,
+          momentum=params['momentum'],
+          weight_decay=params['lars_weight_decay'],
+          skip_list=['batch_normalization', 'bias'])
+    except ImportError as e:
+      logging.exception('LARSOptimizer is currently not supported '
+                        'in TensorFlow 2.x.')
+      raise e
+
   else:
     raise ValueError('Unsupported optimizer type %s.' % params['optimizer'])
   return optimizer
@@ -110,7 +120,7 @@ def compute_model_statistics(batch_size, is_training=True):
   """Compute number of parameters and FLOPS."""
   num_trainable_params = np.sum(
       [np.prod(var.get_shape().as_list()) for var in tf.trainable_variables()])
-  tf.logging.info('number of trainable params: {}'.format(num_trainable_params))
+  logging.info('number of trainable params: %d', num_trainable_params)
 
   options = tf.profiler.ProfileOptionBuilder.float_operation()
   options['output'] = 'none'
@@ -118,11 +128,11 @@ def compute_model_statistics(batch_size, is_training=True):
       tf.get_default_graph(), options=options).total_float_ops
   flops_per_image = flops / batch_size
   if is_training:
-    tf.logging.info(
-        'number of FLOPS per image: {} in training'.format(flops_per_image))
+    logging.info(
+        'number of FLOPS per image: %f in training', flops_per_image)
   else:
-    tf.logging.info(
-        'number of FLOPS per image: {} in eval'.format(flops_per_image))
+    logging.info(
+        'number of FLOPS per image: %f in eval', flops_per_image)
 
 
 def build_model_graph(features, labels, is_training, params):
@@ -379,7 +389,7 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
       # Otherwise, it is in export mode, the features is past in directly.
 
   if params['precision'] == 'bfloat16':
-    with tf.contrib.tpu.bfloat16_scope():
+    with tf.tpu.bfloat16_scope():
       model_outputs = build_model_graph(
           features, labels,
           (mode == tf.estimator.ModeKeys.TRAIN or
@@ -423,8 +433,8 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
     # If we are doing PREDICT, we can return here.
     if mode == tf.estimator.ModeKeys.PREDICT:
       if params['use_tpu']:
-        return tf.contrib.tpu.TPUEstimatorSpec(mode=mode,
-                                               predictions=predictions)
+        return tf.estimator.tpu.TPUEstimatorSpec(mode=mode,
+                                                 predictions=predictions)
       return tf.estimator.EstimatorSpec(mode=mode,
                                         predictions=predictions)
 
@@ -485,10 +495,10 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
     if params['use_tpu']:
       # For now, just return loss against the eval dataset.
       # In the future, calculate COCO metrics against the eval dataset.
-      return tf.contrib.tpu.TPUEstimatorSpec(mode=mode,
-                                             predictions=predictions,
-                                             eval_metrics=None,
-                                             loss=total_loss)
+      return tf.estimator.tpu.TPUEstimatorSpec(mode=mode,
+                                               predictions=predictions,
+                                               eval_metrics=None,
+                                               loss=total_loss)
     return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions,
                                       eval_metrics=None, loss=total_loss)
 
@@ -496,14 +506,14 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
   if mode == tf.estimator.ModeKeys.TRAIN:
     optimizer = create_optimizer(learning_rate, params)
     if params['use_tpu']:
-      optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
+      optimizer = tf.tpu.CrossShardOptimizer(optimizer)
 
     scaffold_fn = None
     if params['warm_start_path']:
 
       def warm_start_scaffold_fn():
-        tf.logging.info(
-            'model_fn warm start from: %s",' % params['warm_start_path'])
+        logging.info(
+            'model_fn warm start from: %s,', params['warm_start_path'])
         assignment_map = _build_assigment_map(
             optimizer,
             prefix=None,
@@ -541,10 +551,10 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
             g.shape.num_elements() for g in old_grads if g is not None)
         clip_norm = params['global_gradient_clip_ratio'] * math.sqrt(
             num_weights)
-        tf.logging.info(
-            'Global clip norm set to %g for %d variables with %d elements.' %
-            (clip_norm, sum(1 for g in old_grads if g is not None),
-             num_weights))
+        logging.info(
+            'Global clip norm set to %g for %d variables with %d elements.',
+            clip_norm, sum(1 for g in old_grads if g is not None),
+            num_weights)
         gradients, _ = tf.clip_by_global_norm(old_grads, clip_norm)
     else:
       gradients, variables = zip(*grads_and_vars)
@@ -570,7 +580,7 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
         This function is executed on the CPU and should not directly reference
         any Tensors in the rest of the `model_fn`. To pass Tensors from the
         model to the `metric_fn`, provide as part of the `host_call`. See
-        https://www.tensorflow.org/api_docs/python/tf/contrib/tpu/TPUEstimatorSpec
+        https://www.tensorflow.org/api_docs/python/tf/estimator/tpu/TPUEstimatorSpec
         for more information.
 
         Arguments should match the list of `Tensor` objects passed as the second
@@ -606,41 +616,41 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
         # TPU loop is finished, setting max_queue value to the same as number of
         # iterations will make the summary writer only flush the data to storage
         # once per loop.
-        with (tf.contrib.summary.create_file_writer(
+        with (tf2.summary.create_file_writer(
             params['model_dir'],
             max_queue=params['iterations_per_loop']).as_default()):
-          with tf.contrib.summary.always_record_summaries():
-            tf.contrib.summary.scalar(
+          with tf2.summary.record_if(True):
+            tf2.summary.scalar(
                 'total_loss', tf.reduce_mean(total_loss), step=global_step)
-            tf.contrib.summary.scalar(
+            tf2.summary.scalar(
                 'total_rpn_loss', tf.reduce_mean(total_rpn_loss),
                 step=global_step)
-            tf.contrib.summary.scalar(
+            tf2.summary.scalar(
                 'rpn_score_loss', tf.reduce_mean(rpn_score_loss),
                 step=global_step)
-            tf.contrib.summary.scalar(
+            tf2.summary.scalar(
                 'rpn_box_loss', tf.reduce_mean(rpn_box_loss), step=global_step)
-            tf.contrib.summary.scalar(
+            tf2.summary.scalar(
                 'total_fast_rcnn_loss', tf.reduce_mean(total_fast_rcnn_loss),
                 step=global_step)
-            tf.contrib.summary.scalar(
+            tf2.summary.scalar(
                 'fast_rcnn_class_loss', tf.reduce_mean(fast_rcnn_class_loss),
                 step=global_step)
-            tf.contrib.summary.scalar(
+            tf2.summary.scalar(
                 'fast_rcnn_box_loss', tf.reduce_mean(fast_rcnn_box_loss),
                 step=global_step)
             if params['include_mask']:
-              tf.contrib.summary.scalar(
+              tf2.summary.scalar(
                   'mask_loss', tf.reduce_mean(mask_loss), step=global_step)
-            tf.contrib.summary.scalar(
+            tf2.summary.scalar(
                 'l2_regularization_loss',
                 tf.reduce_mean(l2_regularization_loss),
                 step=global_step)
-            tf.contrib.summary.scalar(
+            tf2.summary.scalar(
                 'learning_rate', tf.reduce_mean(learning_rate),
                 step=global_step)
 
-            return tf.contrib.summary.all_summary_ops()
+            return tf.summary.all_v2_summary_ops()
 
       # To log the loss, current learning rate, and epoch for Tensorboard, the
       # summary op needs to be run on the host CPU via host_call. host_call
@@ -668,7 +678,7 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
     scaffold_fn = None
 
   if params['use_tpu']:
-    return tf.contrib.tpu.TPUEstimatorSpec(
+    return tf.estimator.tpu.TPUEstimatorSpec(
         mode=mode,
         loss=total_loss,
         train_op=train_op,

@@ -18,9 +18,9 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from collections import OrderedDict
+import collections
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 from object_detection import argmax_matcher
 from object_detection import balanced_positive_negative_sampler
 from object_detection import box_list
@@ -154,7 +154,7 @@ class Anchors(object):
 
   def unpack_labels(self, labels):
     """Unpacks an array of labels into multiscales labels."""
-    labels_unpacked = OrderedDict()
+    labels_unpacked = collections.OrderedDict()
     count = 0
     for level in range(self.min_level, self.max_level + 1):
       feat_size0 = int(self.image_size[0] / 2**level)

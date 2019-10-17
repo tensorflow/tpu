@@ -26,11 +26,9 @@ Users of a BoxCoder can call two methods:
 In both cases, the arguments are assumed to be in 1-1 correspondence already;
 it is not the job of a BoxCoder to perform matching.
 """
-from abc import ABCMeta
-from abc import abstractmethod
-from abc import abstractproperty
+import abc
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 
 # Box coder types.
@@ -42,9 +40,9 @@ SQUARE = 'square'
 
 class BoxCoder(object):
   """Abstract base class for box coder."""
-  __metaclass__ = ABCMeta
+  __metaclass__ = abc.ABCMeta
 
-  @abstractproperty
+  @abc.abstractproperty
   def code_size(self):
     """Return the size of each code.
 
@@ -85,7 +83,7 @@ class BoxCoder(object):
     with tf.name_scope('Decode'):
       return self._decode(rel_codes, anchors)
 
-  @abstractmethod
+  @abc.abstractmethod
   def _encode(self, boxes, anchors):
     """Method to be overriden by implementations.
 
@@ -98,7 +96,7 @@ class BoxCoder(object):
     """
     pass
 
-  @abstractmethod
+  @abc.abstractmethod
   def _decode(self, rel_codes, anchors):
     """Method to be overriden by implementations.
 
