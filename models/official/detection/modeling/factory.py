@@ -14,7 +14,6 @@
 # ==============================================================================
 """Factory to build detection model."""
 
-
 from modeling import retinanet_model
 from modeling import shapemask_model
 
