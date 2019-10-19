@@ -18,7 +18,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from dataloader import maskrcnn_parser
 from dataloader import retinanet_parser
 from dataloader import shapemask_parser
 
@@ -47,29 +46,6 @@ def parser_generator(params, mode):
         use_bfloat16=parser_params.use_bfloat16,
         mode=mode,
         regenerate_source_id=parser_params.regenerate_source_id)
-  elif params.architecture.parser == 'maskrcnn_parser':
-    anchor_params = params.anchor
-    parser_params = params.maskrcnn_parser
-    parser_fn = maskrcnn_parser.Parser(
-        output_size=parser_params.output_size,
-        min_level=anchor_params.min_level,
-        max_level=anchor_params.max_level,
-        num_scales=anchor_params.num_scales,
-        aspect_ratios=anchor_params.aspect_ratios,
-        anchor_size=anchor_params.anchor_size,
-        rpn_match_threshold=parser_params.rpn_match_threshold,
-        rpn_unmatched_threshold=parser_params.rpn_unmatched_threshold,
-        rpn_batch_size_per_im=parser_params.rpn_batch_size_per_im,
-        rpn_fg_fraction=parser_params.rpn_fg_fraction,
-        aug_rand_hflip=parser_params.aug_rand_hflip,
-        aug_scale_min=parser_params.aug_scale_min,
-        aug_scale_max=parser_params.aug_scale_max,
-        skip_crowd_during_training=parser_params.skip_crowd_during_training,
-        max_num_instances=parser_params.max_num_instances,
-        include_mask=parser_params.include_mask,
-        mask_crop_size=parser_params.mask_crop_size,
-        use_bfloat16=parser_params.use_bfloat16,
-        mode=mode)
   elif params.architecture.parser == 'shapemask_parser':
     anchor_params = params.anchor
     parser_params = params.shapemask_parser
