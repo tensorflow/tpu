@@ -308,6 +308,19 @@ def serving_model_fn_builder(export_tpu_model,
         'detection_scores': tf.identity(
             model_outputs['detection_scores'], 'DetectionScores'),
     }
+    if 'detection_masks' in model_outputs:
+      predictions.update({
+          'detection_masks':
+              tf.identity(model_outputs['detection_masks'], 'DetectionMasks'),
+      })
+
+    if 'detection_outer_boxes' in model_outputs:
+      predictions.update({
+          'detection_outer_boxes':
+              tf.identity(model_outputs['detection_outer_boxes'],
+                          'DetectionOuterBoxes'),
+      })
+
     if output_image_info:
       predictions['image_info'] = tf.identity(
           model_outputs['image_info'], 'ImageInfo')
