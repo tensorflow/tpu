@@ -26,7 +26,6 @@ SHAPEMASK_CFG.override({
         'learning_rate': {
             'learning_rate_steps': [30000, 40000],
         },
-        'transpose_input': False,
     },
     'eval': {
         'type': 'shapemask_box_and_mask',
