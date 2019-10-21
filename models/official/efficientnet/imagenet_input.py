@@ -95,8 +95,6 @@ class ImageNetTFExampleInput(object):
     self.image_size = image_size
     self.include_background_label = include_background_label
     self.num_label_classes = num_label_classes
-    if include_background_label:
-      self.num_label_classes += 1
     self.augment_name = augment_name
     self.mixup_alpha = mixup_alpha
     self.randaug_num_layers = randaug_num_layers
