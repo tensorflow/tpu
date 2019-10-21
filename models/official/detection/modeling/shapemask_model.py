@@ -45,6 +45,7 @@ class ShapeMaskModel(base_model.Model):
         params.shapemask_head)
     self._fine_mask_fn = factory.finemask_head_generator(params.shapemask_head)
     self._outer_box_scale = params.shapemask_parser.outer_box_scale
+    self._transpose_input = params.train.transpose_input
 
     # Loss function.
     self._cls_loss_fn = losses.RetinanetClassLoss(params.retinanet_loss)
@@ -118,6 +119,9 @@ class ShapeMaskModel(base_model.Model):
     return model_outputs
 
   def train(self, features, labels):
+    if self._transpose_input:
+      features = tf.transpose(features, [3, 0, 1, 2])
+
     outputs = self.model_outputs(features, labels, mode=mode_keys.TRAIN)
 
     # Adds RetinaNet model losses.

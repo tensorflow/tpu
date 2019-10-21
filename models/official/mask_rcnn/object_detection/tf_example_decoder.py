@@ -113,8 +113,7 @@ class TfExampleDecoder(object):
         - groundtruth_is_crowd: a bool tensor of shape [None].
         - groundtruth_area: a float32 tensor of shape [None].
         - groundtruth_boxes: a float32 tensor of shape [None, 4].
-        - groundtruth_instance_masks: a float32 tensor of shape
-            [None, None, None].
+        - groundtruth_attributes - 1D int64 tensor of shape [None].
 
       Optional:
         - groundtruth_difficult - 1D bool tensor of shape
@@ -123,7 +122,6 @@ class TfExampleDecoder(object):
             [None] indicating if the boxes represent `group_of` instances.
         - groundtruth_instance_masks - 3D float32 tensor of
             shape [None, None, None] containing instance masks.
-        - groundtruth_attributes - 1D int64 tensor of shape [None]
         - groundtruth_polygons - 1D float tensor of shape [None]
     """
     parsed_tensors = tf.io.parse_single_example(
@@ -160,13 +158,13 @@ class TfExampleDecoder(object):
                                         dtype=tf.bool),
         'groundtruth_area': areas,
         'groundtruth_boxes': boxes,
+        'groundtruth_attributes': parsed_tensors[
+            'image/object/attribute/label'],
     }
     if self._use_instance_mask:
       decoded_tensors.update({
           'groundtruth_instance_masks': masks,
           'groundtruth_polygons': parsed_tensors['image/object/polygon'],
-          'groundtruth_attributes':
-              parsed_tensors['image/object/attribute/label'],
           'groundtruth_difficult':
               parsed_tensors['image/object/difficult'],
           'groundtruth_group_of':

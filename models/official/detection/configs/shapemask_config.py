@@ -17,6 +17,8 @@
 from configs import base_config
 from hyperparameters import params_dict
 
+SHAPEMASK_RESNET_FROZEN_VAR_PREFIX = r'(resnet\d+/)conv2d(|_([1-9]|10))\/'
+
 # pylint: disable=line-too-long
 SHAPEMASK_CFG = params_dict.ParamsDict(base_config.BASE_CFG)
 SHAPEMASK_CFG.override({
@@ -26,7 +28,7 @@ SHAPEMASK_CFG.override({
         'learning_rate': {
             'learning_rate_steps': [30000, 40000],
         },
-        'transpose_input': False,
+        'frozen_variable_prefix': SHAPEMASK_RESNET_FROZEN_VAR_PREFIX,
     },
     'eval': {
         'type': 'shapemask_box_and_mask',

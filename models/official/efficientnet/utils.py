@@ -280,6 +280,17 @@ class EvalCkptDriver(object):
 
   def build_dataset(self, filenames, labels, is_training):
     """Build input dataset."""
+    batch_drop_remainder = False
+    if 'condconv' in self.model_name and not is_training:
+      # CondConv layers can only be called with known batch dimension. Thus, we
+      # must drop all remaining examples that do not make up one full batch.
+      # To ensure all examples are evaluated, use a batch size that evenly
+      # divides the number of files.
+      batch_drop_remainder = True
+      num_files = len(filenames)
+      if num_files % self.batch_size != 0:
+        tf.logging.warn('Remaining examples in last batch are not being '
+                        'evaluated.')
     filenames = tf.constant(filenames)
     labels = tf.constant(labels)
     dataset = tf.data.Dataset.from_tensor_slices((filenames, labels))
@@ -293,7 +304,8 @@ class EvalCkptDriver(object):
       return image, label
 
     dataset = dataset.map(_parse_function)
-    dataset = dataset.batch(self.batch_size)
+    dataset = dataset.batch(self.batch_size,
+                            drop_remainder=batch_drop_remainder)
 
     iterator = dataset.make_one_shot_iterator()
     images, labels = iterator.get_next()

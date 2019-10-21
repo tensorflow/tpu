@@ -5,7 +5,9 @@
 
 Updates
 
-  - **[Oct 2019] Released new EfficientNet models trained with RandAugment: [paper](https://arxiv.org/abs/1909.13719).**
+  - **[Oct 2019] Released EfficientNet-CondConv models with conditionally parameterized convolutions: [README](condconv/README.md), [paper](https://arxiv.org/abs/1904.04971).**
+
+  - [Oct 2019] Released new EfficientNet models trained with RandAugment: [paper](https://arxiv.org/abs/1909.13719).
 
   - [Aug 2019] Released EfficientNet-EdgeTPU models: [README](edgetpu/README.md) and [blog post](https://ai.googleblog.com/2019/08/efficientnet-edgetpu-creating.html).
 

@@ -36,7 +36,6 @@ def efficientnet_condconv_params(model_name):
   params_dict = {
       # (width_coefficient, depth_coefficient, resolution, dropout_rate,
       #  condconv_num_experts)
-      'efficientnet-condconv-b0-2e': (1.0, 1.0, 224, 0.25, 2),
       'efficientnet-condconv-b0-4e': (1.0, 1.0, 224, 0.25, 4),
       'efficientnet-condconv-b0-8e': (1.0, 1.0, 224, 0.25, 8),
       'efficientnet-condconv-b0-8e-depth': (1.0, 1.1, 224, 0.25, 8)

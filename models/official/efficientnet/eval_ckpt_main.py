@@ -31,6 +31,7 @@ import tensorflow.compat.v1 as tf
 import efficientnet_builder
 import preprocessing
 import utils
+from condconv import efficientnet_condconv_builder
 from edgetpu import efficientnet_edgetpu_builder
 
 flags.DEFINE_string('model_name', 'efficientnet-b0', 'Model name to eval.')
@@ -61,11 +62,14 @@ class EvalCkptDriver(utils.EvalCkptDriver):
     """Build model with input features."""
     if self.model_name.startswith('efficientnet-edgetpu'):
       model_builder = efficientnet_edgetpu_builder
+    elif self.model_name.startswith('efficientnet-condconv'):
+      model_builder = efficientnet_condconv_builder
     elif self.model_name.startswith('efficientnet'):
       model_builder = efficientnet_builder
     else:
       raise ValueError(
-          'Model must be either efficientnet-b* or efficientnet-edgetpu*')
+          'Model must be either efficientnet-b* or efficientnet-edgetpu* or'
+          'efficientnet-condconv*')
 
     features -= tf.constant(
         model_builder.MEAN_RGB, shape=[1, 1, 3], dtype=features.dtype)
@@ -87,11 +91,15 @@ def get_eval_driver(model_name, include_background_label=False):
   if model_name.startswith('efficientnet-edgetpu'):
     _, _, image_size, _ = (
         efficientnet_edgetpu_builder.efficientnet_edgetpu_params(model_name))
+  elif model_name.startswith('efficientnet-condconv'):
+    _, _, image_size, _, _ = (
+        efficientnet_condconv_builder.efficientnet_condconv_params(model_name))
   elif model_name.startswith('efficientnet'):
     _, _, image_size, _ = efficientnet_builder.efficientnet_params(model_name)
   else:
     raise ValueError(
-        'Model must be either efficientnet-b* or efficientnet-edgetpu*')
+        'Model must be either efficientnet-b* or efficientnet-edgetpu* or '
+        'efficientnet-condconv*')
 
   return EvalCkptDriver(
       model_name=model_name,
