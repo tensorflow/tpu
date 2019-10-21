@@ -113,8 +113,6 @@ def main(_):
   # Enables eager context for TF 1.x. TF 2.x will use eager by default.
   # This is used to conveniently get a representative dataset generator using
   # TensorFlow training input helper.
-  (MAJOR, MINOR, PATCH) = map(int, tf.VERSION.split('.'))
-
   tf.enable_eager_execution()
 
   model_builder = get_model_builder(FLAGS.model_name)
@@ -151,10 +149,6 @@ def main(_):
     converter = tf.lite.TFLiteConverter.from_session(sess, [images],
                                                      [output_tensor])
     if FLAGS.quantize:
-      if MAJOR<=1 and MINOR<15:
-        raise AssertionError("Post training quantization requires "
-            "TensorFlow version >= 1.15")
-
       if not FLAGS.data_dir:
         raise ValueError(
             "Post training quantization requires data_dir flag to point to the "

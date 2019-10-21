@@ -70,6 +70,10 @@ flags.DEFINE_bool(
     'transpose_input',
     default=None,
     help='Use TPU double transpose optimization')
+flags.DEFINE_string(
+    'tpu_job_name', None,
+    'Name of TPU worker binary. Only necessary if job name is changed from'
+    ' default tpu_worker.')
 
 # Model specific paramenters
 flags.DEFINE_string('mode', 'train',
