@@ -125,15 +125,16 @@ def multilevel_propose_rois(rpn_boxes,
               image_shape,
               rpn_min_size_threshold)
 
+        this_level_pre_nms_top_k = min(num_boxes, rpn_pre_nms_top_k)
+        this_level_post_nms_top_k = min(num_boxes, rpn_post_nms_top_k)
         if rpn_nms_threshold > 0.0:
-          this_level_pre_nms_top_k = min(num_boxes, rpn_pre_nms_top_k)
           if use_batched_nms:
             this_level_rois, this_level_roi_scores, _, _ = (
                 tf.image.combined_non_max_suppression(
                     tf.expand_dims(this_level_boxes, axis=2),
                     tf.expand_dims(this_level_scores, axis=-1),
                     max_output_size_per_class=this_level_pre_nms_top_k,
-                    max_total_size=rpn_post_nms_top_k,
+                    max_total_size=this_level_post_nms_top_k,
                     iou_threshold=rpn_nms_threshold,
                     score_threshold=rpn_score_threshold,
                     pad_per_class=False,
@@ -149,24 +150,26 @@ def multilevel_propose_rois(rpn_boxes,
                 nms.sorted_non_max_suppression_padded(
                     this_level_scores,
                     this_level_boxes,
-                    max_output_size=rpn_post_nms_top_k,
+                    max_output_size=this_level_post_nms_top_k,
                     iou_threshold=rpn_nms_threshold))
         else:
           this_level_rois, this_level_roi_scores = box_utils.top_k_boxes(
-              this_level_rois, this_level_scores, k=rpn_post_nms_top_k)
+              this_level_rois,
+              this_level_scores,
+              k=this_level_post_nms_top_k)
 
         rois.append(this_level_rois)
         roi_scores.append(this_level_roi_scores)
 
-    rois = tf.concat(rois, axis=1)
-    roi_scores = tf.concat(roi_scores, axis=1)
+    all_rois = tf.concat(rois, axis=1)
+    all_roi_scores = tf.concat(roi_scores, axis=1)
 
     with tf.name_scope('top_k_rois'):
-      _, num_valid_rois = roi_scores.get_shape().as_list()
+      _, num_valid_rois = all_roi_scores.get_shape().as_list()
       overall_top_k = min(num_valid_rois, rpn_post_nms_top_k)
 
       selected_rois, selected_roi_scores = box_utils.top_k_boxes(
-          rois, roi_scores, k=overall_top_k)
+          all_rois, all_roi_scores, k=overall_top_k)
 
     return selected_rois, selected_roi_scores
 

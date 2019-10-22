@@ -336,7 +336,7 @@ class MaskrcnnLoss(object):
     Returns:
       mask_loss: a float tensor representing total mask loss.
     """
-    with tf.name_scope('mask_loss'):
+    with tf.name_scope('mask_rcnn_loss'):
       (batch_size, num_masks, mask_height,
        mask_width) = mask_outputs.get_shape().as_list()
 

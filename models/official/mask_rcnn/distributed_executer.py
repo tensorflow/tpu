@@ -44,6 +44,7 @@ class DistributedExecuter(object):
     self._flags = flags
     self._model_params = model_params
     self._model_fn = model_fn
+    self._tpu_job_name = flags.tpu_job_name
 
   @abc.abstractmethod
   def build_strategy_configuration(self):
@@ -328,6 +329,7 @@ class TPUEstimatorExecuter(DistributedExecuter):
         num_shards=num_shards,
         num_cores_per_replica=num_cores_per_replica,
         input_partition_dims=input_partition_dims,
+        tpu_job_name=self._tpu_job_name,
         per_host_input_for_training=tf.estimator.tpu.InputPipelineConfig
         .PER_HOST_V2)
     run_config = tf.estimator.tpu.RunConfig(
