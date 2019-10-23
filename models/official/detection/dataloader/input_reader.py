@@ -23,12 +23,16 @@ from dataloader import mode_keys as ModeKeys
 class InputFn(object):
   """Input function for tf.Estimator."""
 
-  def __init__(self, file_pattern, params, mode):
+  def __init__(self, file_pattern, params, mode, dataset_type='tfrecord'):
     self._file_pattern = file_pattern
     self._mode = mode
     self._is_training = (mode == ModeKeys.TRAIN)
-    self._parser_fn = factory.parser_generator(params, mode)
-    self._dataset_fn = tf.data.TFRecordDataset
+    if dataset_type == 'tfrecord':
+      self._dataset_fn = tf.data.TFRecordDataset
+      self._parser_fn = factory.parser_generator(params, mode)
+    else:
+      raise ValueError('Dataset type %s is not supported.' % dataset_type)
+
     self._transpose_input = hasattr(params, 'train') and hasattr(
         params.train, 'transpose_input') and params.train.transpose_input
 
