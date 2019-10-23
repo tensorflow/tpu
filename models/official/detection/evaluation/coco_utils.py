@@ -20,13 +20,14 @@ from __future__ import print_function
 
 import copy
 import json
+from absl import logging
 
 import numpy as np
 from PIL import Image
 from pycocotools import coco
 from pycocotools import mask as mask_utils
 import six
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 from dataloader import tf_example_decoder
 from utils import box_utils
@@ -448,7 +449,7 @@ def generate_annotation_file(groundtruth_generator,
                              annotation_file):
   """Generates COCO-style annotation JSON file given a groundtruth generator."""
   groundtruths = {}
-  tf.logging.info('Loading groundtruth annotations from dataset to memory...')
+  logging.info('Loading groundtruth annotations from dataset to memory...')
   for groundtruth in groundtruth_generator():
     for k, v in six.iteritems(groundtruth):
       if k not in groundtruths:
@@ -457,7 +458,7 @@ def generate_annotation_file(groundtruth_generator,
         groundtruths[k].append(v)
   gt_dataset = convert_groundtruths_to_coco_dataset(groundtruths)
 
-  tf.logging.info('Saving groundtruth annotations to the JSON file...')
+  logging.info('Saving groundtruth annotations to the JSON file...')
   with tf.gfile.Open(annotation_file, 'w') as f:
     f.write(json.dumps(gt_dataset))
-  tf.logging.info('Done saving the JSON file...')
+  logging.info('Done saving the JSON file...')

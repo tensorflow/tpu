@@ -31,7 +31,7 @@ Note that TargetAssigners only operate on detections from a single
 image at a time, so any logic for applying a TargetAssigner to multiple
 images must be handled externally.
 """
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 from utils.object_detection import box_list
 from utils.object_detection import shape_utils

@@ -22,8 +22,9 @@ from __future__ import print_function
 import os
 import pprint
 from absl import flags
+from absl import logging
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 from configs import factory
 from dataloader import input_reader
@@ -101,7 +102,7 @@ def main(argv):
   params.lock()
   pp = pprint.PrettyPrinter()
   params_str = pp.pformat(params.as_dict())
-  tf.logging.info('Model Parameters: {}'.format(params_str))
+  logging.info('Model Parameters: %s', params_str)
 
   # Builds detection model on TPUs.
   model_fn = model_builder.ModelFn(params)
@@ -128,11 +129,11 @@ def main(argv):
 
   elif FLAGS.mode == 'eval':
     def terminate_eval():
-      tf.logging.info('Terminating eval after %d seconds of no checkpoints' %
-                      params.eval.eval_timeout)
+      logging.info('Terminating eval after %d seconds of no checkpoints',
+                   params.eval.eval_timeout)
       return True
     # Runs evaluation when there's a new checkpoint.
-    for ckpt in tf.contrib.training.checkpoints_iterator(
+    for ckpt in tf.train.checkpoints_iterator(
         params.model_dir,
         min_interval_secs=params.eval.min_eval_interval,
         timeout=params.eval.eval_timeout,
@@ -140,29 +141,29 @@ def main(argv):
       # Terminates eval job when final checkpoint is reached.
       current_step = int(os.path.basename(ckpt).split('-')[1])
 
-      tf.logging.info('Starting to evaluate.')
+      logging.info('Starting to evaluate.')
       try:
         executor.evaluate(
             eval_input_fn,
             params.eval.eval_samples // params.eval.eval_batch_size, ckpt)
 
         if current_step >= params.train.total_steps:
-          tf.logging.info('Evaluation finished after training step %d' %
-                          current_step)
+          logging.info('Evaluation finished after training step %d',
+                       current_step)
           break
       except tf.errors.NotFoundError:
         # Since the coordinator is on a different job than the TPU worker,
         # sometimes the TPU worker does not finish initializing until long after
         # the CPU job tells it to start evaluating. In this case, the checkpoint
         # file could have been deleted already.
-        tf.logging.info('Checkpoint %s no longer exists, skipping checkpoint' %
-                        ckpt)
+        logging.info('Checkpoint %s no longer exists, skipping checkpoint',
+                     ckpt)
 
   elif FLAGS.mode == 'train_and_eval':
     save_config(params, params.model_dir)
     num_cycles = int(params.train.total_steps / params.eval.num_steps_per_eval)
     for cycle in range(num_cycles):
-      tf.logging.info('Start training cycle %d.' % cycle)
+      logging.info('Start training cycle %d.', cycle)
       current_cycle_last_train_step = ((cycle + 1)
                                        * params.eval.num_steps_per_eval)
       executor.train(train_input_fn, current_cycle_last_train_step)
@@ -170,9 +171,9 @@ def main(argv):
           eval_input_fn,
           params.eval.eval_samples // params.eval.eval_batch_size)
   else:
-    tf.logging.info('Mode not found.')
+    logging.info('Mode not found.')
 
 
 if __name__ == '__main__':
-  tf.logging.set_verbosity(tf.logging.INFO)
+  logging.set_verbosity(logging.INFO)
   tf.app.run(main)

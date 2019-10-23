@@ -17,9 +17,11 @@
 import collections
 import os
 
+from absl import logging
+
 import numpy as np
 import six
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 from evaluation import coco_utils
 from evaluation import factory
@@ -44,7 +46,7 @@ class TpuExecutor(object):
     model_fn: The Model function for `tf.estimator.Estimator`.
     params: The (Retinanet) detecton parameter config.
     tpu_cluster_resolver: The `TPUClusterResolver` instance. If set, it will be
-      directly passed to `tf.contrib.tpu.RunConfig`, otherwise, will need to
+      directly passed to `tf.estimator.tpu.RunConfig`, otherwise, will need to
       construct a new `TPUClusterResolver` during construction.
   """
 
@@ -60,7 +62,7 @@ class TpuExecutor(object):
 
     if params.use_tpu or self._tpu_cluster_resolver:
       if not self._tpu_cluster_resolver:
-        self._tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
+        self._tpu_cluster_resolver = tf.distribute.cluster_resolver.TPUClusterResolver(
             params.platform.tpu,
             zone=params.platform.tpu_zone,
             project=params.platform.gcp_project)
@@ -92,11 +94,11 @@ class TpuExecutor(object):
         num_cores_per_replica=num_cores_per_replica,
         input_partition_dims=input_partition_dims,
         tpu_job_name=self._tpu_job_name,
-        per_host_input_for_training=tf.contrib.tpu.InputPipelineConfig
+        per_host_input_for_training=tf.estimator.tpu.InputPipelineConfig
         .PER_HOST_V2  # pylint: disable=line-too-long
     )
 
-    run_config = tf.contrib.tpu.RunConfig(
+    run_config = tf.estimator.tpu.RunConfig(
         session_config=tf.ConfigProto(
             isolate_session_state=params.isolate_session_state),
         cluster=self._tpu_cluster_resolver,
@@ -105,7 +107,7 @@ class TpuExecutor(object):
         log_step_count_steps=params.train.iterations_per_loop,
         tpu_config=tpu_config,
     )
-    self._estimator = tf.contrib.tpu.TPUEstimator(
+    self._estimator = tf.estimator.tpu.TPUEstimator(
         model_fn=model_fn,
         use_tpu=params.use_tpu,
         train_batch_size=params.train.train_batch_size,
@@ -178,7 +180,7 @@ class TpuExecutor(object):
             losses[key[5::]] += (np.mean(val) / eval_steps)
         self._evaluator.update(predictions)
       metrics = self._evaluator.evaluate()
-      tf.logging.info('Eval result: {}'.format(metrics))
+      logging.info('Eval result: %s', metrics)
 
       # Summary writer writes out eval metrics.
       output_dir = os.path.join(self._model_dir, 'eval')

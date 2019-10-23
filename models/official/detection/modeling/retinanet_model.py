@@ -18,7 +18,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 from dataloader import mode_keys
 from modeling import base_model
@@ -105,7 +105,7 @@ class RetinanetModel(base_model.Model):
     else:
       host_call_fn = None
 
-    return tf.contrib.tpu.TPUEstimatorSpec(
+    return tf.estimator.tpu.TPUEstimatorSpec(
         mode=tf.estimator.ModeKeys.TRAIN,
         loss=total_loss,
         train_op=train_op,
@@ -159,5 +159,5 @@ class RetinanetModel(base_model.Model):
           tf.reshape(box_loss, [1]), [batch_size])
       predictions['loss_model_loss'] = tf.tile(
           tf.reshape(model_loss, [1]), [batch_size])
-    return tf.contrib.tpu.TPUEstimatorSpec(
+    return tf.estimator.tpu.TPUEstimatorSpec(
         mode=tf.estimator.ModeKeys.PREDICT, predictions=predictions)

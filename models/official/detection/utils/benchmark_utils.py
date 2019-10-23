@@ -18,15 +18,16 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from absl import logging
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 
 def compute_model_statistics(batch_size, is_training=True):
   """Compute number of parameters and FLOPS."""
   num_trainable_params = np.sum(
       [np.prod(var.get_shape().as_list()) for var in tf.trainable_variables()])
-  tf.logging.info('number of trainable params: {}'.format(num_trainable_params))
+  logging.info('number of trainable params: %d', num_trainable_params)
 
   options = tf.profiler.ProfileOptionBuilder.float_operation()
   options['output'] = 'none'
@@ -34,8 +35,8 @@ def compute_model_statistics(batch_size, is_training=True):
       tf.get_default_graph(), options=options).total_float_ops
   flops_per_image = flops / batch_size
   if is_training:
-    tf.logging.info(
-        'number of FLOPS per image: {} in training'.format(flops_per_image))
+    logging.info(
+        'number of FLOPS per image: %d in training', flops_per_image)
   else:
-    tf.logging.info(
-        'number of FLOPS per image: {} in eval'.format(flops_per_image))
+    logging.info(
+        'number of FLOPS per image: %d in eval', flops_per_image)

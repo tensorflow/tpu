@@ -24,8 +24,9 @@ from __future__ import division
 from __future__ import print_function
 
 import functools
+from absl import logging
 import enum
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 from modeling.architecture import nn_ops
 from ops import spatial_transform_ops
@@ -189,7 +190,7 @@ class Nasfpn(object):
     with tf.variable_scope('fpn_cells'):
       for i in range(self._num_repeats):
         with tf.variable_scope('cell_{}'.format(i)):
-          tf.logging.info('building cell {}'.format(i))
+          logging.info('building cell %s', i)
           feats_dict = self._build_feature_pyramid(feats, is_training)
           feats = [feats_dict[level] for level in range(
               self._min_level, self._max_level + 1)]
@@ -204,7 +205,7 @@ class Nasfpn(object):
 
     for i, sub_policy in enumerate(self._config.nodes):
       with tf.variable_scope('sub_policy{}'.format(i)):
-        tf.logging.info('sub_policy {} : {}'.format(i, sub_policy))
+        logging.info('sub_policy %d : %s', i, sub_policy)
         new_level = sub_policy['level']
 
         # Checks the range of input_offsets.
@@ -272,5 +273,5 @@ class Nasfpn(object):
     for i in range(len(feats) - num_output_levels, len(feats)):
       level = feat_levels[i]
       output_feats[level] = feats[i]
-    tf.logging.info('Output feature pyramid: {}'.format(output_feats))
+    logging.info('Output feature pyramid: %s', output_feats)
     return output_feats

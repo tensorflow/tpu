@@ -187,47 +187,46 @@ def main(unused_argv):
   logging.info('Enable top 5 accuracy: %s.', FLAGS.eval_top_5_accuracy)
   logging.info('Training model using data in directory "%s".', FLAGS.data)
 
-  with tf.device('/job:worker'):
-    with strategy.scope():
-      logging.info('Building Keras ResNet-50 model')
-      model = resnet_model.ResNet50(num_classes=NUM_CLASSES)
+  with strategy.scope():
+    logging.info('Building Keras ResNet-50 model')
+    model = resnet_model.ResNet50(num_classes=NUM_CLASSES)
 
-      logging.info('Compiling model.')
-      metrics = ['sparse_categorical_accuracy']
+    logging.info('Compiling model.')
+    metrics = ['sparse_categorical_accuracy']
 
-      if FLAGS.eval_top_5_accuracy:
-        metrics.append(sparse_top_k_categorical_accuracy)
+    if FLAGS.eval_top_5_accuracy:
+      metrics.append(sparse_top_k_categorical_accuracy)
 
-      model.compile(
-          optimizer=tf.keras.optimizers.SGD(
-              learning_rate=BASE_LEARNING_RATE, momentum=0.9, nesterov=True),
-          loss='sparse_categorical_crossentropy',
-          metrics=metrics)
+    model.compile(
+        optimizer=tf.keras.optimizers.SGD(
+            learning_rate=BASE_LEARNING_RATE, momentum=0.9, nesterov=True),
+        loss='sparse_categorical_crossentropy',
+        metrics=metrics)
 
-    imagenet_train = imagenet_input.ImageNetInput(
-        is_training=True, data_dir=FLAGS.data, batch_size=batch_size,
-        use_bfloat16=USE_BFLOAT16)
-    imagenet_eval = imagenet_input.ImageNetInput(
-        is_training=False, data_dir=FLAGS.data, batch_size=batch_size,
-        use_bfloat16=USE_BFLOAT16)
+  imagenet_train = imagenet_input.ImageNetInput(
+      is_training=True, data_dir=FLAGS.data, batch_size=batch_size,
+      use_bfloat16=USE_BFLOAT16)
+  imagenet_eval = imagenet_input.ImageNetInput(
+      is_training=False, data_dir=FLAGS.data, batch_size=batch_size,
+      use_bfloat16=USE_BFLOAT16)
 
-    lr_schedule_cb = LearningRateBatchScheduler(
-        schedule=learning_rate_schedule_wrapper(training_steps_per_epoch))
-    tensorboard_cb = tf.keras.callbacks.TensorBoard(
-        log_dir=model_dir)
+  lr_schedule_cb = LearningRateBatchScheduler(
+      schedule=learning_rate_schedule_wrapper(training_steps_per_epoch))
+  tensorboard_cb = tf.keras.callbacks.TensorBoard(
+      log_dir=model_dir)
 
-    training_callbacks = [lr_schedule_cb, tensorboard_cb]
+  training_callbacks = [lr_schedule_cb, tensorboard_cb]
 
-    model.fit(
-        imagenet_train.input_fn(),
-        epochs=FLAGS.num_epochs,
-        steps_per_epoch=training_steps_per_epoch,
-        callbacks=training_callbacks,
-        validation_data=imagenet_eval.input_fn(),
-        validation_steps=validation_steps,
-        validation_freq=5)
+  model.fit(
+      imagenet_train.input_fn(),
+      epochs=FLAGS.num_epochs,
+      steps_per_epoch=training_steps_per_epoch,
+      callbacks=training_callbacks,
+      validation_data=imagenet_eval.input_fn(),
+      validation_steps=validation_steps,
+      validation_freq=5)
 
-    model_saving_utils.save_model(model, model_dir, WEIGHTS_TXT)
+  model_saving_utils.save_model(model, model_dir, WEIGHTS_TXT)
 
 if __name__ == '__main__':
   logging.set_verbosity(logging.INFO)

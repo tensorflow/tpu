@@ -22,7 +22,8 @@ import abc
 import functools
 import re
 import six
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+import tensorflow.compat.v2 as tf2
 
 from modeling import learning_rates
 
@@ -109,7 +110,7 @@ class Model(object):
   def model_outputs(self, features, labels, mode):
     """Build the model outputs."""
     if self._use_bfloat16:
-      with tf.contrib.tpu.bfloat16_scope():
+      with tf.tpu.bfloat16_scope():
         def cast_outputs_to_float(d):
           for k, v in sorted(six.iteritems(d)):
             if isinstance(v, dict):
@@ -148,7 +149,7 @@ class Model(object):
     # Sets up the optimizer.
     optimizer = self._optimizer_fn(learning_rate)
     if self._use_tpu:
-      optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
+      optimizer = tf.tpu.CrossShardOptimizer(optimizer)
 
     # Batch norm requires update_ops to be added as a train_op dependency.
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
@@ -200,14 +201,14 @@ class Model(object):
       global_step, summaries = tf.nest.pack_sequence_as(
           host_call_inputs, flat_args)
       global_step = tf.reduce_mean(global_step)
-      with (tf.contrib.summary.create_file_writer(
+      with (tf2.summary.create_file_writer(
           self._model_dir,
           max_queue=self._iterations_per_loop).as_default()):
-        with tf.contrib.summary.always_record_summaries():
+        with tf2.summary.record_if(True):
           for key, value in summaries.items():
-            tf.contrib.summary.scalar(key, tf.reduce_mean(value),
-                                      step=global_step)
-          return tf.contrib.summary.all_summary_ops()
+            tf2.summary.scalar(key, tf.reduce_mean(value),
+                               step=global_step)
+          return tf.summary.all_v2_summary_ops()
     global_step = tf.reshape(tf.train.get_global_step()[None], [1])
     host_call_inputs = [global_step, self.summaries]
     return (host_call_fn, tf.nest.flatten(host_call_inputs))
