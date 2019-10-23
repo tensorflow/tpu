@@ -51,7 +51,7 @@ class InputFn(object):
 
     # Parses the fetched records to input tensors for model function.
     dataset = dataset.apply(
-        tf.contrib.data.map_and_batch(
+        tf.data.experimental.map_and_batch(
             self._parser_fn,
             batch_size=batch_size,
             num_parallel_batches=64,
