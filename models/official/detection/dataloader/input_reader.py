@@ -14,7 +14,7 @@
 # ==============================================================================
 """Data loader and input processing."""
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 from dataloader import factory
 from dataloader import mode_keys as ModeKeys

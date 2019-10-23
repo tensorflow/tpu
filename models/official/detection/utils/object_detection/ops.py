@@ -18,7 +18,7 @@
 This is originally implemented in TensorFlow Object Detection API.
 """
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 from utils.object_detection import shape_utils
 

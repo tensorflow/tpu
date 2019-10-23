@@ -15,7 +15,7 @@
 
 """Utils used to manipulate tensor shapes."""
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 
 def assert_shape_equal(shape_a, shape_b):

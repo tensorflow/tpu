@@ -19,11 +19,11 @@ from __future__ import division
 from __future__ import print_function
 
 import functools
-import tensorflow as tf
+from absl import logging
+import tensorflow.compat.v1 as tf
 
-from tensorflow.contrib.tpu.python.ops import tpu_ops
-from tensorflow.contrib.tpu.python.tpu import tpu_function
 from tensorflow.python.ops import math_ops  # pylint: disable=g-direct-tensorflow-import
+from tensorflow.python.tpu import tpu_function  # pylint: disable=g-direct-tensorflow-import
 
 
 def cross_replica_average(t, num_groups=1):
@@ -39,7 +39,7 @@ def cross_replica_average(t, num_groups=1):
     group_assignment = [[
         x for x in range(num_shards) if x // num_shards_per_group == y
     ] for y in range(num_groups)]
-  return tpu_ops.cross_replica_sum(t, group_assignment) / math_ops.cast(
+  return tf.tpu.cross_replica_sum(t, group_assignment) / math_ops.cast(
       num_shards_per_group, t.dtype)
 
 
@@ -235,8 +235,8 @@ class Dropblock(object):
     if not is_training or self._dropblock_keep_prob is None:
       return net
 
-    tf.logging.info('Applying DropBlock: dropblock_size {},'
-                    'net.shape {}'.format(self._dropblock_size, net.shape))
+    logging.info('Applying DropBlock: dropblock_size %d,'
+                 'net.shape %s', self._dropblock_size, net.shape)
 
     if self._data_format == 'channels_last':
       _, height, width, _ = net.get_shape().as_list()

@@ -32,10 +32,11 @@ from __future__ import print_function
 
 import atexit
 import tempfile
+from absl import logging
 import numpy as np
 from pycocotools import cocoeval
 import six
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 from evaluation import coco_utils
 from utils import class_utils
@@ -111,14 +112,14 @@ class COCOEvaluator(object):
         coco-style evaluation metrics (box and mask).
     """
     if not self._annotation_file:
-      tf.logging.info('Thre is no annotation_file in COCOEvaluator.')
+      logging.info('There is no annotation_file in COCOEvaluator.')
       gt_dataset = coco_utils.convert_groundtruths_to_coco_dataset(
           self._groundtruths)
       coco_gt = coco_utils.COCOWrapper(
           eval_type=('mask' if self._include_mask else 'box'),
           gt_dataset=gt_dataset)
     else:
-      tf.logging.info('Using annotation file: %s', self._annotation_file)
+      logging.info('Using annotation file: %s', self._annotation_file)
       coco_gt = self._coco_gt
     coco_predictions = coco_utils.convert_predictions_to_coco_annotations(
         self._predictions)

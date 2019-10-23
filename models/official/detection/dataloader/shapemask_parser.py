@@ -22,7 +22,7 @@ ShapeMask: Learning to Segment Novel Objects by Refining Shape Priors.
 arXiv:1904.03239.
 """
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 from dataloader import anchor
 from dataloader import mode_keys as ModeKeys

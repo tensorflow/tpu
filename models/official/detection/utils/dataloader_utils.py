@@ -14,7 +14,7 @@
 # ==============================================================================
 """Utility functions for dataloader."""
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 from utils import input_utils
 

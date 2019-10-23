@@ -27,12 +27,11 @@ from __future__ import print_function
 
 import functools
 from absl import flags
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 from configs import factory
 from modeling import serving
 from hyperparameters import params_dict
-from tensorflow.contrib.tpu.python.tpu import tpu_config
 
 FLAGS = flags.FLAGS
 
@@ -71,15 +70,16 @@ def main(argv):
       transpose_input=False)
 
   print(' - Setting up TPUEstimator...')
-  estimator = tf.contrib.tpu.TPUEstimator(
+  estimator = tf.estimator.tpu.TPUEstimator(
       model_fn=serving.serving_model_fn_builder(
           FLAGS.use_tpu,
           FLAGS.output_image_info,
           FLAGS.output_normalized_coordinates,
           FLAGS.cast_num_detections_to_float),
       model_dir=None,
-      config=tpu_config.RunConfig(
-          tpu_config=tpu_config.TPUConfig(iterations_per_loop=1),
+      config=tf.estimator.tpu.RunConfig(
+          tpu_config=tf.estimator.tpu.TPUConfig(
+              iterations_per_loop=1),
           master='local',
           evaluation_master='local'),
       params=model_params,

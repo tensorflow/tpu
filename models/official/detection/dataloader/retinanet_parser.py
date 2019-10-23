@@ -20,13 +20,11 @@ into (image, labels) tuple for RetinaNet.
 T.-Y. Lin, P. Goyal, R. Girshick, K. He,  and P. Dollar
 Focal Loss for Dense Object Detection. arXiv:1708.02002
 """
-
-import tensorflow as tf
-
+from absl import logging
+import tensorflow.compat.v1 as tf
 from dataloader import anchor
 from dataloader import mode_keys as ModeKeys
 from dataloader import tf_example_decoder
-from utils import autoaugment_utils
 from utils import box_utils
 from utils import dataloader_utils
 from utils import input_utils
@@ -203,6 +201,12 @@ class Parser(object):
     # NOTE: The autoaugment method works best when used alongside the standard
     # horizontal flipping of images along with size jittering and normalization.
     if self._use_autoaugment:
+      try:
+        from utils import autoaugment_utils  # pylint: disable=g-import-not-at-top
+      except ImportError as e:
+        logging.exception('Autoaugment is not supported in TF 2.x.')
+        raise e
+
       image, boxes = autoaugment_utils.distort_image_with_autoaugment(
           image, boxes, self._autoaugment_policy_name)
 
