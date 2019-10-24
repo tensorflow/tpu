@@ -110,13 +110,16 @@ def main(argv):
 
   # Prepares input functions for train and eval.
   train_input_fn = input_reader.InputFn(
-      params.train.train_file_pattern, params, mode=ModeKeys.TRAIN)
+      params.train.train_file_pattern, params, mode=ModeKeys.TRAIN,
+      dataset_type=params.train.train_dataset_type)
   if params.eval.type == 'customized':
     eval_input_fn = input_reader.InputFn(
-        params.eval.eval_file_pattern, params, mode=ModeKeys.EVAL)
+        params.eval.eval_file_pattern, params, mode=ModeKeys.EVAL,
+        dataset_type=params.eval.eval_dataset_type)
   else:
     eval_input_fn = input_reader.InputFn(
-        params.eval.eval_file_pattern, params, mode=ModeKeys.PREDICT_WITH_GT)
+        params.eval.eval_file_pattern, params, mode=ModeKeys.PREDICT_WITH_GT,
+        dataset_type=params.eval.eval_dataset_type)
 
   # Runs the model.
   if FLAGS.mode == 'train':

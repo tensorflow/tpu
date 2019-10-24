@@ -54,6 +54,7 @@ BASE_CFG = {
         },
         'frozen_variable_prefix': RESNET_FROZEN_VAR_PREFIX,
         'train_file_pattern': '',
+        'train_dataset_type': 'tfrecord',
         'transpose_input': True,
         'l2_weight_decay': 0.0001,
         'gradient_clip_norm': 0.0,
@@ -67,6 +68,7 @@ BASE_CFG = {
         'type': 'box',
         'val_json_file': '',
         'eval_file_pattern': '',
+        'eval_dataset_type': 'tfrecord',
     },
     'predict': {
         'predict_batch_size': 8,

@@ -95,9 +95,9 @@ SHAPEMASK_CFG.override({
     },
     'retinanet_loss': {
         'num_classes': 91,
-        'focal_loss_alpha': 0.25,
+        'focal_loss_alpha': 0.4,
         'focal_loss_gamma': 1.5,
-        'huber_loss_delta': 0.1,
+        'huber_loss_delta': 0.15,
         'box_loss_weight': 50,
     },
     'shapemask_loss': {
