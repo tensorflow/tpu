@@ -164,7 +164,7 @@ def densenet_imagenet_model(image, k, depths, num_classes, is_training=True):
           num_channels += k
       if i != len(depths) - 1:
         num_channels /= 2
-        v = transition_layer(v, num_channels, is_training)
+        v = transition_layer(v, int(num_channels), is_training)
 
   global_pool = tf.reduce_mean(v, axis=(1, 2), name="global_pool")
   dense_layer = tf.layers.dense(global_pool, units=num_classes)
