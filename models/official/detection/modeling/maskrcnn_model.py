@@ -38,6 +38,9 @@ class MaskrcnnModel(base_model.Model):
     super(MaskrcnnModel, self).__init__(params)
 
     self._include_mask = params.architecture.include_mask
+    if self._include_mask:
+      raise ValueError('Only Faster R-CNN is currently supported. '
+                       'Mask R-CNN is coming soon.')
 
     # Architecture generators.
     self._backbone_fn = factory.backbone_generator(params)

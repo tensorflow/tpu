@@ -29,7 +29,7 @@ MASKRCNN_CFG.override({
         'backbone': 'resnet',
         'multilevel_features': 'fpn',
         'use_bfloat16': True,
-        'include_mask': True,
+        'include_mask': False,
     },
     'maskrcnn_parser': {
         'use_bfloat16': True,
@@ -43,7 +43,7 @@ MASKRCNN_CFG.override({
         'aug_scale_max': 1.0,
         'skip_crowd_during_training': True,
         'max_num_instances': 100,
-        'include_mask': True,
+        'include_mask': False,
         'mask_crop_size': 112,
     },
     'anchor': {
