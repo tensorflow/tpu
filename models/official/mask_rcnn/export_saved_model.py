@@ -37,6 +37,8 @@ import functools
 from absl import flags
 import tensorflow.compat.v1 as tf
 
+import sys
+sys.path.insert(0, 'tpu/models')
 from common import inference_warmup
 from hyperparameters import params_dict
 import serving
