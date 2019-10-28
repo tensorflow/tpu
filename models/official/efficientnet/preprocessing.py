@@ -137,7 +137,7 @@ def _flip(image):
 def preprocess_for_train(image_bytes, use_bfloat16, image_size=IMAGE_SIZE,
                          augment_name=None,
                          randaug_num_layers=None, randaug_magnitude=None):
-  """Preprocesses the given image for evaluation.
+  """Preprocesses the given image for training.
 
   Args:
     image_bytes: `Tensor` representing an image binary of arbitrary size.
