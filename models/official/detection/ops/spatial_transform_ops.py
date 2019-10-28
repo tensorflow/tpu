@@ -40,11 +40,11 @@ def nearest_upsampling(data, scale):
     h = tf.shape(data)[1]
     w = tf.shape(data)[2]
     bs = -1 if bs is None else bs
-    # Uses reshape to quickly upsample the input.  The nearest pixel is selected
-    # implicitly via broadcasting.
-    data = tf.reshape(data, [bs, h, 1, w, 1, c]) * tf.ones(
-        [1, 1, scale, 1, scale, 1], dtype=data.dtype)
-    return tf.reshape(data, [bs, h * scale, w * scale, c])
+    # Instead of broadcasting with a 6-d tensor, we're using stacking here
+    # for TfLite compatibity.
+    output = tf.stack([data] * scale, axis=3)
+    output = tf.stack([output] * scale, axis=2)
+    return tf.reshape(output, [bs, h * scale, w * scale, c])
 
 
 def selective_crop_and_resize(features,

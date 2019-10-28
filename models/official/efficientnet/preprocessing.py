@@ -137,7 +137,7 @@ def _flip(image):
 def preprocess_for_train(image_bytes, use_bfloat16, image_size=IMAGE_SIZE,
                          augment_name=None,
                          randaug_num_layers=None, randaug_magnitude=None):
-  """Preprocesses the given image for training.
+  """Preprocesses the given image for evaluation.
 
   Args:
     image_bytes: `Tensor` representing an image binary of arbitrary size.
@@ -223,7 +223,7 @@ def preprocess_image(image_bytes,
     augment_name: `string` that is the name of the augmentation method
       to apply to the image. `autoaugment` if AutoAugment is to be used or
       `randaugment` if RandAugment is to be used. If the value is `None` no
-      augmentation method will be applied. See autoaugment.py for more
+      augmentation method will be applied applied. See autoaugment.py for more
       details.
     randaug_num_layers: 'int', if RandAug is used, what should the number of
       layers be. See autoaugment.py for detailed description.
