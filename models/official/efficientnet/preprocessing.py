@@ -223,7 +223,7 @@ def preprocess_image(image_bytes,
     augment_name: `string` that is the name of the augmentation method
       to apply to the image. `autoaugment` if AutoAugment is to be used or
       `randaugment` if RandAugment is to be used. If the value is `None` no
-      augmentation method will be applied applied. See autoaugment.py for more
+      augmentation method will be applied. See autoaugment.py for more
       details.
     randaug_num_layers: 'int', if RandAug is used, what should the number of
       layers be. See autoaugment.py for detailed description.
