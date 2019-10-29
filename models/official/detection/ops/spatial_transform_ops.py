@@ -1,3 +1,4 @@
+# Lint as: python2, python3
 # Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,6 +19,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from six.moves import range
 import tensorflow.compat.v1 as tf
 
 
@@ -218,7 +220,7 @@ def multilevel_crop_and_resize(features, boxes, output_size=7):
     [batch_size, num_boxes, output_size, output_size, num_filters].
   """
   with tf.name_scope('multilevel_crop_and_resize'):
-    levels = features.keys()
+    levels = list(features.keys())
     min_level = min(levels)
     max_level = max(levels)
     _, max_feature_height, max_feature_width, _ = (
