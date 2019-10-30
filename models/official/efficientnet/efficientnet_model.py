@@ -397,7 +397,8 @@ class MBConvBlock(tf.keras.layers.Layer):
     if self._block_args.id_skip:
       if all(
           s == 1 for s in self._block_args.strides
-      ) and inputs.get_shape().as_list()[-1] == x.get_shape().as_list()[-1]:
+      ) and (inputs.get_shape().as_list()[self._channel_axis]
+             == x.get_shape().as_list()[self._channel_axis]):
         # only apply drop_connect if skip presents.
         if drop_connect_rate:
           x = utils.drop_connect(x, training, drop_connect_rate)
@@ -591,6 +592,7 @@ class Model(tf.keras.Model):
         strides=[1, 1],
         kernel_initializer=conv_kernel_initializer,
         padding='same',
+        data_format=self._global_params.data_format,
         use_bias=False)
     self._bn1 = self._batch_norm(
         axis=channel_axis,
