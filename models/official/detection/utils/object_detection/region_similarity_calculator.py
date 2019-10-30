@@ -1,3 +1,4 @@
+# Lint as: python2, python3
 # Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,9 +19,14 @@
 Region Similarity Calculators compare a pairwise measure of similarity
 between the boxes in two BoxLists.
 """
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 from abc import ABCMeta
 from abc import abstractmethod
 
+import six
 import tensorflow.compat.v1 as tf
 
 
@@ -87,9 +93,8 @@ def iou(boxlist1, boxlist2, scope=None):
         tf.zeros_like(intersections), tf.truediv(intersections, unions))
 
 
-class RegionSimilarityCalculator(object):
+class RegionSimilarityCalculator(six.with_metaclass(ABCMeta, object)):
   """Abstract base class for region similarity calculator."""
-  __metaclass__ = ABCMeta
 
   def compare(self, boxlist1, boxlist2, scope=None):
     """Computes matrix of pairwise similarity between BoxLists.
