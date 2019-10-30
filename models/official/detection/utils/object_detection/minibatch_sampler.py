@@ -1,3 +1,4 @@
+# Lint as: python2, python3
 # Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,17 +31,21 @@ Subclasses should implement the Subsample function and can make use of the
 This is originally implemented in TensorFlow Object Detection API.
 """
 
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 from abc import ABCMeta
 from abc import abstractmethod
 
+import six
 import tensorflow.compat.v1 as tf
 
 from utils.object_detection import ops
 
 
-class MinibatchSampler(object):
+class MinibatchSampler(six.with_metaclass(ABCMeta, object)):
   """Abstract base class for subsampling minibatches."""
-  __metaclass__ = ABCMeta
 
   def __init__(self):
     """Constructs a minibatch sampler."""
