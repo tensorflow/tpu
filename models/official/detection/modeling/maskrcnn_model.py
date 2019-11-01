@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Model defination for the RetinaNet Model."""
+"""Model defination for the Mask R-CNN Model."""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -144,8 +144,10 @@ class MaskrcnnModel(base_model.Model):
           'mask_targets': mask_targets,
           'sampled_class_targets': classes,
       })
+    else:
+      rpn_rois = boxes
+      classes = tf.cast(classes, dtype=tf.int32)
 
-    classes = tf.cast(classes, dtype=tf.int32)
     mask_roi_features = spatial_transform_ops.multilevel_crop_and_resize(
         fpn_features, rpn_rois, output_size=14)
 
