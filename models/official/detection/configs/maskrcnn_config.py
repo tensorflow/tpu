@@ -85,7 +85,7 @@ MASKRCNN_CFG.override({
     },
     'mrcnn_head': {
         'num_classes': 91,
-        'mrcnn_resolution': 28,
+        'mask_target_size': 28,
         'batch_norm': {
             'batch_norm_momentum': 0.997,
             'batch_norm_epsilon': 1e-4,
@@ -124,8 +124,8 @@ MASKRCNN_CFG.override({
         'mix_gt_boxes': True,
     },
     'mask_sampling': {
-        'num_mask_samples_per_image': 28,
-        'cropped_mask_size': 28,
+        'num_mask_samples_per_image': 128,  # Typically = `num_samples_per_image` * `fg_fraction`.
+        'mask_target_size': 28,
     },
     'postprocess': {
         'use_batched_nms': False,
@@ -144,5 +144,6 @@ MASKRCNN_RESTRICTIONS = [
     'anchor.max_level == fpn.max_level',
     'anchor.min_level == rpn_head.min_level',
     'anchor.max_level == rpn_head.max_level',
+    'mrcnn_head.mask_target_size == mask_sampling.mask_target_size',
 ]
 # pylint: enable=line-too-long
