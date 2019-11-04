@@ -33,8 +33,10 @@ class InputFn(object):
     else:
       raise ValueError('Dataset type %s is not supported.' % dataset_type)
 
-    self._transpose_input = hasattr(params, 'train') and hasattr(
-        params.train, 'transpose_input') and params.train.transpose_input
+    try:
+      self._transpose_input = params.train.transpose_input
+    except KeyError:
+      self._transpose_input = False
 
   def __call__(self, params):
     batch_size = params['batch_size']

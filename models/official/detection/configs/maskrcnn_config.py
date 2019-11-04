@@ -22,7 +22,7 @@ MASKRCNN_CFG = params_dict.ParamsDict(base_config.BASE_CFG)
 MASKRCNN_CFG.override({
     'type': 'mask_rcnn',
     'eval': {
-        'type': 'box_and_mask',
+        'type': 'box',
     },
     'architecture': {
         'parser': 'maskrcnn_parser',
