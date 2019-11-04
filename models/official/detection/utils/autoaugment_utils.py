@@ -21,6 +21,8 @@ from __future__ import print_function
 import inspect
 import math
 import tensorflow as tf
+from tensorflow.contrib import image as contrib_image
+from tensorflow.contrib import training as contrib_training
 
 
 # This signifies the max integer that the controller RNN could predict for the
@@ -313,7 +315,7 @@ def rotate(image, degrees, replace):
   # In practice, we should randomize the rotation degrees by flipping
   # it negatively half the time, but that's done on 'degrees' outside
   # of the function.
-  image = tf.contrib.image.rotate(wrap(image), radians)
+  image = contrib_image.rotate(wrap(image), radians)
   return unwrap(image, replace)
 
 
@@ -706,7 +708,7 @@ def _apply_multi_bbox_augmentation_wrapper(image, bboxes, prob, aug_func,
       # pylint:disable=g-long-lambda
       lambda: _apply_multi_bbox_augmentation(
           image, bboxes, prob, aug_func, func_changes_bbox, *args))
-      # pylint:enable=g-long-lambda
+  # pylint:enable=g-long-lambda
   return image, bboxes
 
 
@@ -868,13 +870,13 @@ def rotate_with_bboxes(image, bboxes, degrees, replace):
 
 def translate_x(image, pixels, replace):
   """Equivalent of PIL Translate in X dimension."""
-  image = tf.contrib.image.translate(wrap(image), [-pixels, 0])
+  image = contrib_image.translate(wrap(image), [-pixels, 0])
   return unwrap(image, replace)
 
 
 def translate_y(image, pixels, replace):
   """Equivalent of PIL Translate in Y dimension."""
-  image = tf.contrib.image.translate(wrap(image), [0, -pixels])
+  image = contrib_image.translate(wrap(image), [0, -pixels])
   return unwrap(image, replace)
 
 
@@ -959,7 +961,7 @@ def shear_x(image, level, replace):
   # with a matrix form of:
   # [1  level
   #  0  1].
-  image = tf.contrib.image.transform(
+  image = contrib_image.transform(
       wrap(image), [1., level, 0., 0., 1., 0., 0., 0.])
   return unwrap(image, replace)
 
@@ -970,7 +972,7 @@ def shear_y(image, level, replace):
   # with a matrix form of:
   # [1  0
   #  level  1].
-  image = tf.contrib.image.transform(
+  image = contrib_image.transform(
       wrap(image), [1., 0., 0., level, 1., 0., 0., 0.])
   return unwrap(image, replace)
 
@@ -1612,9 +1614,12 @@ def distort_image_with_autoaugment(image, bboxes, augmentation_name):
 
   policy = available_policies[augmentation_name]()
   # Hparams that will be used for AutoAugment.
-  augmentation_hparams = tf.contrib.training.HParams(
-      cutout_max_pad_fraction=0.75, cutout_bbox_replace_with_mean=False,
-      cutout_const=100, translate_const=250, cutout_bbox_const=50,
+  augmentation_hparams = contrib_training.HParams(
+      cutout_max_pad_fraction=0.75,
+      cutout_bbox_replace_with_mean=False,
+      cutout_const=100,
+      translate_const=250,
+      cutout_bbox_const=50,
       translate_bbox_const=120)
 
   return build_and_apply_nas_policy(policy, image, bboxes, augmentation_hparams)

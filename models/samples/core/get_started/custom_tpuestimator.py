@@ -19,6 +19,8 @@ from __future__ import print_function
 
 import iris_data_tpu as iris_data
 import tensorflow as tf
+from tensorflow.contrib import cluster_resolver as contrib_cluster_resolver
+from tensorflow.contrib import tpu as contrib_tpu
 
 # Cloud TPU Cluster Resolver flags
 tf.flags.DEFINE_string(
@@ -101,23 +103,23 @@ def my_model(features, labels, mode, params):
         "probabilities": tf.nn.softmax(logits),
         "logits": logits,
     }
-    return tf.contrib.tpu.TPUEstimatorSpec(mode, predictions=predictions)
+    return contrib_tpu.TPUEstimatorSpec(mode, predictions=predictions)
 
   # Compute loss.
   loss = tf.losses.sparse_softmax_cross_entropy(labels=labels,
                                                 logits=logits)
 
   if mode == tf.estimator.ModeKeys.EVAL:
-    return tf.contrib.tpu.TPUEstimatorSpec(
+    return contrib_tpu.TPUEstimatorSpec(
         mode=mode, loss=loss, eval_metrics=(metric_fn, [labels, logits]))
 
   # Create training op.
   if mode == tf.estimator.ModeKeys.TRAIN:
     optimizer = tf.train.AdagradOptimizer(learning_rate=0.1)
     if FLAGS.use_tpu:
-      optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
+      optimizer = contrib_tpu.CrossShardOptimizer(optimizer)
     train_op = optimizer.minimize(loss, global_step=tf.train.get_global_step())
-    return tf.contrib.tpu.TPUEstimatorSpec(mode, loss=loss, train_op=train_op)
+    return contrib_tpu.TPUEstimatorSpec(mode, loss=loss, train_op=train_op)
 
 
 def main(argv):
@@ -135,19 +137,18 @@ def main(argv):
     my_feature_columns.append(tf.feature_column.numeric_column(key=key))
 
   # Resolve TPU cluster and runconfig for this.
-  tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
-      FLAGS.tpu)
+  tpu_cluster_resolver = contrib_cluster_resolver.TPUClusterResolver(FLAGS.tpu)
 
-  run_config = tf.contrib.tpu.RunConfig(
+  run_config = contrib_tpu.RunConfig(
       model_dir=FLAGS.model_dir,
       cluster=tpu_cluster_resolver,
       session_config=tf.ConfigProto(
           allow_soft_placement=True, log_device_placement=True),
-      tpu_config=tf.contrib.tpu.TPUConfig(FLAGS.iterations),
+      tpu_config=contrib_tpu.TPUConfig(FLAGS.iterations),
   )
 
   # Build 2 hidden layer DNN with 10, 10 units respectively.
-  classifier = tf.contrib.tpu.TPUEstimator(
+  classifier = contrib_tpu.TPUEstimator(
       model_fn=my_model,
       use_tpu=FLAGS.use_tpu,
       train_batch_size=FLAGS.batch_size,

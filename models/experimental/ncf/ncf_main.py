@@ -203,13 +203,13 @@ def create_tpu_estimator(model_fn, feature_columns, params):
       project=params["gcp_project"],
       coordinator_name="coordinator")
 
-  config = tf.estimator.tpu.RunConfig(
+  config = tf.contrib.tpu.RunConfig(
       cluster=tpu_cluster_resolver,
       model_dir=params["model_dir"],
-      tpu_config=tf.estimator.tpu.TPUConfig(
+      tpu_config=tf.contrib.tpu.TPUConfig(
           iterations_per_loop=params["iterations_per_loop"],
           experimental_host_call_every_n_steps=100,
-          per_host_input_for_training=tf.estimator.tpu.InputPipelineConfig
+          per_host_input_for_training=tf.contrib.tpu.InputPipelineConfig
           .PER_HOST_V2))
 
   return tf.estimator.tpu.TPUEstimator(

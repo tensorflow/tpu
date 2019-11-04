@@ -30,6 +30,8 @@ from absl import app
 from absl import flags
 import numpy as np
 import tensorflow as tf
+from tensorflow.contrib import cluster_resolver as contrib_cluster_resolver
+from tensorflow.contrib import distribute as contrib_distribute
 
 # TODO(sourabhbajaj): Remove the need for this flag.
 flags.DEFINE_bool('use_tpu', True,
@@ -73,9 +75,9 @@ def mnist_model(input_shape):
 
 def run():
   """Run the model training and return evaluation output."""
-  resolver = tf.contrib.cluster_resolver.TPUClusterResolver(tpu=FLAGS.tpu)
-  tf.contrib.distribute.initialize_tpu_system(resolver)
-  strategy = tf.contrib.distribute.TPUStrategy(resolver, steps_per_run=100)
+  resolver = contrib_cluster_resolver.TPUClusterResolver(tpu=FLAGS.tpu)
+  contrib_distribute.initialize_tpu_system(resolver)
+  strategy = contrib_distribute.TPUStrategy(resolver, steps_per_run=100)
 
   if FLAGS.fake_data:
     print('Using fake data')
