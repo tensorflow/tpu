@@ -1,4 +1,3 @@
-# Lint as: python2, python3
 # Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,15 +26,10 @@ Users of a BoxCoder can call two methods:
 In both cases, the arguments are assumed to be in 1-1 correspondence already;
 it is not the job of a BoxCoder to perform matching.
 """
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 from abc import ABCMeta
 from abc import abstractmethod
 from abc import abstractproperty
 
-import six
 import tensorflow.compat.v1 as tf
 
 
@@ -46,8 +40,9 @@ MEAN_STDDEV = 'mean_stddev'
 SQUARE = 'square'
 
 
-class BoxCoder(six.with_metaclass(ABCMeta, object)):
+class BoxCoder(object):
   """Abstract base class for box coder."""
+  __metaclass__ = ABCMeta
 
   @abstractproperty
   def code_size(self):
@@ -150,7 +145,7 @@ def batch_decode(encoded_boxes, box_coder, anchors):
                       anchors.num_boxes_static()))
 
   decoded_boxes = tf.stack([
-      six.ensure_text(box_coder, boxes, anchors).get()
+      box_coder.decode(boxes, anchors).get()
       for boxes in tf.unstack(encoded_boxes)
   ])
   return decoded_boxes
