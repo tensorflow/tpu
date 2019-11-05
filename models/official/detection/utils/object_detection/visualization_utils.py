@@ -1,4 +1,3 @@
-# Lint as: python2, python3
 # Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,10 +19,6 @@ These functions often receive an image, perform some visualization on the image.
 The functions do not return a value, instead they modify the image itself.
 
 """
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import collections
 import functools
 # Set headless-friendly backend.
@@ -35,8 +30,6 @@ import PIL.ImageColor as ImageColor
 import PIL.ImageDraw as ImageDraw
 import PIL.ImageFont as ImageFont
 import six
-from six.moves import range
-from six.moves import zip
 import tensorflow.compat.v1 as tf
 
 from utils.object_detection import shape_utils
@@ -583,6 +576,7 @@ def visualize_boxes_and_labels_on_image_array(
   box_to_display_str_map = collections.defaultdict(list)
   box_to_color_map = collections.defaultdict(str)
   box_to_instance_masks_map = {}
+  box_to_score_map = {}
   box_to_instance_boundaries_map = {}
   box_to_keypoints_map = collections.defaultdict(list)
   if not max_boxes_to_draw:
@@ -602,7 +596,7 @@ def visualize_boxes_and_labels_on_image_array(
         display_str = ''
         if not skip_labels:
           if not agnostic_mode:
-            if classes[i] in list(category_index.keys()):
+            if classes[i] in category_index.keys():
               class_name = category_index[classes[i]]['name']
             else:
               class_name = 'N/A'
@@ -612,6 +606,8 @@ def visualize_boxes_and_labels_on_image_array(
             display_str = '{}%'.format(int(100*scores[i]))
           else:
             display_str = '{}: {}%'.format(display_str, int(100*scores[i]))
+          box_to_score_map[box] = int(100*scores[i])
+
         box_to_display_str_map[box].append(display_str)
         if agnostic_mode:
           box_to_color_map[box] = 'DarkOrange'
@@ -619,8 +615,15 @@ def visualize_boxes_and_labels_on_image_array(
           box_to_color_map[box] = STANDARD_COLORS[
               classes[i] % len(STANDARD_COLORS)]
 
+  # Handle the case when box_to_score_map is empty.
+  if box_to_score_map:
+    box_color_iter = sorted(
+        box_to_color_map.items(), key=lambda kv: box_to_score_map[kv[0]])
+  else:
+    box_color_iter = box_to_color_map.items()
+
   # Draw all boxes onto image.
-  for box, color in box_to_color_map.items():
+  for box, color in box_color_iter:
     ymin, xmin, ymax, xmax = box
     if instance_masks is not None:
       draw_mask_on_image_array(

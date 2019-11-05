@@ -1,4 +1,3 @@
-# Lint as: python2, python3
 # Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -78,7 +77,7 @@ class BoxList(object):
 
   def get_all_fields(self):
     """Returns all fields."""
-    return list(self.data.keys())
+    return self.data.keys()
 
   def get_extra_fields(self):
     """Returns all non-box fields (i.e., everything not named 'boxes')."""

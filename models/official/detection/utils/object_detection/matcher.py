@@ -1,4 +1,3 @@
-# Lint as: python2, python3
 # Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,14 +31,9 @@ consider this box a positive example (match) nor a negative example (no match).
 The Match class is used to store the match results and it provides simple apis
 to query the results.
 """
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 from abc import ABCMeta
 from abc import abstractmethod
 
-import six
 import tensorflow.compat.v1 as tf
 
 
@@ -203,9 +197,10 @@ class Match(object):
     return gathered_tensor
 
 
-class Matcher(six.with_metaclass(ABCMeta, object)):
+class Matcher(object):
   """Abstract base class for matcher.
   """
+  __metaclass__ = ABCMeta
 
   def match(self, similarity_matrix, scope=None, **params):
     """Computes matches among row and column indices and returns the result.
