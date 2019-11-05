@@ -28,6 +28,8 @@ from absl import flags
 import numpy as np
 import six
 import tensorflow as tf
+from tensorflow.contrib import cluster_resolver as contrib_cluster_resolver
+from tensorflow.contrib import tpu as contrib_tpu
 
 flags.DEFINE_bool('use_tpu', True, 'Use TPU model instead of CPU.')
 flags.DEFINE_string('tpu', None, 'Name of the TPU to use.')
@@ -118,10 +120,9 @@ def main(unused_dev):
   training_model.summary()
 
   if FLAGS.use_tpu:
-    strategy = tf.contrib.tpu.TPUDistributionStrategy(
-        tf.contrib.cluster_resolver.TPUClusterResolver(tpu=flags.FLAGS.tpu)
-    )
-    training_model = tf.contrib.tpu.keras_to_tpu_model(
+    strategy = contrib_tpu.TPUDistributionStrategy(
+        contrib_cluster_resolver.TPUClusterResolver(tpu=flags.FLAGS.tpu))
+    training_model = contrib_tpu.keras_to_tpu_model(
         training_model, strategy=strategy)
 
   print('Training on', 'TPU' if FLAGS.use_tpu else 'CPU')
@@ -149,9 +150,9 @@ def main(unused_dev):
   prediction_model = lstm_model(seq_len=1, batch_size=batch_size, stateful=True)
   prediction_model.load_weights(WEIGHTS_TXT)
   if FLAGS.use_tpu:
-    strategy = tf.contrib.tpu.TPUDistributionStrategy(
-        tf.contrib.cluster_resolver.TPUClusterResolver(tpu=flags.FLAGS.tpu))
-    prediction_model = tf.contrib.tpu.keras_to_tpu_model(
+    strategy = contrib_tpu.TPUDistributionStrategy(
+        contrib_cluster_resolver.TPUClusterResolver(tpu=flags.FLAGS.tpu))
+    prediction_model = contrib_tpu.keras_to_tpu_model(
         prediction_model, strategy=strategy)
 
   # First, run the seed forward to prime the state of the model.

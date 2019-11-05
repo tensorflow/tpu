@@ -22,6 +22,9 @@ from absl import app
 from absl import flags
 import absl.logging as _logging  # pylint: disable=unused-import
 import tensorflow as tf
+from tensorflow.contrib import cluster_resolver as contrib_cluster_resolver
+from tensorflow.contrib import keras as contrib_keras
+from tensorflow.contrib import tpu as contrib_tpu
 
 
 # Cloud TPU Cluster Resolvers
@@ -61,7 +64,7 @@ FLAGS = flags.FLAGS
 def model_fn(features, labels, mode, params):
   """Define a CIFAR model in Keras."""
   del params  # unused
-  layers = tf.contrib.keras.layers
+  layers = contrib_keras.layers
 
   # Pass our input tensor to initialize the Keras input layer.
   v = layers.Input(tensor=features)
@@ -88,19 +91,18 @@ def model_fn(features, labels, mode, params):
   )
   optimizer = tf.train.AdamOptimizer()
   if FLAGS.use_tpu:
-    optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
+    optimizer = contrib_tpu.CrossShardOptimizer(optimizer)
 
   train_op = optimizer.minimize(loss, global_step=tf.train.get_global_step())
 
-  return tf.contrib.tpu.TPUEstimatorSpec(
+  return contrib_tpu.TPUEstimatorSpec(
       mode=mode,
       loss=loss,
       train_op=train_op,
       predictions={
           "classes": tf.argmax(input=logits, axis=1),
           "probabilities": tf.nn.softmax(logits, name="softmax_tensor")
-      }
-  )
+      })
 
 
 def input_fn(params):
@@ -133,23 +135,21 @@ def input_fn(params):
 def main(argv):
   del argv  # Unused.
 
-  tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
-      FLAGS.tpu,
-      zone=FLAGS.tpu_zone,
-      project=FLAGS.gcp_project)
+  tpu_cluster_resolver = contrib_cluster_resolver.TPUClusterResolver(
+      FLAGS.tpu, zone=FLAGS.tpu_zone, project=FLAGS.gcp_project)
 
-  run_config = tf.contrib.tpu.RunConfig(
+  run_config = contrib_tpu.RunConfig(
       cluster=tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
       save_checkpoints_secs=3600,
       session_config=tf.ConfigProto(
           allow_soft_placement=True, log_device_placement=True),
-      tpu_config=tf.contrib.tpu.TPUConfig(
+      tpu_config=contrib_tpu.TPUConfig(
           iterations_per_loop=FLAGS.iterations_per_loop,
           num_shards=FLAGS.num_shards),
   )
 
-  estimator = tf.contrib.tpu.TPUEstimator(
+  estimator = contrib_tpu.TPUEstimator(
       model_fn=model_fn,
       use_tpu=FLAGS.use_tpu,
       config=run_config,

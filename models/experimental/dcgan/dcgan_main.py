@@ -33,6 +33,7 @@ import cifar_input
 import cifar_model
 import mnist_input
 import mnist_model
+from tensorflow.contrib import cluster_resolver as contrib_cluster_resolver
 from tensorflow.python.estimator import estimator
 
 FLAGS = flags.FLAGS
@@ -101,10 +102,8 @@ def noise_input_fn(params):
 
 def main(argv):
   del argv
-  tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
-      FLAGS.tpu,
-      zone=FLAGS.tpu_zone,
-      project=FLAGS.gcp_project)
+  tpu_cluster_resolver = contrib_cluster_resolver.TPUClusterResolver(
+      FLAGS.tpu, zone=FLAGS.tpu_zone, project=FLAGS.gcp_project)
 
   config = tf.compat.v1.estimator.tpu.RunConfig(
       cluster=tpu_cluster_resolver,

@@ -23,7 +23,7 @@ import json
 from absl import app as absl_app
 from absl import flags
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 from official.recommendation import constants as rconst
 from official.recommendation import movielens
@@ -391,7 +391,7 @@ def create_model_fn(feature_columns):
               params["match_mlperf"],
               use_tpu_spec=params["use_tpu"]))
 
-      return tf.contrib.tpu.TPUEstimatorSpec(
+      return tf.estimator.tpu.TPUEstimatorSpec(
           mode=mode,
           loss=cross_entropy,
           eval_metrics=(metric_fn, [in_top_k, ndcg, metric_weights]))
@@ -402,7 +402,7 @@ def create_model_fn(feature_columns):
       optimizer = tf.train.AdamOptimizer(
           learning_rate=params["learning_rate"], beta1=params["beta1"],
           beta2=params["beta2"], epsilon=params["epsilon"])
-      optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
+      optimizer = tf.tpu.CrossShardOptimizer(optimizer)
 
       loss = tf.losses.sparse_softmax_cross_entropy(
           labels=labels,
@@ -422,7 +422,7 @@ def create_model_fn(feature_columns):
       update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
       train_op = tf.group(minimize_op, update_ops)
 
-      return tf.contrib.tpu.TPUEstimatorSpec(
+      return tf.estimator.tpu.TPUEstimatorSpec(
           mode=mode, loss=loss, train_op=train_op)
 
     else:
@@ -482,4 +482,5 @@ def logits_fn(features, feature_columns, params):
 
 if __name__ == "__main__":
   tf.logging.set_verbosity(tf.logging.INFO)
+  tf.disable_v2_behavior()
   absl_app.run(main)
