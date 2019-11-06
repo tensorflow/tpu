@@ -161,7 +161,8 @@ class InputReader(object):
                              source_id)
         source_id = tf.string_to_number(source_id)
 
-        if self._mode == tf.estimator.ModeKeys.PREDICT:
+        if (self._mode == tf.estimator.ModeKeys.PREDICT or
+            self._mode == tf.estimator.ModeKeys.EVAL):
           image = preprocess_ops.normalize_image(image)
           if params['resize_method'] == 'retinanet':
             image, image_info, _, _, _ = preprocess_ops.resize_crop_pad(
@@ -182,7 +183,8 @@ class InputReader(object):
             resized_image = tf.image.resize_images(orig_image,
                                                    params['image_size'])
             features['orig_images'] = resized_image
-          if params['include_groundtruth_in_features']:
+          if (params['include_groundtruth_in_features'] or
+              self._mode == tf.estimator.ModeKeys.EVAL):
             labels = _prepare_labels_for_eval(
                 data,
                 target_num_instances=self._max_num_instances,
@@ -192,8 +194,7 @@ class InputReader(object):
           else:
             return {'features': features}
 
-        elif (self._mode == tf.estimator.ModeKeys.TRAIN or
-              self._mode == tf.estimator.ModeKeys.EVAL):
+        elif self._mode == tf.estimator.ModeKeys.TRAIN:
           instance_masks = None
           if self._use_instance_mask:
             instance_masks = data['groundtruth_instance_masks']
@@ -212,9 +213,7 @@ class InputReader(object):
               instance_masks = tf.gather_nd(instance_masks, indices)
 
           image = preprocess_ops.normalize_image(image)
-          # Random flipping for training only.
-          if (self._mode == tf.estimator.ModeKeys.TRAIN
-              and params['input_rand_hflip']):
+          if params['input_rand_hflip']:
             flipped_results = (
                 preprocess_ops.random_horizontal_flip(
                     image, boxes=boxes, masks=instance_masks))
@@ -344,8 +343,7 @@ class InputReader(object):
 
     # Enable TPU performance optimization: transpose input, space-to-depth
     # image transform, or both.
-    if ((self._mode == tf.estimator.ModeKeys.TRAIN or
-         self._mode == tf.estimator.ModeKeys.EVAL) and
+    if (self._mode == tf.estimator.ModeKeys.TRAIN and
         (params['transpose_input'] or
          (params['backbone'].startswith('resnet') and
           params['conv0_space_to_depth_block_size'] > 0))):
