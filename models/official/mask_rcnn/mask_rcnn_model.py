@@ -378,23 +378,22 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
   Returns:
     tpu_spec: the TPUEstimatorSpec to run training, evaluation, or prediction.
   """
-  if mode == tf.estimator.ModeKeys.PREDICT:
-    if params['include_groundtruth_in_features'] and ('labels' in features):
+  if (mode == tf.estimator.ModeKeys.PREDICT or
+      mode == tf.estimator.ModeKeys.EVAL):
+    if ((params['include_groundtruth_in_features'] or
+         mode == tf.estimator.ModeKeys.EVAL) and ('labels' in features)):
       # In include groundtruth for eval.
       labels = features['labels']
-    else:
-      labels = None
+
     if 'features' in features:
       features = features['features']
       # Otherwise, it is in export mode, the features is past in directly.
 
   if params['precision'] == 'bfloat16':
     with tf.tpu.bfloat16_scope():
-      model_outputs = build_model_graph(
-          features, labels,
-          (mode == tf.estimator.ModeKeys.TRAIN or
-           mode == tf.estimator.ModeKeys.EVAL),
-          params)
+      model_outputs = build_model_graph(features, labels,
+                                        mode == tf.estimator.ModeKeys.TRAIN,
+                                        params)
       model_outputs.update({
           'source_id': features['source_ids'],
           'image_info': features['image_info'],
@@ -407,11 +406,9 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
             d[k] = tf.cast(v, tf.float32)
       cast_outputs_to_float(model_outputs)
   else:
-    model_outputs = build_model_graph(
-        features, labels,
-        (mode == tf.estimator.ModeKeys.TRAIN or
-         mode == tf.estimator.ModeKeys.EVAL),
-        params)
+    model_outputs = build_model_graph(features, labels,
+                                      mode == tf.estimator.ModeKeys.TRAIN,
+                                      params)
     model_outputs.update({
         'source_id': features['source_ids'],
         'image_info': features['image_info'],
@@ -486,21 +483,6 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
   ])
   total_loss = (total_rpn_loss + total_fast_rcnn_loss + mask_loss +
                 l2_regularization_loss)
-
-  if mode == tf.estimator.ModeKeys.EVAL:
-    # Predictions can only contain a dict of tensors, not a dict of dict of
-    # tensors. These outputs are not used for eval purposes.
-    del predictions['rpn_score_outputs']
-    del predictions['rpn_box_outputs']
-    if params['use_tpu']:
-      # For now, just return loss against the eval dataset.
-      # In the future, calculate COCO metrics against the eval dataset.
-      return tf.estimator.tpu.TPUEstimatorSpec(mode=mode,
-                                               predictions=predictions,
-                                               eval_metrics=None,
-                                               loss=total_loss)
-    return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions,
-                                      eval_metrics=None, loss=total_loss)
 
   host_call = None
   if mode == tf.estimator.ModeKeys.TRAIN:
