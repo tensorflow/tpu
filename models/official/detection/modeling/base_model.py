@@ -96,6 +96,7 @@ class Model(object):
     # Summary.
     self._enable_summary = params.enable_summary
     self._summaries = {}
+    self._image_summaries = {}
     self._model_dir = params.model_dir
     self._iterations_per_loop = params.train.iterations_per_loop
 
@@ -198,7 +199,7 @@ class Model(object):
       Returns:
         List of summary ops to run on the CPU host.
       """
-      global_step, summaries = tf.nest.pack_sequence_as(
+      global_step, summaries, image_summaries = tf.nest.pack_sequence_as(
           host_call_inputs, flat_args)
       global_step = tf.reduce_mean(global_step)
       with (tf2.summary.create_file_writer(
@@ -206,15 +207,19 @@ class Model(object):
           max_queue=self._iterations_per_loop).as_default()):
         with tf2.summary.record_if(True):
           for key, value in summaries.items():
-            tf2.summary.scalar(key, tf.reduce_mean(value),
-                               step=global_step)
+            tf2.summary.scalar(key, tf.reduce_mean(value), step=global_step)
+          for key, value in image_summaries.items():
+            tf2.summary.image(key, value, step=global_step)
           return tf.summary.all_v2_summary_ops()
     global_step = tf.reshape(tf.train.get_global_step()[None], [1])
-    host_call_inputs = [global_step, self.summaries]
+    host_call_inputs = [global_step, self.summaries, self._image_summaries]
     return (host_call_fn, tf.nest.flatten(host_call_inputs))
 
   def add_scalar_summary(self, name, tensor):
     self._summaries[name] = tf.reshape(tensor, [1])
+
+  def add_image_summary(self, name, tensor):
+    self._image_summaries[name] = tensor
 
   @property
   def summaries(self):
