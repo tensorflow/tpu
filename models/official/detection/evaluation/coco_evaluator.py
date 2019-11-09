@@ -1,3 +1,4 @@
+# Lint as: python2, python3
 # Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -36,6 +37,7 @@ from absl import logging
 import numpy as np
 from pycocotools import cocoeval
 import six
+from six.moves import range
 import tensorflow.compat.v1 as tf
 
 from evaluation import coco_utils
@@ -63,7 +65,7 @@ class COCOEvaluator(object):
         to absolute values (`image_info` is needed in this case).
     """
     if annotation_file:
-      if annotation_file.startswith('gs://'):
+      if six.ensure_str(annotation_file).startswith('gs://'):
         _, local_val_json = tempfile.mkstemp(suffix='.json')
         tf.gfile.Remove(local_val_json)
 

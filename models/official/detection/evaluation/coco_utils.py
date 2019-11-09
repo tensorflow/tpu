@@ -1,3 +1,4 @@
+# Lint as: python2, python3
 # Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,6 +28,8 @@ from PIL import Image
 from pycocotools import coco
 from pycocotools import mask as mask_utils
 import six
+from six.moves import range
+from six.moves import zip
 import tensorflow.compat.v1 as tf
 
 from dataloader import tf_example_decoder
@@ -327,7 +330,7 @@ def convert_groundtruths_to_coco_dataset(groundtruths, label_map=None):
               (boxes[j, k, 3] - boxes[j, k, 1]) *
               (boxes[j, k, 2] - boxes[j, k, 0]))
         if 'masks' in groundtruths:
-          mask = Image.open(six.StringIO(groundtruths['masks'][i][j, k]))
+          mask = Image.open(six.BytesIO(groundtruths['masks'][i][j, k]))
           width, height = mask.size
           np_mask = (
               np.array(mask.getdata()).reshape(height, width).astype(np.uint8))
