@@ -562,7 +562,7 @@ class Model(tf.keras.Model):
             output_filters=block_args.output_filters * depth_factor,
             kernel_size=((block_args.kernel_size + 1) // 2 if depth_factor > 1
                          else block_args.kernel_size))
-        # if the first block has stride-2 and super_pixel trandformation
+        # if the first block has stride-2 and super_pixel transformation
         if (block_args.strides[0] == 2 and block_args.strides[1] == 2):
           block_args = block_args._replace(strides=[1, 1])
           self._blocks.append(conv_block(block_args, self._global_params))
