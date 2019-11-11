@@ -1,3 +1,4 @@
+# Lint as: python2, python3
 # Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +15,12 @@
 # ==============================================================================
 """Utility functions for input processing."""
 
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import math
+from six.moves import range
 import tensorflow.compat.v1 as tf
 
 from utils import box_utils
