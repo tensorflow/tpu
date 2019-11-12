@@ -40,7 +40,7 @@ GlobalParams = collections.namedtuple('GlobalParams', [
     'batch_norm_momentum', 'batch_norm_epsilon', 'dropout_rate', 'data_format',
     'num_classes', 'width_coefficient', 'depth_coefficient', 'depth_divisor',
     'min_depth', 'drop_connect_rate', 'relu_fn', 'batch_norm', 'use_se',
-    'local_pooling', 'condconv_num_experts'
+    'local_pooling', 'condconv_num_experts', 'clip_projection_output'
 ])
 GlobalParams.__new__.__defaults__ = (None,) * len(GlobalParams._fields)
 
@@ -193,6 +193,8 @@ class MBConvBlock(tf.keras.layers.Layer):
     self._has_se = (
         global_params.use_se and self._block_args.se_ratio is not None and
         0 < self._block_args.se_ratio <= 1)
+
+    self._clip_projection_output = global_params.clip_projection_output
 
     self.endpoints = None
 
@@ -394,6 +396,8 @@ class MBConvBlock(tf.keras.layers.Layer):
     # Add identity so that quantization-aware training can insert quantization
     # ops correctly.
     x = tf.identity(x)
+    if self._clip_projection_output:
+      x = tf.clip_by_value(x, -6, 6)
     if self._block_args.id_skip:
       if all(
           s == 1 for s in self._block_args.strides
@@ -464,6 +468,8 @@ class MBConvBlockWithoutDepthwise(MBConvBlock):
     # Add identity so that quantization-aware training can insert quantization
     # ops correctly.
     x = tf.identity(x)
+    if self._clip_projection_output:
+      x = tf.clip_by_value(x, -6, 6)
 
     if self._block_args.id_skip:
       if all(
