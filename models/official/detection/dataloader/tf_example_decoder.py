@@ -36,8 +36,8 @@ class TfExampleDecoder(object):
     self._keys_to_features = {
         'image/encoded': tf.FixedLenFeature((), tf.string),
         'image/source_id': tf.FixedLenFeature((), tf.string, ''),
-        'image/height': tf.FixedLenFeature((), tf.int64),
-        'image/width': tf.FixedLenFeature((), tf.int64),
+        'image/height': tf.FixedLenFeature((), tf.int64, -1),
+        'image/width': tf.FixedLenFeature((), tf.int64, -1),
         'image/object/bbox/xmin': tf.VarLenFeature(tf.float32),
         'image/object/bbox/xmax': tf.VarLenFeature(tf.float32),
         'image/object/bbox/ymin': tf.VarLenFeature(tf.float32),
@@ -127,6 +127,18 @@ class TfExampleDecoder(object):
     image = self._decode_image(parsed_tensors)
     boxes = self._decode_boxes(parsed_tensors)
     areas = self._decode_areas(parsed_tensors)
+
+    decode_image_shape = tf.logical_or(
+        tf.equal(parsed_tensors['image/height'], -1),
+        tf.equal(parsed_tensors['image/width'], -1))
+    image_shape = tf.cast(tf.shape(image), dtype=tf.int64)
+
+    parsed_tensors['image/height'] = tf.where(decode_image_shape,
+                                              image_shape[0],
+                                              parsed_tensors['image/height'])
+    parsed_tensors['image/width'] = tf.where(decode_image_shape, image_shape[1],
+                                             parsed_tensors['image/width'])
+
     is_crowds = tf.cond(
         tf.greater(tf.shape(parsed_tensors['image/object/is_crowd'])[0], 0),
         lambda: tf.cast(parsed_tensors['image/object/is_crowd'], dtype=tf.bool),
