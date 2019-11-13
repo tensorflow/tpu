@@ -15,6 +15,8 @@
 """Config template to train Mask R-CNN."""
 
 from configs import base_config
+import sys
+sys.path.insert(0, 'tpu/models')
 from hyperparameters import params_dict
 
 # pylint: disable=line-too-long
