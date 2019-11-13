@@ -629,7 +629,7 @@ class Model(tf.keras.Model):
       training: boolean, whether the model is constructed for training.
       features_only: build the base feature network only.
       pooled_features_only: build the base network for features extraction
-        (after 1x2 conv layer and global pooling, but before dropout and fc
+        (after 1x1 conv layer and global pooling, but before dropout and fc
         head).
 
     Returns:
@@ -681,6 +681,7 @@ class Model(tf.keras.Model):
       with tf.variable_scope('head'):
         outputs = self._relu_fn(
             self._bn1(self._conv_head(outputs), training=training))
+        self.endpoints['head_1x1'] = outputs
 
         if self._global_params.local_pooling:
           shape = outputs.get_shape().as_list()
