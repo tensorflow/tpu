@@ -24,14 +24,14 @@ MASKRCNN_CFG = params_dict.ParamsDict(base_config.BASE_CFG)
 MASKRCNN_CFG.override({
     'type': 'mask_rcnn',
     'eval': {
-        'type': 'box',
+        'type': 'box_and_mask',
     },
     'architecture': {
         'parser': 'maskrcnn_parser',
         'backbone': 'resnet',
         'multilevel_features': 'fpn',
         'use_bfloat16': True,
-        'include_mask': False,
+        'include_mask': True,
     },
     'maskrcnn_parser': {
         'use_bfloat16': True,
@@ -45,7 +45,7 @@ MASKRCNN_CFG.override({
         'aug_scale_max': 1.0,
         'skip_crowd_during_training': True,
         'max_num_instances': 100,
-        'include_mask': False,
+        'include_mask': True,
         'mask_crop_size': 112,
     },
     'anchor': {
@@ -133,7 +133,7 @@ MASKRCNN_CFG.override({
         'use_batched_nms': False,
         'max_total_size': 100,
         'nms_iou_threshold': 0.5,
-        'score_threshold': 0.0,
+        'score_threshold': 0.05,
         'pre_nms_num_boxes': 1000,
     },
 }, is_strict=False)
