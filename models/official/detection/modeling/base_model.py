@@ -28,22 +28,42 @@ import tensorflow.compat.v2 as tf2
 from modeling import learning_rates
 
 
-def filter_trainable_variables(variables, frozen_variable_prefix):
-  """Filter trainable varialbes.
+def filter_variables(variables, variable_regex, is_whitelist):
+  """Filter a list of variables based on the regex.
 
   Args:
     variables: a list of tf.Variable to be filtered.
-    frozen_variable_prefix: a regex string specifing the prefix pattern of
-      the frozen variables' names.
+    variable_regex: a regex specifying the filtering rule.
+    is_whitelist: a bool. If True, indicate `variable_regex` specifies the
+      variables to keep. If False, indicate `variable_regex` specfieis the
+      variables to discard.
 
   Returns:
-    filtered_variables: a list of tf.Variable filtered out the frozen ones.
+    filtered_variables: a list of tf.Variable after filtering.
   """
-  filtered_variables = [
-      v for v in variables if frozen_variable_prefix is None or
-      not re.match(frozen_variable_prefix, v.name)
-  ]
+  if is_whitelist:
+    filtered_variables = [
+        v for v in variables if variable_regex is None or
+        re.match(variable_regex, v.name)
+    ]
+  else:
+    filtered_variables = [
+        v for v in variables if variable_regex is None or
+        not re.match(variable_regex, v.name)
+    ]
   return filtered_variables
+
+
+def filter_trainable_variables(variables, frozen_variable_prefix):
+  """Filter and retrun trainable variables."""
+  return filter_variables(
+      variables, frozen_variable_prefix, is_whitelist=False)
+
+
+def filter_regularization_variables(variables, regularization_variable_regex):
+  """Filter and return regularization variables."""
+  return filter_variables(
+      variables, regularization_variable_regex, is_whitelist=True)
 
 
 class OptimizerFactory(object):
@@ -87,7 +107,9 @@ class Model(object):
 
     self._gradient_clip_norm = params.train.gradient_clip_norm
 
-    self._frozen_variable_prefix = params.train.frozen_variable_prefix
+    self._frozen_var_prefix = params.train.frozen_variable_prefix
+
+    self._regularization_var_regex = params.train.regularization_variable_regex
 
     # Checkpoint restoration.
     self._checkpoint = params.train.checkpoint.path
@@ -157,13 +179,14 @@ class Model(object):
 
     # Gets all trainable variables and apply the variable filter.
     train_var_list = filter_trainable_variables(
-        tf.trainable_variables(), self._frozen_variable_prefix)
+        tf.trainable_variables(), self._frozen_var_prefix)
 
+    # Gets the regularization variables and apply the regularization loss.
+    regularization_var_list = filter_regularization_variables(
+        train_var_list, self._regularization_var_regex)
     l2_regularization_loss = self._l2_weight_decay * tf.add_n([
-        tf.nn.l2_loss(v)
-        for v in train_var_list
-        if 'batch_normalization' not in v.name and 'bias' not in v.name
-    ])
+        tf.nn.l2_loss(v) for v in regularization_var_list])
+
     self.add_scalar_summary('l2_regularization_loss', l2_regularization_loss)
 
     total_loss = model_loss + l2_regularization_loss
