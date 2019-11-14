@@ -285,6 +285,9 @@ def build_model_graph(features, labels, is_training, params):
 
   # Faster-RCNN mode.
   if not params['include_mask']:
+    # Print #parameters and #FLOPs in model.
+    compute_model_statistics(batch_size, is_training=is_training)
+
     return model_outputs
 
   # Mask sampling
