@@ -38,9 +38,6 @@ class MaskrcnnModel(base_model.Model):
     super(MaskrcnnModel, self).__init__(params)
 
     self._include_mask = params.architecture.include_mask
-    if self._include_mask:
-      raise ValueError('Only Faster R-CNN is currently supported. '
-                       'Mask R-CNN is coming soon.')
 
     # Architecture generators.
     self._backbone_fn = factory.backbone_generator(params)
@@ -80,7 +77,7 @@ class MaskrcnnModel(base_model.Model):
         'rpn_score_outputs': rpn_score_outputs,
         'rpn_box_outputs': rpn_box_outputs,
     })
-    rpn_rois, rpn_roi_scores = self._generate_rois_fn(
+    rpn_rois, _ = self._generate_rois_fn(
         rpn_box_outputs,
         rpn_score_outputs,
         labels['anchor_boxes'],
@@ -89,7 +86,6 @@ class MaskrcnnModel(base_model.Model):
 
     if is_training:
       rpn_rois = tf.stop_gradient(rpn_rois)
-      rpn_roi_scores = tf.stop_gradient(rpn_roi_scores)
 
       # Sample proposals.
       rpn_rois, matched_gt_boxes, matched_gt_classes, matched_gt_indices = (
@@ -137,8 +133,9 @@ class MaskrcnnModel(base_model.Model):
       rpn_rois, classes, mask_targets = self._sample_masks_fn(
           rpn_rois, matched_gt_boxes, matched_gt_classes, matched_gt_indices,
           labels['gt_masks'])
+      mask_targets = tf.stop_gradient(mask_targets)
+
       classes = tf.cast(classes, dtype=tf.int32)
-      rpn_rois = tf.stop_gradient(rpn_rois)
 
       model_outputs.update({
           'mask_targets': mask_targets,

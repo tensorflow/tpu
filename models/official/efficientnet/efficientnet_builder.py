@@ -133,9 +133,9 @@ def swish(features, use_native=True, use_hard=False):
   """Computes the Swish activation function.
 
   We provide three alternnatives:
-    - Native tf.nn.swish, use less memory during training than compsible swish.
+    - Native tf.nn.swish, use less memory during training than composable swish.
     - Quantization friendly hard swish.
-    - A composible swish, equavilant to tf.nn.swish, but more general for
+    - A composable swish, equivalant to tf.nn.swish, but more general for
       finetuning and TF-Hub.
 
   Args:
@@ -250,7 +250,8 @@ def build_model(images,
     if not override_params:
       override_params = {}
     override_params['batch_norm'] = utils.BatchNormalization
-    override_params['relu_fn'] = functools.partial(swish, use_native=False)
+    if fine_tuning:
+      override_params['relu_fn'] = functools.partial(swish, use_native=False)
   blocks_args, global_params = get_model_params(model_name, override_params)
 
   if model_dir:

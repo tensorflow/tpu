@@ -346,7 +346,11 @@ def single_level_feature_crop(features, level_boxes, detection_prior_levels,
   return crop_features
 
 
-def crop_mask_in_target_box(masks, boxes, target_boxes, output_size):
+def crop_mask_in_target_box(masks,
+                            boxes,
+                            target_boxes,
+                            output_size,
+                            sample_offset=0):
   """Crop masks in target boxes.
 
   Args:
@@ -359,6 +363,8 @@ def crop_mask_in_target_box(masks, boxes, target_boxes, output_size):
       coordinates. A box is represented by [ymin, xmin, ymax, xmax].
     output_size: A scalar to indicate the output crop size. It currently only
       supports to output a square shape outputs.
+    sample_offset: a float number in [0, 1] indicates the subpixel sample offset
+      from grid point.
 
   Returns:
     A 4-D tensor representing feature crop of shape
@@ -403,7 +409,7 @@ def crop_mask_in_target_box(masks, boxes, target_boxes, output_size):
         levels,
         boundaries,
         output_size,
-        sample_offset=0)
+        sample_offset=sample_offset)
     cropped_masks = tf.squeeze(cropped_masks, axis=-1)
 
   return cropped_masks
