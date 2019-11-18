@@ -40,6 +40,7 @@ class Fpn(object):
                max_level=7,
                fpn_feat_dims=256,
                use_separable_conv=False,
+               use_batch_norm=True,
                batch_norm_relu=nn_ops.BatchNormRelu()):
     """FPN initialization function.
 
@@ -49,6 +50,7 @@ class Fpn(object):
       fpn_feat_dims: `int` number of filters in FPN layers.
       use_separable_conv: `bool`, if True use separable convolution for
         convolution in FPN layers.
+      use_batch_norm: 'bool', indicating whether batchnorm layers are added.
       batch_norm_relu: an operation that includes a batch normalization layer
         followed by a relu layer(optional).
     """
@@ -60,6 +62,7 @@ class Fpn(object):
           tf.layers.separable_conv2d, depth_multiplier=1)
     else:
       self._conv2d_op = tf.layers.conv2d
+    self._use_batch_norm = use_batch_norm
     self._batch_norm_relu = batch_norm_relu
 
   def __call__(self, multilevel_features, is_training=False):
@@ -121,9 +124,11 @@ class Fpn(object):
             kernel_size=(3, 3),
             padding='same',
             name='p%d' % level)
-      # Adds batch_norm layer.
-      for level in range(self._min_level, self._max_level + 1):
-        feats[level] = self._batch_norm_relu(
-            feats[level], relu=False, is_training=is_training,
-            name='p%d-bn' % level)
+
+      if self._use_batch_norm:
+        # Adds batch_norm layer.
+        for level in range(self._min_level, self._max_level + 1):
+          feats[level] = self._batch_norm_relu(
+              feats[level], relu=False, is_training=is_training,
+              name='p%d-bn' % level)
     return feats

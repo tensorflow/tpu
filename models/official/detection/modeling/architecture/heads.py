@@ -34,6 +34,7 @@ class RpnHead(object):
                min_level,
                max_level,
                anchors_per_location,
+               use_batch_norm=True,
                batch_norm_relu=nn_ops.BatchNormRelu()):
     """Initialize params to build Region Proposal Network head.
 
@@ -42,12 +43,14 @@ class RpnHead(object):
       max_level: `int` number of maximum feature level.
       anchors_per_location: `int` number of number of anchors per pixel
         location.
+      use_batch_norm: 'bool', indicating whether batchnorm layers are added.
       batch_norm_relu: an operation that includes a batch normalization layer
         followed by a relu layer(optional).
     """
     self._min_level = min_level
     self._max_level = max_level
     self._anchors_per_location = anchors_per_location
+    self._use_batch_norm = use_batch_norm
     self._batch_norm_relu = batch_norm_relu
 
   def __call__(self, features, is_training=False):
@@ -58,17 +61,24 @@ class RpnHead(object):
 
       def shared_rpn_heads(features, anchors_per_location, level):
         """Shared RPN heads."""
-        del level
         features = tf.layers.conv2d(
             features,
             256,
             kernel_size=(3, 3),
             strides=(1, 1),
-            activation=tf.nn.relu,
+            activation=(None if self._use_batch_norm else tf.nn.relu),
             bias_initializer=tf.zeros_initializer(),
             kernel_initializer=tf.random_normal_initializer(stddev=0.01),
             padding='same',
             name='rpn')
+
+        if self._use_batch_norm:
+          # The batch normalization layers are not shared between levels.
+          features = self._batch_norm_relu(
+              features,
+              name=('rpn-l%d-bn' % level),
+              is_training=is_training)
+
         # Proposal classification scores
         scores = tf.layers.conv2d(
             features,
@@ -105,6 +115,7 @@ class FastrcnnHead(object):
   def __init__(self,
                num_classes,
                mlp_head_dim,
+               use_batch_norm=True,
                batch_norm_relu=nn_ops.BatchNormRelu()):
     """Initialize params to build Fast R-CNN box head.
 
@@ -112,11 +123,13 @@ class FastrcnnHead(object):
       num_classes: a integer for the number of classes.
       mlp_head_dim: a integer that is the hidden dimension in the
         fully-connected layers.
+      use_batch_norm: 'bool', indicating whether batchnorm layers are added.
       batch_norm_relu: an operation that includes a batch normalization layer
         followed by a relu layer(optional).
     """
     self._num_classes = num_classes
     self._mlp_head_dim = mlp_head_dim
+    self._use_batch_norm = use_batch_norm
     self._batch_norm_relu = batch_norm_relu
 
   def __call__(self,
@@ -144,12 +157,18 @@ class FastrcnnHead(object):
           roi_features, [-1, num_rois, height * width * filters])
       net = tf.layers.dense(roi_features,
                             units=self._mlp_head_dim,
-                            activation=tf.nn.relu,
+                            activation=(
+                                None if self._use_batch_norm else tf.nn.relu),
                             name='fc6')
+      if self._use_batch_norm:
+        net = self._batch_norm_relu(net, is_training=is_training)
       net = tf.layers.dense(net,
                             units=self._mlp_head_dim,
-                            activation=tf.nn.relu,
+                            activation=(
+                                None if self._use_batch_norm else tf.nn.relu),
                             name='fc7')
+      if self._use_batch_norm:
+        net = self._batch_norm_relu(net, is_training=is_training)
 
       class_outputs = tf.layers.dense(
           net,
@@ -172,17 +191,20 @@ class MaskrcnnHead(object):
   def __init__(self,
                num_classes,
                mask_target_size,
+               use_batch_norm=True,
                batch_norm_relu=nn_ops.BatchNormRelu()):
     """Initialize params to build Fast R-CNN head.
 
     Args:
       num_classes: a integer for the number of classes.
       mask_target_size: a integer that is the resolution of masks.
+      use_batch_norm: 'bool', indicating whether batchnorm layers are added.
       batch_norm_relu: an operation that includes a batch normalization layer
         followed by a relu layer(optional).
     """
     self._num_classes = num_classes
     self._mask_target_size = mask_target_size
+    self._use_batch_norm = use_batch_norm
     self._batch_norm_relu = batch_norm_relu
 
   def __call__(self, roi_features, class_indices, is_training=False):
@@ -194,6 +216,7 @@ class MaskrcnnHead(object):
       class_indices: a Tensor of shape [batch_size, num_rois], indicating
         which class the ROI is.
       is_training: `boolean`, if True if model is in training mode.
+
     Returns:
       mask_outputs: a tensor with a shape of
         [batch_size, num_masks, mask_height, mask_width, num_classes],
@@ -227,10 +250,12 @@ class MaskrcnnHead(object):
             strides=(1, 1),
             padding='same',
             dilation_rate=(1, 1),
-            activation=tf.nn.relu,
+            activation=(None if self._use_batch_norm else tf.nn.relu),
             kernel_initializer=tf.random_normal_initializer(stddev=init_stddev),
             bias_initializer=tf.zeros_initializer(),
             name='mask-conv-l%d' % i)
+        if self._use_batch_norm:
+          net = self._batch_norm_relu(net, is_training=is_training)
 
       kernel_size = (2, 2)
       fan_out = 256
@@ -241,10 +266,12 @@ class MaskrcnnHead(object):
           kernel_size=kernel_size,
           strides=(2, 2),
           padding='valid',
-          activation=tf.nn.relu,
+          activation=(None if self._use_batch_norm else tf.nn.relu),
           kernel_initializer=tf.random_normal_initializer(stddev=init_stddev),
           bias_initializer=tf.zeros_initializer(),
           name='conv5-mask')
+      if self._use_batch_norm:
+        net = self._batch_norm_relu(net, is_training=is_training)
 
       kernel_size = (1, 1)
       fan_out = self._num_classes
@@ -290,6 +317,7 @@ class RetinanetHead(object):
                num_convs=4,
                num_filters=256,
                use_separable_conv=False,
+               use_batch_norm=True,
                batch_norm_relu=nn_ops.BatchNormRelu()):
     """Initialize params to build RetinaNet head.
 
@@ -303,6 +331,7 @@ class RetinanetHead(object):
       num_filters: `int` number of filters used in the head architecture.
       use_separable_conv: `bool` to indicate whether to use separable
         convoluation.
+      use_batch_norm: 'bool', indicating whether batchnorm layers are added.
       batch_norm_relu: an operation that includes a batch normalization layer
         followed by a relu layer(optional).
     """
@@ -316,6 +345,7 @@ class RetinanetHead(object):
     self._num_filters = num_filters
     self._use_separable_conv = use_separable_conv
 
+    self._use_batch_norm = use_batch_norm
     self._batch_norm_relu = batch_norm_relu
 
   def __call__(self, fpn_features, is_training=False):
@@ -348,14 +378,16 @@ class RetinanetHead(object):
           self._num_filters,
           kernel_size=(3, 3),
           bias_initializer=tf.zeros_initializer(),
-          activation=None,
+          activation=(None if self._use_batch_norm else tf.nn.relu),
           padding='same',
           name='class-'+str(i))
-      # The convolution layers in the class net are shared among all levels, but
-      # each level has its batch normlization to capture the statistical
-      # difference among different levels.
-      features = self._batch_norm_relu(features, is_training=is_training,
-                                       name='class-%d-%d'%(i, level),)
+
+      if self._use_batch_norm:
+        # The convolution layers in the class net are shared among all levels,
+        # but each level has its batch normlization to capture the statistical
+        # difference among different levels.
+        features = self._batch_norm_relu(features, is_training=is_training,
+                                         name='class-%d-%d'%(i, level),)
     if self._use_separable_conv:
       conv2d_op = functools.partial(
           tf.layers.separable_conv2d, depth_multiplier=1)
@@ -386,15 +418,17 @@ class RetinanetHead(object):
           features,
           self._num_filters,
           kernel_size=(3, 3),
-          activation=None,
+          activation=(None if self._use_batch_norm else tf.nn.relu),
           bias_initializer=tf.zeros_initializer(),
           padding='same',
           name='box-'+str(i))
-      # The convolution layers in the box net are shared among all levels, but
-      # each level has its batch normlization to capture the statistical
-      # difference among different levels.
-      features = self._batch_norm_relu(features, is_training=is_training,
-                                       name='box-%d-%d'%(i, level))
+
+      if self._use_batch_norm:
+        # The convolution layers in the box net are shared among all levels, but
+        # each level has its batch normlization to capture the statistical
+        # difference among different levels.
+        features = self._batch_norm_relu(features, is_training=is_training,
+                                         name='box-%d-%d'%(i, level))
     if self._use_separable_conv:
       conv2d_op = functools.partial(
           tf.layers.separable_conv2d, depth_multiplier=1)
@@ -810,7 +844,12 @@ class ShapemaskFinemaskHead(object):
 class SegmentationHead(object):
   """Semantic segmentation head."""
 
-  def __init__(self, num_classes, level, num_convs):
+  def __init__(self,
+               num_classes,
+               level,
+               num_convs,
+               use_batch_norm=True,
+               batch_norm_relu=nn_ops.BatchNormRelu()):
     """Initialize params to build segmentation head.
 
     Args:
@@ -819,15 +858,19 @@ class SegmentationHead(object):
       level: `int` feature level used for prediction.
       num_convs: `int` number of stacked convolution before the last prediction
         layer.
+      use_batch_norm: 'bool', indicating whether batchnorm layers are added.
+      batch_norm_relu: an operation that includes a batch normalization layer
+        followed by a relu layer(optional).
     """
     self._num_classes = num_classes
     self._level = level
     self._num_convs = num_convs
+    self._use_batch_norm = use_batch_norm
+    self._batch_norm_relu = batch_norm_relu
 
   def __call__(self,
                features,
-               is_training,
-               batch_norm_relu=nn_ops.BatchNormRelu()):
+               is_training):
     """Generate logits for semantic segmentation.
 
     Args:
@@ -835,8 +878,6 @@ class SegmentationHead(object):
         mask_crop_size, mask_crop_size, num_downsample_channels]. This is the
         instance feature crop.
       is_training: a bool indicating whether in training mode.
-      batch_norm_relu: an operation that includes a batch normalization layer
-        followed by a relu layer(optional).
 
     Returns:
       logits: semantic segmentation logits as a float Tensor of shape
@@ -852,13 +893,14 @@ class SegmentationHead(object):
             kernel_size=(3, 3),
             bias_initializer=tf.zeros_initializer(),
             kernel_initializer=tf.random_normal_initializer(stddev=0.01),
-            activation=None,
+            activation=(None if self._use_batch_norm else tf.nn.relu),
             padding='same',
             name='class-%d' % i)
-        features = batch_norm_relu(
-            features,
-            is_training=is_training,
-            name='class-%d-bn' % i)
+        if self._use_batch_norm:
+          features = self._batch_norm_relu(
+              features,
+              is_training=is_training,
+              name='class-%d-bn' % i)
       logits = tf.layers.conv2d(
           features,
           self._num_classes,  # This include background class 0.

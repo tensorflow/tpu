@@ -143,7 +143,7 @@ def run():
     model.compile(optimizer, loss=tf.keras.losses.categorical_crossentropy)
 
     # Writing summary logs to file may have performance impact. Therefore, we
-    # only write summary events everty 100th steps.
+    # only write summary events every 100th steps.
     tensorboard_callback = tf.keras.callbacks.TensorBoard(
         FLAGS.model_dir, update_freq=100)
     model.fit(

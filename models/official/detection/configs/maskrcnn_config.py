@@ -66,6 +66,7 @@ MASKRCNN_CFG.override({
         'min_level': 2,
         'max_level': 6,
         'anchors_per_location': 3,
+        'use_batch_norm': False,
         'batch_norm': {
             'batch_norm_momentum': 0.997,
             'batch_norm_epsilon': 1e-4,
@@ -78,6 +79,7 @@ MASKRCNN_CFG.override({
         # one background classes whose index is 0.
         'num_classes': 91,
         'fast_rcnn_mlp_head_dim': 1024,
+        'use_batch_norm': False,
         'batch_norm': {
             'batch_norm_momentum': 0.997,
             'batch_norm_epsilon': 1e-4,
@@ -88,6 +90,7 @@ MASKRCNN_CFG.override({
     'mrcnn_head': {
         'num_classes': 91,
         'mask_target_size': 28,
+        'use_batch_norm': False,
         'batch_norm': {
             'batch_norm_momentum': 0.997,
             'batch_norm_epsilon': 1e-4,
