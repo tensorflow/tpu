@@ -171,6 +171,9 @@ func (c *upCmd) gceImageFamily() (string, error) {
 	if c.tfVersion == "nightly" {
 		return "tf-nightly", nil
 	}
+	if c.tfVersion == "nightly-2.x" {
+		return "tf-nightly-2-x", nil
+	}
 	parsed, err := parseVersion(c.tfVersion)
 	if err != nil {
 		return "", err

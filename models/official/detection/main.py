@@ -1,3 +1,4 @@
+# Lint as: python2, python3
 # Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,6 +25,8 @@ import pprint
 from absl import flags
 from absl import logging
 
+import six
+from six.moves import range
 import tensorflow.compat.v1 as tf
 
 from configs import factory
@@ -142,7 +145,7 @@ def main(argv):
         timeout=params.eval.eval_timeout,
         timeout_fn=terminate_eval):
       # Terminates eval job when final checkpoint is reached.
-      current_step = int(os.path.basename(ckpt).split('-')[1])
+      current_step = int(six.ensure_str(os.path.basename(ckpt)).split('-')[1])
 
       logging.info('Starting to evaluate.')
       try:

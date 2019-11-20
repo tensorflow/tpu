@@ -1,3 +1,4 @@
+# Lint as: python2, python3
 # Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,6 +23,7 @@ import abc
 import functools
 import re
 import six
+from six.moves import zip
 import tensorflow.compat.v1 as tf
 import tensorflow.compat.v2 as tf2
 
@@ -90,10 +92,8 @@ class OptimizerFactory(object):
     return self._optimizer(learning_rate)
 
 
-class Model(object):
+class Model(six.with_metaclass(abc.ABCMeta, object)):
   """Base class for model function."""
-
-  __metaclass__ = abc.ABCMeta
 
   def __init__(self, params):
     self._use_bfloat16 = params.architecture.use_bfloat16
@@ -196,7 +196,7 @@ class Model(object):
       grads = [gv[0] for gv in grads_and_vars]
       tvars = [gv[1] for gv in grads_and_vars]
       clipped_grads, _ = tf.clip_by_global_norm(grads, self._gradient_clip_norm)
-      grads_and_vars = zip(clipped_grads, tvars)
+      grads_and_vars = list(zip(clipped_grads, tvars))
 
     with tf.control_dependencies(update_ops):
       minimize_op = optimizer.apply_gradients(grads_and_vars, global_step)

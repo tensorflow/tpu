@@ -26,7 +26,7 @@ from absl import logging
 import numpy as np
 from PIL import Image
 from pycocotools import coco
-from pycocotools import mask as mask_utils
+from pycocotools import mask as mask_api
 import six
 from six.moves import range
 from six.moves import zip
@@ -34,96 +34,7 @@ import tensorflow.compat.v1 as tf
 
 from dataloader import tf_example_decoder
 from utils import box_utils
-
-import cv2
-
-
-def generate_segmentation_from_masks(masks,
-                                     detected_boxes,
-                                     image_height,
-                                     image_width,
-                                     is_image_mask=False):
-  """Generates segmentation result from instance masks.
-
-  Args:
-    masks: a numpy array of shape [N, mask_height, mask_width] representing the
-      instance masks w.r.t. the `detected_boxes`.
-    detected_boxes: a numpy array of shape [N, 4] representing the reference
-      bounding boxes.
-    image_height: an integer representing the height of the image.
-    image_width: an integer representing the width of the image.
-    is_image_mask: bool. True: input masks are whole-image masks. False: input
-      masks are bounding-box level masks.
-
-  Returns:
-    segms: a numpy array of shape [N, image_height, image_width] representing
-      the instance masks *pasted* on the image canvas.
-  """
-
-  def expand_boxes(boxes, scale):
-    """Expands an array of boxes by a given scale."""
-    # Reference: https://github.com/facebookresearch/Detectron/blob/master/detectron/utils/boxes.py#L227  # pylint: disable=line-too-long
-    # The `boxes` in the reference implementation is in [x1, y1, x2, y2] form,
-    # whereas `boxes` here is in [x1, y1, w, h] form
-    w_half = boxes[:, 2] * .5
-    h_half = boxes[:, 3] * .5
-    x_c = boxes[:, 0] + w_half
-    y_c = boxes[:, 1] + h_half
-
-    w_half *= scale
-    h_half *= scale
-
-    boxes_exp = np.zeros(boxes.shape)
-    boxes_exp[:, 0] = x_c - w_half
-    boxes_exp[:, 2] = x_c + w_half
-    boxes_exp[:, 1] = y_c - h_half
-    boxes_exp[:, 3] = y_c + h_half
-
-    return boxes_exp
-
-  # Reference: https://github.com/facebookresearch/Detectron/blob/master/detectron/core/test.py#L812  # pylint: disable=line-too-long
-  # To work around an issue with cv2.resize (it seems to automatically pad
-  # with repeated border values), we manually zero-pad the masks by 1 pixel
-  # prior to resizing back to the original image resolution. This prevents
-  # "top hat" artifacts. We therefore need to expand the reference boxes by an
-  # appropriate factor.
-  _, mask_height, mask_width = masks.shape
-  scale = max((mask_width + 2.0) / mask_width,
-              (mask_height + 2.0) / mask_height)
-
-  ref_boxes = expand_boxes(detected_boxes, scale)
-  ref_boxes = ref_boxes.astype(np.int32)
-  padded_mask = np.zeros((mask_height + 2, mask_width + 2), dtype=np.float32)
-  segms = []
-  for mask_ind, mask in enumerate(masks):
-    im_mask = np.zeros((image_height, image_width), dtype=np.uint8)
-    if is_image_mask:
-      # Process whole-image masks.
-      im_mask[:, :] = mask[:, :]
-    else:
-      # Process mask inside bounding boxes.
-      padded_mask[1:-1, 1:-1] = mask[:, :]
-
-      ref_box = ref_boxes[mask_ind, :]
-      w = ref_box[2] - ref_box[0] + 1
-      h = ref_box[3] - ref_box[1] + 1
-      w = np.maximum(w, 1)
-      h = np.maximum(h, 1)
-
-      mask = cv2.resize(padded_mask, (w, h))
-      mask = np.array(mask > 0.5, dtype=np.uint8)
-
-      x_0 = max(ref_box[0], 0)
-      x_1 = min(ref_box[2] + 1, image_width)
-      y_0 = max(ref_box[1], 0)
-      y_1 = min(ref_box[3] + 1, image_height)
-
-      im_mask[y_0:y_1, x_0:x_1] = mask[(y_0 - ref_box[1]):(y_1 - ref_box[1]), (x_0 - ref_box[0]):(x_1 - ref_box[0])]
-    segms.append(im_mask)
-
-  segms = np.array(segms)
-  assert masks.shape[0] == segms.shape[0]
-  return segms
+from utils import mask_utils
 
 
 class COCOWrapper(coco.COCO):
@@ -191,7 +102,7 @@ class COCOWrapper(coco.COCO):
         ann['segmentation'] = [
             [x1, y1, x1, y2, x2, y2, x2, y1]]
       elif self._eval_type == 'mask':
-        ann['area'] = mask_utils.area(ann['segmentation'])
+        ann['area'] = mask_api.area(ann['segmentation'])
 
     res.dataset['annotations'] = copy.deepcopy(predictions)
     res.createIndex()
@@ -239,15 +150,14 @@ def convert_predictions_to_coco_annotations(predictions):
 
     for j in range(batch_size):
       if 'detection_masks' in predictions:
-        image_masks = generate_segmentation_from_masks(
+        image_masks = mask_utils.paste_instance_masks(
             predictions['detection_masks'][i][j],
             mask_boxes[i][j],
             int(predictions['image_info'][i][j, 0, 0]),
-            int(predictions['image_info'][i][j, 0, 1]),
-            is_image_mask=False)
+            int(predictions['image_info'][i][j, 0, 1]))
         binary_masks = (image_masks > 0.0).astype(np.uint8)
         encoded_masks = [
-            mask_utils.encode(np.asfortranarray(binary_mask))
+            mask_api.encode(np.asfortranarray(binary_mask))
             for binary_mask in list(binary_masks)]
       for k in range(max_num_detections):
         ann = {}
@@ -335,10 +245,10 @@ def convert_groundtruths_to_coco_dataset(groundtruths, label_map=None):
           np_mask = (
               np.array(mask.getdata()).reshape(height, width).astype(np.uint8))
           np_mask[np_mask > 0] = 255
-          encoded_mask = mask_utils.encode(np.asfortranarray(np_mask))
+          encoded_mask = mask_api.encode(np.asfortranarray(np_mask))
           ann['segmentation'] = encoded_mask
           if 'areas' not in groundtruths:
-            ann['area'] = mask_utils.area(encoded_mask)
+            ann['area'] = mask_api.area(encoded_mask)
         gt_annotations.append(ann)
 
   for i, ann in enumerate(gt_annotations):
@@ -361,11 +271,15 @@ def convert_groundtruths_to_coco_dataset(groundtruths, label_map=None):
 class COCOGroundtruthGenerator(object):
   """Generates the groundtruth annotations from a single example sequentially."""
 
-  def __init__(self, file_pattern, num_examples, include_mask):
+  def __init__(self, file_pattern, num_examples, include_mask, dataset_type):
     self._file_pattern = file_pattern
     self._num_examples = num_examples
     self._include_mask = include_mask
-    self._dataset_fn = tf.data.TFRecordDataset
+    if dataset_type == 'tfrecord':
+      self._dataset_fn = tf.data.TFRecordDataset
+    else:
+      raise ValueError('Dataset type %s is not supported.' % dataset_type)
+    self._dataset_type = dataset_type
 
   def _parse_single_example(self, example):
     """Parses a single serialized tf.Example proto.
@@ -422,7 +336,10 @@ class COCOGroundtruthGenerator(object):
             lambda filename: self._dataset_fn(filename).prefetch(1),
             cycle_length=32,
             sloppy=False))
-    dataset = dataset.map(self._parse_single_example, num_parallel_calls=64)
+
+    if self._dataset_type == 'tfrecord':
+      parser_fn = self._parse_single_example
+    dataset = dataset.map(parser_fn, num_parallel_calls=64)
     dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
     dataset = dataset.batch(1, drop_remainder=False)
     return dataset
@@ -441,10 +358,11 @@ class COCOGroundtruthGenerator(object):
 def scan_and_generator_annotation_file(file_pattern,
                                        num_samples,
                                        include_mask,
-                                       annotation_file):
+                                       annotation_file,
+                                       dataset_type):
   """Scans and generate the COCO-style annotation JSON file given a dataset."""
   groundtruth_generator = COCOGroundtruthGenerator(
-      file_pattern, num_samples, include_mask)
+      file_pattern, num_samples, include_mask, dataset_type)
   generate_annotation_file(groundtruth_generator, annotation_file)
 
 

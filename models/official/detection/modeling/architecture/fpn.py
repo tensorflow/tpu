@@ -1,3 +1,4 @@
+# Lint as: python2, python3
 # Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,6 +27,7 @@ from __future__ import print_function
 
 import functools
 
+from six.moves import range
 import tensorflow.compat.v1 as tf
 
 from modeling.architecture import nn_ops
@@ -79,7 +81,7 @@ class Fpn(object):
       [min_level, min_level + 1, ..., max_level]. The values are corresponding
       FPN features with shape [batch_size, height_l, width_l, fpn_feat_dims].
     """
-    input_levels = multilevel_features.keys()
+    input_levels = list(multilevel_features.keys())
     if min(input_levels) > self._min_level:
       raise ValueError(
           'The minimum backbone level %d should be '%(min(input_levels)) +

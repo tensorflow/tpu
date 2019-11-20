@@ -1,3 +1,4 @@
+# Lint as: python2, python3
 # Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,9 +24,12 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import functools
-from absl import logging
 import enum
+import functools
+
+from absl import logging
+from six.moves import range
+from six.moves import zip
 import tensorflow.compat.v1 as tf
 
 from modeling.architecture import nn_ops
@@ -87,7 +91,7 @@ class Config(object):
                        'divisible by 4.'.format(len(config)))
     num_nodes = int(len(config) / 4)
     num_output_nodes = self.max_level - self.min_level + 1
-    levels = range(self.max_level, self.min_level - 1, -1)
+    levels = list(range(self.max_level, self.min_level - 1, -1))
 
     nodes = []
     for i in range(num_nodes):
@@ -177,7 +181,7 @@ class Nasfpn(object):
     """
     feats = []
     for level in range(self._min_level, self._max_level + 1):
-      if level in multilevel_features.keys():
+      if level in list(multilevel_features.keys()):
         # TODO(tsungyi): The original impl. does't downsample the backbone feat.
         feats.append(self._resample_feature_map(
             multilevel_features[level], level, level, is_training,

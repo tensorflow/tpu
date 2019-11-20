@@ -49,7 +49,7 @@ class Anchor(object):
       num_scales: integer number representing intermediate scales added
         on each level. For instances, num_scales=2 adds one additional
         intermediate anchor scales [2^0, 2^0.5] on each level.
-      aspect_ratios: list of float numbers representing the aspect raito anchors
+      aspect_ratios: list of float numbers representing the aspect ratio anchors
         added on each level. The number indicates the ratio of width to height.
         For instances, aspect_ratios=[1.0, 2.0, 0.5] adds three anchors on each
         scale level.
@@ -71,7 +71,7 @@ class Anchor(object):
     """Generates multiscale anchor boxes.
 
     Returns:
-      a Tensor of shape [N, 4], represneting anchor boxes of all levels
+      a Tensor of shape [N, 4], representing anchor boxes of all levels
       concatenated together.
     """
     boxes_all = []
