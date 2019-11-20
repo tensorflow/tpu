@@ -119,44 +119,20 @@ def main(unused_argv):
   tf.tpu.experimental.initialize_tpu_system(resolver)
   strategy = tf.distribute.experimental.TPUStrategy(resolver)
 
-  # TODO(b/130307853): In TPU Pod, we have to use
-  # `strategy.experimental_distribute_datasets_from_function` instead of
-  # `strategy.experimental_distribute_dataset` because dataset cannot be
-  # cloned in eager mode. And when using
-  # `strategy.experimental_distribute_datasets_from_function`, we should use
-  # per core batch size instead of global batch size, because no re-batch is
-  # happening in this case.
-  is_tpu_pod = strategy.extended._input_workers.num_workers > 1  # pylint: disable=protected-access
-  if is_tpu_pod:
-    imagenet_train = imagenet_input.ImageNetInput(
-        is_training=True,
-        data_dir=FLAGS.data,
-        batch_size=PER_CORE_BATCH_SIZE,
-        use_bfloat16=_USE_BFLOAT16)
-    imagenet_eval = imagenet_input.ImageNetInput(
-        is_training=False,
-        data_dir=FLAGS.data,
-        batch_size=PER_CORE_BATCH_SIZE,
-        use_bfloat16=_USE_BFLOAT16)
-    train_dataset = strategy.experimental_distribute_datasets_from_function(
-        imagenet_train.input_fn)
-    test_dataset = strategy.experimental_distribute_datasets_from_function(
-        imagenet_eval.input_fn)
-  else:
-    imagenet_train = imagenet_input.ImageNetInput(
-        is_training=True,
-        data_dir=FLAGS.data,
-        batch_size=batch_size,
-        use_bfloat16=_USE_BFLOAT16)
-    imagenet_eval = imagenet_input.ImageNetInput(
-        is_training=False,
-        data_dir=FLAGS.data,
-        batch_size=batch_size,
-        use_bfloat16=_USE_BFLOAT16)
-    train_dataset = strategy.experimental_distribute_dataset(
-        imagenet_train.input_fn())
-    test_dataset = strategy.experimental_distribute_dataset(
-        imagenet_eval.input_fn())
+  imagenet_train = imagenet_input.ImageNetInput(
+      is_training=True,
+      data_dir=FLAGS.data,
+      batch_size=PER_CORE_BATCH_SIZE,
+      use_bfloat16=_USE_BFLOAT16)
+  imagenet_eval = imagenet_input.ImageNetInput(
+      is_training=False,
+      data_dir=FLAGS.data,
+      batch_size=PER_CORE_BATCH_SIZE,
+      use_bfloat16=_USE_BFLOAT16)
+  train_dataset = strategy.experimental_distribute_datasets_from_function(
+      imagenet_train.input_fn)
+  test_dataset = strategy.experimental_distribute_datasets_from_function(
+      imagenet_eval.input_fn)
 
   if _USE_BFLOAT16:
     policy = tf.keras.mixed_precision.experimental.Policy('mixed_bfloat16')
