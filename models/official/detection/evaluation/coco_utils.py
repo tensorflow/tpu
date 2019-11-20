@@ -271,11 +271,15 @@ def convert_groundtruths_to_coco_dataset(groundtruths, label_map=None):
 class COCOGroundtruthGenerator(object):
   """Generates the groundtruth annotations from a single example sequentially."""
 
-  def __init__(self, file_pattern, num_examples, include_mask):
+  def __init__(self, file_pattern, num_examples, include_mask, dataset_type):
     self._file_pattern = file_pattern
     self._num_examples = num_examples
     self._include_mask = include_mask
-    self._dataset_fn = tf.data.TFRecordDataset
+    if dataset_type == 'tfrecord':
+      self._dataset_fn = tf.data.TFRecordDataset
+    else:
+      raise ValueError('Dataset type %s is not supported.' % dataset_type)
+    self._dataset_type = dataset_type
 
   def _parse_single_example(self, example):
     """Parses a single serialized tf.Example proto.
@@ -332,7 +336,10 @@ class COCOGroundtruthGenerator(object):
             lambda filename: self._dataset_fn(filename).prefetch(1),
             cycle_length=32,
             sloppy=False))
-    dataset = dataset.map(self._parse_single_example, num_parallel_calls=64)
+
+    if self._dataset_type == 'tfrecord':
+      parser_fn = self._parse_single_example
+    dataset = dataset.map(parser_fn, num_parallel_calls=64)
     dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
     dataset = dataset.batch(1, drop_remainder=False)
     return dataset
@@ -351,10 +358,11 @@ class COCOGroundtruthGenerator(object):
 def scan_and_generator_annotation_file(file_pattern,
                                        num_samples,
                                        include_mask,
-                                       annotation_file):
+                                       annotation_file,
+                                       dataset_type):
   """Scans and generate the COCO-style annotation JSON file given a dataset."""
   groundtruth_generator = COCOGroundtruthGenerator(
-      file_pattern, num_samples, include_mask)
+      file_pattern, num_samples, include_mask, dataset_type)
   generate_annotation_file(groundtruth_generator, annotation_file)
 
 

@@ -138,7 +138,8 @@ class TpuExecutor(object):
           self._params.eval.eval_file_pattern,
           self._params.eval.eval_samples,
           include_mask=False,
-          annotation_file=val_json_file)
+          annotation_file=val_json_file,
+          dataset_type=self._params.eval.eval_dataset_type)
     eval_params = params_dict.ParamsDict(self._params.eval)
     eval_params.override({'val_json_file': val_json_file})
     self._evaluator = factory.evaluator_generator(eval_params)
