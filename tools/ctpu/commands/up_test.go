@@ -223,6 +223,9 @@ func TestUpImageFamily(t *testing.T) {
 		tfVersion: "nightly",
 		want:      "tf-nightly",
 	}, {
+		tfVersion: "nightly-2.x",
+		want:      "tf-nightly-2-x",
+	}, {
 		tfVersion: "nightly-20180203",
 		want:      "",
 	}, {
