@@ -326,7 +326,7 @@ class Parser(object):
         'source_id': data['source_id'],
         'height': data['height'],
         'width': data['width'],
-        'num_groundtrtuhs': tf.shape(data['groundtruth_classes']),
+        'num_groundtruths': tf.shape(data['groundtruth_classes']),
         'boxes': box_utils.denormalize_boxes(
             data['groundtruth_boxes'], image_shape),
         'classes': data['groundtruth_classes'],
