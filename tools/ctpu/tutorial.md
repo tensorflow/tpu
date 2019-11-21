@@ -161,7 +161,7 @@ python /usr/share/models/official/mnist/mnist_tpu.py --data_dir=gs://$GCS_BUCKET
 
 ### What's happening? ###
 
-This [Python script](https://github.com/tensorflow/models/blob/master/official/mnist/mnist_tpu.py)
+This [Python script](https://github.com/tensorflow/models/blob/master/official/r1/mnist/mnist_tpu.py)
 creates a
 [`TPUEstimator`](https://www.tensorflow.org/versions/master/api_docs/python/tf/contrib/tpu/TPUEstimator)
 and then invokes `estimator.train(...)`.
