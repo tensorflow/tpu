@@ -69,6 +69,7 @@ BASE_CFG = {
         'eval_timeout': None,
         'num_steps_per_eval': 1000,
         'type': 'box',
+        'use_json_file': True,
         'val_json_file': '',
         'eval_file_pattern': '',
         'eval_dataset_type': 'tfrecord',

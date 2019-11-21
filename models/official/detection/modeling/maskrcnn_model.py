@@ -239,6 +239,8 @@ class MaskrcnnModel(base_model.Model):
     if 'groundtruths' in labels:
       predictions['pred_source_id'] = labels['groundtruths']['source_id']
       predictions['gt_source_id'] = labels['groundtruths']['source_id']
+      predictions['gt_height'] = labels['groundtruths']['height']
+      predictions['gt_width'] = labels['groundtruths']['width']
       predictions['gt_image_info'] = labels['image_info']
       predictions['gt_num_detections'] = (
           labels['groundtruths']['num_detections'])

@@ -128,20 +128,21 @@ class TpuExecutor(object):
 
   def prepare_evaluation(self):
     """Preapre for evaluation."""
-    val_json_file = os.path.join(self._params.model_dir,
-                                 'eval_annotation_file.json')
-    if self._params.eval.val_json_file:
-      tf.gfile.Copy(
-          self._params.eval.val_json_file, val_json_file, overwrite=True)
-    else:
-      coco_utils.scan_and_generator_annotation_file(
-          self._params.eval.eval_file_pattern,
-          self._params.eval.eval_samples,
-          include_mask=False,
-          annotation_file=val_json_file,
-          dataset_type=self._params.eval.eval_dataset_type)
     eval_params = params_dict.ParamsDict(self._params.eval)
-    eval_params.override({'val_json_file': val_json_file})
+    if self._params.eval.use_json_file:
+      val_json_file = os.path.join(self._params.model_dir,
+                                   'eval_annotation_file.json')
+      if self._params.eval.val_json_file:
+        tf.gfile.Copy(
+            self._params.eval.val_json_file, val_json_file, overwrite=True)
+      else:
+        coco_utils.scan_and_generator_annotation_file(
+            self._params.eval.eval_file_pattern,
+            self._params.eval.eval_samples,
+            include_mask=False,
+            annotation_file=val_json_file,
+            dataset_type=self._params.eval.eval_dataset_type)
+      eval_params.override({'val_json_file': val_json_file})
     self._evaluator = factory.evaluator_generator(eval_params)
 
   def evaluate(self, input_fn, eval_steps, checkpoint_path=None):
@@ -185,7 +186,10 @@ class TpuExecutor(object):
             groundtruths[key[3::]] = val
           if key[0:5] == 'loss_':
             losses[key[5::]] += (np.mean(val) / eval_steps)
-        self._evaluator.update(predictions)
+        self._evaluator.update(
+            predictions,
+            groundtruths=(None if self._params.eval.use_json_file
+                          else groundtruths))
       metrics = self._evaluator.evaluate()
       logging.info('Eval result: %s', metrics)
 

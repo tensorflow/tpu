@@ -194,6 +194,9 @@ class ShapeMaskModel(base_model.Model):
     if 'groundtruths' in labels:
       predictions['pred_source_id'] = labels['groundtruths']['source_id']
       predictions['gt_source_id'] = labels['groundtruths']['source_id']
+      predictions['gt_height'] = labels['groundtruths']['height']
+      predictions['gt_width'] = labels['groundtruths']['width']
+      predictions['gt_image_info'] = labels['image_info']
       predictions['gt_boxes'] = labels['groundtruths']['boxes']
       predictions['gt_classes'] = labels['groundtruths']['classes']
       predictions['gt_areas'] = labels['groundtruths']['areas']
