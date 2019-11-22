@@ -51,6 +51,8 @@ flags.DEFINE_string('labels_map_file', '/tmp/labels_map.txt',
                     'Labels map from label id to its meaning.')
 flags.DEFINE_bool('include_background_label', False,
                   'Whether to include background as label #0')
+flags.DEFINE_bool('advprop_preprocessing', False,
+                  'Whether to use AdvProp preprocessing.')
 flags.DEFINE_integer('num_images', 5000,
                      'Number of images to eval. Use -1 to eval all images.')
 
@@ -71,10 +73,14 @@ class EvalCkptDriver(utils.EvalCkptDriver):
           'Model must be either efficientnet-b* or efficientnet-edgetpu* or'
           'efficientnet-condconv*')
 
-    features -= tf.constant(
-        model_builder.MEAN_RGB, shape=[1, 1, 3], dtype=features.dtype)
-    features /= tf.constant(
-        model_builder.STDDEV_RGB, shape=[1, 1, 3], dtype=features.dtype)
+    if FLAGS.advprop_preprocessing:
+      # AdvProp uses Inception preprocessing.
+      features = features * 2.0 / 255 - 1.0
+    else:
+      features -= tf.constant(
+          model_builder.MEAN_RGB, shape=[1, 1, 3], dtype=features.dtype)
+      features /= tf.constant(
+          model_builder.STDDEV_RGB, shape=[1, 1, 3], dtype=features.dtype)
     logits, _ = model_builder.build_model(
         features, self.model_name, is_training)
     probs = tf.nn.softmax(logits)
