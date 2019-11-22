@@ -74,8 +74,6 @@ RETINANET_CFG.override({
 
 RETINANET_RESTRICTIONS = [
     'architecture.use_bfloat16 == retinanet_parser.use_bfloat16',
-    'anchor.min_level == fpn.min_level',
-    'anchor.max_level == fpn.max_level',
     'anchor.min_level == retinanet_head.min_level',
     'anchor.max_level == retinanet_head.max_level',
     'anchor.min_level == postprocess.min_level',
