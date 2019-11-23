@@ -145,8 +145,6 @@ MASKRCNN_CFG.override({
 MASKRCNN_RESTRICTIONS = [
     'architecture.use_bfloat16 == maskrcnn_parser.use_bfloat16',
     'architecture.include_mask == maskrcnn_parser.include_mask',
-    'anchor.min_level == fpn.min_level',
-    'anchor.max_level == fpn.max_level',
     'anchor.min_level == rpn_head.min_level',
     'anchor.max_level == rpn_head.max_level',
     'mrcnn_head.mask_target_size == mask_sampling.mask_target_size',
