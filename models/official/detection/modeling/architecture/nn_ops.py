@@ -184,7 +184,6 @@ class BatchNormRelu(object):
           scale=True,
           training=(is_training and self._trainable),
           trainable=self._trainable,
-          fused=True,
           gamma_initializer=gamma_initializer,
           num_distributed_groups=1,
           name=name)
