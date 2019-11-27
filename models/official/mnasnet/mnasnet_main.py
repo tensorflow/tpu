@@ -190,6 +190,11 @@ flags.DEFINE_integer(
     'which the global step information is logged.')
 
 flags.DEFINE_bool(
+    'add_summaries',
+    default=None,
+    help=('Whether to write training/eval summaries for visualization.'))
+
+flags.DEFINE_bool(
     'use_cache', default=None, help=('Enable cache for training input.'))
 
 flags.DEFINE_float(
@@ -437,67 +442,27 @@ def build_model_fn(features, labels, mode, params):
       # user, this should look like regular synchronous training.
       optimizer = tf.tpu.CrossShardOptimizer(optimizer)
 
+      if params['add_summaries']:
+        summary_writer = tf2.summary.create_file_writer(
+            FLAGS.model_dir, max_queue=params['iterations_per_loop'])
+        with summary_writer.as_default():
+          should_record = tf.equal(global_step % params['iterations_per_loop'],
+                                   0)
+          with tf2.summary.record_if(should_record):
+            tf2.summary.scalar('loss', loss, step=global_step)
+            tf2.summary.scalar('learning_rate', learning_rate, step=global_step)
+            tf2.summary.scalar('current_epoch', current_epoch, step=global_step)
+
     # Batch normalization requires UPDATE_OPS to be added as a dependency to
     # the train operation.
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
-    with tf.control_dependencies(update_ops):
+
+    with tf.control_dependencies(update_ops + tf.summary.all_v2_summary_ops()):
       train_op = optimizer.minimize(loss, global_step)
 
     if has_moving_average_decay:
       with tf.control_dependencies([train_op]):
         train_op = ema.apply(ema_vars)
-
-    if not params['skip_host_call']:
-
-      def host_call_fn(gs, loss, lr, ce):
-        """Training host call.
-
-        Creates scalar summaries for training metrics.
-
-        This function is executed on the CPU and should not directly reference
-        any Tensors in the rest of the `model_fn`. To pass Tensors from the
-        model to the `metric_fn`, provide as part of the `host_call`. See
-        https://www.tensorflow.org/api_docs/python/tf/estimator/tpu/TPUEstimatorSpec
-        for more information.
-
-        Arguments should match the list of `Tensor` objects passed as the second
-        element in the tuple passed to `host_call`.
-
-        Args:
-          gs: `Tensor with shape `[batch]` for the global_step
-          loss: `Tensor` with shape `[batch]` for the training loss.
-          lr: `Tensor` with shape `[batch]` for the learning_rate.
-          ce: `Tensor` with shape `[batch]` for the current_epoch.
-
-        Returns:
-          List of summary ops to run on the CPU host.
-        """
-        gs = gs[0]
-        # Host call fns are executed params['iterations_per_loop'] times after
-        # one TPU loop is finished, setting max_queue value to the same as
-        # number of iterations will make the summary writer only flush the
-        # data to storage once per loop.
-        with tf2.summary.create_file_writer(
-            FLAGS.model_dir,
-            max_queue=params['iterations_per_loop']).as_default():
-          with tf2.summary.record_if(True):
-            tf2.summary.scalar('loss', loss[0], step=gs)
-            tf2.summary.scalar('learning_rate', lr[0], step=gs)
-            tf2.summary.scalar('current_epoch', ce[0], step=gs)
-
-            return tf.summary.all_v2_summary_ops()
-
-      # To log the loss, current learning rate, and epoch for Tensorboard, the
-      # summary op needs to be run on the host CPU via host_call. host_call
-      # expects [batch_size, ...] Tensors, thus reshape to introduce a batch
-      # dimension. These Tensors are implicitly concatenated to
-      # [params['batch_size']].
-      gs_t = tf.reshape(global_step, [1])
-      loss_t = tf.reshape(loss, [1])
-      lr_t = tf.reshape(learning_rate, [1])
-      ce_t = tf.reshape(current_epoch, [1])
-
-      host_call = (host_call_fn, [gs_t, loss_t, lr_t, ce_t])
 
   else:
     train_op = None
@@ -687,6 +652,7 @@ def main(unused_argv):
   additional_params = {
       'steps_per_epoch': params.num_train_images / params.train_batch_size,
       'quantized_training': FLAGS.quantized_training,
+      'add_summaries': FLAGS.add_summaries,
   }
 
   params = params_dict.override_params_dict(
@@ -705,6 +671,11 @@ def main(unused_argv):
     save_checkpoints_steps = None
   else:
     save_checkpoints_steps = max(100, params.iterations_per_loop)
+
+  # Enables automatic outside compilation. Required in order to
+  # automatically detect summary ops to run on CPU instead of TPU.
+  tf.config.set_soft_device_placement(True)
+
   config = tf.estimator.tpu.RunConfig(
       cluster=tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
