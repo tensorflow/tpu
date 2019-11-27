@@ -448,6 +448,8 @@ class Parser(object):
       # Converts boxes from normalized coordinates to pixel coordinates.
       groundtruths = {
           'source_id': data['source_id'],
+          'height': data['height'],
+          'width': data['width'],
           'num_detections': tf.shape(data['groundtruth_classes']),
           'boxes': box_utils.denormalize_boxes(
               data['groundtruth_boxes'], image_shape),
