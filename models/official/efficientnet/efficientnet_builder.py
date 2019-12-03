@@ -165,7 +165,7 @@ def swish(features, use_native=True, use_hard=False):
 def efficientnet(width_coefficient=None,
                  depth_coefficient=None,
                  dropout_rate=0.2,
-                 drop_connect_rate=0.2):
+                 survival_prob=0.8):
   """Creates a efficientnet model."""
   blocks_args = [
       'r1_k3_s11_e1_i32_o16_se0.25', 'r2_k3_s22_e6_i16_o24_se0.25',
@@ -177,7 +177,7 @@ def efficientnet(width_coefficient=None,
       batch_norm_momentum=0.99,
       batch_norm_epsilon=1e-3,
       dropout_rate=dropout_rate,
-      drop_connect_rate=drop_connect_rate,
+      survival_prob=survival_prob,
       data_format='channels_last',
       num_classes=1000,
       width_coefficient=width_coefficient,
@@ -247,6 +247,11 @@ def build_model(images,
   """
   assert isinstance(images, tf.Tensor)
   assert not (features_only and pooled_features_only)
+
+  # For backward compatibility.
+  if override_params and override_params.get('drop_connect_rate', None):
+    override_params['survival_prob'] = 1 - override_params['drop_connect_rate']
+
   if not training or fine_tuning:
     if not override_params:
       override_params = {}
@@ -301,6 +306,10 @@ def build_model_base(images, model_name, training, override_params=None):
     When override_params has invalid fields, raises ValueError.
   """
   assert isinstance(images, tf.Tensor)
+  # For backward compatibility.
+  if override_params and override_params.get('drop_connect_rate', None):
+    override_params['survival_prob'] = 1 - override_params['drop_connect_rate']
+
   blocks_args, global_params = get_model_params(model_name, override_params)
 
   with tf.variable_scope(model_name):
