@@ -46,7 +46,7 @@ def efficientnet_condconv_params(model_name):
 def efficientnet_condconv(width_coefficient=None,
                           depth_coefficient=None,
                           dropout_rate=0.2,
-                          drop_connect_rate=0.2,
+                          survival_prob=0.8,
                           condconv_num_experts=None):
   """Creates an efficientnet-condconv model."""
   blocks_args = [
@@ -62,7 +62,7 @@ def efficientnet_condconv(width_coefficient=None,
       batch_norm_momentum=0.99,
       batch_norm_epsilon=1e-3,
       dropout_rate=dropout_rate,
-      drop_connect_rate=drop_connect_rate,
+      survival_prob=survival_prob,
       data_format='channels_last',
       num_classes=1000,
       width_coefficient=width_coefficient,

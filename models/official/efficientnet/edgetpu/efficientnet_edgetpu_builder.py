@@ -46,7 +46,7 @@ def efficientnet_edgetpu_params(model_name):
 def efficientnet_edgetpu(width_coefficient=None,
                          depth_coefficient=None,
                          dropout_rate=0.2,
-                         drop_connect_rate=0.2):
+                         survival_prob=0.8):
   """Creates an efficientnet-edgetpu model."""
   blocks_args = [
       'r1_k3_s11_e4_i24_o24_c1_noskip',
@@ -60,7 +60,7 @@ def efficientnet_edgetpu(width_coefficient=None,
       batch_norm_momentum=0.99,
       batch_norm_epsilon=1e-3,
       dropout_rate=dropout_rate,
-      drop_connect_rate=drop_connect_rate,
+      survival_prob=survival_prob,
       data_format='channels_last',
       num_classes=1001,
       width_coefficient=width_coefficient,

@@ -51,7 +51,7 @@ def efficientnet_tpu_params(model_name):
 def efficientnet_tpu(width_coefficient=None,
                      depth_coefficient=None,
                      dropout_rate=0.2,
-                     drop_connect_rate=0.2):
+                     survival_prob=0.8):
   """Creates a efficientnet model."""
   blocks_args = [
       'r1_k3_s11_e1_i32_o16_se0.25_p1', 'r2_k3_s22_e6_i16_o24_se0.25_f1_p2',
@@ -63,7 +63,7 @@ def efficientnet_tpu(width_coefficient=None,
       batch_norm_momentum=0.99,
       batch_norm_epsilon=1e-3,
       dropout_rate=dropout_rate,
-      drop_connect_rate=drop_connect_rate,
+      survival_prob=survival_prob,
       data_format='channels_last',
       num_classes=1000,
       width_coefficient=width_coefficient,

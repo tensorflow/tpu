@@ -240,7 +240,7 @@ flags.DEFINE_float(
     help=('Dropout rate for the final output layer.'))
 
 flags.DEFINE_float(
-    'drop_connect_rate', default=None,
+    'survival_prob', default=None,
     help=('Drop connect rate for the network.'))
 
 flags.DEFINE_float(
@@ -309,8 +309,8 @@ def model_fn(features, labels, mode, params):
     override_params['batch_norm_epsilon'] = FLAGS.batch_norm_epsilon
   if FLAGS.dropout_rate is not None:
     override_params['dropout_rate'] = FLAGS.dropout_rate
-  if FLAGS.drop_connect_rate is not None:
-    override_params['drop_connect_rate'] = FLAGS.drop_connect_rate
+  if FLAGS.survival_prob is not None:
+    override_params['survival_prob'] = FLAGS.survival_prob
   if FLAGS.data_format:
     override_params['data_format'] = FLAGS.data_format
   if FLAGS.num_label_classes:

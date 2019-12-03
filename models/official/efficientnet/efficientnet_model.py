@@ -39,7 +39,7 @@ from condconv import condconv_layers
 GlobalParams = collections.namedtuple('GlobalParams', [
     'batch_norm_momentum', 'batch_norm_epsilon', 'dropout_rate', 'data_format',
     'num_classes', 'width_coefficient', 'depth_coefficient', 'depth_divisor',
-    'min_depth', 'drop_connect_rate', 'relu_fn', 'batch_norm', 'use_se',
+    'min_depth', 'survival_prob', 'relu_fn', 'batch_norm', 'use_se',
     'local_pooling', 'condconv_num_experts', 'clip_projection_output'
 ])
 GlobalParams.__new__.__defaults__ = (None,) * len(GlobalParams._fields)
@@ -329,13 +329,13 @@ class MBConvBlock(tf.keras.layers.Layer):
                  (se_tensor.shape))
     return tf.sigmoid(se_tensor) * input_tensor
 
-  def call(self, inputs, training=True, drop_connect_rate=None):
+  def call(self, inputs, training=True, survival_prob=None):
     """Implementation of call().
 
     Args:
       inputs: the inputs tensor.
       training: boolean, whether the model is constructed for training.
-      drop_connect_rate: float, between 0 to 1, drop connect rate.
+      survival_prob: float, between 0 to 1, drop connect rate.
 
     Returns:
       A output tensor.
@@ -401,10 +401,10 @@ class MBConvBlock(tf.keras.layers.Layer):
     if self._block_args.id_skip:
       if all(
           s == 1 for s in self._block_args.strides
-      ) and inputs.get_shape().as_list()[-1] == x.get_shape().as_list()[-1]:
-        # only apply drop_connect if skip presents.
-        if drop_connect_rate:
-          x = utils.drop_connect(x, training, drop_connect_rate)
+      ) and self._block_args.input_filters == self._block_args.output_filters:
+        # Apply only if skip connection presents.
+        if survival_prob:
+          x = utils.drop_connect(x, training, survival_prob)
         x = tf.add(x, inputs)
     logging.info('Project: %s shape: %s', x.name, x.shape)
     return x
@@ -444,13 +444,13 @@ class MBConvBlockWithoutDepthwise(MBConvBlock):
         momentum=self._batch_norm_momentum,
         epsilon=self._batch_norm_epsilon)
 
-  def call(self, inputs, training=True, drop_connect_rate=None):
+  def call(self, inputs, training=True, survival_prob=None):
     """Implementation of call().
 
     Args:
       inputs: the inputs tensor.
       training: boolean, whether the model is constructed for training.
-      drop_connect_rate: float, between 0 to 1, drop connect rate.
+      survival_prob: float, between 0 to 1, drop connect rate.
 
     Returns:
       A output tensor.
@@ -475,9 +475,9 @@ class MBConvBlockWithoutDepthwise(MBConvBlock):
       if all(
           s == 1 for s in self._block_args.strides
       ) and self._block_args.input_filters == self._block_args.output_filters:
-        # only apply drop_connect if skip presents.
-        if drop_connect_rate:
-          x = utils.drop_connect(x, training, drop_connect_rate)
+        # Apply only if skip connection presents.
+        if survival_prob:
+          x = utils.drop_connect(x, training, survival_prob)
         x = tf.add(x, inputs)
     logging.info('Project: %s shape: %s', x.name, x.shape)
     return x
@@ -660,12 +660,13 @@ class Model(tf.keras.Model):
         reduction_idx += 1
 
       with tf.variable_scope('blocks_%s' % idx):
-        drop_rate = self._global_params.drop_connect_rate
-        if drop_rate:
-          drop_rate *= float(idx) / len(self._blocks)
-          logging.info('block_%s drop_connect_rate: %s', idx, drop_rate)
+        survival_prob = self._global_params.survival_prob
+        if survival_prob:
+          drop_rate = 1.0 - survival_prob
+          survival_prob = 1.0 - drop_rate * float(idx) / len(self._blocks)
+          logging.info('block_%s survival_prob: %s', idx, survival_prob)
         outputs = block.call(
-            outputs, training=training, drop_connect_rate=drop_rate)
+            outputs, training=training, survival_prob=survival_prob)
         self.endpoints['block_%s' % idx] = outputs
         if is_reduction:
           self.endpoints['reduction_%s' % reduction_idx] = outputs
