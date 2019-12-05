@@ -28,6 +28,7 @@ import tensorflow.compat.v1 as tf
 import tensorflow.compat.v2 as tf2
 
 from modeling import learning_rates
+from utils import benchmark_utils
 
 
 def filter_variables(variables, variable_regex, is_whitelist):
@@ -129,6 +130,11 @@ class Model(six.with_metaclass(abc.ABCMeta, object)):
   def build_outputs(self, features, labels, mode):
     """Build the graph of the forward path."""
     pass
+
+  def _log_model_statistics(self, batched_input):
+    batch_size, _, _, _ = batched_input.get_shape().as_list()
+    _, _ = benchmark_utils.compute_model_statistics(
+        batch_size)
 
   def model_outputs(self, features, labels, mode):
     """Build the model outputs."""

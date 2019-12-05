@@ -127,6 +127,7 @@ class MaskrcnnModel(base_model.Model):
       })
 
     if not self._include_mask:
+      self._log_model_statistics(features)
       return model_outputs
 
     if is_training:
@@ -159,6 +160,7 @@ class MaskrcnnModel(base_model.Model):
           'detection_masks': tf.nn.sigmoid(mask_outputs)
       })
 
+    self._log_model_statistics(features)
     return model_outputs
 
   def train(self, features, labels):
