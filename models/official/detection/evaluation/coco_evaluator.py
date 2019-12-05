@@ -65,7 +65,7 @@ class COCOEvaluator(object):
         to absolute values (`image_info` is needed in this case).
     """
     if annotation_file:
-      if six.ensure_str(annotation_file).startswith('gs://'):
+      if annotation_file.startswith('gs://'):
         _, local_val_json = tempfile.mkstemp(suffix='.json')
         tf.gfile.Remove(local_val_json)
 
