@@ -23,6 +23,7 @@ import os
 import re
 from absl import logging
 import numpy as np
+import six
 import tensorflow.compat.v1 as tf
 
 import efficientnet_model
@@ -54,7 +55,10 @@ class BlockDecoder(object):
 
   def _decode_block_string(self, block_string):
     """Gets a block through a string notation of arguments."""
-    assert isinstance(block_string, str)
+    if six.PY2:
+      assert isinstance(block_string, (str, unicode))
+    else:
+      assert isinstance(block_string, str)
     ops = block_string.split('_')
     options = {}
     for op in ops:
@@ -163,18 +167,21 @@ def swish(features, use_native=True, use_hard=False):
   return features * tf.nn.sigmoid(features)
 
 
+_DEFAULT_BLOCKS_ARGS = [
+    'r1_k3_s11_e1_i32_o16_se0.25', 'r2_k3_s22_e6_i16_o24_se0.25',
+    'r2_k5_s22_e6_i24_o40_se0.25', 'r3_k3_s22_e6_i40_o80_se0.25',
+    'r3_k5_s11_e6_i80_o112_se0.25', 'r4_k5_s22_e6_i112_o192_se0.25',
+    'r1_k3_s11_e6_i192_o320_se0.25',
+]
+
+
 def efficientnet(width_coefficient=None,
                  depth_coefficient=None,
                  dropout_rate=0.2,
                  survival_prob=0.8):
   """Creates a efficientnet model."""
-  blocks_args = [
-      'r1_k3_s11_e1_i32_o16_se0.25', 'r2_k3_s22_e6_i16_o24_se0.25',
-      'r2_k5_s22_e6_i24_o40_se0.25', 'r3_k3_s22_e6_i40_o80_se0.25',
-      'r3_k5_s11_e6_i80_o112_se0.25', 'r4_k5_s22_e6_i112_o192_se0.25',
-      'r1_k3_s11_e6_i192_o320_se0.25',
-  ]
   global_params = efficientnet_model.GlobalParams(
+      blocks_args=_DEFAULT_BLOCKS_ARGS,
       batch_norm_momentum=0.99,
       batch_norm_epsilon=1e-3,
       dropout_rate=dropout_rate,
@@ -191,8 +198,7 @@ def efficientnet(width_coefficient=None,
       batch_norm=utils.TpuBatchNormalization,  # TPU-specific requirement.
       use_se=True,
       clip_projection_output=False)
-  decoder = BlockDecoder()
-  return decoder.decode(blocks_args), global_params
+  return global_params
 
 
 def get_model_params(model_name, override_params):
@@ -200,7 +206,7 @@ def get_model_params(model_name, override_params):
   if model_name.startswith('efficientnet'):
     width_coefficient, depth_coefficient, _, dropout_rate = (
         efficientnet_params(model_name))
-    blocks_args, global_params = efficientnet(
+    global_params = efficientnet(
         width_coefficient, depth_coefficient, dropout_rate)
   else:
     raise NotImplementedError('model name is not pre-defined: %s' % model_name)
@@ -210,8 +216,10 @@ def get_model_params(model_name, override_params):
     # in global_params.
     global_params = global_params._replace(**override_params)
 
+  decoder = BlockDecoder()
+  blocks_args = decoder.decode(global_params.blocks_args)
+
   logging.info('global_params= %s', global_params)
-  logging.info('blocks_args= %s', blocks_args)
   return blocks_args, global_params
 
 
