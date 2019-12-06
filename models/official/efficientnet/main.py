@@ -682,7 +682,6 @@ def main(unused_argv):
           include_background_label=include_background_label,
           augment_name=FLAGS.augment_name,
           mixup_alpha=FLAGS.mixup_alpha,
-          use_randaug=FLAGS.use_randaug,
           randaug_num_layers=FLAGS.randaug_num_layers,
           randaug_magnitude=FLAGS.randaug_magnitude)
     else:
