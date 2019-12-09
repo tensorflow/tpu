@@ -158,5 +158,6 @@ def main(argv):
 
 
 if __name__ == '__main__':
+  tf.disable_eager_execution()
   logging.set_verbosity(logging.INFO)
   tf.app.run(main)
