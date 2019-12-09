@@ -107,6 +107,8 @@ class ShapeMaskModel(base_model.Model):
         'coarse_mask_logits': coarse_mask_logits,
         'prior_masks': prior_masks,
     }
+
+    self._log_model_statistics(features)
     if not is_training:
       model_outputs.update({
           'num_detections': valid_detections,
