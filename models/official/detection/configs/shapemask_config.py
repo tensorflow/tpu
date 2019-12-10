@@ -29,6 +29,7 @@ SHAPEMASK_CFG.override({
             'learning_rate_steps': [30000, 40000],
         },
         'frozen_variable_prefix': SHAPEMASK_RESNET_FROZEN_VAR_PREFIX,
+        'regularization_variable_regex': None,
     },
     'eval': {
         'type': 'shapemask_box_and_mask',
