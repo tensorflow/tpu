@@ -19,33 +19,15 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import functools
 from absl import logging
 from six.moves import range
 import tensorflow.compat.v1 as tf
 
-from tensorflow.python.ops import math_ops  # pylint: disable=g-direct-tensorflow-import
 from tensorflow.python.tpu import tpu_function  # pylint: disable=g-direct-tensorflow-import
+from tensorflow.python.tpu.ops import tpu_ops  # pylint: disable=g-direct-tensorflow-import
 
 
-def cross_replica_average(t, num_groups=1):
-  """Calculates the average value of input tensor across TPU replicas."""
-  num_shards = tpu_function.get_tpu_context().number_of_shards
-  num_shards_per_group = 1
-  group_assignment = None
-  if num_groups > 0:
-    if num_shards % num_groups != 0:
-      raise ValueError('num_shards: %d mod num_groups: %d, should be 0' %
-                       (num_shards, num_groups))
-    num_shards_per_group = num_shards // num_groups
-    group_assignment = [[
-        x for x in range(num_shards) if x // num_shards_per_group == y
-    ] for y in range(num_groups)]
-  return tf.tpu.cross_replica_sum(t, group_assignment) / math_ops.cast(
-      num_shards_per_group, t.dtype)
-
-
-class BatchNormalization(tf.layers.BatchNormalization):
+class TpuBatchNormalization(tf.layers.BatchNormalization):
   """Batch Normalization layer that supports cross replica computation on TPU.
 
   This class extends the keras.BatchNormalization implementation by supporting
@@ -56,75 +38,62 @@ class BatchNormalization(tf.layers.BatchNormalization):
   https://www.tensorflow.org/api_docs/python/tf/keras/layers/BatchNormalization
   """
 
-  def __init__(self, fused=None, cross_replica_average_fn=None, **kwargs):
+  def __init__(self, fused=False, **kwargs):
     """Builds the batch normalization layer.
 
     Arguments:
-      fused: if `None` or `True`, use a faster, fused implementation if
-        possible. If `False`, use the system recommended implementation.
-      cross_replica_average_fn:  A function takes a tensor and outputs the mean
-        value across all the replicas. Currently, only TPU version supports this
-        feature. If specified, fused must be `False`.
+      fused: If `False`, use the system recommended implementation. Only support
+        `False` in the current implementation.
       **kwargs: input augments that are forwarded to
         tf.layers.BatchNormalization.
     """
-    kwargs['fused'] = fused
-    super(BatchNormalization, self).__init__(**kwargs)
-    self.cross_replica_average_fn = cross_replica_average_fn
+    if fused in (True, None):
+      raise ValueError('TpuBatchNormalization does not support fused=True.')
+    super(TpuBatchNormalization, self).__init__(fused=fused, **kwargs)
 
-    if fused and cross_replica_average_fn is not None:
-      raise ValueError('fused must be `False` when sepcifying'
-                       ' cross_replica_average_fn')
+  def _cross_replica_average(self, t, num_shards_per_group):
+    """Calculates the average value of input tensor across TPU replicas."""
+    num_shards = tpu_function.get_tpu_context().number_of_shards
+    group_assignment = None
+    if num_shards_per_group > 1:
+      if num_shards % num_shards_per_group != 0:
+        raise ValueError(
+            'num_shards: %d mod shards_per_group: %d, should be 0' %
+            (num_shards, num_shards_per_group))
+      num_groups = num_shards // num_shards_per_group
+      group_assignment = [[
+          x for x in range(num_shards) if x // num_shards_per_group == y
+      ] for y in range(num_groups)]
+    return tpu_ops.cross_replica_sum(t, group_assignment) / tf.cast(
+        num_shards_per_group, t.dtype)
 
   def _moments(self, inputs, reduction_axes, keep_dims):
-    shard_mean, shard_variance = super(BatchNormalization, self)._moments(
+    """Compute the mean and variance: it overrides the original _moments."""
+    shard_mean, shard_variance = super(TpuBatchNormalization, self)._moments(
         inputs, reduction_axes, keep_dims=keep_dims)
-    if self.cross_replica_average_fn:
-      # Uses the definition of Var[X] = E[X^2] - E[X]^2.
-      shard_square_of_mean = tf.math.square(shard_mean)
-      shard_mean_of_square = shard_variance + shard_square_of_mean
-      group_mean = self.cross_replica_average_fn(shard_mean)
-      group_mean_of_square = self.cross_replica_average_fn(shard_mean_of_square)
-      group_variance = group_mean_of_square - tf.math.square(group_mean)
+
+    num_shards = tpu_function.get_tpu_context().number_of_shards or 1
+    if num_shards <= 8:  # Skip cross_replica for 2x2 or smaller slices.
+      num_shards_per_group = 1
+    else:
+      num_shards_per_group = max(8, num_shards // 1)
+    tf.logging.info('TpuBatchNormalizationV1 with num_shards_per_group %s',
+                    num_shards_per_group)
+    if num_shards_per_group > 1:
+      # Each group has multiple replicas: here we compute group mean/variance by
+      # aggregating per-replica mean/variance.
+      group_mean = self._cross_replica_average(shard_mean, num_shards_per_group)
+      group_variance = self._cross_replica_average(shard_variance,
+                                                   num_shards_per_group)
+
+      # Group variance needs to also include the difference between shard_mean
+      # and group_mean.
+      mean_distance = tf.square(group_mean - shard_mean)
+      group_variance += self._cross_replica_average(mean_distance,
+                                                    num_shards_per_group)
       return (group_mean, group_variance)
     else:
       return (shard_mean, shard_variance)
-
-
-def cross_replica_batch_normalization(inputs,
-                                      training=False,
-                                      num_distributed_groups=1,
-                                      **kwargs):
-  """Functional interface for the cross replica batch normalization layer.
-
-
-  For detailed information of arguments and implementation, refer to:
-  https://www.tensorflow.org/api_docs/python/tf/keras/layers/BatchNormalization
-
-  Arguments:
-    inputs: Tensor input.
-    training: Either a Python boolean, or a TensorFlow boolean scalar tensor
-      (e.g. a placeholder). Whether to return the output in training mode
-      (normalized with statistics of the current batch) or in inference mode
-      (normalized with moving statistics). **NOTE**: make sure to set this
-        parameter correctly, or else your training/inference will not work
-        properly.
-    num_distributed_groups: Number of groups to normalize in the distributed
-      batch normalization. Replicas will evenly split into groups. For example,
-      1 for global batch norm and -1 or None for per-replica batch norm.
-    **kwargs: For passing through arguments to BatchNormalization.
-
-  Returns:
-    Output tensor.
-
-  Raises:
-    ValueError: if eager execution is enabled.
-  """
-  layer = BatchNormalization(
-      cross_replica_average_fn=functools.partial(
-          cross_replica_average, num_groups=num_distributed_groups),
-      **kwargs)
-  return layer.apply(inputs, training=training)
 
 
 class BatchNormRelu(object):
@@ -176,17 +145,16 @@ class BatchNormRelu(object):
       gamma_initializer = tf.ones_initializer()
 
     if self._use_sync_bn:
-      inputs = cross_replica_batch_normalization(
-          inputs=inputs,
+      tpu_batch_norm = TpuBatchNormalization(
           momentum=self._momentum,
           epsilon=self._epsilon,
           center=True,
           scale=True,
-          training=(is_training and self._trainable),
           trainable=self._trainable,
           gamma_initializer=gamma_initializer,
-          num_distributed_groups=1,
           name=name)
+      inputs = tpu_batch_norm(
+          inputs, training=(is_training and self._trainable))
     else:
       inputs = tf.layers.batch_normalization(
           inputs=inputs,
