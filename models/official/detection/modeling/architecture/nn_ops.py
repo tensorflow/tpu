@@ -27,7 +27,7 @@ from tensorflow.python.tpu import tpu_function  # pylint: disable=g-direct-tenso
 from tensorflow.python.tpu.ops import tpu_ops  # pylint: disable=g-direct-tensorflow-import
 
 
-class TpuBatchNormalization(tf.layers.BatchNormalization):
+class BatchNormalization(tf.layers.BatchNormalization):
   """Batch Normalization layer that supports cross replica computation on TPU.
 
   This class extends the keras.BatchNormalization implementation by supporting
@@ -48,8 +48,9 @@ class TpuBatchNormalization(tf.layers.BatchNormalization):
         tf.layers.BatchNormalization.
     """
     if fused in (True, None):
-      raise ValueError('TpuBatchNormalization does not support fused=True.')
-    super(TpuBatchNormalization, self).__init__(fused=fused, **kwargs)
+      raise ValueError('The TPU version of BatchNormalization does not support '
+                       'fused=True.')
+    super(BatchNormalization, self).__init__(fused=fused, **kwargs)
 
   def _cross_replica_average(self, t, num_shards_per_group):
     """Calculates the average value of input tensor across TPU replicas."""
@@ -69,7 +70,7 @@ class TpuBatchNormalization(tf.layers.BatchNormalization):
 
   def _moments(self, inputs, reduction_axes, keep_dims):
     """Compute the mean and variance: it overrides the original _moments."""
-    shard_mean, shard_variance = super(TpuBatchNormalization, self)._moments(
+    shard_mean, shard_variance = super(BatchNormalization, self)._moments(
         inputs, reduction_axes, keep_dims=keep_dims)
 
     num_shards = tpu_function.get_tpu_context().number_of_shards or 1
@@ -77,7 +78,7 @@ class TpuBatchNormalization(tf.layers.BatchNormalization):
       num_shards_per_group = 1
     else:
       num_shards_per_group = max(8, num_shards // 1)
-    tf.logging.info('TpuBatchNormalizationV1 with num_shards_per_group %s',
+    tf.logging.info('BatchNormalization with num_shards_per_group %s',
                     num_shards_per_group)
     if num_shards_per_group > 1:
       # Each group has multiple replicas: here we compute group mean/variance by
@@ -145,7 +146,7 @@ class BatchNormRelu(object):
       gamma_initializer = tf.ones_initializer()
 
     if self._use_sync_bn:
-      tpu_batch_norm = TpuBatchNormalization(
+      sync_batch_norm = BatchNormalization(
           momentum=self._momentum,
           epsilon=self._epsilon,
           center=True,
@@ -153,7 +154,7 @@ class BatchNormRelu(object):
           trainable=self._trainable,
           gamma_initializer=gamma_initializer,
           name=name)
-      inputs = tpu_batch_norm(
+      inputs = sync_batch_norm(
           inputs, training=(is_training and self._trainable))
     else:
       inputs = tf.layers.batch_normalization(
