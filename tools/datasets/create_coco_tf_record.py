@@ -43,7 +43,7 @@ from pycocotools import mask
 from research.object_detection.utils import dataset_util
 from research.object_detection.utils import label_map_util
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 flags.DEFINE_boolean(
     'include_masks', False, 'Whether to include instance segmentations masks '
     '(PNG encoded) in the result. default: False.')
