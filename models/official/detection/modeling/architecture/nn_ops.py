@@ -257,3 +257,27 @@ class Dropblock(object):
     net = net / tf.cast(percent_ones, net.dtype) * tf.cast(
         block_pattern, net.dtype)
     return net
+
+
+def drop_connect(inputs, is_training, drop_connect_rate):
+  """Apply drop connect.
+
+  Args:
+    inputs: `Tensor` input tensor.
+    is_training: `bool` if True, the model is in training mode.
+    drop_connect_rate: `float` drop connect rate.
+
+  Returns:
+    A output tensor, which should have the same shape as input.
+  """
+  if not is_training or drop_connect_rate is None or drop_connect_rate == 0:
+    return inputs
+
+  keep_prob = 1.0 - drop_connect_rate
+  batch_size = tf.shape(inputs)[0]
+  random_tensor = keep_prob
+  random_tensor += tf.random_uniform([batch_size, 1, 1, 1], dtype=inputs.dtype)
+  binary_tensor = tf.floor(random_tensor)
+  output = tf.div(inputs, keep_prob) * binary_tensor
+  return output
+
