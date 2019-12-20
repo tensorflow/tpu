@@ -1,4 +1,4 @@
-# Copyright 2018 Google Inc. All Rights Reserved.
+# Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -36,7 +36,7 @@ import shutil
 import subprocess
 import sys
 import apache_beam as beam
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 
 def _int64_feature(value):

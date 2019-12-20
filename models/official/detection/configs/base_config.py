@@ -48,7 +48,6 @@ BASE_CFG = {
             'init_learning_rate': 0.08,
             'learning_rate_levels': [0.008, 0.0008],
             'learning_rate_steps': [15000, 20000],
-            'total_steps': 22500,
         },
         'checkpoint': {
             'path': '',

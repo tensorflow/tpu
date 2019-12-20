@@ -104,7 +104,7 @@ class Model(six.with_metaclass(abc.ABCMeta, object)):
     # Optimization.
     self._optimizer_fn = OptimizerFactory(params.train.optimizer)
     self._learning_rate_fn = learning_rates.learning_rate_generator(
-        params.train.learning_rate)
+        params.train.learning_rate, params.train.total_steps)
 
     self._gradient_clip_norm = params.train.gradient_clip_norm
 

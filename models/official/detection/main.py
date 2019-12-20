@@ -30,6 +30,7 @@ from six.moves import range
 import tensorflow.compat.v1 as tf
 
 from configs import factory
+from configs import io
 from dataloader import input_reader
 from dataloader import mode_keys as ModeKeys
 from executor import tpu_executor
@@ -61,14 +62,6 @@ flags.DEFINE_string(
     ' default tpu_worker.')
 
 FLAGS = flags.FLAGS
-
-
-def save_config(params, model_dir):
-  if model_dir:
-    if not tf.gfile.Exists(model_dir):
-      tf.gfile.MakeDirs(model_dir)
-    params_dict.save_params_dict_to_yaml(
-        params, os.path.join(model_dir, 'params.yaml'))
 
 
 def main(argv):
@@ -126,7 +119,7 @@ def main(argv):
 
   # Runs the model.
   if FLAGS.mode == 'train':
-    save_config(params, params.model_dir)
+    io.save_config(params, params.model_dir)
     executor.train(train_input_fn, params.train.total_steps)
     if FLAGS.eval_after_training:
       executor.evaluate(
@@ -166,7 +159,7 @@ def main(argv):
                      ckpt)
 
   elif FLAGS.mode == 'train_and_eval':
-    save_config(params, params.model_dir)
+    io.save_config(params, params.model_dir)
     num_cycles = int(params.train.total_steps / params.eval.num_steps_per_eval)
     for cycle in range(num_cycles):
       logging.info('Start training cycle %d.', cycle)
