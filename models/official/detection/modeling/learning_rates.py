@@ -64,7 +64,7 @@ def cosine_learning_rate_with_linear_warmup(global_step,
   return learning_rate
 
 
-def learning_rate_generator(params):
+def learning_rate_generator(params, total_steps):
   """The learning rate function generator."""
   if params.type == 'step':
     return functools.partial(
@@ -80,6 +80,6 @@ def learning_rate_generator(params):
         init_learning_rate=params.init_learning_rate,
         warmup_learning_rate=params.warmup_learning_rate,
         warmup_steps=params.warmup_steps,
-        total_steps=params.total_steps)
+        total_steps=total_steps)
   else:
     raise ValueError('Unsupported learning rate type: {}.'.format(params.type))
