@@ -25,7 +25,7 @@ from absl import logging
 import numpy as np
 import tensorflow.compat.v1 as tf
 
-import params_dict
+from hyperparameters import params_dict
 
 FLAGS = flags.FLAGS
 

@@ -26,7 +26,7 @@ import functools
 from absl import flags
 import tensorflow.compat.v1 as tf
 
-import params_dict
+from hyperparameters import params_dict
 import unet_config
 import unet_model
 

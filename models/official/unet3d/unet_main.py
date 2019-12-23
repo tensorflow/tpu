@@ -23,8 +23,8 @@ from absl import app
 from absl import flags
 import tensorflow.compat.v1 as tf
 
+from hyperparameters import params_dict
 import input_reader
-import params_dict
 import tpu_executor
 import unet_config
 import unet_model
