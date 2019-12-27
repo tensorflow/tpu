@@ -35,9 +35,7 @@ python main.py \
 --model_variant=resnet_v1_101_beta \
 --image_pyramid=1. \
 --aspp_with_separable_conv=false \
---multi_grid=1 \
---multi_grid=2 \
---multi_grid=4 \
+--multi_grid=1,2,4 \
 --decoder_use_separable_conv=false
 ```
 You can use `mode=eval` for evaluation after training is completed. The model should train to close to 0.74 MIOU in around 9 hours. If you have train_aug split available and use `--train_split=train_aug`, then MIOU should be close to 0.77.
