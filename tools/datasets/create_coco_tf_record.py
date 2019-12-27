@@ -110,7 +110,7 @@ def create_tf_example(image,
   image_id = image['id']
 
   full_path = os.path.join(image_dir, filename)
-  with tf.compat.v1.gfile.GFile(full_path, 'rb') as fid:
+  with tf.gfile.GFile(full_path, 'rb') as fid:
     encoded_jpg = fid.read()
   encoded_jpg_io = io.BytesIO(encoded_jpg)
   image = PIL.Image.open(encoded_jpg_io)
@@ -209,7 +209,7 @@ def _pool_create_tf_example(args):
 
 def _load_object_annotations(object_annotations_file):
   """Loads object annotation JSON file."""
-  with tf.compat.v1.gfile.GFile(object_annotations_file, 'r') as fid:
+  with tf.gfile.GFile(object_annotations_file, 'r') as fid:
     obj_annotations = json.load(fid)
 
   images = obj_annotations['images']
@@ -235,7 +235,7 @@ def _load_object_annotations(object_annotations_file):
 
 def _load_caption_annotations(caption_annotations_file):
   """Loads caption annotation JSON file."""
-  with tf.compat.v1.gfile.GFile(caption_annotations_file, 'r') as fid:
+  with tf.gfile.GFile(caption_annotations_file, 'r') as fid:
     caption_annotations = json.load(fid)
 
   img_to_caption_annotation = collections.defaultdict(list)
@@ -257,7 +257,7 @@ def _load_caption_annotations(caption_annotations_file):
 
 
 def _load_images_info(images_info_file):
-  with tf.compat.v1.gfile.GFile(images_info_file, 'r') as fid:
+  with tf.gfile.GFile(images_info_file, 'r') as fid:
     info_dict = json.load(fid)
   return info_dict['images']
 
@@ -289,7 +289,7 @@ def _create_tf_record_from_coco_annotations(images_info_file,
 
   logging.info('writing to output path: %s', output_path)
   writers = [
-      tf.compat.v1.python_io.TFRecordWriter(
+      tf.python_io.TFRecordWriter(
           output_path + '-%05d-of-%05d.tfrecord' % (i, num_shards))
       for i in range(num_shards)
   ]
@@ -353,8 +353,8 @@ def main(_):
     images_info_file = FLAGS.caption_annotations_file
 
   directory = os.path.dirname(FLAGS.output_file_prefix)
-  if not tf.compat.v1.gfile.IsDirectory(directory):
-    tf.compat.v1.gfile.MakeDirs(directory)
+  if not tf.gfile.IsDirectory(directory):
+    tf.gfile.MakeDirs(directory)
 
   _create_tf_record_from_coco_annotations(images_info_file, FLAGS.image_dir,
                                           FLAGS.output_file_prefix,
