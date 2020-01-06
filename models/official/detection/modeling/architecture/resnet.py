@@ -26,7 +26,67 @@ from __future__ import print_function
 
 from six.moves import range
 import tensorflow.compat.v1 as tf
+
+from modeling.architecture import nn_blocks
 from modeling.architecture import nn_ops
+
+
+def block_group(inputs,
+                filters,
+                strides,
+                use_projection,
+                block_fn,
+                block_repeats,
+                batch_norm_relu=nn_ops.BatchNormRelu(),
+                dropblock=nn_ops.Dropblock(),
+                data_format='channels_last',
+                name=None,
+                is_training=False):
+  """Builds one group of blocks.
+
+  Args:
+    inputs: a `Tensor` of size `[batch, channels, height, width]`.
+    filters: an `int` number of filters for the first two convolutions.
+    strides: an `int` block stride. If greater than 1, this block will
+      ultimately downsample the input.
+    use_projection: a `bool` for whether this block should use a projection
+      shortcut (versus the default identity shortcut). This is usually `True`
+      for the first block of a block group, which may change the number of
+      filters and the resolution.
+    block_fn: the `function` for the block to use within the model
+    block_repeats: an `int` number of blocks to repeat in the group.
+    batch_norm_relu: an operation that is added after convolutions, including a
+      batch norm layer and an optional relu activation.
+    dropblock: a drop block layer that is added after convluations. Note that
+      the default implementation does not apply any drop block.
+    data_format: a `str` that specifies the data format.
+    name: a `str` name for the Tensor output of the block layer.
+    is_training: a `bool` if True, the model is in training mode.
+
+  Returns:
+    The output `Tensor` of the block layer.
+  """
+  # Only the first block per block_group uses projection shortcut and strides.
+  inputs = block_fn(
+      inputs,
+      filters,
+      strides,
+      use_projection=use_projection,
+      batch_norm_relu=batch_norm_relu,
+      dropblock=dropblock,
+      data_format=data_format,
+      is_training=is_training)
+  for _ in range(1, block_repeats):
+    inputs = block_fn(
+        inputs,
+        filters,
+        1,
+        use_projection=False,
+        batch_norm_relu=batch_norm_relu,
+        dropblock=dropblock,
+        data_format=data_format,
+        is_training=is_training)
+  return tf.identity(inputs, name)
 
 
 class Resnet(object):
@@ -55,13 +115,13 @@ class Resnet(object):
     self._data_format = data_format
 
     model_params = {
-        10: {'block': self.residual_block, 'layers': [1, 1, 1, 1]},
-        18: {'block': self.residual_block, 'layers': [2, 2, 2, 2]},
-        34: {'block': self.residual_block, 'layers': [3, 4, 6, 3]},
-        50: {'block': self.bottleneck_block, 'layers': [3, 4, 6, 3]},
-        101: {'block': self.bottleneck_block, 'layers': [3, 4, 23, 3]},
-        152: {'block': self.bottleneck_block, 'layers': [3, 8, 36, 3]},
-        200: {'block': self.bottleneck_block, 'layers': [3, 24, 36, 3]}
+        10: {'block': nn_blocks.residual_block, 'layers': [1, 1, 1, 1]},
+        18: {'block': nn_blocks.residual_block, 'layers': [2, 2, 2, 2]},
+        34: {'block': nn_blocks.residual_block, 'layers': [3, 4, 6, 3]},
+        50: {'block': nn_blocks.bottleneck_block, 'layers': [3, 4, 6, 3]},
+        101: {'block': nn_blocks.bottleneck_block, 'layers': [3, 4, 23, 3]},
+        152: {'block': nn_blocks.bottleneck_block, 'layers': [3, 8, 36, 3]},
+        200: {'block': nn_blocks.bottleneck_block, 'layers': [3, 24, 36, 3]}
     }
 
     if resnet_depth not in model_params:
@@ -90,124 +150,6 @@ class Resnet(object):
     with tf.variable_scope('resnet%s' % self._resnet_depth):
       return self._resnet_fn(inputs, is_training)
 
-  def residual_block(self, inputs, filters, strides, use_projection=False,
-                     is_training=False):
-    """Standard building block for residual networks with BN after convolutions.
-
-    Args:
-      inputs: `Tensor` of size `[batch, channels, height, width]`.
-      filters: `int` number of filters for the first two convolutions. Note that
-          the third and final convolution will use 4 times as many filters.
-      strides: `int` block stride. If greater than 1, this block will ultimately
-          downsample the input.
-      use_projection: `bool` for whether this block should use a projection
-          shortcut (versus the default identity shortcut). This is usually
-          `True` for the first block of a block group, which may change the
-          number of filters and the resolution.
-      is_training: `bool` if True, the model is in training mode.
-    Returns:
-      The output `Tensor` of the block.
-    """
-    shortcut = inputs
-    if use_projection:
-      # Projection shortcut in first layer to match filters and strides
-      shortcut = nn_ops.conv2d_fixed_padding(
-          inputs=inputs, filters=filters, kernel_size=1, strides=strides,
-          data_format=self._data_format)
-      shortcut = self._batch_norm_relu(shortcut, relu=False,
-                                       is_training=is_training)
-
-    inputs = nn_ops.conv2d_fixed_padding(
-        inputs=inputs, filters=filters, kernel_size=3, strides=strides,
-        data_format=self._data_format)
-    inputs = self._batch_norm_relu(inputs, is_training=is_training)
-
-    inputs = nn_ops.conv2d_fixed_padding(
-        inputs=inputs, filters=filters, kernel_size=3, strides=1,
-        data_format=self._data_format)
-    inputs = self._batch_norm_relu(inputs, relu=False, init_zero=True,
-                                   is_training=is_training)
-
-    return tf.nn.relu(inputs + shortcut)
-
-  def bottleneck_block(self, inputs, filters, strides, use_projection=False,
-                       is_training=False):
-    """Bottleneck block variant for residual networks with BN after convolutions.
-
-    Args:
-      inputs: `Tensor` of size `[batch, channels, height, width]`.
-      filters: `int` number of filters for the first two convolutions. Note that
-          the third and final convolution will use 4 times as many filters.
-      strides: `int` block stride. If greater than 1, this block will ultimately
-          downsample the input.
-      use_projection: `bool` for whether this block should use a projection
-          shortcut (versus the default identity shortcut). This is usually
-          `True` for the first block of a block group, which may change the
-          number of filters and the resolution.
-      is_training: `bool` if True, the model is in training mode.
-
-    Returns:
-      The output `Tensor` of the block.
-    """
-    shortcut = inputs
-    if use_projection:
-      # Projection shortcut only in first block within a group. Bottleneck
-      # blocks end with 4 times the number of filters.
-      filters_out = 4 * filters
-      shortcut = nn_ops.conv2d_fixed_padding(
-          inputs=inputs, filters=filters_out, kernel_size=1, strides=strides,
-          data_format=self._data_format)
-      shortcut = self._batch_norm_relu(shortcut, relu=False,
-                                       is_training=is_training)
-    shortcut = self._dropblock(shortcut, is_training=is_training)
-
-    inputs = nn_ops.conv2d_fixed_padding(
-        inputs=inputs, filters=filters, kernel_size=1, strides=1,
-        data_format=self._data_format)
-    inputs = self._batch_norm_relu(inputs, is_training=is_training)
-    inputs = self._dropblock(inputs, is_training=is_training)
-
-    inputs = nn_ops.conv2d_fixed_padding(
-        inputs=inputs, filters=filters, kernel_size=3, strides=strides,
-        data_format=self._data_format)
-    inputs = self._batch_norm_relu(inputs, is_training=is_training)
-    inputs = self._dropblock(inputs, is_training=is_training)
-
-    inputs = nn_ops.conv2d_fixed_padding(
-        inputs=inputs, filters=4 * filters, kernel_size=1, strides=1,
-        data_format=self._data_format)
-    inputs = self._batch_norm_relu(inputs, relu=False, init_zero=True,
-                                   is_training=is_training)
-    inputs = self._dropblock(inputs, is_training=is_training)
-
-    return tf.nn.relu(inputs + shortcut)
-
-  def block_group(self, inputs, filters, block_fn, blocks, strides, name,
-                  is_training):
-    """Creates one group of blocks for the ResNet model.
-
-    Args:
-      inputs: `Tensor` of size `[batch, channels, height, width]`.
-      filters: `int` number of filters for the first convolution of the layer.
-      block_fn: `function` for the block to use within the model
-      blocks: `int` number of blocks contained in the layer.
-      strides: `int` stride to use for the first convolution of the layer. If
-          greater than 1, this layer will downsample the input.
-      name: `str`name for the Tensor output of the block layer.
-      is_training: `bool` if True, the model is in training mode.
-
-    Returns:
-      The output `Tensor` of the block layer.
-    """
-    # Only the first block per block_group uses projection shortcut and strides.
-    inputs = block_fn(inputs, filters, strides, use_projection=True,
-                      is_training=is_training)
-
-    for _ in range(1, blocks):
-      inputs = block_fn(inputs, filters, 1, is_training=is_training)
-
-    return tf.identity(inputs, name)
-
   def resnet_v1_generator(self, block_fn, layers):
     """Generator for ResNet v1 models.
 
@@ -235,18 +177,50 @@ class Resnet(object):
           data_format=self._data_format)
       inputs = tf.identity(inputs, 'initial_max_pool')
 
-      c2 = self.block_group(
-          inputs=inputs, filters=64, block_fn=block_fn, blocks=layers[0],
-          strides=1, name='block_group1', is_training=is_training)
-      c3 = self.block_group(
-          inputs=c2, filters=128, block_fn=block_fn, blocks=layers[1],
-          strides=2, name='block_group2', is_training=is_training)
-      c4 = self.block_group(
-          inputs=c3, filters=256, block_fn=block_fn, blocks=layers[2],
-          strides=2, name='block_group3', is_training=is_training)
-      c5 = self.block_group(
-          inputs=c4, filters=512, block_fn=block_fn, blocks=layers[3],
-          strides=2, name='block_group4', is_training=is_training)
+      c2 = block_group(
+          inputs=inputs,
+          filters=64,
+          strides=1,
+          use_projection=True,
+          block_fn=block_fn,
+          block_repeats=layers[0],
+          batch_norm_relu=self._batch_norm_relu,
+          dropblock=self._dropblock,
+          name='block_group1',
+          is_training=is_training)
+      c3 = block_group(
+          inputs=c2,
+          filters=128,
+          strides=2,
+          use_projection=True,
+          block_fn=block_fn,
+          block_repeats=layers[1],
+          batch_norm_relu=self._batch_norm_relu,
+          dropblock=self._dropblock,
+          name='block_group2',
+          is_training=is_training)
+      c4 = block_group(
+          inputs=c3,
+          filters=256,
+          strides=2,
+          use_projection=True,
+          block_fn=block_fn,
+          block_repeats=layers[2],
+          batch_norm_relu=self._batch_norm_relu,
+          dropblock=self._dropblock,
+          name='block_group3',
+          is_training=is_training)
+      c5 = block_group(
+          inputs=c4,
+          filters=512,
+          strides=2,
+          use_projection=True,
+          block_fn=block_fn,
+          block_repeats=layers[3],
+          batch_norm_relu=self._batch_norm_relu,
+          dropblock=self._dropblock,
+          name='block_group3',
+          is_training=is_training)
       return {2: c2, 3: c3, 4: c4, 5: c5}
 
     return model
