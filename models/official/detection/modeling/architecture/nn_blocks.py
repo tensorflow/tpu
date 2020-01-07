@@ -20,7 +20,8 @@ from __future__ import division
 #Standard imports
 from __future__ import print_function
 
-import tensorflow as tf
+from absl import logging
+import tensorflow.compat.v1 as tf
 
 from modeling.architecture import nn_ops
 
@@ -58,7 +59,7 @@ def residual_block(inputs,
   Returns:
     The output `Tensor` of the block.
   """
-  tf.logging.info('-----> Building residual block.')
+  logging.info('-----> Building residual block.')
   shortcut = inputs
   if use_projection:
     shortcut = nn_ops.conv2d_fixed_padding(
@@ -128,7 +129,7 @@ def bottleneck_block(inputs,
   Returns:
     The output `Tensor` of the block.
   """
-  tf.logging.info('-----> Building bottleneck block.')
+  logging.info('-----> Building bottleneck block.')
 
   shortcut = inputs
   if use_projection:

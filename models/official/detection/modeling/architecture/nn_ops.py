@@ -78,8 +78,8 @@ class BatchNormalization(tf.layers.BatchNormalization):
       num_shards_per_group = 1
     else:
       num_shards_per_group = max(8, num_shards // 1)
-    tf.logging.info('BatchNormalization with num_shards_per_group %s',
-                    num_shards_per_group)
+    logging.info('BatchNormalization with num_shards_per_group %s',
+                 num_shards_per_group)
     if num_shards_per_group > 1:
       # Each group has multiple replicas: here we compute group mean/variance by
       # aggregating per-replica mean/variance.
