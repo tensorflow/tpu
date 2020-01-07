@@ -30,6 +30,7 @@ def residual_block(inputs,
                    filters,
                    strides,
                    use_projection,
+                   activation=tf.nn.relu,
                    batch_norm_relu=nn_ops.BatchNormRelu(),
                    dropblock=nn_ops.Dropblock(),
                    drop_connect_rate=None,
@@ -46,6 +47,7 @@ def residual_block(inputs,
       shortcut (versus the default identity shortcut). This is usually `True`
       for the first block of a block group, which may change the number of
       filters and the resolution.
+    activation: activation function. Support 'relu' and 'swish'.
     batch_norm_relu: an operation that is added after convolutions, including a
       batch norm layer and an optional relu activation.
     dropblock: a drop block layer that is added after convluations. Note that
@@ -92,13 +94,14 @@ def residual_block(inputs,
   if drop_connect_rate:
     inputs = nn_ops.drop_connect(inputs, is_training, drop_connect_rate)
 
-  return tf.nn.relu(inputs + shortcut)
+  return activation(inputs + shortcut)
 
 
 def bottleneck_block(inputs,
                      filters,
                      strides,
                      use_projection,
+                     activation=tf.nn.relu,
                      batch_norm_relu=nn_ops.BatchNormRelu(),
                      dropblock=nn_ops.Dropblock(),
                      drop_connect_rate=None,
@@ -116,6 +119,7 @@ def bottleneck_block(inputs,
       shortcut (versus the default identity shortcut). This is usually `True`
       for the first block of a block group, which may change the number of
       filters and the resolution.
+    activation: activation function. Support 'relu' and 'swish'.
     batch_norm_relu: an operation that is added after convolutions, including a
       batch norm layer and an optional relu activation.
     dropblock: a drop block layer that is added after convluations. Note that
@@ -173,4 +177,4 @@ def bottleneck_block(inputs,
   if drop_connect_rate:
     inputs = nn_ops.drop_connect(inputs, is_training, drop_connect_rate)
 
-  return tf.nn.relu(inputs + shortcut)
+  return activation(inputs + shortcut)
