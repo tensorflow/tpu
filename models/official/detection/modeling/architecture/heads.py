@@ -223,7 +223,7 @@ class FastrcnnHead(object):
             net,
             units=self._fc_dims,
             activation=(None if self._use_batch_norm else tf.nn.relu),
-            name='fc_{}'.format(i))
+            name='fc{}'.format(i+6))
         if self._use_batch_norm:
           net = self._batch_norm_relu(net, is_training=is_training)
 
