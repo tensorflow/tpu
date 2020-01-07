@@ -309,46 +309,26 @@ class Parser(object):
         anchor_boxes: ordered dictionary with keys
           [min_level, min_level+1, ..., max_level]. The values are tensor with
           shape [height_l, width_l, 4] representing anchor boxes at each level.
-        rpn_score_targets: ordered dictionary with keys
-          [min_level, min_level+1, ..., max_level]. The values are tensor with
-          shape [height_l, width_l, anchors_per_location]. The height_l and
-          width_l represent the dimension of class logits at l-th level.
-        rpn_box_targets: ordered dictionary with keys
-          [min_level, min_level+1, ..., max_level]. The values are tensor with
-          shape [height_l, width_l, anchors_per_location * 4]. The height_l and
-          width_l represent the dimension of bounding box regression output at
-          l-th level.
-        gt_boxes: Groundtruth bounding box annotations. The box is represented
-           in [y1, x1, y2, x2] format. The coordinates are w.r.t the scaled
-           image that is fed to the network. The tennsor is padded with -1 to
-           the fixed dimension [self._max_num_instances, 4].
-        gt_classes: Groundtruth classes annotations. The tennsor is padded
-          with -1 to the fixed dimension [self._max_num_instances].
-        gt_masks: groundtrugh masks cropped by the bounding box and
-          resized to a fixed size determined by mask_crop_size.
-        gt_areas: Box area or mask area depend on whether mask is present.
-        gt_iscrowd: Whether the ground truth label is a crowd label.
-        num_gts: Number of ground truths in the image.
+        groundtruths:
+          source_id: Groundtruth source id.
+          height: Original image height.
+          width: Original image width.
+          boxes: Groundtruth bounding box annotations. The box is represented
+             in [y1, x1, y2, x2] format. The coordinates are w.r.t the scaled
+             image that is fed to the network. The tennsor is padded with -1 to
+             the fixed dimension [self._max_num_instances, 4].
+          classes: Groundtruth classes annotations. The tennsor is padded
+            with -1 to the fixed dimension [self._max_num_instances].
+          areas: Box area or mask area depend on whether mask is present.
+          is_crowds: Whether the ground truth label is a crowd label.
+          num_groundtruths: Number of ground truths in the image.
     """
-    classes = data['groundtruth_classes']
-    boxes = data['groundtruth_boxes']
-    areas = data['groundtruth_area']
-    if self._include_mask:
-      masks = data['groundtruth_instance_masks']
-
-    is_crowds = data['groundtruth_is_crowd']
-    num_gts = tf.size(classes, out_type=tf.int64)
-
     # Gets original image and its size.
     image = data['image']
     image_shape = tf.shape(image)[0:2]
 
     # Normalizes image with mean and std pixel values.
     image = input_utils.normalize_image(image)
-
-    # Converts boxes from normalized coordinates to pixel coordinates.
-    # Now the coordinates of boxes are w.r.t. the original image.
-    boxes = box_utils.denormalize_boxes(boxes, image_shape)
 
     # Resizes and crops image.
     image, image_info = input_utils.resize_and_crop_image(
@@ -360,34 +340,7 @@ class Parser(object):
         aug_scale_max=self._aug_scale_max)
     image_height, image_width, _ = image.get_shape().as_list()
 
-    # Resizes and crops boxes.
-    # Now the coordinates of boxes are w.r.t the scaled image.
-    image_scale = image_info[2, :]
-    offset = image_info[3, :]
-    boxes = input_utils.resize_and_crop_boxes(
-        boxes, image_scale, (image_height, image_width), offset)
-
-    # Filters out ground truth boxes that are all zeros.
-    indices = box_utils.get_non_empty_box_indices(boxes)
-    boxes = tf.gather(boxes, indices)
-    classes = tf.gather(classes, indices)
-    if self._include_mask:
-      masks = tf.gather(masks, indices)
-      cropped_boxes = boxes + tf.tile(tf.expand_dims(offset, axis=0), [1, 2])
-      cropped_boxes = box_utils.normalize_boxes(
-          cropped_boxes, image_info[1, :])
-      num_masks = tf.shape(masks)[0]
-      masks = tf.image.crop_and_resize(
-          tf.expand_dims(masks, axis=-1),
-          cropped_boxes,
-          box_indices=tf.range(num_masks, dtype=tf.int32),
-          crop_size=[self._mask_crop_size, self._mask_crop_size],
-          method='bilinear')
-      masks = tf.squeeze(masks, axis=-1)
-
     # Assigns anchor targets.
-    # Note that after the target assignment, box targets are absolute pixel
-    # offsets w.r.t. the scaled image.
     input_anchor = anchor.Anchor(
         self._min_level,
         self._max_level,
@@ -395,38 +348,42 @@ class Parser(object):
         self._aspect_ratios,
         self._anchor_size,
         (image_height, image_width))
-    anchor_labeler = anchor.RpnAnchorLabeler(
-        input_anchor,
-        self._rpn_match_threshold,
-        self._rpn_unmatched_threshold,
-        self._rpn_batch_size_per_im,
-        self._rpn_fg_fraction)
-    rpn_score_targets, rpn_box_targets = anchor_labeler.label_anchors(
-        boxes, tf.cast(tf.expand_dims(classes, axis=-1), dtype=tf.float32))
 
     # If bfloat16 is used, casts input image to tf.bfloat16.
     if self._use_bfloat16:
       image = tf.cast(image, dtype=tf.bfloat16)
 
+    # Sets up groundtruth data for evaluation.
+    groundtruths = {
+        'source_id':
+            data['source_id'],
+        'height':
+            data['height'],
+        'width':
+            data['width'],
+        'num_groundtruths':
+            tf.shape(data['groundtruth_classes']),
+        'boxes':
+            box_utils.denormalize_boxes(data['groundtruth_boxes'], image_shape),
+        'classes':
+            data['groundtruth_classes'],
+        'areas':
+            data['groundtruth_area'],
+        'is_crowds':
+            tf.cast(data['groundtruth_is_crowd'], tf.int32),
+    }
+    # TODO(b/143766089): Add ground truth masks for segmentation metrics.
+    groundtruths['source_id'] = dataloader_utils.process_source_id(
+        groundtruths['source_id'])
+    groundtruths = dataloader_utils.pad_groundtruths_to_fixed_size(
+        groundtruths, self._max_num_instances)
+
     # Packs labels for model_fn outputs.
     labels = {
         'anchor_boxes': input_anchor.multilevel_boxes,
         'image_info': image_info,
-        'rpn_score_targets': rpn_score_targets,
-        'rpn_box_targets': rpn_box_targets,
+        'groundtruths': groundtruths,
     }
-    labels['gt_boxes'] = input_utils.pad_to_fixed_size(
-        boxes, self._max_num_instances, -1)
-    labels['gt_classes'] = input_utils.pad_to_fixed_size(
-        classes, self._max_num_instances, -1)
-    if self._include_mask:
-      labels['gt_masks'] = input_utils.pad_to_fixed_size(
-          masks, self._max_num_instances, -1)
-    labels['gt_areas'] = input_utils.pad_to_fixed_size(
-        areas, self._max_num_instances, -1)
-    labels['gt_iscrowd'] = input_utils.pad_to_fixed_size(
-        is_crowds, self._max_num_instances, -1)
-    labels['num_gts'] = num_gts
 
     return image, labels
 
