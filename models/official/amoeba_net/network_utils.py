@@ -32,11 +32,11 @@ from __future__ import print_function
 
 import tensorflow as tf
 
+from tensorflow.contrib import framework as contrib_framework
+from tensorflow.contrib import slim
+from tensorflow.contrib.framework.python.ops import add_arg_scope
 from tensorflow.contrib.tpu.python.ops import tpu_ops
-from tensorflow.python.training import moving_averages
-
-arg_scope = tf.contrib.framework.arg_scope
-slim = tf.contrib.slim
+from tensorflow.python.training import moving_averages  # pylint: disable=g-direct-tensorflow-import
 
 DATA_FORMAT_NCHW = 'NCHW'
 DATA_FORMAT_NHWC = 'NHWC'
@@ -87,14 +87,14 @@ def calc_reduction_layers(num_cells, num_reduction_layers):
   return reduction_layers
 
 
-@tf.contrib.framework.add_arg_scope
+@add_arg_scope
 def get_channel_index(data_format=INVALID):
   assert data_format != INVALID
   axis = 3 if data_format == 'NHWC' else 1
   return axis
 
 
-@tf.contrib.framework.add_arg_scope
+@add_arg_scope
 def get_channel_dim(shape, data_format=INVALID):
   assert data_format != INVALID
   assert len(shape) == 4
@@ -106,7 +106,7 @@ def get_channel_dim(shape, data_format=INVALID):
     raise ValueError('Not a valid data_format', data_format)
 
 
-@tf.contrib.framework.add_arg_scope
+@add_arg_scope
 def global_avg_pool(x, data_format=INVALID):
   """Average pool away the height and width spatial dimensions of x."""
   assert data_format != INVALID
@@ -118,7 +118,7 @@ def global_avg_pool(x, data_format=INVALID):
     return tf.reduce_mean(x, [2, 3])
 
 
-@tf.contrib.framework.add_arg_scope
+@add_arg_scope
 def factorized_reduction(net, output_filters, stride, data_format=INVALID):
   """Reduces the shape of net without information loss due to striding."""
   assert output_filters % 2 == 0, (
@@ -160,7 +160,7 @@ def factorized_reduction(net, output_filters, stride, data_format=INVALID):
   return final_path
 
 
-@tf.contrib.framework.add_arg_scope
+@add_arg_scope
 def drop_path(net, keep_prob, is_training=True):
   """Drops out a whole example hiddenstate with the specified probability."""
   if is_training:
@@ -510,7 +510,7 @@ class BaseCell(object):
     net = tf.concat(values=states_to_combine, axis=concat_axis)
     return net
 
-  @tf.contrib.framework.add_arg_scope  # No public API. For internal use only.
+  @add_arg_scope  # No public API. For internal use only.
   def _apply_drop_path(self, net, current_step=None,
                        drop_connect_version='v1'):
     """Apply drop_path regularization.
@@ -551,7 +551,7 @@ class BaseCell(object):
 
 
 # TODO(huangyp): find out the difference and use the layers batch_norm.
-@tf.contrib.framework.add_arg_scope
+@add_arg_scope
 def batch_norm(inputs,
                decay=0.999,
                center=True,
@@ -660,14 +660,14 @@ def batch_norm(inputs,
     # Allocate parameters for the beta and gamma of the normalization.
     trainable_beta = trainable and center
     collections = [tf.GraphKeys.MODEL_VARIABLES, tf.GraphKeys.GLOBAL_VARIABLES]
-    beta = tf.contrib.framework.variable(
+    beta = contrib_framework.variable(
         'beta',
         params_shape,
         collections=collections,
         initializer=tf.zeros_initializer(),
         trainable=trainable_beta)
     trainable_gamma = trainable and scale
-    gamma = tf.contrib.framework.variable(
+    gamma = contrib_framework.variable(
         'gamma',
         params_shape,
         collections=collections,
@@ -685,13 +685,13 @@ def batch_norm(inputs,
     scope = tf.get_variable_scope()
     partitioner = scope.partitioner
     scope.set_partitioner(None)
-    moving_mean = tf.contrib.framework.variable(
+    moving_mean = contrib_framework.variable(
         'moving_mean',
         params_shape,
         initializer=tf.zeros_initializer(),
         trainable=False,
         collections=moving_collections)
-    moving_variance = tf.contrib.framework.variable(
+    moving_variance = contrib_framework.variable(
         'moving_variance',
         params_shape,
         initializer=tf.ones_initializer(),
