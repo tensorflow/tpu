@@ -46,6 +46,7 @@ import tensorflow_hub as hub
 import amoeba_net
 import amoeba_net_model as model_lib
 import model_builder
+from tensorflow.contrib import slim
 
 flags.DEFINE_string('tf_hub_mode', 'export_to_hub',
                     'export_to_hub|eval_from_hub')
@@ -66,7 +67,6 @@ flags.DEFINE_bool(
 
 
 FLAGS = flags.FLAGS
-slim = tf.contrib.slim
 
 
 def _make_module_fn(hparams, num_classes):

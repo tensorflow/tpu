@@ -34,7 +34,9 @@ import absl.logging as _logging  # pylint: disable=unused-import
 import tensorflow as tf
 import amoeba_net_model as model_lib
 from common import inference_warmup
-
+from tensorflow.contrib import cluster_resolver as contrib_cluster_resolver
+from tensorflow.contrib import tpu as contrib_tpu
+from tensorflow.contrib.training.python.training import evaluation
 
 # Cloud TPU Cluster Resolvers
 flags.DEFINE_string(
@@ -206,25 +208,23 @@ FLAGS = flags.FLAGS
 
 def build_run_config():
   """Return RunConfig for TPU estimator."""
-  tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
-      FLAGS.tpu,
-      zone=FLAGS.tpu_zone,
-      project=FLAGS.gcp_project)
+  tpu_cluster_resolver = contrib_cluster_resolver.TPUClusterResolver(
+      FLAGS.tpu, zone=FLAGS.tpu_zone, project=FLAGS.gcp_project)
 
   eval_steps = FLAGS.num_eval_images // FLAGS.eval_batch_size
   iterations_per_loop = (eval_steps if FLAGS.mode == 'eval'
                          else FLAGS.iterations_per_loop)
   save_checkpoints_steps = FLAGS.save_checkpoints_steps or iterations_per_loop
-  run_config = tf.contrib.tpu.RunConfig(
+  run_config = contrib_tpu.RunConfig(
       cluster=tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
       save_checkpoints_steps=save_checkpoints_steps,
       keep_checkpoint_max=None,
-      tpu_config=tf.contrib.tpu.TPUConfig(
+      tpu_config=contrib_tpu.TPUConfig(
           iterations_per_loop=iterations_per_loop,
           num_shards=FLAGS.num_shards,
-          per_host_input_for_training=tf.contrib.tpu.InputPipelineConfig.PER_HOST_V2
-      ))
+          per_host_input_for_training=contrib_tpu.InputPipelineConfig
+          .PER_HOST_V2))
   return run_config
 
 
@@ -309,10 +309,8 @@ def _terminate_eval():
 
 
 def _get_next_checkpoint():
-  return tf.contrib.training.checkpoints_iterator(
-      FLAGS.model_dir,
-      timeout=FLAGS.eval_timeout,
-      timeout_fn=_terminate_eval)
+  return evaluation.checkpoints_iterator(
+      FLAGS.model_dir, timeout=FLAGS.eval_timeout, timeout_fn=_terminate_eval)
 
 
 def _set_or_add_hparam(hparams, name, value):
@@ -350,7 +348,7 @@ def main(_):
   if hparams.use_tpu:
     run_config = build_run_config()
     # Temporary treatment until flags are released.
-    image_classifier = tf.contrib.tpu.TPUEstimator(
+    image_classifier = contrib_tpu.TPUEstimator(
         model_fn=model.model_fn,
         use_tpu=True,
         config=run_config,

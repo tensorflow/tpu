@@ -27,6 +27,9 @@ import tensorflow as tf
 import inception_preprocessing
 import model_builder
 import model_specs
+from tensorflow.contrib import framework as contrib_framework
+from tensorflow.contrib import tpu as contrib_tpu
+from tensorflow.contrib import training as contrib_training
 
 
 # Random cropping constants
@@ -45,11 +48,10 @@ def imagenet_hparams():
   These defaults are for full training. For search training, some should be
   modified to increase the speed of the search.
   """
-  return tf.contrib.training.HParams(
+  return contrib_training.HParams(
       ##########################################################################
       # Input pipeline params. #################################################
       ##########################################################################
-
       image_size=299,
       num_train_images=1281167,
       num_eval_images=50000,
@@ -80,7 +82,6 @@ def imagenet_hparams():
 
       # Summed across all TPU cores training a model.
       train_batch_size=32,
-
       num_epochs=100.,
 
       # Auxiliary head.
@@ -139,9 +140,7 @@ def imagenet_hparams():
 
       # How many different crops are fed into one model. Also affects training.
       num_input_images=1,
-
       moving_average_decay=0.9999,
-
       write_summaries=0,
 
       ##########################################################################
@@ -316,7 +315,7 @@ class AmoebaNetEstimatorModel(object):
       tf.logging.fatal('Unknown optimizer:', self.hparams.optimizer)
 
     if self.hparams.use_tpu:
-      optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
+      optimizer = contrib_tpu.CrossShardOptimizer(optimizer)
     return optimizer
 
   def _build_train_op(self, optimizer, loss, global_step):
@@ -354,8 +353,7 @@ class AmoebaNetEstimatorModel(object):
     if is_predict:
       predictions = {'logits': logits}
       if self.hparams.use_tpu:
-        return  tf.contrib.tpu.TPUEstimatorSpec(mode=mode,
-                                                predictions=predictions)
+        return contrib_tpu.TPUEstimatorSpec(mode=mode, predictions=predictions)
       else:
         return tf.estimator.EstimatorSpec(mode=mode,
                                           predictions=predictions)
@@ -391,12 +389,11 @@ class AmoebaNetEstimatorModel(object):
         def host_call_fn(gs, lr):
           # Outfeed supports int32 but global_step is expected to be int64.
           gs = tf.cast(tf.reduce_mean(gs), tf.int64)
-          with tf.contrib.summary.create_file_writer(
-              self.model_dir).as_default():
-            with tf.contrib.summary.always_record_summaries():
-              tf.contrib.summary.scalar('learning_rate', tf.reduce_mean(lr),
-                                        step=gs)
-              return tf.contrib.summary.all_summary_ops()
+          with tf.summary.create_file_writer(self.model_dir).as_default():
+            with tf.summary.always_record_summaries():
+              tf.summary.scalar('learning_rate', tf.reduce_mean(lr), step=gs)
+              return tf.summary.all_summary_ops()
+
         host_call = (host_call_fn, [gs_t, lr_t])
 
     eval_metrics = None
@@ -421,9 +418,12 @@ class AmoebaNetEstimatorModel(object):
       eval_metric_ops = metric_fn(labels, logits)
 
     if self.hparams.use_tpu:
-      return tf.contrib.tpu.TPUEstimatorSpec(
-          mode=mode, loss=loss, train_op=train_op,
-          host_call=host_call, eval_metrics=eval_metrics)
+      return contrib_tpu.tpu.TPUEstimatorSpec(
+          mode=mode,
+          loss=loss,
+          train_op=train_op,
+          host_call=host_call,
+          eval_metrics=eval_metrics)
     return tf.estimator.EstimatorSpec(
         mode=mode, loss=loss, train_op=train_op,
         eval_metric_ops=eval_metric_ops)
@@ -529,7 +529,7 @@ class InputPipeline(object):
       return dataset
 
     dataset = dataset.apply(
-        tf.contrib.data.parallel_interleave(
+        tf.data.experimental.parallel_interleave(
             fetch_dataset, cycle_length=64, sloppy=True))
     dataset = dataset.shuffle(1024)
 
@@ -568,7 +568,7 @@ class LoadEMAHook(tf.train.SessionRunHook):
   def begin(self):
     ema = tf.train.ExponentialMovingAverage(self.moving_average_decay)
     variables_to_restore = ema.variables_to_restore()
-    self._load_ema = tf.contrib.framework.assign_from_checkpoint_fn(
+    self._load_ema = contrib_framework.assign_from_checkpoint_fn(
         tf.train.latest_checkpoint(self._model_dir), variables_to_restore)
 
   def after_create_session(self, sess, coord):

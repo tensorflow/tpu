@@ -104,7 +104,8 @@ class BatchNormRelu(object):
                momentum=0.997,
                epsilon=1e-4,
                trainable=True,
-               use_sync_bn=False):
+               use_sync_bn=False,
+               activation='relu'):
     """A class to construct layers for a batch normalization followed by a ReLU.
 
     Args:
@@ -115,11 +116,18 @@ class BatchNormRelu(object):
         layer.
       use_sync_bn: `boolean`, indicating whether to use the cross replica
         synchronized batch normalization.
+      activation: activation function. Support 'relu' and 'swish'.
     """
     self._momentum = momentum
     self._epsilon = epsilon
     self._trainable = trainable
     self._use_sync_bn = use_sync_bn
+    if activation == 'relu':
+      self._activation = tf.nn.relu
+    elif activation == 'swish':
+      self._activation = tf.nn.swish
+    else:
+      raise ValueError('Activation {} not implemented.'.format(activation))
 
   def __call__(self,
                inputs,
@@ -170,7 +178,7 @@ class BatchNormRelu(object):
           name=name)
 
     if relu:
-      inputs = tf.nn.relu(inputs)
+      inputs = self._activation(inputs)
     return inputs
 
 

@@ -25,10 +25,9 @@ import numpy as np
 import tensorflow as tf
 
 import network_utils
-
-
-arg_scope = tf.contrib.framework.arg_scope
-slim = tf.contrib.slim
+from tensorflow.contrib import layers as contrib_layers
+from tensorflow.contrib import slim
+from tensorflow.contrib.framework.python.ops import arg_scope
 
 
 def _build_loss(loss_fn, loss_name, logits, end_points, labels,
@@ -179,7 +178,7 @@ def _build_aux_head(net, end_points, num_classes, hparams, scope):
                                shape, padding='VALID')
       aux_logits = network_utils.batch_norm(aux_logits, scope='aux_bn1')
       aux_logits = tf.nn.relu(aux_logits)
-      aux_logits = tf.contrib.layers.flatten(aux_logits)
+      aux_logits = contrib_layers.flatten(aux_logits)
       aux_logits = slim.fully_connected(aux_logits, num_classes)
       end_point_name = (
           'aux_logits' if 'aux_logits' not in end_points else 'aux_logits_2')
@@ -261,8 +260,8 @@ def network_arg_scope(weight_decay=5e-5,
       'num_shards': num_shards,
       'distributed_group_size': distributed_group_size,
   }
-  weights_regularizer = tf.contrib.layers.l2_regularizer(weight_decay)
-  weights_initializer = tf.contrib.layers.variance_scaling_initializer(
+  weights_regularizer = contrib_layers.l2_regularizer(weight_decay)
+  weights_initializer = contrib_layers.variance_scaling_initializer(
       mode='FAN_OUT')
   with arg_scope([slim.fully_connected, slim.conv2d, slim.separable_conv2d],
                  weights_regularizer=weights_regularizer,

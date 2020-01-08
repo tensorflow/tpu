@@ -26,12 +26,13 @@ from modeling.architecture import nn_ops
 from modeling.architecture import resnet
 
 
-def batch_norm_relu_generator(params):
+def batch_norm_relu_generator(params, activation='relu'):
   return nn_ops.BatchNormRelu(
       momentum=params.batch_norm_momentum,
       epsilon=params.batch_norm_epsilon,
       trainable=params.batch_norm_trainable,
-      use_sync_bn=params.use_sync_bn)
+      use_sync_bn=params.use_sync_bn,
+      activation=activation)
 
 
 def dropblock_generator(params):

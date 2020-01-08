@@ -27,7 +27,7 @@ def compute_model_statistics(batch_size):
   """Compute number of parameters and FLOPS."""
   num_trainable_params = np.sum(
       [np.prod(var.get_shape().as_list()) for var in tf.trainable_variables()])
-  logging.info('number of trainable params: %.2fM.',
+  logging.info('number of trainable params: %f M.',
                num_trainable_params * 1. / 10**6)
 
   options = tf.profiler.ProfileOptionBuilder.float_operation()
@@ -35,7 +35,7 @@ def compute_model_statistics(batch_size):
   flops = tf.profiler.profile(
       tf.get_default_graph(), options=options).total_float_ops
   flops_per_image = flops * 1. / batch_size / 10**9 / 2
-  logging.info('number of FLOPS (multi-adds) per image: %.2fB.',
+  logging.info('number of FLOPS (multi-adds) per image: %f B.',
                flops_per_image)
 
   return num_trainable_params, flops_per_image
