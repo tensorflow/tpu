@@ -32,6 +32,7 @@ from __future__ import division
 from __future__ import print_function
 
 import atexit
+import json
 import tempfile
 from absl import logging
 import numpy as np
@@ -105,6 +106,21 @@ class COCOEvaluator(object):
     self._predictions = {}
     if not self._annotation_file:
       self._groundtruths = {}
+
+  def dump_predictions(self, file_path):
+    """Dumps the predictions in COCO format.
+
+    This can be used to output the prediction results in COCO format, for
+    example to prepare for test-dev result submission.
+
+    Args:
+      file_path: a string specifying the path to the prediction JSON file.
+    """
+    coco_predictions = coco_utils.convert_predictions_to_coco_annotations(
+        self._predictions)
+
+    with tf.gfile.Open(file_path, 'w') as f:
+      json.dump(coco_predictions, f)
 
   def evaluate(self):
     """Evaluates with detections from all images with COCO API.
