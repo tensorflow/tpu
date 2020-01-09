@@ -22,6 +22,7 @@ import os
 import time
 
 import numpy as np
+import six
 import tensorflow as tf
 
 import inception_preprocessing
@@ -207,7 +208,8 @@ def formatted_hparams(hparams):
 
   # Format hparams.
   readable_items = [
-      '%s: %s' % (k, v) for k, v in sorted(hparams.values().iteritems())]
+      '%s: %s' % (k, v) for k, v in sorted(six.iteritems(hparams.values()))
+  ]
   readable_items.append('Bad keys: %s' % ','.join(bad_keys))
   readable_string = ('\n'.join(readable_items))
   return readable_string
