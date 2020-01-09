@@ -48,7 +48,16 @@ func gcloudConfig() (*Config, error) {
 	if len(homedir) == 0 {
 		return nil, errors.New("could not find your home directory")
 	}
-	return buildGcloudEnvConfig(path.Join(homedir, ".config", "gcloud"), true)
+
+	// Set this flag to ignore checking whether ~/.config/gcloud/application_default_credentials.json exists.
+	// Useful for environments where there is a service account/metadata server available, but the file does not exist.
+	// Examples include special Docker containers.
+	ignoreFlag, ignoreAppCredentialsFile := os.LookupEnv("CTPU_IGNORE_APP_CREDENTIALS_FILE")
+	if ignoreAppCredentialsFile && (ignoreFlag == "0" || ignoreFlag == "false") {
+		ignoreAppCredentialsFile = false
+	}
+
+	return buildGcloudEnvConfig(path.Join(homedir, ".config", "gcloud"), !ignoreAppCredentialsFile)
 }
 
 func buildGcloudEnvConfig(configDir string, checkAppCredentials bool) (*Config, error) {
