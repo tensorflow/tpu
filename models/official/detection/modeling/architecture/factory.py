@@ -96,7 +96,8 @@ def retinanet_head_generator(params):
       params.retinanet_head_num_filters,
       params.use_separable_conv,
       params.use_batch_norm,
-      batch_norm_relu=batch_norm_relu_generator(params.batch_norm))
+      batch_norm_relu=batch_norm_relu_generator(
+          params.batch_norm, params.activation))
 
 
 def rpn_head_generator(params):

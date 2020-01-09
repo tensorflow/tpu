@@ -79,6 +79,7 @@ SHAPEMASK_CFG.override({
             'batch_norm_trainable': True,
             'use_sync_bn': False,
         },
+        'activation': 'relu',
     },
     'shapemask_head': {
         'num_classes': 91,

@@ -58,6 +58,7 @@ RETINANET_CFG.override({
             'batch_norm_trainable': True,
             'use_sync_bn': False,
         },
+        'activation': 'relu',
     },
     'retinanet_loss': {
         'num_classes': 91,
