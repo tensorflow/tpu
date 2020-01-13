@@ -134,13 +134,12 @@ def bottleneck_block(inputs,
     The output `Tensor` of the block.
   """
   logging.info('-----> Building bottleneck block.')
-
   shortcut = inputs
   if use_projection:
-    filters_out = 4 * filters
+    out_filters = 4 * filters
     shortcut = nn_ops.conv2d_fixed_padding(
         inputs=inputs,
-        filters=filters_out,
+        filters=out_filters,
         kernel_size=1,
         strides=strides,
         data_format=data_format)
@@ -178,3 +177,97 @@ def bottleneck_block(inputs,
     inputs = nn_ops.drop_connect(inputs, is_training, drop_connect_rate)
 
   return activation(inputs + shortcut)
+
+
+def mbconv_block(inputs,
+                 in_filters,
+                 out_filters,
+                 expand_ratio,
+                 strides,
+                 use_projection,
+                 kernel_size=3,
+                 se_ratio=None,
+                 batch_norm_relu=nn_ops.BatchNormRelu(),
+                 dropblock=nn_ops.Dropblock(),
+                 drop_connect_rate=None,
+                 data_format='channels_last',
+                 is_training=False):
+  """The bottleneck block with BN and DropBlock after convolutions.
+
+  Args:
+    inputs: a `Tensor` of size `[batch, channels, height, width]`.
+    in_filters: a `int` number of filters for the input feature map.
+    out_filters: a `int` number of filters for the output feature map.
+    expand_ratio: a `int` number as the feature dimension expansion ratio.
+    strides: a `int` block stride. If greater than 1, this block will ultimately
+      downsample the input.
+    use_projection: a `bool` for whether this block should use a projection
+      shortcut (versus the default identity shortcut). This is usually `True`
+      for the first block of a block group, which may change the number of
+      filters and the resolution.
+    kernel_size: kernel size for the depthwise convolution.
+    se_ratio: squeeze and excitation ratio.
+    batch_norm_relu: an operation that is added after convolutions, including a
+      batch norm layer and an optional relu activation.
+    dropblock: a drop block layer that is added after convluations. Note that
+      the default implementation does not apply any drop block.
+    drop_connect_rate: a 'float' number that specifies the drop connection rate
+      of the block. Note that the default `None` means no drop connection is
+      applied.
+    data_format: a `str` that specifies the data format.
+    is_training: a `bool` if True, the model is in training mode.
+
+  Returns:
+    The output `Tensor` of the block.
+  """
+  tf.logging.info('-----> Building mbconv block.')
+  shortcut = inputs
+  if use_projection:
+    shortcut = nn_ops.conv2d_fixed_padding(
+        inputs=inputs,
+        filters=out_filters,
+        kernel_size=1,
+        strides=strides,
+        data_format=data_format)
+    shortcut = batch_norm_relu(shortcut, is_training=is_training)
+    shortcut = dropblock(shortcut, is_training=is_training)
+
+  # First 1x1 conv for channel expansion.
+  inputs = nn_ops.conv2d_fixed_padding(
+      inputs=inputs,
+      filters=in_filters * expand_ratio,
+      kernel_size=1,
+      strides=1,
+      data_format=data_format)
+  inputs = batch_norm_relu(inputs, is_training=is_training)
+  inputs = dropblock(inputs, is_training=is_training)
+
+  # Second depthwise conv.
+  inputs = nn_ops.depthwise_conv2d_fixed_padding(
+      inputs=inputs,
+      kernel_size=kernel_size,
+      strides=strides,
+      data_format=data_format)
+  inputs = batch_norm_relu(inputs, is_training=is_training)
+  inputs = dropblock(inputs, is_training=is_training)
+
+  # Squeeze and excitation.
+  if se_ratio is not None and se_ratio > 0 and se_ratio <= 1:
+    inputs = nn_ops.squeeze_excitation(
+        inputs, in_filters, se_ratio, expand_ratio=expand_ratio,
+        data_format=data_format)
+
+  # Third 1x1 conv for reversed bottleneck.
+  inputs = nn_ops.conv2d_fixed_padding(
+      inputs=inputs,
+      filters=out_filters,
+      kernel_size=1,
+      strides=1,
+      data_format=data_format)
+  inputs = batch_norm_relu(inputs, is_training=is_training)
+  inputs = dropblock(inputs, is_training=is_training)
+
+  if drop_connect_rate:
+    inputs = nn_ops.drop_connect(inputs, is_training, drop_connect_rate)
+
+  return tf.add(inputs, shortcut)
