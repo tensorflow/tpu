@@ -351,3 +351,85 @@ def conv2d_fixed_padding(inputs,
       use_bias=False,
       kernel_initializer=tf.variance_scaling_initializer(),
       data_format=data_format)
+
+
+class DepthwiseConv2D(tf.keras.layers.DepthwiseConv2D, tf.layers.Layer):
+  """Wrap keras DepthwiseConv2D to tf.layers."""
+  pass
+
+
+def depthwise_conv2d_fixed_padding(inputs,
+                                   kernel_size,
+                                   strides,
+                                   data_format='channels_last'):
+  """Strided 2-D depthwise convolution with explicit padding.
+
+  The padding is consistent and is based only on `kernel_size`, not on the
+  dimensions of `inputs` (as opposed to using `tf.layers.conv2d` alone).
+
+  Args:
+    inputs: `Tensor` of size `[batch, channels, height_in, width_in]`.
+    kernel_size: `int` kernel size of the convolution.
+    strides: `int` strides of the convolution.
+    data_format: An optional string from: "channels_last", "channels_first".
+        Defaults to "channels_last".
+
+  Returns:
+    A `Tensor` of shape `[batch, filters, height_out, width_out]`.
+  """
+  if strides > 1:
+    inputs = fixed_padding(inputs, kernel_size, data_format=data_format)
+  depthwise_conv = DepthwiseConv2D(
+      [kernel_size, kernel_size],
+      strides=strides,
+      padding=('SAME' if strides == 1 else 'VALID'),
+      use_bias=False,
+      data_format=data_format)
+  return depthwise_conv(inputs)
+
+
+def squeeze_excitation(inputs,
+                       in_filters,
+                       se_ratio,
+                       expand_ratio=1,
+                       data_format='channels_last'):
+  """Squeeze and excitation implementation.
+
+  Args:
+    inputs: `Tensor` of size `[batch, channels, height_in, width_in]`.
+    in_filters: `int` number of input filteres before expansion.
+    se_ratio: `float` a se ratio between 0 and 1 for squeeze and excitation.
+    expand_ratio: `int` expansion ratio for the block.
+    data_format: An optional string from: "channels_last", "channels_first".
+        Defaults to "channels_last".
+
+  Returns:
+    A `Tensor` of shape `[batch, filters, height_out, width_out]`.
+  """
+  num_reduced_filters = max(1, int(in_filters * se_ratio))
+  se_reduce = tf.layers.Conv2D(
+      num_reduced_filters,
+      kernel_size=[1, 1],
+      strides=[1, 1],
+      kernel_initializer=tf.variance_scaling_initializer(),
+      padding='same',
+      data_format=data_format,
+      use_bias=True)
+  se_expand = tf.layers.Conv2D(
+      in_filters * expand_ratio,
+      kernel_size=[1, 1],
+      strides=[1, 1],
+      kernel_initializer=tf.variance_scaling_initializer(),
+      padding='same',
+      data_format=data_format,
+      use_bias=True)
+
+  # Process input
+  if data_format == 'channels_first':
+    spatial_dims = [2, 3]
+  else:
+    spatial_dims = [1, 2]
+  se_tensor = tf.reduce_mean(inputs, spatial_dims, keepdims=True)
+  se_tensor = se_expand(tf.nn.swish(se_reduce(se_tensor)))
+
+  return tf.sigmoid(se_tensor) * inputs
