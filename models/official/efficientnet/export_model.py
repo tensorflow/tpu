@@ -135,12 +135,12 @@ def main(_):
     if FLAGS.output_saved_model_dir:
       signature_def_map = {
           "serving_default":
-              tf.compat.v1.saved_model.signature_def_utils
+              tf.saved_model.signature_def_utils
               .predict_signature_def({"input": images},
                                      {"output": output_tensor})
       }
 
-      builder = tf.compat.v1.saved_model.Builder(FLAGS.output_saved_model_dir)
+      builder = tf.saved_model.Builder(FLAGS.output_saved_model_dir)
       builder.add_meta_graph_and_variables(
           sess, ["serve"], signature_def_map=signature_def_map)
       builder.save()
