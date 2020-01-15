@@ -433,3 +433,101 @@ def squeeze_excitation(inputs,
   se_tensor = se_expand(tf.nn.swish(se_reduce(se_tensor)))
 
   return tf.sigmoid(se_tensor) * inputs
+
+
+def aspp_layer(feat,
+               aspp_conv_filters=256,
+               batch_norm_relu=BatchNormRelu(),
+               data_format='channels_last',
+               is_training=False):
+  """Atrous Spatial Pyramid Pooling (ASPP) layer.
+
+    It is proposaed in "Rethinking Atrous Convolution for Semantic Image
+    Segmentation". Please see details in https://arxiv.org/pdf/1706.05587.pdf
+
+  Args:
+    feat: A float Tensor of shape [batch_size, feature_height, feature_width,
+      feature_channel1]. The input features.
+    aspp_conv_filters: `int` number of filters in the aspp layer.
+    batch_norm_relu: an operation that is added after convolutions, including a
+      batch norm layer and an optional relu activation.
+    data_format: Data format. It has to match with the backbone data_format.
+    is_training: a `bool` if True, the model is in training mode.
+
+  Returns:
+    A float Tensor of shape [batch_size, feature_height, feature_width,
+      feature_channel2]. The output features.
+  """
+  feat_list = []
+
+  resize_height = tf.shape(feat)[1]
+  resize_width = tf.shape(feat)[2]
+  image_feature = tf.reduce_mean(feat, axis=[1, 2], keepdims=True)
+
+  # Casts the feature to float32 so the resize_bilinear op can be run in TPU.
+  image_feature = tf.cast(image_feature, tf.float32)
+  image_feature = tf.image.resize_bilinear(
+      image_feature, [resize_height, resize_width], align_corners=True)
+  # Casts it back to be compatible with the rest opetations.
+  image_feature = tf.cast(image_feature, feat.dtype)
+  image_feature = tf.layers.conv2d(
+      inputs=image_feature,
+      filters=aspp_conv_filters,
+      kernel_size=(1, 1),
+      strides=(1, 1),
+      padding='SAME',
+      use_bias=False,
+      kernel_initializer=tf.variance_scaling_initializer(),
+      data_format=data_format)
+
+  if isinstance(resize_height, tf.Tensor):
+    resize_height = None
+  if isinstance(resize_width, tf.Tensor):
+    resize_width = None
+  image_feature.set_shape(
+      [None, resize_height, resize_width, aspp_conv_filters])
+  image_feature = batch_norm_relu(image_feature, is_training=is_training)
+
+  feat_list.append(image_feature)
+
+  conv1x1 = tf.layers.conv2d(
+      inputs=feat,
+      filters=aspp_conv_filters,
+      kernel_size=(1, 1),
+      strides=(1, 1),
+      padding='SAME',
+      use_bias=False,
+      kernel_initializer=tf.variance_scaling_initializer(),
+      data_format=data_format)
+  conv1x1 = batch_norm_relu(conv1x1, is_training=is_training)
+  feat_list.append(conv1x1)
+
+  atrous_rates = [6, 12, 18]
+  for rate in atrous_rates:
+    conv3x3 = tf.layers.conv2d(
+        inputs=feat,
+        filters=aspp_conv_filters,
+        kernel_size=(3, 3),
+        strides=(1, 1),
+        padding='SAME',
+        use_bias=False,
+        kernel_initializer=tf.variance_scaling_initializer(),
+        data_format=data_format,
+        dilation_rate=rate)
+    conv3x3 = batch_norm_relu(conv3x3, is_training=is_training)
+    feat_list.append(conv3x3)
+
+  concat_feat = tf.concat(feat_list, 3)
+
+  output_feat = tf.layers.conv2d(
+      inputs=concat_feat,
+      filters=aspp_conv_filters,
+      kernel_size=(1, 1),
+      strides=(1, 1),
+      padding='SAME',
+      use_bias=False,
+      kernel_initializer=tf.variance_scaling_initializer(),
+      data_format=data_format)
+  output_feat = batch_norm_relu(output_feat, is_training=is_training)
+
+  return output_feat
