@@ -520,8 +520,12 @@ class SegmentationLoss(object):
 
   def __call__(self, logits, labels):
     _, height, width, _ = logits.get_shape().as_list()
+    # Use bilinear resizing because nearest neighbor is not supported in
+    # tensorflow 1.14 with TPU. Once the environment is updated, it should be
+    # change back to nearest neighbor. For now, it is tested and the performance
+    # should be similar.
     labels = tf.image.resize_images(
-        labels, (height, width), method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
+        labels, (height, width), method=tf.image.ResizeMethod.BILINEAR)
     valid_mask = tf.not_equal(labels, self._ignore_label)
     normalizer = tf.reduce_sum(tf.to_float(valid_mask))
     # Assign pixel with ignore label to class 0 (background). The loss on the
