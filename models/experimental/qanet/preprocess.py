@@ -30,7 +30,7 @@ from absl import flags
 
 from six import string_types
 from six import text_type
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 import data
 

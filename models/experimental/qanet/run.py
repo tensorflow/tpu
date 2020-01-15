@@ -14,7 +14,7 @@ from absl import app
 # limitations under the License.
 # ==============================================================================
 """Main launcher for QANet train/eval/predict."""
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 import run_lib
 

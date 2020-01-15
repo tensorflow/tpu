@@ -24,10 +24,10 @@ import time
 from absl import app
 from absl import flags
 import requests
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 import tensorflow.contrib.tensorrt as trt
-from tensorflow.python.saved_model import loader
-from tensorflow.python.saved_model import tag_constants
+from tensorflow.compat.v1.python.saved_model import loader
+from tensorflow.compat.v1.python.saved_model import tag_constants
 
 
 flags.DEFINE_string(
