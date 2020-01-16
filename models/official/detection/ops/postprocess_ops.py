@@ -361,6 +361,7 @@ class MultilevelDetectionGenerator(object):
   """Generates detected boxes with scores and classes for one-stage detector."""
 
   def __init__(self, params):
+    self._apply_nms = params.apply_nms
     self._generate_detections = generate_detections_factory(params)
     self._min_level = params.min_level
     self._max_level = params.max_level
@@ -393,20 +394,34 @@ class MultilevelDetectionGenerator(object):
       boxes.append(boxes_i)
       scores.append(scores_i)
     boxes = tf.concat(boxes, axis=1)
+    boxes = tf.expand_dims(boxes, axis=2)
     scores = tf.concat(scores, axis=1)
 
+    if not self._apply_nms:
+      return {
+          'raw_boxes': boxes,
+          'raw_scores': scores,
+      }
+
     nmsed_boxes, nmsed_scores, nmsed_classes, valid_detections = (
-        self._generate_detections(tf.expand_dims(boxes, axis=2), scores))
+        self._generate_detections(boxes, scores))
 
     # Adds 1 to offset the background class which has index 0.
     nmsed_classes += 1
-    return nmsed_boxes, nmsed_scores, nmsed_classes, valid_detections
+
+    return {
+        'num_detections': valid_detections,
+        'detection_boxes': nmsed_boxes,
+        'detection_classes': nmsed_classes,
+        'detection_scores': nmsed_scores,
+    }
 
 
 class GenericDetectionGenerator(object):
   """Generates the final detected boxes with scores and classes."""
 
   def __init__(self, params):
+    self._apply_nms = params.apply_nms
     self._generate_detections = generate_detections_factory(params)
 
   def __call__(self, box_outputs, class_outputs, anchor_boxes, image_shape):
@@ -469,10 +484,21 @@ class GenericDetectionGenerator(object):
         decoded_boxes,
         tf.stack([batch_size, num_locations, num_classes - 1, 4], axis=-1))
 
+    if not self._apply_nms:
+      return {
+          'raw_boxes': decoded_boxes,
+          'raw_scores': class_outputs,
+      }
+
     nmsed_boxes, nmsed_scores, nmsed_classes, valid_detections = (
         self._generate_detections(decoded_boxes, class_outputs))
 
     # Adds 1 to offset the background class which has index 0.
     nmsed_classes += 1
 
-    return nmsed_boxes, nmsed_scores, nmsed_classes, valid_detections
+    return {
+        'num_detections': valid_detections,
+        'detection_boxes': nmsed_boxes,
+        'detection_classes': nmsed_classes,
+        'detection_scores': nmsed_scores,
+    }

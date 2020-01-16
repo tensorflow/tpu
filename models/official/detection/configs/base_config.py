@@ -127,6 +127,7 @@ BASE_CFG = {
         },
     },
     'postprocess': {
+        'apply_nms': True,
         'use_batched_nms': False,
         'max_total_size': 100,
         'nms_iou_threshold': 0.5,
