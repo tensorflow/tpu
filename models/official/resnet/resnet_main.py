@@ -187,6 +187,25 @@ flags.DEFINE_bool(
 flags.DEFINE_integer('log_step_count_steps', 64, 'The number of steps at '
                      'which the global step information is logged.')
 
+flags.DEFINE_string(
+    'augment_name', default=None,
+    help='`string` that is the name of the augmentation method'
+         'to apply to the image. `autoaugment` if AutoAugment is to be used or'
+         '`randaugment` if RandAugment is to be used. If the value is `None` no'
+         'augmentation method will be applied applied. See autoaugment.py for  '
+         'more details.')
+
+
+flags.DEFINE_integer(
+    'randaug_num_layers', default=None,
+    help='If RandAug is used, what should the number of layers be.'
+         'See autoaugment.py for detailed description.')
+
+flags.DEFINE_integer(
+    'randaug_magnitude', default=None,
+    help='If RandAug is used, what should the magnitude be. '
+         'See autoaugment.py for detailed description.')
+
 # Inference configuration.
 flags.DEFINE_bool(
     'add_warmup_requests', False,
@@ -597,7 +616,10 @@ def main(unused_argv):
             is_training=is_training,
             use_bfloat16=use_bfloat16,
             transpose_input=params.transpose_input,
-            selection=selection)
+            selection=selection,
+            augment_name=FLAGS.augment_name,
+            randaug_num_layers=FLAGS.randaug_num_layers,
+            randaug_magnitude=FLAGS.randaug_magnitude)
         for (is_training, selection) in [(True,
                                           select_train), (False, select_eval)]
     ]
@@ -615,7 +637,11 @@ def main(unused_argv):
             image_size=params.image_size,
             num_parallel_calls=params.num_parallel_calls,
             include_background_label=(params.num_label_classes == 1001),
-            use_bfloat16=use_bfloat16) for is_training in [True, False]
+            use_bfloat16=use_bfloat16,
+            augment_name=FLAGS.augment_name,
+            randaug_num_layers=FLAGS.randaug_num_layers,
+            randaug_magnitude=FLAGS.randaug_magnitude)
+        for is_training in [True, False]
     ]
 
   steps_per_epoch = params.num_train_images // params.train_batch_size

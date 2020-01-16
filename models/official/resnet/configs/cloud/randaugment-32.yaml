@@ -1,0 +1,10 @@
+resnet_depth: 50
+train_steps: 56304
+train_batch_size: 4096
+eval_batch_size: 1024
+iterations_per_loop: 1000
+num_cores: 32
+skip_host_call: True
+augment_name: 'randaugment'
+randaug_num_layers: 2
+randaug_magnitude: 9

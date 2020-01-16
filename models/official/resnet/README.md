@@ -208,7 +208,9 @@ are a few differences to the model and training compared to the original paper:
 
 * The preprocessing and data augmentation is slightly different. In particular,
   we have an additional step during normalization which rescales the inputs
-  based on the stddev of the RGB values of the dataset.
+  based on the stddev of the RGB values of the dataset. Additionally, we
+  have also implemented [AutoAugment](https://arxiv.org/abs/1805.09501) and [RandAugment](https://arxiv.org/abs/1909.13719), which are forms of data
+  augmentation that substantially improve the final performance of the model.
 * We use a larger batch size of 1024 (by default) instead of 256 and
   linearly scale the learning rate. In addition, we adopt the learning rate
   schedule suggested by [Accurate, Large Minibatch SGD: Training ImageNet in 1
