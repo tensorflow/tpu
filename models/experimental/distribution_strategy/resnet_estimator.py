@@ -29,6 +29,9 @@ import tensorflow as tf
 
 import imagenet_input
 import resnet_model
+from tensorflow.contrib import cluster_resolver as contrib_cluster_resolver
+from tensorflow.contrib import distribute as contrib_distribute
+from tensorflow.contrib import tpu as contrib_tpu
 
 tf.flags.DEFINE_string('tpu', None, 'Name of TPU to run this against')
 tf.flags.DEFINE_string('gcp_project', None, 'GCP project containing the TPU')
@@ -112,7 +115,7 @@ def model_fn(features, labels, mode):
       return model(inputs=features, is_training=is_training)
 
   if FLAGS.precision == 'bfloat16':
-    with tf.contrib.tpu.bfloat16_scope():
+    with contrib_tpu.bfloat16_scope():
       logits = create_model()
   else:
     logits = create_model()
@@ -171,10 +174,8 @@ def model_fn(features, labels, mode):
 
 def main(unused_argv):
   """Starts a ResNet training session."""
-  tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
-      FLAGS.tpu,
-      zone=FLAGS.tpu_zone,
-      project=FLAGS.gcp_project)
+  tpu_cluster_resolver = contrib_cluster_resolver.TPUClusterResolver(
+      FLAGS.tpu, zone=FLAGS.tpu_zone, project=FLAGS.gcp_project)
 
   # Estimator looks at the master it connects to for MonitoredTrainingSession
   # by reading the `TF_CONFIG` environment variable.
@@ -190,9 +191,9 @@ def main(unused_argv):
       FLAGS.eval_batch_size * FLAGS.num_cores)
   steps_per_eval = steps_per_run_train
 
-  train_distribution = tf.contrib.distribute.TPUStrategy(
+  train_distribution = contrib_distribute.TPUStrategy(
       tpu_cluster_resolver, steps_per_run=steps_per_run_train)
-  eval_distribution = tf.contrib.distribute.TPUStrategy(
+  eval_distribution = contrib_distribute.TPUStrategy(
       tpu_cluster_resolver, steps_per_run=steps_per_run_eval)
   config = tf.estimator.RunConfig(
       model_dir=FLAGS.model_dir,

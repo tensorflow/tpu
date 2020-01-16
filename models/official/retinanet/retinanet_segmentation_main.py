@@ -28,6 +28,9 @@ import tensorflow as tf
 
 import dataloader
 import retinanet_segmentation_model
+from tensorflow.contrib import cluster_resolver as contrib_cluster_resolver
+from tensorflow.contrib import tpu as contrib_tpu
+from tensorflow.contrib import training as contrib_training
 
 
 # Cloud TPU Cluster Resolvers
@@ -89,10 +92,8 @@ def main(argv):
   del argv  # Unused.
 
   if FLAGS.use_tpu:
-    tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
-        FLAGS.tpu,
-        zone=FLAGS.tpu_zone,
-        project=FLAGS.gcp_project)
+    tpu_cluster_resolver = contrib_cluster_resolver.TPUClusterResolver(
+        FLAGS.tpu, zone=FLAGS.tpu_zone, project=FLAGS.gcp_project)
     tpu_grpc_url = tpu_cluster_resolver.get_master()
     tf.Session.reset(tpu_grpc_url)
 
@@ -117,7 +118,7 @@ def main(argv):
       mode=FLAGS.mode,
   )
 
-  run_config = tf.contrib.tpu.RunConfig(
+  run_config = contrib_tpu.RunConfig(
       cluster=tpu_cluster_resolver,
       evaluation_master='',
       model_dir=FLAGS.model_dir,
@@ -125,12 +126,11 @@ def main(argv):
       log_step_count_steps=FLAGS.iterations_per_loop,
       session_config=tf.ConfigProto(
           allow_soft_placement=True, log_device_placement=False),
-      tpu_config=tf.contrib.tpu.TPUConfig(
+      tpu_config=contrib_tpu.TPUConfig(
           FLAGS.iterations_per_loop,
           FLAGS.num_shards,
           per_host_input_for_training=(
-              tf.contrib.tpu.InputPipelineConfig.PER_HOST_V2)
-      ))
+              contrib_tpu.InputPipelineConfig.PER_HOST_V2)))
 
   model_fn = retinanet_segmentation_model.segmentation_model_fn
 
@@ -143,7 +143,7 @@ def main(argv):
       is_training_bn=False,
   )
   if FLAGS.mode == 'train':
-    train_estimator = tf.contrib.tpu.TPUEstimator(
+    train_estimator = contrib_tpu.TPUEstimator(
         model_fn=model_fn,
         use_tpu=FLAGS.use_tpu,
         train_batch_size=FLAGS.train_batch_size,
@@ -160,7 +160,7 @@ def main(argv):
     if FLAGS.eval_after_training:
       # Run evaluation on CPU after training finishes.
 
-      eval_estimator = tf.contrib.tpu.TPUEstimator(
+      eval_estimator = contrib_tpu.TPUEstimator(
           model_fn=retinanet_segmentation_model.segmentation_model_fn,
           use_tpu=FLAGS.use_tpu,
           train_batch_size=FLAGS.train_batch_size,
@@ -175,7 +175,7 @@ def main(argv):
 
   elif FLAGS.mode == 'eval':
 
-    eval_estimator = tf.contrib.tpu.TPUEstimator(
+    eval_estimator = contrib_tpu.TPUEstimator(
         model_fn=retinanet_segmentation_model.segmentation_model_fn,
         use_tpu=FLAGS.use_tpu,
         train_batch_size=FLAGS.train_batch_size,
@@ -189,7 +189,7 @@ def main(argv):
       return True
 
     # Run evaluation when there's a new checkpoint
-    for ckpt in tf.contrib.training.checkpoints_iterator(
+    for ckpt in contrib_training.checkpoints_iterator(
         FLAGS.model_dir,
         min_interval_secs=FLAGS.min_eval_interval,
         timeout=FLAGS.eval_timeout,
@@ -224,14 +224,14 @@ def main(argv):
                         ckpt)
 
   elif FLAGS.mode == 'train_and_eval':
-    train_estimator = tf.contrib.tpu.TPUEstimator(
+    train_estimator = contrib_tpu.TPUEstimator(
         model_fn=retinanet_segmentation_model.segmentation_model_fn,
         use_tpu=FLAGS.use_tpu,
         train_batch_size=FLAGS.train_batch_size,
         config=run_config,
         params=params)
 
-    eval_estimator = tf.contrib.tpu.TPUEstimator(
+    eval_estimator = contrib_tpu.TPUEstimator(
         model_fn=retinanet_segmentation_model.segmentation_model_fn,
         use_tpu=FLAGS.use_tpu,
         train_batch_size=FLAGS.train_batch_size,

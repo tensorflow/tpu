@@ -24,6 +24,7 @@ import functools
 import os
 import tensorflow as tf
 import resnet_preprocessing
+from tensorflow.contrib import cloud as contrib_cloud
 
 
 def image_serving_input_fn():
@@ -338,7 +339,7 @@ class ImageNetBigtableInput(ImageNetTFExampleInput):
   def make_source_dataset(self):
     """See base class."""
     data = self.selection
-    client = tf.contrib.cloud.BigtableClient(data.project, data.instance)
+    client = contrib_cloud.BigtableClient(data.project, data.instance)
     table = client.table(data.table)
     ds = table.parallel_scan_prefix(data.prefix,
                                     columns=[(data.column_family,

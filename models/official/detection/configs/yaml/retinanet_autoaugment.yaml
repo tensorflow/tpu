@@ -3,8 +3,8 @@
 # checkpoint for the backbone.
 # Right now the code uses a pretrained checkpoint, but a future version will change this.
 # To train the ResNet 101 or ResNet 200 version, simply change the 'resnet_depth' to 101 or 200.
-# Expected accuracy on ResNet 50 with using autoaugment: 38.67
-# Expected accuracy on ResNet 50 without using autoaugment: 34.52
+# Expected accuracy on ResNet 50 with using autoaugment: 38.0
+# Expected accuracy on ResNet 50 without using autoaugment: 36.4
 train:
   total_steps: 277200
   learning_rate:
@@ -17,3 +17,5 @@ resnet:
 
 retinanet_parser:
   use_autoaugment: true
+  aug_scale_min: 0.8
+  aug_scale_max: 1.2

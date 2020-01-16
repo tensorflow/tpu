@@ -25,15 +25,17 @@ from __future__ import division
 from __future__ import print_function
 
 import tensorflow as tf
+from tensorflow.contrib import layers as contrib_layers
+from tensorflow.contrib import tpu as contrib_tpu
 
 
 def conv2d(inputs,
            filters,
            kernel_size,
            strides=(1, 1),
-           kernel_initializer=tf.contrib.layers.xavier_initializer_conv2d(),
+           kernel_initializer=contrib_layers.xavier_initializer_conv2d(),
            bias_initializer=tf.zeros_initializer(),
-           kernel_regularizer=tf.contrib.layers.l2_regularizer(scale=0.0002),
+           kernel_regularizer=contrib_layers.l2_regularizer(scale=0.0002),
            name=None):
   return tf.layers.conv2d(
       inputs,
@@ -131,11 +133,11 @@ def model_fn(features, labels, mode, params):
         use_nesterov=True)
 
   if params["use_tpu"]:
-    optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
+    optimizer = contrib_tpu.CrossShardOptimizer(optimizer)
 
   train_op = optimizer.minimize(loss, tf.train.get_global_step())
 
-  return tf.contrib.tpu.TPUEstimatorSpec(
+  return contrib_tpu.TPUEstimatorSpec(
       mode=mode,
       loss=loss,
       train_op=train_op,

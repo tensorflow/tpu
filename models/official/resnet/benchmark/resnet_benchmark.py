@@ -34,6 +34,8 @@ sys.path.append(os.path.dirname(os.path.abspath(sys.path[0])))
 
 from official.resnet import imagenet_input    # pylint: disable=g-import-not-at-top
 from official.resnet import resnet_main
+from tensorflow.contrib import cluster_resolver as contrib_cluster_resolver
+from tensorflow.contrib import tpu as contrib_tpu
 from tensorflow.python.estimator import estimator
 
 
@@ -60,20 +62,18 @@ NUM_EVAL_IMAGES = 50000
 
 
 def main(unused_argv):
-  tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
-      FLAGS.tpu,
-      zone=FLAGS.tpu_zone,
-      project=FLAGS.gcp_project)
+  tpu_cluster_resolver = contrib_cluster_resolver.TPUClusterResolver(
+      FLAGS.tpu, zone=FLAGS.tpu_zone, project=FLAGS.gcp_project)
 
-  config = tf.contrib.tpu.RunConfig(
+  config = contrib_tpu.RunConfig(
       cluster=tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
       save_checkpoints_steps=FLAGS.iterations_per_loop,
       keep_checkpoint_max=None,
-      tpu_config=tf.contrib.tpu.TPUConfig(
+      tpu_config=contrib_tpu.TPUConfig(
           iterations_per_loop=FLAGS.iterations_per_loop,
           num_shards=FLAGS.num_cores,
-          per_host_input_for_training=tf.contrib.tpu.InputPipelineConfig.PER_HOST_V2))  # pylint: disable=line-too-long
+          per_host_input_for_training=contrib_tpu.InputPipelineConfig.PER_HOST_V2))  # pylint: disable=line-too-long
 
   # Input pipelines are slightly different (with regards to shuffling and
   # preprocessing) between training and evaluation.
@@ -123,7 +123,7 @@ def main(unused_argv):
         use_bfloat16=True,
         transpose_input=FLAGS.transpose_input)
 
-  resnet_classifier = tf.contrib.tpu.TPUEstimator(
+  resnet_classifier = contrib_tpu.TPUEstimator(
       use_tpu=FLAGS.use_tpu,
       model_fn=resnet_main.resnet_model_fn,
       config=config,

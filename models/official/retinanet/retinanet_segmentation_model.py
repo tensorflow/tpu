@@ -30,6 +30,8 @@ import tensorflow as tf
 
 import retinanet_architecture
 import retinanet_model
+from tensorflow.contrib import tpu as contrib_tpu
+from tensorflow.contrib import training as contrib_training
 
 
 def _segmentation_loss(logits, labels, params):
@@ -95,7 +97,7 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
         is_training_bn=params['is_training_bn'])
 
   if params['use_bfloat16']:
-    with tf.contrib.tpu.bfloat16_scope():
+    with contrib_tpu.bfloat16_scope():
       cls_outputs = _model_outputs()
       cls_outputs = tf.cast(cls_outputs, tf.float32)
   else:
@@ -140,7 +142,7 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
     optimizer = tf.train.MomentumOptimizer(
         learning_rate, momentum=params['momentum'])
     if params['use_tpu']:
-      optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
+      optimizer = contrib_tpu.CrossShardOptimizer(optimizer)
 
     # Batch norm requires update_ops to be added as a train_op dependency.
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
@@ -209,13 +211,13 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
 
     eval_metrics = (metric_fn, metric_fn_inputs)
 
-  return tf.contrib.tpu.TPUEstimatorSpec(
+  return contrib_tpu.TPUEstimatorSpec(
       mode=mode,
       loss=total_loss,
       train_op=train_op,
       eval_metrics=eval_metrics,
       scaffold_fn=scaffold_fn,
-      )
+  )
 
 
 def segmentation_model_fn(features, labels, mode, params):
@@ -226,7 +228,7 @@ def segmentation_model_fn(features, labels, mode, params):
 
 
 def default_hparams():
-  return tf.contrib.training.HParams(
+  return contrib_training.HParams(
       image_size=513,
       input_rand_hflip=True,
       # dataset specific parameters

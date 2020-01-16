@@ -26,6 +26,7 @@ from absl import flags
 import tensorflow as tf
 
 from tensorflow.contrib import slim
+from tensorflow.contrib import tpu as contrib_tpu
 
 from tensorflow.contrib.slim.nets import inception
 
@@ -145,12 +146,12 @@ def model_fn(features, labels, mode, params):
     tf.logging.fatal('Unknown optimizer:', FLAGS.optimizer)
 
   if FLAGS.use_tpu:
-    optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
+    optimizer = contrib_tpu.CrossShardOptimizer(optimizer)
 
   train_op = optimizer.minimize(
       loss, global_step=tf.train.get_or_create_global_step())
 
-  return tf.contrib.tpu.TPUEstimatorSpec(mode=mode, loss=loss, train_op=train_op)
+  return contrib_tpu.TPUEstimatorSpec(mode=mode, loss=loss, train_op=train_op)
 
 
 def input_fn(params):
@@ -274,15 +275,15 @@ def main(unused_argv):
 
   tf.logging.set_verbosity(tf.logging.INFO)
 
-  run_config = tf.contrib.tpu.RunConfig(
+  run_config = contrib_tpu.RunConfig(
       master=FLAGS.master,
       model_dir=FLAGS.model_dir,
       save_checkpoints_secs=FLAGS.save_checkpoints_secs,
       session_config=tf.ConfigProto(),
-      tpu_config=tf.contrib.tpu.TPUConfig(FLAGS.iterations, FLAGS.num_shards),
+      tpu_config=contrib_tpu.TPUConfig(FLAGS.iterations, FLAGS.num_shards),
   )
 
-  estimator = tf.contrib.tpu.TPUEstimator(
+  estimator = contrib_tpu.TPUEstimator(
       model_fn=model_fn,
       use_tpu=FLAGS.use_tpu,
       config=run_config,

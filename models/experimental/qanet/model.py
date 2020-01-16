@@ -21,6 +21,9 @@ from tensor2tensor.layers import common_layers
 import tensorflow as tf
 import data
 import utils
+from tensorflow.contrib import cluster_resolver as contrib_cluster_resolver
+from tensorflow.contrib import layers as contrib_layers
+from tensorflow.contrib import tpu as contrib_tpu
 
 
 def build_config(model_dir, data_path):
@@ -465,7 +468,7 @@ def build_train_op(loss, is_tpu, opt_cfg, trainable_vars=None):
         beta2=opt_cfg.beta2,
         epsilon=opt_cfg.epsilon)
     if is_tpu:
-      opt = tf.contrib.tpu.CrossShardOptimizer(opt)
+      opt = contrib_tpu.CrossShardOptimizer(opt)
     return opt
 
   if opt_cfg.l2_reg:
@@ -476,7 +479,7 @@ def build_train_op(loss, is_tpu, opt_cfg, trainable_vars=None):
 
     loss += tf.multiply(opt_cfg.l2_reg, tf.add_n(decay_costs))
 
-  train_op = tf.contrib.layers.optimize_loss(
+  train_op = contrib_layers.optimize_loss(
       loss=loss,
       global_step=tf.train.get_global_step(),
       learning_rate=opt_cfg.lr,
@@ -607,7 +610,7 @@ def model_fn(
 
   # Run eval on CPU/GPU always
   if cfg.tpu.enable and is_training:
-    return tf.contrib.tpu.TPUEstimatorSpec(
+    return contrib_tpu.TPUEstimatorSpec(
         mode,
         loss=loss,
         predictions=predictions,
@@ -634,7 +637,7 @@ def get_estimator(**kwargs):
 
   if cfg.tpu.get('name'):
     tf.logging.info('Using cluster resolver.')
-    cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
+    cluster_resolver = contrib_cluster_resolver.TPUClusterResolver(
         cfg.tpu.name, zone=cfg.tpu.zone, project=cfg.tpu.gcp_project)
     master = None
   else:
@@ -645,13 +648,13 @@ def get_estimator(**kwargs):
   if cfg.tpu.enable:
     if not cfg.steps_per_epoch:
       raise ValueError('steps_per_epoch must be nonzero on TPU.')
-    exp = tf.contrib.tpu.TPUEstimator(
+    exp = contrib_tpu.TPUEstimator(
         model_fn=model_fn,
-        config=tf.contrib.tpu.RunConfig(
+        config=contrib_tpu.RunConfig(
             cluster=cluster_resolver,
             master=master,
             model_dir=cfg.model_dir,
-            tpu_config=tf.contrib.tpu.TPUConfig(
+            tpu_config=contrib_tpu.TPUConfig(
                 iterations_per_loop=cfg.steps_per_epoch)),
         use_tpu=True,
         eval_on_tpu=False,

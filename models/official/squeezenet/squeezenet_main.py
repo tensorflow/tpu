@@ -33,6 +33,8 @@ from hyperparameters import params_dict
 import data_pipeline
 import squeezenet_model
 from configs import squeezenet_config
+from tensorflow.contrib import cluster_resolver as contrib_cluster_resolver
+from tensorflow.contrib import tpu as contrib_tpu
 
 common_tpu_flags.define_common_tpu_flags()
 common_hparams_flags.define_common_hparams_flags()
@@ -85,27 +87,25 @@ def main(unused_argv):
   params.validate()
   params.lock()
 
-  tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
-      FLAGS.tpu,
-      zone=FLAGS.tpu_zone,
-      project=FLAGS.gcp_project)
+  tpu_cluster_resolver = contrib_cluster_resolver.TPUClusterResolver(
+      FLAGS.tpu, zone=FLAGS.tpu_zone, project=FLAGS.gcp_project)
 
   if not params.use_async_checkpointing:
     save_checkpoints_steps = max(5000, params.train.iterations_per_loop)
 
-  run_config = tf.contrib.tpu.RunConfig(
+  run_config = contrib_tpu.RunConfig(
       cluster=tpu_cluster_resolver,
       model_dir=params.model_dir,
       save_checkpoints_steps=save_checkpoints_steps,
       session_config=tf.ConfigProto(
           allow_soft_placement=True, log_device_placement=False),
-      tpu_config=tf.contrib.tpu.TPUConfig(
+      tpu_config=contrib_tpu.TPUConfig(
           iterations_per_loop=params.train.iterations_per_loop,
           num_shards=params.train.num_cores_per_replica,
       ),
   )
 
-  estimator = tf.contrib.tpu.TPUEstimator(
+  estimator = contrib_tpu.TPUEstimator(
       model_fn=squeezenet_model.model_fn,
       use_tpu=params.use_tpu,
       config=run_config,

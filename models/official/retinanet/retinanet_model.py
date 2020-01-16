@@ -32,6 +32,8 @@ import anchors
 import coco_metric
 import postprocess
 import retinanet_architecture
+from tensorflow.contrib import tpu as contrib_tpu
+from tensorflow.contrib import training as contrib_training
 
 
 _DEFAULT_BATCH_SIZE = 64
@@ -399,7 +401,7 @@ def _model_fn(features, labels, mode, params, model, use_tpu_estimator_spec,
         is_training_bn=params['is_training_bn'])
 
   if params['use_bfloat16']:
-    with tf.contrib.tpu.bfloat16_scope():
+    with contrib_tpu.bfloat16_scope():
       cls_outputs, box_outputs = _model_outputs()
       levels = cls_outputs.keys()
       for level in levels:
@@ -415,7 +417,7 @@ def _model_fn(features, labels, mode, params, model, use_tpu_estimator_spec,
     def _predict_postprocess_wrapper(args):
       return _predict_postprocess(*args)
 
-    predictions = tf.contrib.tpu.outside_compilation(
+    predictions = contrib_tpu.outside_compilation(
         _predict_postprocess_wrapper,
         (cls_outputs, box_outputs, labels, params))
 
@@ -425,8 +427,8 @@ def _model_fn(features, labels, mode, params, model, use_tpu_estimator_spec,
           'image_info': tf.identity(image_info, 'ImageInfo'),
       })
 
-    return tf.contrib.tpu.TPUEstimatorSpec(mode=tf.estimator.ModeKeys.PREDICT,
-                                           predictions=predictions)
+    return contrib_tpu.TPUEstimatorSpec(
+        mode=tf.estimator.ModeKeys.PREDICT, predictions=predictions)
 
   # Load pretrained model from checkpoint.
   if params['resnet_checkpoint'] and mode == tf.estimator.ModeKeys.TRAIN:
@@ -460,7 +462,7 @@ def _model_fn(features, labels, mode, params, model, use_tpu_estimator_spec,
     optimizer = tf.train.MomentumOptimizer(
         learning_rate, momentum=params['momentum'])
     if params['use_tpu']:
-      optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
+      optimizer = contrib_tpu.CrossShardOptimizer(optimizer)
     else:
       if params['auto_mixed_precision']:
         optimizer = tf.train.experimental.enable_mixed_precision_graph_rewrite(
@@ -520,7 +522,7 @@ def _model_fn(features, labels, mode, params, model, use_tpu_estimator_spec,
     eval_metrics = (metric_fn, metric_fn_inputs)
 
   if use_tpu_estimator_spec:
-    return tf.contrib.tpu.TPUEstimatorSpec(
+    return contrib_tpu.TPUEstimatorSpec(
         mode=mode,
         loss=total_loss,
         train_op=train_op,
@@ -560,7 +562,7 @@ def est_retinanet_model_fn(features, labels, mode, params):
 
 
 def default_hparams():
-  return tf.contrib.training.HParams(
+  return contrib_training.HParams(
       # input preprocessing parameters
       image_size=640,
       input_rand_hflip=True,

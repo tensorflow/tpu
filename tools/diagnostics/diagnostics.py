@@ -20,6 +20,7 @@ from datetime import datetime
 import logging
 import socket
 import subprocess
+from tensorflow.contrib import tpu as contrib_tpu
 
 # pylint: disable=g-import-not-at-top
 try:
@@ -200,10 +201,10 @@ class Diagnostics(object):
     x = tf.Variable(tf.ones([3, 3], tf.float32), name='x')
     y = tf.Variable(tf.ones([3, 3], tf.float32), name='y')
 
-    result = tf.contrib.tpu.rewrite(_computation_fn, [alpha, x, y])
+    result = contrib_tpu.rewrite(_computation_fn, [alpha, x, y])
 
     with tf.Session('grpc://{0}:8470'.format(self.tpu_ip)) as sess:
-      sess.run(tf.contrib.tpu.initialize_system())
+      sess.run(contrib_tpu.initialize_system())
       sess.run(tf.global_variables_initializer())
       logging.info(sess.run(result))
       sess.run(tpu.shutdown_system())

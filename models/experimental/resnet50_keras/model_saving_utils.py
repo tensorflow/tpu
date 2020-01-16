@@ -21,7 +21,7 @@ from __future__ import print_function
 
 import os
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 try:
   import h5py as _  # pylint: disable=g-import-not-at-top

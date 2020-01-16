@@ -15,6 +15,9 @@
 """Provide model_fn for TPUEstimator training and evaluation."""
 
 import tensorflow as tf
+from tensorflow.contrib import slim as contrib_slim
+from tensorflow.contrib import summary as contrib_summary
+from tensorflow.contrib import tpu as contrib_tpu
 
 from tensorflow.contrib.tpu.python.tpu import bfloat16
 from deeplab import common
@@ -23,7 +26,7 @@ from deeplab.model import multi_scale_logits
 from deeplab.utils.train_utils import add_softmax_cross_entropy_loss_for_each_scale
 
 
-slim = tf.contrib.slim
+slim = contrib_slim
 
 # Scope for the merged multi-scale logits.
 _MERGED_LOGITS_SCOPE = 'merged_logits'
@@ -175,7 +178,7 @@ def model_fn(features, labels, mode, params):
         params, global_step, num_batches_per_epoch)
     optimizer = _get_optimizer(params, learning_rate)
     if params['use_tpu']:
-      optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
+      optimizer = contrib_tpu.CrossShardOptimizer(optimizer)
 
     # Batch norm requires update_ops to be added as a train_op dependency.
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
@@ -206,19 +209,21 @@ def model_fn(features, labels, mode, params):
         """
         # Outfeed supports int32 but global_step is expected to be int64.
         global_step = tf.reduce_mean(global_step)
-        with (tf.contrib.summary.create_file_writer(
+        with (contrib_summary.create_file_writer(
             params['model_dir']).as_default()):
-          with tf.contrib.summary.always_record_summaries():
-            tf.contrib.summary.scalar(
+          with contrib_summary.always_record_summaries():
+            contrib_summary.scalar(
                 'loss', tf.reduce_mean(loss), step=global_step)
-            tf.contrib.summary.scalar(
-                'learning_rate', tf.reduce_mean(learning_rate),
+            contrib_summary.scalar(
+                'learning_rate',
+                tf.reduce_mean(learning_rate),
                 step=global_step)
-            tf.contrib.summary.scalar(
-                'current_epoch', tf.reduce_mean(current_epoch),
+            contrib_summary.scalar(
+                'current_epoch',
+                tf.reduce_mean(current_epoch),
                 step=global_step)
 
-            return tf.contrib.summary.all_summary_ops()
+            return contrib_summary.all_summary_ops()
 
       # To log the loss, current learning rate, and epoch for Tensorboard, the
       # summary op needs to be run on the host CPU via host_call. host_call
@@ -251,7 +256,7 @@ def model_fn(features, labels, mode, params):
   else:
     tf.logging.info('No init checkpoint found. Training from scratch.')
     scaffold_fn = None
-  return tf.contrib.tpu.TPUEstimatorSpec(
+  return contrib_tpu.TPUEstimatorSpec(
       mode=mode,
       loss=loss,
       train_op=train_op,

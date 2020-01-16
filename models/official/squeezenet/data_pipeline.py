@@ -20,6 +20,7 @@ from __future__ import print_function
 
 import os
 import tensorflow as tf
+from tensorflow.contrib import data as contrib_data
 
 _FILE_PATTERN = "%s-*"
 _NUM_CLASSES = 1001
@@ -434,7 +435,7 @@ class InputReader(object):
       return tf.data.TFRecordDataset(filename, buffer_size=32 * 1000 * 1000)
 
     dataset = dataset.apply(
-        tf.contrib.data.parallel_interleave(
+        contrib_data.parallel_interleave(
             _load_records, sloppy=True, cycle_length=64))
 
     dataset = dataset.prefetch(bs * 4)
