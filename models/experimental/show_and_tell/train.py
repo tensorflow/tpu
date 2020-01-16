@@ -26,6 +26,10 @@ import tensorflow as tf
 
 import configuration
 import show_and_tell_model
+from tensorflow.contrib import cluster_resolver as contrib_cluster_resolver
+from tensorflow.contrib import estimator as contrib_estimator
+from tensorflow.contrib import tpu as contrib_tpu
+from tensorflow.contrib import training as contrib_training
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -80,10 +84,10 @@ def model_fn(features, labels, mode, params):
 
   optimizer = tf.train.GradientDescentOptimizer(
       learning_rate=training_config.initial_learning_rate)
-  optimizer = tf.contrib.estimator.clip_gradients_by_norm(
+  optimizer = contrib_estimator.clip_gradients_by_norm(
       optimizer, training_config.clip_gradients)
   if FLAGS.use_tpu:
-    optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
+    optimizer = contrib_tpu.CrossShardOptimizer(optimizer)
   train_op = optimizer.minimize(
       model.total_loss, global_step=tf.train.get_or_create_global_step())
 
@@ -91,7 +95,7 @@ def model_fn(features, labels, mode, params):
     """Load pretrained Inception checkpoint at initialization time."""
     return tf.train.Scaffold(init_fn=model.init_fn)
 
-  return tf.contrib.tpu.TPUEstimatorSpec(
+  return contrib_tpu.TPUEstimatorSpec(
       mode=mode,
       loss=model.total_loss,
       train_op=train_op,
@@ -118,23 +122,21 @@ def main(unused_argv):
   assert FLAGS.model_dir, "--model_dir is required"
 
   if FLAGS.use_tpu:
-    tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
-        FLAGS.tpu,
-        zone=FLAGS.tpu_zone,
-        project=FLAGS.gcp_project)
+    tpu_cluster_resolver = contrib_cluster_resolver.TPUClusterResolver(
+        FLAGS.tpu, zone=FLAGS.tpu_zone, project=FLAGS.gcp_project)
     tpu_grpc_url = tpu_cluster_resolver.get_master()
   else:
     tpu_grpc_url = ''
 
-  run_config = tf.contrib.tpu.RunConfig(
+  run_config = contrib_tpu.RunConfig(
       master=tpu_grpc_url,
       model_dir=FLAGS.model_dir,
       save_checkpoints_steps=1000,
       keep_checkpoint_max=None,
-      tpu_config=tf.contrib.tpu.TPUConfig(
+      tpu_config=contrib_tpu.TPUConfig(
           iterations_per_loop=FLAGS.iterations_per_loop,))
 
-  estimator = tf.contrib.tpu.TPUEstimator(
+  estimator = contrib_tpu.TPUEstimator(
       use_tpu=FLAGS.use_tpu,
       model_fn=model_fn,
       config=run_config,
@@ -155,7 +157,7 @@ def main(unused_argv):
     )
   else:
     # Run evaluation when there"s a new checkpoint
-    for ckpt in tf.contrib.training.checkpoints_iterator(FLAGS.model_dir):
+    for ckpt in contrib_training.checkpoints_iterator(FLAGS.model_dir):
       tf.logging.info("Starting to evaluate.")
       try:
         eval_results = estimator.evaluate(

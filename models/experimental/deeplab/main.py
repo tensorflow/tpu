@@ -27,6 +27,10 @@ import tensorflow as tf
 
 import data_pipeline
 import model
+from tensorflow.contrib import cluster_resolver as contrib_cluster_resolver
+from tensorflow.contrib import slim as contrib_slim
+from tensorflow.contrib import tpu as contrib_tpu
+from tensorflow.contrib import training as contrib_training
 from tensorflow.python.estimator import estimator
 from deeplab import common
 from deeplab.deprecated import segmentation_dataset
@@ -135,7 +139,7 @@ flags.DEFINE_string(
     help='GCE zone where the Cloud TPU is located in. If not specified, we '
     'will attempt to automatically detect the GCE project from metadata.')
 
-slim = tf.contrib.slim
+slim = contrib_slim
 FLAGS = flags.FLAGS
 
 
@@ -222,21 +226,19 @@ def main(unused_argv):
 
   num_batches_per_epoch = num_train_images / FLAGS.train_batch_size
 
-  tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
-      FLAGS.tpu,
-      zone=FLAGS.tpu_zone,
-      project=FLAGS.gcp_project)
-  config = tf.contrib.tpu.RunConfig(
+  tpu_cluster_resolver = contrib_cluster_resolver.TPUClusterResolver(
+      FLAGS.tpu, zone=FLAGS.tpu_zone, project=FLAGS.gcp_project)
+  config = contrib_tpu.RunConfig(
       cluster=tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
       save_checkpoints_steps=FLAGS.save_checkpoints_steps,
-      tpu_config=tf.contrib.tpu.TPUConfig(
+      tpu_config=contrib_tpu.TPUConfig(
           iterations_per_loop=FLAGS.iterations_per_loop,
           num_shards=FLAGS.num_shards))
 
   params = get_params(ignore_label, num_classes, num_batches_per_epoch)
 
-  deeplab_estimator = tf.contrib.tpu.TPUEstimator(
+  deeplab_estimator = contrib_tpu.TPUEstimator(
       use_tpu=FLAGS.use_tpu,
       model_fn=model.model_fn,
       config=config,
@@ -269,7 +271,7 @@ def main(unused_argv):
     )
 
     # Run evaluation when there's a new checkpoint
-    for ckpt in tf.contrib.training.checkpoints_iterator(
+    for ckpt in contrib_training.checkpoints_iterator(
         FLAGS.model_dir, timeout=FLAGS.eval_timeout):
 
       tf.logging.info('Starting to evaluate.')

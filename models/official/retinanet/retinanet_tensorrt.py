@@ -25,9 +25,9 @@ from absl import app
 from absl import flags
 import requests
 import tensorflow.compat.v1 as tf
-import tensorflow.contrib.tensorrt as trt
 from tensorflow.compat.v1.python.saved_model import loader
 from tensorflow.compat.v1.python.saved_model import tag_constants
+from tensorflow.contrib import tensorrt as contrib_tensorrt
 
 
 flags.DEFINE_string(
@@ -66,7 +66,7 @@ def main(argv):
   tensorrt_saved_model_dir = '{}_trt'.format(original_saved_model_dir)
 
   # Converts `SavedModel` to TensorRT inference graph.
-  trt.create_inference_graph(
+  contrib_tensorrt.create_inference_graph(
       None,
       None,
       input_saved_model_dir=original_saved_model_dir,

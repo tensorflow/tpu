@@ -29,6 +29,9 @@ import tensorflow as tf
 
 import densenet_model
 import vgg_preprocessing
+from tensorflow.contrib import cluster_resolver as contrib_cluster_resolver
+from tensorflow.contrib import data as contrib_data
+from tensorflow.contrib import tpu as contrib_tpu
 from tensorflow.contrib.training.python.training import evaluation
 
 FLAGS = flags.FLAGS
@@ -225,7 +228,7 @@ class ImageNetInput(object):
       return dataset
 
     dataset = dataset.apply(
-        tf.contrib.data.parallel_interleave(
+        contrib_data.parallel_interleave(
             prefetch_dataset, cycle_length=FLAGS.num_files_infeed, sloppy=True))
     dataset = dataset.shuffle(FLAGS.shuffle_buffer_size)
 
@@ -296,7 +299,7 @@ def model_fn(features, labels, mode, params):
   if mode == tf.estimator.ModeKeys.TRAIN:
     optimizer = tf.train.MomentumOptimizer(
         learning_rate=learning_rate, momentum=_MOMENTUM)
-    optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
+    optimizer = contrib_tpu.CrossShardOptimizer(optimizer)
 
     # Batch norm requires update_ops to be added as a train_op dependency.
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
@@ -318,15 +321,13 @@ def model_fn(features, labels, mode, params):
 
     eval_metrics = (metric_fn, [labels, logits, lr_repeat, ce_repeat])
 
-  return tf.contrib.tpu.TPUEstimatorSpec(
+  return contrib_tpu.TPUEstimatorSpec(
       mode=mode, loss=loss, train_op=train_op, eval_metrics=eval_metrics)
 
 
 def main(unused_argv):
-  tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
-      FLAGS.tpu,
-      zone=FLAGS.tpu_zone,
-      project=FLAGS.gcp_project)
+  tpu_cluster_resolver = contrib_cluster_resolver.TPUClusterResolver(
+      FLAGS.tpu, zone=FLAGS.tpu_zone, project=FLAGS.gcp_project)
 
   batches_per_epoch = _NUM_TRAIN_IMAGES / FLAGS.train_batch_size
   steps_per_checkpoint = FLAGS.steps_per_checkpoint
@@ -340,15 +341,15 @@ def main(unused_argv):
       "batches_per_epoch": batches_per_epoch,
   }
 
-  config = tf.contrib.tpu.RunConfig(
+  config = contrib_tpu.RunConfig(
       cluster=tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
       save_checkpoints_steps=steps_per_checkpoint,
       log_step_count_steps=iterations_per_loop,
-      tpu_config=tf.contrib.tpu.TPUConfig(
+      tpu_config=contrib_tpu.TPUConfig(
           iterations_per_loop=iterations_per_loop, num_shards=FLAGS.num_shards))
 
-  densenet_estimator = tf.contrib.tpu.TPUEstimator(
+  densenet_estimator = contrib_tpu.TPUEstimator(
       model_fn=model_fn,
       config=config,
       train_batch_size=FLAGS.train_batch_size,

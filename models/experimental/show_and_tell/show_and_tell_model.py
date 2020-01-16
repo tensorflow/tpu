@@ -28,6 +28,8 @@ import tensorflow as tf
 import image_embedding
 import image_processing
 import inputs as input_ops
+from tensorflow.contrib import layers as contrib_layers
+from tensorflow.contrib import rnn as contrib_rnn
 
 
 class ShowAndTellModel(object):
@@ -208,7 +210,7 @@ class ShowAndTellModel(object):
 
     # Map inception output into embedding space.
     with tf.variable_scope("image_embedding") as scope:
-      image_embeddings = tf.contrib.layers.fully_connected(
+      image_embeddings = contrib_layers.fully_connected(
           inputs=inception_output,
           num_outputs=self.config.embedding_size,
           activation_fn=None,
@@ -256,10 +258,10 @@ class ShowAndTellModel(object):
     # This LSTM cell has biases and outputs tanh(new_c) * sigmoid(o), but the
     # modified LSTM in the "Show and Tell" paper has no biases and outputs
     # new_c * sigmoid(o).
-    lstm_cell = tf.contrib.rnn.BasicLSTMCell(
+    lstm_cell = contrib_rnn.BasicLSTMCell(
         num_units=self.config.num_lstm_units, state_is_tuple=True)
     if self.mode == "train":
-      lstm_cell = tf.contrib.rnn.DropoutWrapper(
+      lstm_cell = contrib_rnn.DropoutWrapper(
           lstm_cell,
           input_keep_prob=self.config.lstm_dropout_keep_prob,
           output_keep_prob=self.config.lstm_dropout_keep_prob)
@@ -307,7 +309,7 @@ class ShowAndTellModel(object):
     lstm_outputs = tf.reshape(lstm_outputs, [-1, lstm_cell.output_size])
 
     with tf.variable_scope("logits") as logits_scope:
-      logits = tf.contrib.layers.fully_connected(
+      logits = contrib_layers.fully_connected(
           inputs=lstm_outputs,
           num_outputs=self.config.vocab_size,
           activation_fn=None,

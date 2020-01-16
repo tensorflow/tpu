@@ -21,6 +21,7 @@ from __future__ import print_function
 
 # Standard Imports
 import tensorflow as tf
+from tensorflow.contrib import stateless as contrib_stateless
 
 
 def distort_image(images, seed):
@@ -34,7 +35,7 @@ def distort_image(images, seed):
     distorted_image: A float32 Tensor of shape [height, width, 3] with values in
       [0, 1].
   """
-  color_ordering = tf.contrib.stateless.stateless_random_normal(
+  color_ordering = contrib_stateless.stateless_random_normal(
       shape=images.shape[0:1],
       seed=tf.cast(tf.stack([0, seed]), tf.int32),
       dtype=tf.float32)

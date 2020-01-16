@@ -27,6 +27,7 @@ import tensorflow as tf
 import data
 import model
 import utils
+from tensorflow.contrib import training as contrib_training
 
 # Cloud TPU Cluster Resolvers
 flags.DEFINE_string(
@@ -128,8 +129,7 @@ def evaluate(override_cfg, model_dir, continuous=True):
   _, eval_input = data.build_dataset(cfg.dataset, is_tpu=cfg.tpu.enable)
   estimator = model.get_estimator(**cfg)
   if continuous:
-    checkpoints_iterator = tf.contrib.training.checkpoints_iterator(
-        cfg.model_dir)
+    checkpoints_iterator = contrib_training.checkpoints_iterator(cfg.model_dir)
     eval_metrics = None
     for ckpt_path in checkpoints_iterator:
       eval_metrics = estimator.evaluate(

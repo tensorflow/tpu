@@ -28,8 +28,12 @@ import tensorflow as tf
 
 import inception_preprocessing
 import vgg_preprocessing
+from tensorflow.contrib import cluster_resolver as contrib_cluster_resolver
+from tensorflow.contrib import data as contrib_data
+from tensorflow.contrib import framework as contrib_framework
 
 from tensorflow.contrib import summary
+from tensorflow.contrib import tpu as contrib_tpu
 from tensorflow.contrib.framework.python.ops import arg_scope
 from tensorflow.contrib.slim.nets import inception
 from tensorflow.contrib.training.python.training import evaluation
@@ -397,7 +401,7 @@ class InputPipeline(object):
         return dataset
 
       dataset = dataset.apply(
-          tf.contrib.data.parallel_interleave(
+          contrib_data.parallel_interleave(
               prefetch_dataset,
               cycle_length=FLAGS.num_files_infeed,
               sloppy=True))
@@ -493,7 +497,7 @@ def inception_model_fn(features, labels, mode, params):
   # builds the network, for different values of --precision.
   def build_network():
     if FLAGS.precision == 'bfloat16':
-      with tf.contrib.tpu.bfloat16_scope():
+      with contrib_tpu.bfloat16_scope():
         logits, end_points = inception.inception_v3(
             features,
             num_classes,
@@ -634,7 +638,7 @@ def inception_model_fn(features, labels, mode, params):
       tf.logging.fatal('Unknown optimizer:', FLAGS.optimizer)
 
     if FLAGS.use_tpu:
-      optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
+      optimizer = contrib_tpu.CrossShardOptimizer(optimizer)
 
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
     with tf.control_dependencies(update_ops):
@@ -723,7 +727,7 @@ def inception_model_fn(features, labels, mode, params):
 
     eval_metrics = (metric_fn, [labels, logits])
 
-  return tf.contrib.tpu.TPUEstimatorSpec(
+  return contrib_tpu.TPUEstimatorSpec(
       mode=mode,
       loss=loss,
       train_op=train_op,
@@ -741,7 +745,7 @@ class LoadEMAHook(tf.train.SessionRunHook):
   def begin(self):
     ema = tf.train.ExponentialMovingAverage(MOVING_AVERAGE_DECAY)
     variables_to_restore = ema.variables_to_restore()
-    self._load_ema = tf.contrib.framework.assign_from_checkpoint_fn(
+    self._load_ema = contrib_framework.assign_from_checkpoint_fn(
         tf.train.latest_checkpoint(self._model_dir), variables_to_restore)
 
   def after_create_session(self, sess, coord):
@@ -752,10 +756,8 @@ class LoadEMAHook(tf.train.SessionRunHook):
 def main(unused_argv):
   del unused_argv  # Unused
 
-  tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
-      FLAGS.tpu,
-      zone=FLAGS.tpu_zone,
-      project=FLAGS.gcp_project)
+  tpu_cluster_resolver = contrib_cluster_resolver.TPUClusterResolver(
+      FLAGS.tpu, zone=FLAGS.tpu_zone, project=FLAGS.gcp_project)
 
   assert FLAGS.precision == 'bfloat16' or FLAGS.precision == 'float32', (
       'Invalid value for --precision flag; must be bfloat16 or float32.')
@@ -784,10 +786,10 @@ def main(unused_argv):
   eval_batch_size = (None if FLAGS.mode == 'train' else
                      FLAGS.eval_batch_size)
 
-  tpu_config = tf.contrib.tpu.TPUConfig(
+  tpu_config = contrib_tpu.TPUConfig(
       iterations_per_loop=iterations, num_shards=FLAGS.num_shards)
 
-  run_config = tf.contrib.tpu.RunConfig(
+  run_config = contrib_tpu.RunConfig(
       cluster=tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
       save_checkpoints_secs=FLAGS.save_checkpoints_secs,
@@ -797,7 +799,7 @@ def main(unused_argv):
           log_device_placement=FLAGS.log_device_placement),
       tpu_config=tpu_config)
 
-  inception_classifier = tf.contrib.tpu.TPUEstimator(
+  inception_classifier = contrib_tpu.TPUEstimator(
       model_fn=inception_model_fn,
       use_tpu=FLAGS.use_tpu,
       config=run_config,

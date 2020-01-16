@@ -18,9 +18,10 @@ Based on third_party/tensorflow_models/deeplab/utils/input_generator.py.
 """
 
 import tensorflow as tf
+from tensorflow.contrib import slim as contrib_slim
 from deeplab import input_preprocess
 
-slim = tf.contrib.slim
+slim = contrib_slim
 
 dataset_data_provider = slim.dataset_data_provider
 

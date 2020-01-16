@@ -32,6 +32,10 @@ from common import inference_warmup
 import dataloader
 import evaluation
 import retinanet_model
+from tensorflow.contrib import cluster_resolver as contrib_cluster_resolver
+from tensorflow.contrib import distribute as contrib_distribute
+from tensorflow.contrib import tpu as contrib_tpu
+from tensorflow.contrib import training as contrib_training
 from tensorflow.core.protobuf import rewriter_config_pb2  # pylint: disable=g-direct-tensorflow-import
 from tensorflow.python.client import device_lib  # pylint: disable=g-direct-tensorflow-import
 from tensorflow.python.eager import profiler  # pylint: disable=g-direct-tensorflow-import
@@ -241,7 +245,7 @@ def main(argv):
 
   if FLAGS.use_tpu:
     if FLAGS.distribution_strategy is None:
-      tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
+      tpu_cluster_resolver = contrib_cluster_resolver.TPUClusterResolver(
           FLAGS.tpu, zone=FLAGS.tpu_zone, project=FLAGS.gcp_project)
       tpu_grpc_url = tpu_cluster_resolver.get_master()
       tf.Session.reset(tpu_grpc_url)
@@ -354,15 +358,14 @@ def main(argv):
         val_json_file=FLAGS.val_json_file,
         mode=FLAGS.mode,
     )
-    tpu_config = tf.contrib.tpu.TPUConfig(
+    tpu_config = contrib_tpu.TPUConfig(
         FLAGS.iterations_per_loop,
         num_shards=num_shards,
         num_cores_per_replica=num_cores_per_replica,
         input_partition_dims=input_partition_dims,
-        per_host_input_for_training=tf.contrib.tpu.InputPipelineConfig
-        .PER_HOST_V2)
+        per_host_input_for_training=contrib_tpu.InputPipelineConfig.PER_HOST_V2)
 
-    run_config = tf.contrib.tpu.RunConfig(
+    run_config = contrib_tpu.RunConfig(
         cluster=tpu_cluster_resolver,
         evaluation_master=FLAGS.eval_master,
         model_dir=FLAGS.model_dir,
@@ -421,7 +424,7 @@ def main(argv):
       if FLAGS.all_reduce_alg:
         dist_strat = tf.distribute.MirroredStrategy(
             devices=devices,
-            cross_device_ops=tf.contrib.distribute.AllReduceCrossDeviceOps(
+            cross_device_ops=contrib_distribute.AllReduceCrossDeviceOps(
                 FLAGS.all_reduce_alg, num_packs=2))
       else:
         dist_strat = tf.distribute.MirroredStrategy(devices=devices)
@@ -482,7 +485,7 @@ def main(argv):
     if FLAGS.distribution_strategy is None:
       total_steps = int((FLAGS.num_epochs * FLAGS.num_examples_per_epoch) /
                         FLAGS.train_batch_size)
-      train_estimator = tf.contrib.tpu.TPUEstimator(
+      train_estimator = contrib_tpu.TPUEstimator(
           model_fn=retinanet_model.tpu_retinanet_model_fn,
           use_tpu=FLAGS.use_tpu,
           train_batch_size=FLAGS.train_batch_size,
@@ -500,7 +503,7 @@ def main(argv):
           resnet_checkpoint=None,
           is_training_bn=False,
       )
-      eval_estimator = tf.contrib.tpu.TPUEstimator(
+      eval_estimator = contrib_tpu.TPUEstimator(
           model_fn=retinanet_model.tpu_retinanet_model_fn,
           use_tpu=FLAGS.use_tpu,
           train_batch_size=FLAGS.train_batch_size,
@@ -568,7 +571,7 @@ def main(argv):
     )
     if FLAGS.distribution_strategy is None:
       # Uses TPUEstimator.
-      eval_estimator = tf.contrib.tpu.TPUEstimator(
+      eval_estimator = contrib_tpu.TPUEstimator(
           model_fn=retinanet_model.tpu_retinanet_model_fn,
           use_tpu=FLAGS.use_tpu,
           train_batch_size=FLAGS.train_batch_size,
@@ -600,7 +603,7 @@ def main(argv):
     tf.gfile.MakeDirs(output_dir)
     summary_writer = tf.summary.FileWriter(output_dir)
     # Run evaluation when there's a new checkpoint
-    for ckpt in tf.contrib.training.checkpoints_iterator(
+    for ckpt in contrib_training.checkpoints_iterator(
         FLAGS.model_dir,
         min_interval_secs=FLAGS.min_eval_interval,
         timeout=FLAGS.eval_timeout,
@@ -649,7 +652,7 @@ def main(argv):
                      FLAGS.num_steps_per_eval)
     for cycle in range(num_cycles):
       tf.logging.info('Starting training cycle, epoch: %d.' % cycle)
-      train_estimator = tf.contrib.tpu.TPUEstimator(
+      train_estimator = contrib_tpu.TPUEstimator(
           model_fn=retinanet_model.tpu_retinanet_model_fn,
           use_tpu=FLAGS.use_tpu,
           train_batch_size=FLAGS.train_batch_size,
@@ -669,7 +672,7 @@ def main(argv):
           is_training_bn=False,
       )
 
-      eval_estimator = tf.contrib.tpu.TPUEstimator(
+      eval_estimator = contrib_tpu.TPUEstimator(
           model_fn=retinanet_model.tpu_retinanet_model_fn,
           use_tpu=FLAGS.use_tpu,
           train_batch_size=FLAGS.train_batch_size,
@@ -701,7 +704,7 @@ def main(argv):
         is_training_bn=False,
         use_bfloat16=False,
     )
-    eval_estimator = tf.contrib.tpu.TPUEstimator(
+    eval_estimator = contrib_tpu.TPUEstimator(
         model_fn=retinanet_model.tpu_retinanet_model_fn,
         use_tpu=True,
         train_batch_size=FLAGS.train_batch_size,

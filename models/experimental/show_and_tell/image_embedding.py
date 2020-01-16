@@ -20,10 +20,12 @@ from __future__ import division
 from __future__ import print_function
 
 import tensorflow as tf
+from tensorflow.contrib import layers as contrib_layers
+from tensorflow.contrib import slim as contrib_slim
 
 from tensorflow.contrib.slim.python.slim.nets.inception_v3 import inception_v3_base
 
-slim = tf.contrib.slim
+slim = contrib_slim
 
 
 
@@ -80,7 +82,7 @@ def inception_v3(images,
     batch_norm_params = None
 
   if trainable:
-    weights_regularizer = tf.contrib.layers.l2_regularizer(weight_decay)
+    weights_regularizer = contrib_layers.l2_regularizer(weight_decay)
   else:
     weights_regularizer = None
 
@@ -110,6 +112,6 @@ def inception_v3(images,
   # Add summaries.
   if add_summaries:
     for v in end_points.values():
-      tf.contrib.layers.summaries.summarize_activation(v)
+      contrib_layers.summaries.summarize_activation(v)
 
   return net

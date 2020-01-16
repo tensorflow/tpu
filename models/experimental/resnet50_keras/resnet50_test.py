@@ -26,6 +26,8 @@ import numpy as np
 import tensorflow as tf
 
 import resnet_model
+from tensorflow.contrib import cluster_resolver as contrib_cluster_resolver
+from tensorflow.contrib import distribute as contrib_distribute
 from tensorflow.python.keras import backend as K  # pylint: disable=g-direct-tensorflow-import
 from tensorflow.python.keras.optimizer_v2 import gradient_descent  # pylint: disable=g-direct-tensorflow-import
 
@@ -112,9 +114,9 @@ class Resnet50Test(absltest.TestCase):
   """Test running a single step of Resnet50, logging the resulting weights."""
 
   def test_keras_single_step(self):
-    resolver = tf.contrib.cluster_resolver.TPUClusterResolver(tpu='')
-    tf.contrib.distribute.initialize_tpu_system(resolver)
-    strategy = tf.contrib.distribute.TPUStrategy(resolver)
+    resolver = contrib_cluster_resolver.TPUClusterResolver(tpu='')
+    contrib_distribute.initialize_tpu_system(resolver)
+    strategy = contrib_distribute.TPUStrategy(resolver)
     np.random.seed(0)
     tf.set_random_seed(0)
 
