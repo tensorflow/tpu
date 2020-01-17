@@ -21,7 +21,7 @@ between the boxes in two BoxLists.
 from abc import ABCMeta
 from abc import abstractmethod
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 
 def area(boxlist, scope=None):
