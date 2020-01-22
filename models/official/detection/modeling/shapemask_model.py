@@ -76,9 +76,14 @@ class ShapeMaskModel(base_model.Model):
       outer_boxes = labels['mask_outer_boxes']
       classes = labels['mask_classes']
     else:
-      boxes, scores, classes, valid_detections = self._generate_detections_fn(
+      detection_results = self._generate_detections_fn(
           box_outputs, cls_outputs, labels['anchor_boxes'],
           labels['image_info'][:, 1:2, :])
+      boxes = detection_results['detection_boxes']
+      scores = detection_results['detection_scores']
+      classes = detection_results['detection_classes']
+      valid_detections = detection_results['num_detections']
+
       # Use list as input to avoide segmentation fault on TPU.
       feature_size = features.get_shape().as_list()[1:3]
       outer_boxes = box_utils.compute_outer_boxes(

@@ -219,7 +219,7 @@ class Resnet(object):
           block_repeats=layers[3],
           batch_norm_relu=self._batch_norm_relu,
           dropblock=self._dropblock,
-          name='block_group3',
+          name='block_group4',
           is_training=is_training)
       return {2: c2, 3: c3, 4: c4, 5: c5}
 

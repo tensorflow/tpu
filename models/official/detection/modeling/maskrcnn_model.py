@@ -20,6 +20,7 @@ from __future__ import print_function
 
 import tensorflow.compat.v1 as tf
 
+from dataloader import anchor
 from dataloader import mode_keys
 from modeling import base_model
 from modeling import losses
@@ -36,6 +37,8 @@ class MaskrcnnModel(base_model.Model):
 
   def __init__(self, params):
     super(MaskrcnnModel, self).__init__(params)
+
+    self._anchor_params = params.anchor
 
     self._include_mask = params.architecture.include_mask
 
@@ -68,6 +71,17 @@ class MaskrcnnModel(base_model.Model):
     is_training = mode == mode_keys.TRAIN
     model_outputs = {}
 
+    if 'anchor_boxes' in labels:
+      anchor_boxes = labels['anchor_boxes']
+    else:
+      anchor_boxes = anchor.Anchor(
+          self._anchor_params.min_level,
+          self._anchor_params.max_level,
+          self._anchor_params.num_scales,
+          self._anchor_params.aspect_ratios,
+          self._anchor_params.anchor_size,
+          features.get_shape().as_list()[1:3]).multilevel_boxes
+
     backbone_features = self._backbone_fn(features, is_training)
     fpn_features = self._fpn_fn(backbone_features, is_training)
 
@@ -80,7 +94,7 @@ class MaskrcnnModel(base_model.Model):
     rpn_rois, _ = self._generate_rois_fn(
         rpn_box_outputs,
         rpn_score_outputs,
-        labels['anchor_boxes'],
+        anchor_boxes,
         labels['image_info'][:, 1, :],
         is_training)
 
@@ -117,14 +131,9 @@ class MaskrcnnModel(base_model.Model):
     })
 
     if not is_training:
-      boxes, scores, classes, valid_detections = self._generate_detections_fn(
+      detection_results = self._generate_detections_fn(
           box_outputs, class_outputs, rpn_rois, labels['image_info'][:, 1:2, :])
-      model_outputs.update({
-          'num_detections': valid_detections,
-          'detection_boxes': boxes,
-          'detection_classes': classes,
-          'detection_scores': scores,
-      })
+      model_outputs.update(detection_results)
 
     if not self._include_mask:
       self._log_model_statistics(features)
@@ -143,8 +152,8 @@ class MaskrcnnModel(base_model.Model):
           'sampled_class_targets': classes,
       })
     else:
-      rpn_rois = boxes
-      classes = tf.cast(classes, dtype=tf.int32)
+      rpn_rois = detection_results['detection_boxes']
+      classes = tf.cast(detection_results['detection_classes'], dtype=tf.int32)
 
     mask_roi_features = spatial_transform_ops.multilevel_crop_and_resize(
         fpn_features, rpn_rois, output_size=14)

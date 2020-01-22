@@ -21,6 +21,7 @@ from __future__ import print_function
 
 import tensorflow.compat.v1 as tf
 
+from dataloader import anchor
 from dataloader import mode_keys
 from modeling import base_model
 from modeling import losses
@@ -33,6 +34,8 @@ class RetinanetModel(base_model.Model):
 
   def __init__(self, params):
     super(RetinanetModel, self).__init__(params)
+
+    self._anchor_params = params.anchor
 
     # Architecture generators.
     self._backbone_fn = factory.backbone_generator(params)
@@ -51,6 +54,17 @@ class RetinanetModel(base_model.Model):
     self._transpose_input = params.train.transpose_input
 
   def build_outputs(self, features, labels, mode):
+    if 'anchor_boxes' in labels:
+      anchor_boxes = labels['anchor_boxes']
+    else:
+      anchor_boxes = anchor.Anchor(
+          self._anchor_params.min_level,
+          self._anchor_params.max_level,
+          self._anchor_params.num_scales,
+          self._anchor_params.aspect_ratios,
+          self._anchor_params.anchor_size,
+          features.get_shape().as_list()[1:3]).multilevel_boxes
+
     backbone_features = self._backbone_fn(
         features, is_training=(mode == mode_keys.TRAIN))
     fpn_features = self._fpn_fn(
@@ -65,15 +79,10 @@ class RetinanetModel(base_model.Model):
     self._log_model_statistics(features)
 
     if mode != mode_keys.TRAIN:
-      boxes, scores, classes, valid_detections = self._generate_detections_fn(
-          box_outputs, cls_outputs, labels['anchor_boxes'],
+      detection_results = self._generate_detections_fn(
+          box_outputs, cls_outputs, anchor_boxes,
           labels['image_info'][:, 1:2, :])
-      model_outputs.update({
-          'num_detections': valid_detections,
-          'detection_boxes': boxes,
-          'detection_classes': classes,
-          'detection_scores': scores,
-      })
+      model_outputs.update(detection_results)
     return model_outputs
 
   def train(self, features, labels):

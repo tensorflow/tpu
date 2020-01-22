@@ -34,7 +34,6 @@ from absl import logging
 import tensorflow.compat.v1 as tf
 
 from configs import factory as config_factory
-from dataloader import anchor
 from dataloader import mode_keys
 from dataloader import tf_example_decoder
 from evaluation import factory as evaluator_factory
@@ -89,16 +88,8 @@ def parse_single_example(serialized_example, params):
           params.retinanet_parser.output_size, 2 ** params.anchor.max_level),
       aug_scale_min=1.0,
       aug_scale_max=1.0)
-  anchors = anchor.Anchor(
-      params.anchor.min_level,
-      params.anchor.max_level,
-      params.anchor.num_scales,
-      params.anchor.aspect_ratios,
-      params.anchor.anchor_size,
-      image.get_shape().as_list()[:2])
 
   labels = {
-      'anchor_boxes': anchors.multilevel_boxes,
       'image_info': image_info,
   }
   groundtruths = {

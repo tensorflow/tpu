@@ -57,6 +57,15 @@ class ImageNetTFExampleInput(object):
     image_size: size of images
     num_parallel_calls: `int` for the number of parallel threads.
     include_background_label: `bool` for whether to include the background label
+    augment_name: `string` that is the name of the augmentation method
+        to apply to the image. `autoaugment` if AutoAugment is to be used or
+        `randaugment` if RandAugment is to be used. If the value is `None` no
+        no augmentation method will be applied applied. See autoaugment.py
+        for more details.
+    randaug_num_layers: 'int', if RandAug is used, what should the number of
+      layers be. See autoaugment.py for detailed description.
+    randaug_magnitude: 'int', if RandAug is used, what should the magnitude
+      be. See autoaugment.py for detailed description.
   """
   __metaclass__ = abc.ABCMeta
 
@@ -66,7 +75,10 @@ class ImageNetTFExampleInput(object):
                image_size=224,
                transpose_input=False,
                num_parallel_calls=8,
-               include_background_label=False):
+               include_background_label=False,
+               augment_name=None,
+               randaug_num_layers=None,
+               randaug_magnitude=None):
     self.image_preprocessing_fn = resnet_preprocessing.preprocess_image
     self.is_training = is_training
     self.use_bfloat16 = use_bfloat16
@@ -74,6 +86,9 @@ class ImageNetTFExampleInput(object):
     self.image_size = image_size
     self.num_parallel_calls = num_parallel_calls
     self.include_background_label = include_background_label
+    self.augment_name = augment_name
+    self.randaug_num_layers = randaug_num_layers
+    self.randaug_magnitude = randaug_magnitude
 
   def set_shapes(self, batch_size, images, labels):
     """Statically set the batch_size dimension."""
@@ -112,7 +127,10 @@ class ImageNetTFExampleInput(object):
         image_bytes=image_bytes,
         is_training=self.is_training,
         image_size=self.image_size,
-        use_bfloat16=self.use_bfloat16)
+        use_bfloat16=self.use_bfloat16,
+        augment_name=self.augment_name,
+        randaug_num_layers=self.randaug_num_layers,
+        randaug_magnitude=self.randaug_magnitude)
 
     label = tf.cast(
         tf.reshape(parsed['image/class/label'], shape=[]), dtype=tf.int32)
@@ -228,7 +246,10 @@ class ImageNetInput(ImageNetTFExampleInput):
                cache=False,
                dataset_split=None,
                shuffle_shards=False,
-               include_background_label=False):
+               include_background_label=False,
+               augment_name=None,
+               randaug_num_layers=None,
+               randaug_magnitude=None):
     """Create an input from TFRecord files.
 
     Args:
@@ -249,13 +270,25 @@ class ImageNetInput(ImageNetTFExampleInput):
       include_background_label: Whether to include the background label. If
         this is True, then num_label_classes should be 1001. If False, then
         num_label_classes should be 1000.
+      augment_name: `string` that is the name of the augmentation method
+        to apply to the image. `autoaugment` if AutoAugment is to be used or
+        `randaugment` if RandAugment is to be used. If the value is `None` no
+        no augmentation method will be applied applied. See autoaugment.py
+        for more details.
+      randaug_num_layers: 'int', if RandAug is used, what should the number of
+        layers be. See autoaugment.py for detailed description.
+      randaug_magnitude: 'int', if RandAug is used, what should the magnitude
+        be. See autoaugment.py for detailed description.
     """
     super(ImageNetInput, self).__init__(
         is_training=is_training,
         image_size=image_size,
         use_bfloat16=use_bfloat16,
         transpose_input=transpose_input,
-        include_background_label=include_background_label)
+        include_background_label=include_background_label,
+        augment_name=augment_name,
+        randaug_num_layers=randaug_num_layers,
+        randaug_magnitude=randaug_magnitude)
     self.data_dir = data_dir
     # TODO(b/112427086):  simplify the choice of input source
     if self.data_dir == 'null' or not self.data_dir:
@@ -344,7 +377,8 @@ BigtableSelection = collections.namedtuple('BigtableSelection', [
 class ImageNetBigtableInput(ImageNetTFExampleInput):
   """Generates ImageNet input_fn from a Bigtable for training or evaluation."""
 
-  def __init__(self, is_training, use_bfloat16, transpose_input, selection):
+  def __init__(self, is_training, use_bfloat16, transpose_input, selection,
+               augment_name, randaug_num_layers, randaug_magnitude):
     """Constructs an ImageNet input from a BigtableSelection.
 
     Args:
@@ -352,11 +386,23 @@ class ImageNetBigtableInput(ImageNetTFExampleInput):
       use_bfloat16: If True, use bfloat16 precision; else use float32.
       transpose_input: 'bool' for whether to use the double transpose trick
       selection: a BigtableSelection specifying a part of a Bigtable.
+      augment_name: `string` that is the name of the augmentation method
+        to apply to the image. `autoaugment` if AutoAugment is to be used or
+        `randaugment` if RandAugment is to be used. If the value is `None` no
+        no augmentation method will be applied applied. See autoaugment.py
+        for more details.
+      randaug_num_layers: 'int', if RandAug is used, what should the number of
+        layers be. See autoaugment.py for detailed description.
+      randaug_magnitude: 'int', if RandAug is used, what should the magnitude
+        be. See autoaugment.py for detailed description.
     """
     super(ImageNetBigtableInput, self).__init__(
         is_training=is_training,
         use_bfloat16=use_bfloat16,
-        transpose_input=transpose_input)
+        transpose_input=transpose_input,
+        augment_name=augment_name,
+        randaug_num_layers=randaug_num_layers,
+        randaug_magnitude=randaug_magnitude)
     self.selection = selection
 
   def make_source_dataset(self, index, num_hosts):
