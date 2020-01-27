@@ -35,20 +35,32 @@ from hyperparameters import params_dict
 
 FLAGS = flags.FLAGS
 
-# pylint: disable=line-too-long
 flags.DEFINE_string('export_dir', None, 'The export directory.')
 flags.DEFINE_string('checkpoint_path', None, 'Checkpoint path.')
 flags.DEFINE_boolean('use_tpu', False, 'Whether or not use TPU.')
-flags.DEFINE_string('model', 'retinanet', 'Model to run: Currently only support `retinanet`.')
+flags.DEFINE_string(
+    'model', 'retinanet',
+    'Model to run: `retinanet`, `mask_rcnn` or `shapemask`.')
+flags.DEFINE_string(
+    'config_file', '', 'The config file template.')
 flags.DEFINE_string('params_override', '', 'The model parameters to override.')
 flags.DEFINE_integer('batch_size', 1, 'The batch size.')
-flags.DEFINE_string('input_type', 'image_bytes', 'One of `raw_image_tensor`, `image_tensor`, `image_bytes` and `tf_example`.')
+flags.DEFINE_string(
+    'input_type', 'image_bytes',
+    'One of `raw_image_tensor`, `image_tensor`, `image_bytes`, `tf_example`.')
 flags.DEFINE_string('input_name', 'input', 'The name of the input node.')
-flags.DEFINE_string('input_image_size', '640,640', 'The comma-separated string of two integers, representing the (height, width) of the input to the model.')
-flags.DEFINE_boolean('output_image_info', True, 'Whether or not output image_info node.')
-flags.DEFINE_boolean('output_normalized_coordinates', False, 'Whether or not output boxes in normalized coordinates.')
-flags.DEFINE_boolean('cast_num_detections_to_float', False, 'Whether or not cast the number of detections to float type.')
-# pylint: enable=line-too-long
+flags.DEFINE_string(
+    'input_image_size', '640,640',
+    'The comma-separated string of two integers representing the height,width '
+    'of the input to the model.')
+flags.DEFINE_boolean(
+    'output_image_info', True, 'Whether or not output image_info node.')
+flags.DEFINE_boolean(
+    'output_normalized_coordinates', False,
+    'Whether or not output boxes in normalized coordinates.')
+flags.DEFINE_boolean(
+    'cast_num_detections_to_float', False,
+    'Whether or not cast the number of detections to float type.')
 
 flags.mark_flag_as_required('export_dir')
 flags.mark_flag_as_required('checkpoint_path')
@@ -58,6 +70,9 @@ def main(argv):
   del argv  # Unused.
 
   params = factory.config_generator(FLAGS.model)
+  if FLAGS.config_file:
+    params = params_dict.override_params_dict(
+        params, FLAGS.config_file, is_strict=True)
   params = params_dict.override_params_dict(
       params, FLAGS.params_override, is_strict=True)
   params.validate()
