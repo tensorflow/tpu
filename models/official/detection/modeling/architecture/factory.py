@@ -19,7 +19,6 @@ from __future__ import division
 from __future__ import print_function
 
 import json
-
 from modeling.architecture import fpn
 from modeling.architecture import heads
 from modeling.architecture import identity
