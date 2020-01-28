@@ -170,7 +170,7 @@ class ImageClassificationBuilder(tfds.core.GeneratorBasedBuilder):
                                                filename=base_name)
 
     label = self._get_text_label(text)
-    assert label < self.builder_config.num_classes
+    assert label < self.builder_config.num_labels
     return {
         'image': {
             'width': img_shape[0],
