@@ -165,14 +165,14 @@ class Parser(object):
           source_id: source image id. Default value -1 if the source id is empty
             in the groundtruth annotation.
           boxes: groundtruth bounding box annotations. The box is represented in
-            [y1, x1, y2, x2] format. The tennsor is padded with -1 to the fixed
+            [y1, x1, y2, x2] format. The tensor is padded with -1 to the fixed
             dimension [self._max_num_instances, 4].
-          classes: groundtruth classes annotations. The tennsor is padded with
+          classes: groundtruth classes annotations. The tensor is padded with
             -1 to the fixed dimension [self._max_num_instances].
-          areas: groundtruth areas annotations. The tennsor is padded with -1
+          areas: groundtruth areas annotations. The tensor is padded with -1
             to the fixed dimension [self._max_num_instances].
           is_crowds: groundtruth annotations to indicate if an annotation
-            represents a group of instances by value {0, 1}. The tennsor is
+            represents a group of instances by value {0, 1}. The tensor is
             padded with 0 to the fixed dimension [self._max_num_instances].
     """
     with tf.name_scope('parser'):
