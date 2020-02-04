@@ -49,7 +49,8 @@ def backbone_generator(params):
     backbone_fn = resnet.Resnet(
         resnet_depth=resnet_params.resnet_depth,
         dropblock=dropblock_generator(resnet_params.dropblock),
-        batch_norm_relu=batch_norm_relu_generator(resnet_params.batch_norm))
+        batch_norm_relu=batch_norm_relu_generator(resnet_params.batch_norm),
+        init_drop_connect_rate=resnet_params.init_drop_connect_rate)
   else:
     raise ValueError('Backbone model %s is not supported.' %
                      params.architecture.backbone)

@@ -31,6 +31,14 @@ from modeling.architecture import nn_blocks
 from modeling.architecture import nn_ops
 
 
+def get_drop_connect_rate(init_rate, block_num, total_blocks):
+  """Get drop connect rate for the ith block."""
+  if init_rate is not None:
+    return init_rate * float(block_num) / total_blocks
+  else:
+    return None
+
+
 def block_group(inputs,
                 filters,
                 strides,
@@ -39,6 +47,7 @@ def block_group(inputs,
                 block_repeats,
                 batch_norm_relu=nn_ops.BatchNormRelu(),
                 dropblock=nn_ops.Dropblock(),
+                drop_connect_rate=None,
                 data_format='channels_last',
                 name=None,
                 is_training=False):
@@ -59,6 +68,9 @@ def block_group(inputs,
       batch norm layer and an optional relu activation.
     dropblock: a drop block layer that is added after convluations. Note that
       the default implementation does not apply any drop block.
+    drop_connect_rate: a 'float' number that specifies the drop connection rate
+      of the block. Note that the default `None` means no drop connection is
+      applied.
     data_format: a `str` that specifies the data format.
     name: a `str` name for the Tensor output of the block layer.
     is_training: a `bool` if True, the model is in training mode.
@@ -74,6 +86,7 @@ def block_group(inputs,
       use_projection=use_projection,
       batch_norm_relu=batch_norm_relu,
       dropblock=dropblock,
+      drop_connect_rate=drop_connect_rate,
       data_format=data_format,
       is_training=is_training)
   for _ in range(1, block_repeats):
@@ -84,6 +97,7 @@ def block_group(inputs,
         use_projection=False,
         batch_norm_relu=batch_norm_relu,
         dropblock=dropblock,
+        drop_connect_rate=drop_connect_rate,
         data_format=data_format,
         is_training=is_training)
   return tf.identity(inputs, name)
@@ -96,6 +110,7 @@ class Resnet(object):
                resnet_depth,
                dropblock=nn_ops.Dropblock(),
                batch_norm_relu=nn_ops.BatchNormRelu(),
+               init_drop_connect_rate=None,
                data_format='channels_last'):
     """ResNet initialization function.
 
@@ -104,6 +119,9 @@ class Resnet(object):
       dropblock: a dropblock layer.
       batch_norm_relu: an operation that includes a batch normalization layer
         followed by a relu layer(optional).
+      init_drop_connect_rate: a 'float' number that specifies the initial drop
+        connection rate. Note that the default `None` means no drop connection
+        is applied.
       data_format: `str` either "channels_first" for `[batch, channels, height,
         width]` or "channels_last for `[batch, height, width, channels]`.
     """
@@ -111,6 +129,7 @@ class Resnet(object):
 
     self._dropblock = dropblock
     self._batch_norm_relu = batch_norm_relu
+    self._init_drop_connect_rate = init_drop_connect_rate
 
     self._data_format = data_format
 
@@ -186,6 +205,8 @@ class Resnet(object):
           block_repeats=layers[0],
           batch_norm_relu=self._batch_norm_relu,
           dropblock=self._dropblock,
+          drop_connect_rate=get_drop_connect_rate(
+              self._init_drop_connect_rate, 2, 5),
           name='block_group1',
           is_training=is_training)
       c3 = block_group(
@@ -197,6 +218,8 @@ class Resnet(object):
           block_repeats=layers[1],
           batch_norm_relu=self._batch_norm_relu,
           dropblock=self._dropblock,
+          drop_connect_rate=get_drop_connect_rate(
+              self._init_drop_connect_rate, 3, 5),
           name='block_group2',
           is_training=is_training)
       c4 = block_group(
@@ -208,6 +231,8 @@ class Resnet(object):
           block_repeats=layers[2],
           batch_norm_relu=self._batch_norm_relu,
           dropblock=self._dropblock,
+          drop_connect_rate=get_drop_connect_rate(
+              self._init_drop_connect_rate, 4, 5),
           name='block_group3',
           is_training=is_training)
       c5 = block_group(
@@ -219,6 +244,8 @@ class Resnet(object):
           block_repeats=layers[3],
           batch_norm_relu=self._batch_norm_relu,
           dropblock=self._dropblock,
+          drop_connect_rate=get_drop_connect_rate(
+              self._init_drop_connect_rate, 5, 5),
           name='block_group4',
           is_training=is_training)
       return {2: c2, 3: c3, 4: c4, 5: c5}

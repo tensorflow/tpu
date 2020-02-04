@@ -85,6 +85,7 @@ BASE_CFG = {
     },
     'resnet': {
         'resnet_depth': 50,
+        'init_drop_connect_rate': None,
         'dropblock': {
             'dropblock_keep_prob': None,
             'dropblock_size': None,
