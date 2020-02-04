@@ -680,8 +680,8 @@ def main(unused_argv):
 
   else:   # FLAGS.mode == 'train' or FLAGS.mode == 'train_and_eval'
     try:
-      current_step = tf.train.load_variable(FLAGS.model_dir,
-                                            tf.GraphKeys.GLOBAL_STEP)
+      current_step = int(tf.train.load_variable(FLAGS.model_dir,
+                                                tf.GraphKeys.GLOBAL_STEP))
     except (TypeError, ValueError, tf.errors.NotFoundError):
       current_step = 0
     steps_per_epoch = params.num_train_images // params.train_batch_size
