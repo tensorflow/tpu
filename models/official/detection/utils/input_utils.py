@@ -303,6 +303,66 @@ def resize_and_crop_image_v2(image,
     return output_image, image_info
 
 
+def center_crop_image(image):
+  """Center crop a square shape slice from the input image.
+
+  It crops a square shape slice from the image. The side of the actual crop
+  is 224 / 256 = 0.875 of the short side of the original image. References:
+  [1] Very Deep Convolutional Networks for Large-Scale Image Recognition
+      https://arxiv.org/abs/1409.1556
+  [2] Deep Residual Learning for Image Recognition
+      https://arxiv.org/abs/1512.03385
+
+  Args:
+    image: a Tensor of shape [height, width, 3] representing the input image.
+
+  Returns:
+    cropped_image: a Tensor representing the center cropped image.
+  """
+  image_size = tf.cast(tf.shape(image)[:2], dtype=tf.float32)
+  crop_size = 0.875 * tf.minimum(image_size[0], image_size[1])
+  crop_offset = tf.cast((image_size - crop_size) / 2.0, dtype=tf.int32)
+  crop_size = tf.cast(crop_size, dtype=tf.int32)
+  cropped_image = image[
+      crop_offset[0]:crop_offset[0] + crop_size,
+      crop_offset[1]:crop_offset[1] + crop_size, :]
+  return cropped_image
+
+
+def random_crop_image(image,
+                      aspect_ratio_range=(3. / 4., 4. / 3.),
+                      area_range=(0.08, 1.0),
+                      max_attempts=10,
+                      seed=1):
+  """Randomly crop an arbitrary shaped slice from the input image.
+
+  Args:
+    image: a Tensor of shape [height, width, 3] representing the input image.
+    aspect_ratio_range: a list of floats. The cropped area of the image must
+      have an aspect ratio = width / height within this range.
+    area_range: a list of floats. The cropped reas of the image must contain
+      a fraction of the input image within this range.
+    max_attempts: the number of attempts at generating a cropped region of the
+      image of the specified constraints. After max_attempts failures, return
+      the entire image.
+    seed: the seed of the random generator.
+
+  Returns:
+    cropped_image: a Tensor representing the random cropped image. Can be the
+      original image if max_attempts is exhausted.
+  """
+  crop_offset, crop_size, _ = tf.image.sample_distorted_bounding_box(
+      tf.shape(image),
+      tf.constant([0.0, 0.0, 1.0, 1.0], dtype=tf.float32, shape=[1, 1, 4]),
+      seed=seed,
+      min_object_covered=area_range[0],
+      aspect_ratio_range=aspect_ratio_range,
+      area_range=area_range,
+      max_attempts=max_attempts)
+  cropped_image = tf.slice(image, crop_offset, crop_size)
+  return cropped_image
+
+
 def resize_and_crop_boxes(boxes,
                           image_scale,
                           output_size,
@@ -370,4 +430,8 @@ def resize_and_crop_masks(masks,
 
 def random_horizontal_flip(image, boxes=None, masks=None):
   """Randomly flips input image and bounding boxes."""
-  return preprocessor.random_horizontal_flip(image, boxes, masks)
+  results = preprocessor.random_horizontal_flip(image, boxes, masks)
+  if boxes is None and masks is None:
+    return results[0]
+  else:
+    return results
