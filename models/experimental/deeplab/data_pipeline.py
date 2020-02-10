@@ -17,7 +17,7 @@
 Based on third_party/tensorflow_models/deeplab/utils/input_generator.py.
 """
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 from tensorflow.contrib import slim as contrib_slim
 from deeplab import input_preprocess
 

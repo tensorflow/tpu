@@ -23,7 +23,7 @@ import time
 
 from absl import app
 from absl import flags
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 import data_pipeline
 import model
