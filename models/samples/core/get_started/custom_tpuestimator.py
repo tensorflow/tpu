@@ -18,7 +18,7 @@ from __future__ import division
 from __future__ import print_function
 
 import iris_data_tpu as iris_data
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 from tensorflow.contrib import cluster_resolver as contrib_cluster_resolver
 from tensorflow.contrib import tpu as contrib_tpu
 
