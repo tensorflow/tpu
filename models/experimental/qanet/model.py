@@ -18,7 +18,7 @@ import os
 import numpy as np
 from tensor2tensor.layers import common_attention
 from tensor2tensor.layers import common_layers
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 import data
 import utils
 from tensorflow.contrib import cluster_resolver as contrib_cluster_resolver
