@@ -20,6 +20,7 @@ sys.path.insert(0, 'tpu/models')
 from hyperparameters import params_dict
 
 # pylint: disable=line-too-long
+
 MASKRCNN_CFG = params_dict.ParamsDict(base_config.BASE_CFG)
 MASKRCNN_CFG.override({
     'type': 'mask_rcnn',
@@ -159,4 +160,5 @@ MASKRCNN_RESTRICTIONS = [
     'anchor.max_level == rpn_head.max_level',
     'mrcnn_head.mask_target_size == mask_sampling.mask_target_size',
 ]
+
 # pylint: enable=line-too-long

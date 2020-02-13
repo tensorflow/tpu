@@ -17,9 +17,10 @@
 from configs import base_config
 from hyperparameters import params_dict
 
+# pylint: disable=line-too-long
+
 SHAPEMASK_RESNET_FROZEN_VAR_PREFIX = r'(resnet\d+/)conv2d(|_([1-9]|10))\/'
 
-# pylint: disable=line-too-long
 SHAPEMASK_CFG = params_dict.ParamsDict(base_config.BASE_CFG)
 SHAPEMASK_CFG.override({
     'type': 'shapemask',
@@ -124,4 +125,5 @@ SHAPEMASK_RESTRICTIONS = [
     'shapemask_head.mask_crop_size == shapemask_parser.mask_crop_size',
     'shapemask_head.upsample_factor == shapemask_parser.upsample_factor',
 ]
+
 # pylint: enable=line-too-long

@@ -26,7 +26,6 @@
 RESNET_FROZEN_VAR_PREFIX = r'(resnet\d+)\/(conv2d(|_([1-9]|10))|batch_normalization(|_([1-9]|10)))\/'
 
 REGULARIZATION_VAR_REGEX = r'.*(kernel|weight):0$'
-
 BASE_CFG = {
     'model_dir': '',
     'use_tpu': True,
