@@ -231,7 +231,7 @@ def build_model(images,
                 fine_tuning=False,
                 features_only=False,
                 pooled_features_only=False):
-  """A helper functiion to creates a model and returns predicted logits.
+  """A helper function to create a model and return predicted logits.
 
   Args:
     images: input images tensor.
@@ -297,7 +297,7 @@ def build_model(images,
 
 
 def build_model_base(images, model_name, training, override_params=None):
-  """A helper functiion to create a base model and return global_pool.
+  """Create a base feature network and return the features before pooling.
 
   Args:
     images: input images tensor.
@@ -307,7 +307,7 @@ def build_model_base(images, model_name, training, override_params=None):
       efficientnet_model.GlobalParams.
 
   Returns:
-    features: global pool features.
+    features: base features before pooling.
     endpoints: the endpoints for each layer.
 
   Raises:
