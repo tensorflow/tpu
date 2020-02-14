@@ -49,8 +49,10 @@ def backbone_generator(params):
     backbone_fn = resnet.Resnet(
         resnet_depth=resnet_params.resnet_depth,
         dropblock=dropblock_generator(resnet_params.dropblock),
-        batch_norm_relu=batch_norm_relu_generator(resnet_params.batch_norm),
-        init_drop_connect_rate=resnet_params.init_drop_connect_rate)
+        batch_norm_relu=batch_norm_relu_generator(
+            resnet_params.batch_norm, activation=resnet_params.activation),
+        init_drop_connect_rate=resnet_params.init_drop_connect_rate,
+        activation=resnet_params.activation)
   else:
     raise ValueError('Backbone model %s is not supported.' %
                      params.architecture.backbone)
@@ -78,7 +80,11 @@ def multilevel_features_generator(params):
         num_repeats=nasfpn_params.num_repeats,
         use_separable_conv=nasfpn_params.use_separable_conv,
         dropblock=dropblock_generator(nasfpn_params.dropblock),
-        batch_norm_relu=batch_norm_relu_generator(nasfpn_params.batch_norm))
+        block_fn=nasfpn_params.block_fn,
+        activation=nasfpn_params.activation,
+        batch_norm_relu=batch_norm_relu_generator(
+            nasfpn_params.batch_norm, activation=nasfpn_params.activation),
+        init_drop_connect_rate=nasfpn_params.init_drop_connect_rate)
   elif params.architecture.multilevel_features == 'identity':
     fpn_fn = identity.Identity()
   else:

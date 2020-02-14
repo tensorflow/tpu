@@ -45,6 +45,7 @@ def block_group(inputs,
                 use_projection,
                 block_fn,
                 block_repeats,
+                activation=tf.nn.relu,
                 batch_norm_relu=nn_ops.BatchNormRelu(),
                 dropblock=nn_ops.Dropblock(),
                 drop_connect_rate=None,
@@ -64,6 +65,7 @@ def block_group(inputs,
       filters and the resolution.
     block_fn: the `function` for the block to use within the model
     block_repeats: an `int` number of blocks to repeat in the group.
+    activation: activation function. Support 'relu' and 'swish'.
     batch_norm_relu: an operation that is added after convolutions, including a
       batch norm layer and an optional relu activation.
     dropblock: a drop block layer that is added after convluations. Note that
@@ -84,6 +86,7 @@ def block_group(inputs,
       filters,
       strides,
       use_projection=use_projection,
+      activation=activation,
       batch_norm_relu=batch_norm_relu,
       dropblock=dropblock,
       drop_connect_rate=drop_connect_rate,
@@ -95,6 +98,7 @@ def block_group(inputs,
         filters,
         1,
         use_projection=False,
+        activation=activation,
         batch_norm_relu=batch_norm_relu,
         dropblock=dropblock,
         drop_connect_rate=drop_connect_rate,
@@ -109,6 +113,7 @@ class Resnet(object):
   def __init__(self,
                resnet_depth,
                dropblock=nn_ops.Dropblock(),
+               activation='relu',
                batch_norm_relu=nn_ops.BatchNormRelu(),
                init_drop_connect_rate=None,
                data_format='channels_last'):
@@ -117,6 +122,7 @@ class Resnet(object):
     Args:
       resnet_depth: `int` depth of ResNet backbone model.
       dropblock: a dropblock layer.
+      activation: activation function. Support 'relu' and 'swish'.
       batch_norm_relu: an operation that includes a batch normalization layer
         followed by a relu layer(optional).
       init_drop_connect_rate: a 'float' number that specifies the initial drop
@@ -128,6 +134,12 @@ class Resnet(object):
     self._resnet_depth = resnet_depth
 
     self._dropblock = dropblock
+    if activation == 'relu':
+      self._activation = tf.nn.relu
+    elif activation == 'swish':
+      self._activation = tf.nn.swish
+    else:
+      raise ValueError('Activation {} not implemented.'.format(activation))
     self._batch_norm_relu = batch_norm_relu
     self._init_drop_connect_rate = init_drop_connect_rate
 
@@ -135,7 +147,9 @@ class Resnet(object):
 
     model_params = {
         10: {'block': nn_blocks.residual_block, 'layers': [1, 1, 1, 1]},
+        14: {'block': nn_blocks.bottleneck_block, 'layers': [1, 1, 1, 1]},
         18: {'block': nn_blocks.residual_block, 'layers': [2, 2, 2, 2]},
+        26: {'block': nn_blocks.bottleneck_block, 'layers': [2, 2, 2, 2]},
         34: {'block': nn_blocks.residual_block, 'layers': [3, 4, 6, 3]},
         50: {'block': nn_blocks.bottleneck_block, 'layers': [3, 4, 6, 3]},
         101: {'block': nn_blocks.bottleneck_block, 'layers': [3, 4, 23, 3]},
@@ -203,6 +217,7 @@ class Resnet(object):
           use_projection=True,
           block_fn=block_fn,
           block_repeats=layers[0],
+          activation=self._activation,
           batch_norm_relu=self._batch_norm_relu,
           dropblock=self._dropblock,
           drop_connect_rate=get_drop_connect_rate(
@@ -216,6 +231,7 @@ class Resnet(object):
           use_projection=True,
           block_fn=block_fn,
           block_repeats=layers[1],
+          activation=self._activation,
           batch_norm_relu=self._batch_norm_relu,
           dropblock=self._dropblock,
           drop_connect_rate=get_drop_connect_rate(
@@ -229,6 +245,7 @@ class Resnet(object):
           use_projection=True,
           block_fn=block_fn,
           block_repeats=layers[2],
+          activation=self._activation,
           batch_norm_relu=self._batch_norm_relu,
           dropblock=self._dropblock,
           drop_connect_rate=get_drop_connect_rate(
@@ -242,6 +259,7 @@ class Resnet(object):
           use_projection=True,
           block_fn=block_fn,
           block_repeats=layers[3],
+          activation=self._activation,
           batch_norm_relu=self._batch_norm_relu,
           dropblock=self._dropblock,
           drop_connect_rate=get_drop_connect_rate(

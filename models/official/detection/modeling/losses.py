@@ -516,10 +516,11 @@ class SegmentationLoss(object):
   """Semantic segmentationloss function."""
 
   def __init__(self, params):
+    self._class_weights = params.class_weights
     self._ignore_label = params.ignore_label
 
   def __call__(self, logits, labels):
-    _, height, width, _ = logits.get_shape().as_list()
+    _, height, width, num_classes = logits.get_shape().as_list()
     # Use bilinear resizing because nearest neighbor is not supported in
     # tensorflow 1.14 with TPU. Once the environment is updated, it should be
     # change back to nearest neighbor. For now, it is tested and the performance
@@ -536,6 +537,21 @@ class SegmentationLoss(object):
     valid_mask = tf.squeeze(tf.cast(valid_mask, tf.float32), axis=3)
     cross_entropy_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(
         labels=labels, logits=logits)
+
+    if not self._class_weights:
+      class_weights = [1] * num_classes
+    else:
+      class_weights = self._class_weights
+
+    if num_classes != len(class_weights):
+      raise ValueError(
+          'Length of class_weights should be {}'.format(num_classes))
+
+    tf.logging.info('Using class weights: %s', class_weights)
+    weight_mask = tf.einsum('...y,y->...',
+                            tf.one_hot(labels, num_classes, dtype=tf.float32),
+                            tf.constant(class_weights, tf.float32))
+    valid_mask *= weight_mask
     cross_entropy_loss *= tf.to_float(valid_mask)
     loss = tf.reduce_sum(cross_entropy_loss) / normalizer
     return loss

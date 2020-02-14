@@ -32,12 +32,62 @@ from six.moves import range
 from six.moves import zip
 import tensorflow.compat.v1 as tf
 
+from modeling.architecture import nn_blocks
 from modeling.architecture import nn_ops
+from modeling.architecture import resnet
 from ops import spatial_transform_ops
 
 
 COMBINATION_OPS = enum.Enum('COMBINATION_OPS', ['SUM', 'GLOBAL_ATTENTION'])
 NODE_TYPES = enum.Enum('NODE_TYPES', ['INTERMEDIATE', 'OUTPUT'])
+
+
+def block_group(inputs,
+                filters,
+                strides,
+                block_fn,
+                block_repeats,
+                conv2d_op=None,
+                activation=tf.nn.swish,
+                batch_norm_relu=nn_ops.BatchNormRelu(),
+                dropblock=nn_ops.Dropblock(),
+                drop_connect_rate=None,
+                data_format='channels_last',
+                name=None,
+                is_training=False):
+  """Creates one group of blocks for NAS-FPN."""
+  if block_fn == 'conv':
+    inputs = conv2d_op(
+        inputs,
+        filters=filters,
+        kernel_size=(3, 3),
+        padding='same',
+        name='conv')
+    inputs = batch_norm_relu(
+        inputs, is_training=is_training, relu=False, name='bn')
+    inputs = dropblock(inputs, is_training=is_training)
+    return inputs
+
+  if block_fn != 'bottleneck':
+    raise ValueError('Block function {} not implemented.'.format(block_fn))
+  _, _, _, num_filters = inputs.get_shape().as_list()
+  block_fn = nn_blocks.bottleneck_block
+  use_projection = not (num_filters == (filters * 4) and strides == 1)
+
+  return resnet.block_group(
+      inputs=inputs,
+      filters=filters,
+      strides=strides,
+      use_projection=use_projection,
+      block_fn=block_fn,
+      block_repeats=block_repeats,
+      activation=activation,
+      batch_norm_relu=batch_norm_relu,
+      dropblock=dropblock,
+      drop_connect_rate=drop_connect_rate,
+      data_format=data_format,
+      name=name,
+      is_training=is_training)
 
 
 def resample_feature_map(feat, level, target_level, is_training,
@@ -120,7 +170,11 @@ class Nasfpn(object):
                num_repeats=7,
                use_separable_conv=False,
                dropblock=nn_ops.Dropblock(),
-               batch_norm_relu=nn_ops.BatchNormRelu()):
+               block_fn='conv',
+               block_repeats=1,
+               activation='swish',
+               batch_norm_relu=nn_ops.BatchNormRelu(),
+               init_drop_connect_rate=None):
     """NAS-FPN initialization function.
 
     Args:
@@ -131,8 +185,16 @@ class Nasfpn(object):
       use_separable_conv: `bool`, if True use separable convolution for
         convolution in NAS-FPN layers.
       dropblock: a Dropblock layer.
+      block_fn: `string` representing types of block group support: conv,
+        bottleneck.
+      block_repeats: `int` representing the number of repeats per block group
+        when block group is bottleneck.
+      activation: activation function. Support 'relu' and 'swish'.
       batch_norm_relu: an operation that includes a batch normalization layer
         followed by a relu layer(optional).
+      init_drop_connect_rate: a 'float' number that specifies the initial drop
+        connection rate. Note that the default `None` means no drop connection
+        is applied.
     """
 
     self._min_level = min_level
@@ -152,13 +214,22 @@ class Nasfpn(object):
     self._config = Config(model_config, self._min_level, self._max_level)
     self._num_repeats = num_repeats
     self._fpn_feat_dims = fpn_feat_dims
+    self._block_fn = block_fn
+    self._block_repeats = block_repeats
     if use_separable_conv:
       self._conv2d_op = functools.partial(
           tf.layers.separable_conv2d, depth_multiplier=1)
     else:
       self._conv2d_op = tf.layers.conv2d
     self._dropblock = dropblock
+    if activation == 'relu':
+      self._activation = tf.nn.relu
+    elif activation == 'swish':
+      self._activation = tf.nn.swish
+    else:
+      raise ValueError('Activation {} not implemented.'.format(activation))
     self._batch_norm_relu = batch_norm_relu
+    self._init_drop_connect_rate = init_drop_connect_rate
     self._resample_feature_map = functools.partial(
         resample_feature_map,
         target_feat_dims=fpn_feat_dims,
@@ -253,22 +324,27 @@ class Nasfpn(object):
               zip(feats, feat_levels, num_output_connections)):
             if num_output == 0 and feat_level == new_level:
               num_output_connections[j] += 1
-              new_node += feat
+
+              feat_ = self._resample_feature_map(
+                  feat, feat_level, new_level, is_training,
+                  name='fa_{}_{}'.format(i, j))
+              new_node += feat_
 
         with tf.variable_scope('op_after_combine{}'.format(len(feats))):
-          # ReLU -> Conv -> BN after binary op.
-          new_node = tf.nn.relu(new_node)
-          new_node = self._conv2d_op(
-              new_node,
+          new_node = self._activation(new_node)
+          new_node = block_group(
+              inputs=new_node,
               filters=self._fpn_feat_dims,
-              kernel_size=(3, 3),
-              padding='same',
-              name='conv')
-
-          new_node = self._batch_norm_relu(
-              new_node, is_training=is_training, relu=False, name='bn')
-
-          new_node = self._dropblock(new_node, is_training=is_training)
+              strides=1,
+              block_fn=self._block_fn,
+              block_repeats=self._block_repeats,
+              conv2d_op=self._conv2d_op,
+              activation=self._activation,
+              batch_norm_relu=self._batch_norm_relu,
+              dropblock=self._dropblock,
+              drop_connect_rate=self._init_drop_connect_rate,
+              name='block_{}'.format(i),
+              is_training=is_training)
         feats.append(new_node)
         feat_levels.append(new_level)
         num_output_connections.append(0)
