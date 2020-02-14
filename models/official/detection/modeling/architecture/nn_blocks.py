@@ -71,7 +71,7 @@ def residual_block(inputs,
         strides=strides,
         data_format=data_format)
     shortcut = batch_norm_relu(shortcut, relu=False, is_training=is_training)
-    shortcut = dropblock(shortcut, is_training=is_training)
+  shortcut = dropblock(shortcut, is_training=is_training)
 
   inputs = nn_ops.conv2d_fixed_padding(
       inputs=inputs,
@@ -144,7 +144,7 @@ def bottleneck_block(inputs,
         strides=strides,
         data_format=data_format)
     shortcut = batch_norm_relu(shortcut, relu=False, is_training=is_training)
-    shortcut = dropblock(shortcut, is_training=is_training)
+  shortcut = dropblock(shortcut, is_training=is_training)
 
   inputs = nn_ops.conv2d_fixed_padding(
       inputs=inputs,

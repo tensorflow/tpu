@@ -89,6 +89,7 @@ BASE_CFG = {
             'dropblock_keep_prob': None,
             'dropblock_size': None,
         },
+        'activation': 'relu',
         'batch_norm': {
             'batch_norm_momentum': 0.997,
             'batch_norm_epsilon': 1e-4,
@@ -119,6 +120,9 @@ BASE_CFG = {
             'dropblock_keep_prob': None,
             'dropblock_size': None,
         },
+        'init_drop_connect_rate': None,
+        'block_fn': 'conv',
+        'activation': 'relu',
         'batch_norm': {
             'batch_norm_momentum': 0.997,
             'batch_norm_epsilon': 1e-4,
