@@ -35,9 +35,8 @@ fi
 sudo apt install -y protobuf-compiler python-pil python-lxml\
   python-pip python-dev git unzip
 
-pip install Cython git+https://github.com/cocodataset/cocoapi#subdirectory=PythonAPI
-
-pip install --upgrade tensorflow
+pip install Cython
+pip install git+https://github.com/cocodataset/cocoapi#subdirectory=PythonAPI
 
 echo "Cloning Tensorflow models directory (for conversion utilities)"
 if [ ! -e tf-models ]; then
