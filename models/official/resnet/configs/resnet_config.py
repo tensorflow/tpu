@@ -40,7 +40,7 @@ RESNET_CFG = {
     'skip_host_call': False,
     'num_parallel_calls': 8,
     'dropblock_groups': '',
-    'dropblock_keep_prob': 0.9,
+    'dropblock_keep_prob': None,
     'dropblock_size': 7,
     'data_format': 'channels_last',
 }
