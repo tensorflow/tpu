@@ -73,7 +73,7 @@ class EvalCkptDriver(utils.EvalCkptDriver):
           'Model must be either efficientnet-b* or efficientnet-edgetpu* or'
           'efficientnet-condconv*')
 
-    if FLAGS.advprop_preprocessing:
+    if self.advprop_preprocessing:
       # AdvProp uses Inception preprocessing.
       features = features * 2.0 / 255 - 1.0
     else:
@@ -92,7 +92,9 @@ class EvalCkptDriver(utils.EvalCkptDriver):
     return preprocessing.preprocess_image
 
 
-def get_eval_driver(model_name, include_background_label=False):
+def get_eval_driver(model_name,
+                    include_background_label=False,
+                    advprop_preprocessing=False):
   """Get a eval driver."""
   if model_name.startswith('efficientnet-edgetpu'):
     _, _, image_size, _ = (
@@ -111,7 +113,8 @@ def get_eval_driver(model_name, include_background_label=False):
       model_name=model_name,
       batch_size=1,
       image_size=image_size,
-      include_background_label=include_background_label)
+      include_background_label=include_background_label,
+      advprop_preprocessing=advprop_preprocessing)
 
 
 # FLAGS should not be used before main.
@@ -120,7 +123,8 @@ FLAGS = flags.FLAGS
 
 def main(unused_argv):
   logging.set_verbosity(logging.ERROR)
-  driver = get_eval_driver(FLAGS.model_name, FLAGS.include_background_label)
+  driver = get_eval_driver(FLAGS.model_name, FLAGS.include_background_label,
+                           FLAGS.advprop_preprocessing)
   if FLAGS.runmode == 'examples':
     # Run inference for an example image.
     driver.eval_example_images(FLAGS.ckpt_dir, [FLAGS.example_img],
