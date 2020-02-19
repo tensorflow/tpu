@@ -231,6 +231,7 @@ class EvalCkptDriver(object):
     image_size: int. Input image size, determined by model name.
     num_classes: int. Number of classes, default to 1000 for ImageNet.
     include_background_label: whether to include extra background label.
+    advprop_preprocessing: whether to use advprop preprocessing.
   """
 
   def __init__(self,
@@ -238,13 +239,15 @@ class EvalCkptDriver(object):
                batch_size=1,
                image_size=224,
                num_classes=1000,
-               include_background_label=False):
+               include_background_label=False,
+               advprop_preprocessing=False):
     """Initialize internal variables."""
     self.model_name = model_name
     self.batch_size = batch_size
     self.num_classes = num_classes
     self.include_background_label = include_background_label
     self.image_size = image_size
+    self.advprop_preprocessing = advprop_preprocessing
 
   def restore_model(self, sess, ckpt_dir, enable_ema=True, export_ckpt=None):
     """Restore variables from checkpoint dir."""
