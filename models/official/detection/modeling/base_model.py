@@ -31,6 +31,24 @@ from modeling import learning_rates
 from utils import benchmark_utils
 
 
+def _build_assigment_map(prefix=None, skip_variables_regex=None):
+  """Generate assigment map for loading checkpoints."""
+  all_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=prefix)
+  if not prefix:
+    prefix = ''
+  assignment_map = {}
+  for var in all_vars:
+    var_name = var.name
+    # Trim the index of the variable.
+    if ':' in var_name:
+      var_name = var_name[:var_name.rindex(':')]
+    if skip_variables_regex and re.match(skip_variables_regex,
+                                         var_name[len(prefix):]):
+      continue
+    assignment_map[var_name[len(prefix):]] = var
+  return assignment_map
+
+
 def filter_variables(variables, variable_regex, is_whitelist):
   """Filter a list of variables based on the regex.
 
@@ -115,6 +133,7 @@ class Model(six.with_metaclass(abc.ABCMeta, object)):
     # Checkpoint restoration.
     self._checkpoint = params.train.checkpoint.path
     self._checkpoint_prefix = params.train.checkpoint.prefix
+    self._skip_variables_regex = params.train.checkpoint.skip_variables_regex
 
     # Summary.
     self._enable_summary = params.enable_summary
@@ -212,8 +231,11 @@ class Model(six.with_metaclass(abc.ABCMeta, object)):
     """Returns scaffold function to restore parameters from checkpoint."""
     def scaffold_fn():
       """Loads pretrained model through scaffold function."""
-      tf.train.init_from_checkpoint(self._checkpoint,
-                                    {'/': self._checkpoint_prefix,})
+      assignment_map = _build_assigment_map(
+          prefix=self._checkpoint_prefix,
+          skip_variables_regex=self._skip_variables_regex)
+      tf.train.init_from_checkpoint(self._checkpoint, assignment_map)
+
       return tf.train.Scaffold()
     return scaffold_fn if self._checkpoint else None
 
