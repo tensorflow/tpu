@@ -14,7 +14,7 @@
 # ==============================================================================
 """Provide model_fn for TPUEstimator training and evaluation."""
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 from tensorflow.contrib import slim as contrib_slim
 from tensorflow.contrib import summary as contrib_summary
 from tensorflow.contrib import tpu as contrib_tpu
