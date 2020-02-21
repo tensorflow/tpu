@@ -112,7 +112,6 @@ class TpuExecutor(object):
         model_dir=params.model_dir,
         log_step_count_steps=params.train.iterations_per_loop,
         tpu_config=tpu_config,
-        save_checkpoints_steps=params.train.save_checkpoints_steps,
     )
     self._estimator = tf.estimator.tpu.TPUEstimator(
         model_fn=model_fn,
