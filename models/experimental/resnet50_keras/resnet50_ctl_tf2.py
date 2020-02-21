@@ -226,12 +226,14 @@ def main(unused_argv):
           logging.info('Running step %s in epoch %s', step, epoch)
         train_step(train_iterator)
       tf.summary.scalar(
-          'loss', training_loss.result(), step=optimizer.iterations)
+          'loss', training_loss.result().numpy(), step=optimizer.iterations)
       tf.summary.scalar(
-          'accuracy', training_accuracy.result(), step=optimizer.iterations)
+          'accuracy',
+          training_accuracy.result().numpy(),
+          step=optimizer.iterations)
       logging.info('Training loss: %s, accuracy: %s%%',
-                   round(training_loss.result(), 4),
-                   round(training_accuracy.result() * 100, 2))
+                   round(training_loss.result().numpy(), 4),
+                   round(training_accuracy.result().numpy() * 100, 2))
       training_loss.reset_states()
       training_accuracy.reset_states()
 
@@ -242,12 +244,13 @@ def main(unused_argv):
           logging.info('Starting to run eval step %s of epoch: %s', step,
                        epoch)
         test_step(test_iterator)
-      tf.summary.scalar('loss', test_loss.result(), step=optimizer.iterations)
       tf.summary.scalar(
-          'accuracy', test_accuracy.result(), step=optimizer.iterations)
+          'loss', test_loss.result().numpy(), step=optimizer.iterations)
+      tf.summary.scalar(
+          'accuracy', test_accuracy.result().numpy(), step=optimizer.iterations)
       logging.info('Test loss: %s, accuracy: %s%%',
-                   round(test_loss.result(), 4),
-                   round(test_accuracy.result() * 100, 2))
+                   round(test_loss.result().numpy(), 4),
+                   round(test_accuracy.result().numpy() * 100, 2))
       test_loss.reset_states()
       test_accuracy.reset_states()
 

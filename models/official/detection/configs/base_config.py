@@ -32,7 +32,6 @@ BASE_CFG = {
     'isolate_session_state': False,
     'train': {
         'iterations_per_loop': 100,
-        'save_checkpoints_steps': None,
         'train_batch_size': 64,
         'total_steps': 22500,
         'num_cores_per_replica': None,
@@ -52,6 +51,7 @@ BASE_CFG = {
         'checkpoint': {
             'path': '',
             'prefix': '',
+            'skip_variables_regex': '',
         },
         'frozen_variable_prefix': RESNET_FROZEN_VAR_PREFIX,
         'train_file_pattern': '',
