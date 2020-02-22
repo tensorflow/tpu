@@ -85,7 +85,15 @@ def _at_least_x_are_equal(a, b, x):
   return tf.greater_equal(tf.reduce_sum(match), x)
 
 
-def _decode_and_random_crop(image_bytes, image_size):
+def _resize_image(image, image_size, method=None):
+  if method is not None:
+    tf.logging.info('Use customized resize method {}'.format(method))
+    return tf.image.resize([image], [image_size, image_size], method)[0]
+  tf.logging.info('Use default resize_bicubic.')
+  return tf.image.resize_bicubic([image], [image_size, image_size])[0]
+
+
+def _decode_and_random_crop(image_bytes, image_size, resize_method=None):
   """Make a random crop of image_size."""
   bbox = tf.constant([0.0, 0.0, 1.0, 1.0], dtype=tf.float32, shape=[1, 1, 4])
   image = distorted_bounding_box_crop(
@@ -102,13 +110,12 @@ def _decode_and_random_crop(image_bytes, image_size):
   image = tf.cond(
       bad,
       lambda: _decode_and_center_crop(image_bytes, image_size),
-      lambda: tf.image.resize_bicubic([image],  # pylint: disable=g-long-lambda
-                                      [image_size, image_size])[0])
+      lambda: _resize_image(image, image_size, resize_method))
 
   return image
 
 
-def _decode_and_center_crop(image_bytes, image_size):
+def _decode_and_center_crop(image_bytes, image_size, resize_method=None):
   """Crops to center of image with padding then scales image_size."""
   shape = tf.image.extract_jpeg_shape(image_bytes)
   image_height = shape[0]
@@ -124,7 +131,7 @@ def _decode_and_center_crop(image_bytes, image_size):
   crop_window = tf.stack([offset_height, offset_width,
                           padded_center_crop_size, padded_center_crop_size])
   image = tf.image.decode_and_crop_jpeg(image_bytes, crop_window, channels=3)
-  image = tf.image.resize_bicubic([image], [image_size, image_size])[0]
+  image = _resize_image(image, image_size, resize_method)
   return image
 
 
@@ -134,9 +141,13 @@ def _flip(image):
   return image
 
 
-def preprocess_for_train(image_bytes, use_bfloat16, image_size=IMAGE_SIZE,
+def preprocess_for_train(image_bytes,
+                         use_bfloat16,
+                         image_size=IMAGE_SIZE,
                          augment_name=None,
-                         randaug_num_layers=None, randaug_magnitude=None):
+                         randaug_num_layers=None,
+                         randaug_magnitude=None,
+                         resize_method=None):
   """Preprocesses the given image for evaluation.
 
   Args:
@@ -152,11 +163,12 @@ def preprocess_for_train(image_bytes, use_bfloat16, image_size=IMAGE_SIZE,
       layers be. See autoaugment.py for detailed description.
     randaug_magnitude: 'int', if RandAug is used, what should the magnitude
       be. See autoaugment.py for detailed description.
+    resize_method: resize method. If none, use bicubic.
 
   Returns:
     A preprocessed image `Tensor`.
   """
-  image = _decode_and_random_crop(image_bytes, image_size)
+  image = _decode_and_random_crop(image_bytes, image_size, resize_method)
   image = _flip(image)
   image = tf.reshape(image, [image_size, image_size, 3])
 
@@ -188,18 +200,22 @@ def preprocess_for_train(image_bytes, use_bfloat16, image_size=IMAGE_SIZE,
   return image
 
 
-def preprocess_for_eval(image_bytes, use_bfloat16, image_size=IMAGE_SIZE):
+def preprocess_for_eval(image_bytes,
+                        use_bfloat16,
+                        image_size=IMAGE_SIZE,
+                        resize_method=None):
   """Preprocesses the given image for evaluation.
 
   Args:
     image_bytes: `Tensor` representing an image binary of arbitrary size.
     use_bfloat16: `bool` for whether to use bfloat16.
     image_size: image size.
+    resize_method: if None, use bicubic.
 
   Returns:
     A preprocessed image `Tensor`.
   """
-  image = _decode_and_center_crop(image_bytes, image_size)
+  image = _decode_and_center_crop(image_bytes, image_size, resize_method)
   image = tf.reshape(image, [image_size, image_size, 3])
   image = tf.image.convert_image_dtype(
       image, dtype=tf.bfloat16 if use_bfloat16 else tf.float32)
@@ -212,7 +228,8 @@ def preprocess_image(image_bytes,
                      image_size=IMAGE_SIZE,
                      augment_name=None,
                      randaug_num_layers=None,
-                     randaug_magnitude=None):
+                     randaug_magnitude=None,
+                     resize_method=None):
   """Preprocesses the given image.
 
   Args:
@@ -229,6 +246,7 @@ def preprocess_image(image_bytes,
       layers be. See autoaugment.py for detailed description.
     randaug_magnitude: 'int', if RandAug is used, what should the magnitude
       be. See autoaugment.py for detailed description.
+    resize_method: 'string' or None. Use resize_bicubic in default.
 
   Returns:
     A preprocessed image `Tensor` with value range of [0, 255].
@@ -236,6 +254,7 @@ def preprocess_image(image_bytes,
   if is_training:
     return preprocess_for_train(
         image_bytes, use_bfloat16, image_size, augment_name,
-        randaug_num_layers, randaug_magnitude)
+        randaug_num_layers, randaug_magnitude, resize_method)
   else:
-    return preprocess_for_eval(image_bytes, use_bfloat16, image_size)
+    return preprocess_for_eval(image_bytes, use_bfloat16, image_size,
+                               resize_method)

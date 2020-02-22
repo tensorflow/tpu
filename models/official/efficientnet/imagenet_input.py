@@ -29,14 +29,21 @@ import tensorflow.compat.v1 as tf
 import preprocessing
 
 
-def build_image_serving_input_fn(image_size, batch_size=None):
+def build_image_serving_input_fn(image_size,
+                                 batch_size=None,
+                                 resize_method=None):
   """Builds a serving input fn for raw images."""
+
   def _image_serving_input_fn():
     """Serving input fn for raw images."""
+
     def _preprocess_image(image_bytes):
       """Preprocess a single raw image."""
       image = preprocessing.preprocess_image(
-          image_bytes=image_bytes, is_training=False, image_size=image_size)
+          image_bytes=image_bytes,
+          is_training=False,
+          image_size=image_size,
+          resize_method=resize_method)
       return image
 
     image_bytes_list = tf.placeholder(
@@ -72,6 +79,7 @@ class ImageNetTFExampleInput(object):
       layers be. See autoaugment.py for detailed description.
     randaug_magnitude: 'int', if RandAug is used, what should the magnitude
       be. See autoaugment.py for detailed description.
+    resize_method: If None, use bicubic in default.
   """
   __metaclass__ = abc.ABCMeta
 
@@ -86,7 +94,8 @@ class ImageNetTFExampleInput(object):
                augment_name=None,
                mixup_alpha=0.0,
                randaug_num_layers=None,
-               randaug_magnitude=None):
+               randaug_magnitude=None,
+               resize_method=None):
     self.image_preprocessing_fn = preprocessing.preprocess_image
     self.is_training = is_training
     self.use_bfloat16 = use_bfloat16
@@ -101,6 +110,7 @@ class ImageNetTFExampleInput(object):
     self.mixup_alpha = mixup_alpha
     self.randaug_num_layers = randaug_num_layers
     self.randaug_magnitude = randaug_magnitude
+    self.resize_method = resize_method
 
   def set_shapes(self, batch_size, images, labels):
     """Statically set the batch_size dimension."""
@@ -168,7 +178,8 @@ class ImageNetTFExampleInput(object):
         use_bfloat16=self.use_bfloat16,
         augment_name=self.augment_name,
         randaug_num_layers=self.randaug_num_layers,
-        randaug_magnitude=self.randaug_magnitude)
+        randaug_magnitude=self.randaug_magnitude,
+        resize_method=self.resize_method)
 
     # The labels will be in range [1,1000], 0 is reserved for background
     label = tf.cast(
@@ -290,7 +301,8 @@ class ImageNetInput(ImageNetTFExampleInput):
                augment_name=None,
                mixup_alpha=0.0,
                randaug_num_layers=None,
-               randaug_magnitude=None):
+               randaug_magnitude=None,
+               resize_method=None):
     """Create an input from TFRecord files.
 
     Args:
@@ -317,6 +329,7 @@ class ImageNetInput(ImageNetTFExampleInput):
         layers be. See autoaugment.py for detailed description.
       randaug_magnitude: 'int', if RandAug is used, what should the magnitude
         be. See autoaugment.py for detailed description.
+      resize_method: If None, use bicubic in default.
     """
     super(ImageNetInput, self).__init__(
         is_training=is_training,
@@ -413,7 +426,8 @@ class ImageNetBigtableInput(ImageNetTFExampleInput):
                include_background_label=False,
                mixup_alpha=0.0,
                randaug_num_layers=None,
-               randaug_magnitude=None):
+               randaug_magnitude=None,
+               resize_method=None):
     """Constructs an ImageNet input from a BigtableSelection.
 
     Args:
@@ -434,6 +448,7 @@ class ImageNetBigtableInput(ImageNetTFExampleInput):
         layers be. See autoaugment.py for detailed description.
       randaug_magnitude: 'int', if RandAug is used, what should the magnitude
         be. See autoaugment.py for detailed description.s
+      resize_method: if None, use bicubic.
     """
     super(ImageNetBigtableInput, self).__init__(
         is_training=is_training,
@@ -444,7 +459,8 @@ class ImageNetBigtableInput(ImageNetTFExampleInput):
         augment_name=augment_name,
         mixup_alpha=mixup_alpha,
         randaug_num_layers=randaug_num_layers,
-        randaug_magnitude=randaug_magnitude)
+        randaug_magnitude=randaug_magnitude,
+        resize_method=resize_method)
     self.selection = selection
 
   def make_source_dataset(self, index, num_hosts):

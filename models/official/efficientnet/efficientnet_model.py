@@ -41,7 +41,7 @@ GlobalParams = collections.namedtuple('GlobalParams', [
     'num_classes', 'width_coefficient', 'depth_coefficient', 'depth_divisor',
     'min_depth', 'survival_prob', 'relu_fn', 'batch_norm', 'use_se',
     'local_pooling', 'condconv_num_experts', 'clip_projection_output',
-    'blocks_args'
+    'blocks_args', 'fix_head_stem',
 ])
 GlobalParams.__new__.__defaults__ = (None,) * len(GlobalParams._fields)
 
@@ -135,13 +135,13 @@ def superpixel_kernel_initializer(shape, dtype='float32', partition_info=None):
   return filters
 
 
-def round_filters(filters, global_params):
+def round_filters(filters, global_params, skip=False):
   """Round number of filters based on depth multiplier."""
   orig_f = filters
   multiplier = global_params.width_coefficient
   divisor = global_params.depth_divisor
   min_depth = global_params.min_depth
-  if not multiplier:
+  if skip or not multiplier:
     return filters
 
   filters *= multiplier
@@ -154,10 +154,10 @@ def round_filters(filters, global_params):
   return int(new_filters)
 
 
-def round_repeats(repeats, global_params):
+def round_repeats(repeats, global_params, skip=False):
   """Round number of filters based on depth multiplier."""
   multiplier = global_params.depth_coefficient
-  if not multiplier:
+  if skip or not multiplier:
     return repeats
   return int(math.ceil(multiplier * repeats))
 
@@ -178,6 +178,7 @@ class MBConvBlock(tf.keras.layers.Layer):
     """
     super(MBConvBlock, self).__init__()
     self._block_args = block_args
+    self._local_pooling = global_params.local_pooling
     self._batch_norm_momentum = global_params.batch_norm_momentum
     self._batch_norm_epsilon = global_params.batch_norm_epsilon
     self._batch_norm = global_params.batch_norm
@@ -324,7 +325,18 @@ class MBConvBlock(tf.keras.layers.Layer):
     Returns:
       A output tensor, which should have the same shape as input.
     """
-    se_tensor = tf.reduce_mean(input_tensor, self._spatial_dims, keepdims=True)
+    if self._local_pooling:
+      shape = input_tensor.get_shape().as_list()
+      kernel_size = [
+          1, shape[self._spatial_dims[0]], shape[self._spatial_dims[1]], 1]
+      se_tensor = tf.nn.avg_pool(
+          input_tensor,
+          ksize=kernel_size,
+          strides=[1, 1, 1, 1],
+          padding='VALID')
+    else:
+      se_tensor = tf.reduce_mean(
+          input_tensor, self._spatial_dims, keepdims=True)
     se_tensor = self._se_expand(self._relu_fn(self._se_reduce(se_tensor)))
     logging.info('Built Squeeze and Excitation with tensor shape: %s',
                  (se_tensor.shape))
@@ -507,6 +519,7 @@ class Model(tf.keras.Model):
     self._blocks_args = blocks_args
     self._relu_fn = global_params.relu_fn or tf.nn.swish
     self._batch_norm = global_params.batch_norm
+    self._fix_head_stem = global_params.fix_head_stem
 
     self.endpoints = None
 
@@ -530,7 +543,7 @@ class Model(tf.keras.Model):
 
     # Stem part.
     self._conv_stem = tf.layers.Conv2D(
-        filters=round_filters(32, self._global_params),
+        filters=round_filters(32, self._global_params, self._fix_head_stem),
         kernel_size=[3, 3],
         strides=[2, 2],
         kernel_initializer=conv_kernel_initializer,
@@ -543,19 +556,24 @@ class Model(tf.keras.Model):
         epsilon=batch_norm_epsilon)
 
     # Builds blocks.
-    for block_args in self._blocks_args:
+    for i, block_args in enumerate(self._blocks_args):
       assert block_args.num_repeat > 0
       assert block_args.super_pixel in [0, 1, 2]
       # Update block input and output filters based on depth multiplier.
       input_filters = round_filters(block_args.input_filters,
                                     self._global_params)
+
       output_filters = round_filters(block_args.output_filters,
                                      self._global_params)
       kernel_size = block_args.kernel_size
+      if self._fix_head_stem and (i == 0 or i == len(self._blocks_args) - 1):
+        repeats = block_args.num_repeat
+      else:
+        repeats = round_repeats(block_args.num_repeat, self._global_params)
       block_args = block_args._replace(
           input_filters=input_filters,
           output_filters=output_filters,
-          num_repeat=round_repeats(block_args.num_repeat, self._global_params))
+          num_repeat=repeats)
 
       # The first block needs to take care of stride and filter size increase.
       conv_block = self._get_conv_block(block_args.conv_type)
@@ -593,7 +611,7 @@ class Model(tf.keras.Model):
 
     # Head part.
     self._conv_head = tf.layers.Conv2D(
-        filters=round_filters(1280, self._global_params),
+        filters=round_filters(1280, self._global_params, self._fix_head_stem),
         kernel_size=[1, 1],
         strides=[1, 1],
         kernel_initializer=conv_kernel_initializer,
