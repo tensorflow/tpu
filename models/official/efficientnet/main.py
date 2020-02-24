@@ -31,6 +31,7 @@ import efficientnet_builder
 import imagenet_input
 import utils
 from condconv import efficientnet_condconv_builder
+from edge import efficientnet_edge_builder
 from edgetpu import efficientnet_edgetpu_builder
 from tpu import efficientnet_tpu_builder
 from tensorflow.core.protobuf import rewriter_config_pb2
@@ -329,17 +330,19 @@ def model_fn(features, labels, mode, params):
   def build_model():
     """Build model using the model_name given through the command line."""
     model_builder = None
-    if FLAGS.model_name.startswith('efficientnet-edgetpu'):
+    if FLAGS.model_name.startswith('efficientnet-edgetpu-'):
       model_builder = efficientnet_edgetpu_builder
-    elif FLAGS.model_name.startswith('efficientnet-tpu'):
+    elif FLAGS.model_name.startswith('efficientnet-edge-'):
+      model_builder = efficientnet_edge_builder
+    elif FLAGS.model_name.startswith('efficientnet-tpu-'):
       model_builder = efficientnet_tpu_builder
-    elif FLAGS.model_name.startswith('efficientnet-condconv'):
+    elif FLAGS.model_name.startswith('efficientnet-condconv-'):
       model_builder = efficientnet_condconv_builder
-    elif FLAGS.model_name.startswith('efficientnet'):
+    elif FLAGS.model_name.startswith('efficientnet-'):
       model_builder = efficientnet_builder
     else:
-      raise ValueError('Model must be efficientnet-b*, efficientnet-edgetpu* '
-                       'efficientnet-tpu*, or efficientnet-condconv*')
+      raise ValueError('Model must be efficientnet-b*, -edgetpu*, -edge*, '
+                       '-tpu*, or -condconv*')
 
     normalized_features = normalize_features(features, model_builder.MEAN_RGB,
                                              model_builder.STDDEV_RGB)
@@ -598,8 +601,13 @@ def export(est, export_dir, input_image_size=None):
   batch_size = 1 if is_cond_conv else None  # Use fixed batch size for condconv.
 
   logging.info('Starting to export model.')
+  if FLAGS.model_name.startswith('efficientnet-edge'):
+    # edge or edgetpu use binlinear for easier post-quantization.
+    resize_method = tf.image.ResizeMethod.BILINEAR
+  else:
+    resize_method = None
   image_serving_input_fn = imagenet_input.build_image_serving_input_fn(
-      input_image_size, batch_size=batch_size)
+      input_image_size, batch_size=batch_size, resize_method=resize_method)
   est.export_saved_model(
       export_dir_base=export_dir,
       serving_input_receiver_fn=image_serving_input_fn)
@@ -609,16 +617,19 @@ def main(unused_argv):
 
   input_image_size = FLAGS.input_image_size
   if not input_image_size:
-    if FLAGS.model_name.startswith('efficientnet-edgetpu'):
+    if FLAGS.model_name.startswith('efficientnet-edge-'):
+      _, _, input_image_size, _ = efficientnet_edge_builder.efficientnet_edge_params(
+          FLAGS.model_name)
+    elif FLAGS.model_name.startswith('efficientnet-edgetpu-'):
       _, _, input_image_size, _ = efficientnet_edgetpu_builder.efficientnet_edgetpu_params(
           FLAGS.model_name)
-    elif FLAGS.model_name.startswith('efficientnet-tpu'):
+    elif FLAGS.model_name.startswith('efficientnet-tpu-'):
       _, _, input_image_size, _ = efficientnet_tpu_builder.efficientnet_tpu_params(
           FLAGS.model_name)
-    elif FLAGS.model_name.startswith('efficientnet-condconv'):
+    elif FLAGS.model_name.startswith('efficientnet-condconv-'):
       _, _, input_image_size, _, _ = efficientnet_condconv_builder.efficientnet_condconv_params(
           FLAGS.model_name)
-    elif FLAGS.model_name.startswith('efficientnet'):
+    elif FLAGS.model_name.startswith('efficientnet-'):
       _, _, input_image_size, _ = efficientnet_builder.efficientnet_params(
           FLAGS.model_name)
     else:
@@ -666,6 +677,11 @@ def main(unused_argv):
       export_to_tpu=FLAGS.export_to_tpu,
       params=params)
 
+  if FLAGS.model_name.startswith('efficientnet-edge'):
+    # edge or edgetpu use binlinear for easier post-quantization.
+    resize_method = tf.image.ResizeMethod.BILINEAR
+  else:
+    resize_method = None
   # Input pipelines are slightly different (with regards to shuffling and
   # preprocessing) between training and evaluation.
   def build_imagenet_input(is_training):
@@ -683,7 +699,8 @@ def main(unused_argv):
           augment_name=FLAGS.augment_name,
           mixup_alpha=FLAGS.mixup_alpha,
           randaug_num_layers=FLAGS.randaug_num_layers,
-          randaug_magnitude=FLAGS.randaug_magnitude)
+          randaug_magnitude=FLAGS.randaug_magnitude,
+          resize_method=resize_method)
     else:
       if FLAGS.data_dir == FAKE_DATA_DIR:
         logging.info('Using fake dataset.')
@@ -703,7 +720,8 @@ def main(unused_argv):
           augment_name=FLAGS.augment_name,
           mixup_alpha=FLAGS.mixup_alpha,
           randaug_num_layers=FLAGS.randaug_num_layers,
-          randaug_magnitude=FLAGS.randaug_magnitude)
+          randaug_magnitude=FLAGS.randaug_magnitude,
+          resize_method=resize_method)
 
   imagenet_train = build_imagenet_input(is_training=True)
   imagenet_eval = build_imagenet_input(is_training=False)

@@ -35,7 +35,7 @@ flags.DEFINE_string("output_tflite", None, "Path to output tflite file.")
 flags.DEFINE_bool("quantize", True,
                   "Quantize model to uint8 before exporting tflite model.")
 flags.DEFINE_integer(
-    "num_steps", 1000,
+    "num_steps", 2000,
     "Number of post-training quantization calibration steps to run.")
 flags.DEFINE_integer("image_size", 224, "Size of the input image.")
 flags.DEFINE_integer("batch_size", 1, "Batch size of input tensor.")
