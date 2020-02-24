@@ -42,8 +42,12 @@ MODELS = {
     "nasnetmobile": tf.keras.applications.NASNetMobile,
 }
 
-flags.DEFINE_enum("model", None, MODELS.keys(), "Name of the model to be run",
-                  case_sensitive=False)
+flags.DEFINE_enum(
+    "model",
+    None,
+    list(MODELS.keys()),
+    "Name of the model to be run",
+    case_sensitive=False)
 flags.DEFINE_string("tpu", None, "Name of the TPU to use")
 flags.DEFINE_integer("batch_size", 128, "Batch size to be used for model")
 flags.DEFINE_integer("epochs", 10, "Number of training epochs")
