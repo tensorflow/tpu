@@ -22,98 +22,100 @@ from hyperparameters import params_dict
 SHAPEMASK_RESNET_FROZEN_VAR_PREFIX = r'(resnet\d+/)conv2d(|_([1-9]|10))\/'
 
 SHAPEMASK_CFG = params_dict.ParamsDict(base_config.BASE_CFG)
-SHAPEMASK_CFG.override({
-    'type': 'shapemask',
-    'train': {
-        'total_steps': 45000,
-        'learning_rate': {
-            'learning_rate_steps': [30000, 40000],
+SHAPEMASK_CFG.override(
+    {
+        'type': 'shapemask',
+        'train': {
+            'total_steps': 45000,
+            'learning_rate': {
+                'learning_rate_steps': [30000, 40000],
+            },
+            'frozen_variable_prefix': SHAPEMASK_RESNET_FROZEN_VAR_PREFIX,
+            'regularization_variable_regex': None,
         },
-        'frozen_variable_prefix': SHAPEMASK_RESNET_FROZEN_VAR_PREFIX,
-        'regularization_variable_regex': None,
-    },
-    'eval': {
-        'type': 'shapemask_box_and_mask',
-        'mask_eval_class': 'all',  # 'all', 'voc', or 'nonvoc'.
-    },
-    'architecture': {
-        'parser': 'shapemask_parser',
-        'backbone': 'resnet',
-        'multilevel_features': 'fpn',
-        'use_bfloat16': True,
-    },
-    'shapemask_parser': {
-        'output_size': [640, 640],
-        'match_threshold': 0.5,
-        'unmatched_threshold': 0.5,
-        'aug_rand_hflip': True,
-        'aug_scale_min': 0.8,
-        'aug_scale_max': 1.2,
-        'skip_crowd_during_training': True,
-        'max_num_instances': 100,
-        'use_bfloat16': True,
-        # Shapemask specific parameters
-        'mask_train_class': 'all',  # 'all', 'voc', or 'nonvoc'.
-        'use_category': True,
-        'outer_box_scale': 1.25,
-        'num_sampled_masks': 8,
-        'mask_crop_size': 32,
-        'mask_min_level': 3,
-        'mask_max_level': 5,
-        'box_jitter_scale': 0.025,
-        'upsample_factor': 4,
-    },
-    'retinanet_head': {
-        'min_level': 3,
-        'max_level': 7,
-        # Note that `num_classes` is the total number of classes including
-        # one background classes whose index is 0.
-        'num_classes': 91,
-        'anchors_per_location': 9,
-        'retinanet_head_num_convs': 4,
-        'retinanet_head_num_filters': 256,
-        'use_separable_conv': False,
-        'use_batch_norm': True,
-        'batch_norm': {
-            'batch_norm_momentum': 0.997,
-            'batch_norm_epsilon': 1e-4,
-            'batch_norm_trainable': True,
-            'use_sync_bn': False,
+        'eval': {
+            'type': 'shapemask_box_and_mask',
+            'mask_eval_class': 'all',  # 'all', 'voc', or 'nonvoc'.
         },
-        'activation': 'relu',
-    },
-    'shapemask_head': {
-        'num_classes': 91,
-        'num_downsample_channels': 128,
-        'mask_crop_size': 32,
-        'use_category_for_mask': True,
-        'num_convs': 4,
-        'upsample_factor': 4,
-        'shape_prior_path': '',
-        'batch_norm': {
-            'batch_norm_momentum': 0.997,
-            'batch_norm_epsilon': 1e-4,
-            'batch_norm_trainable': True,
-            'use_sync_bn': False,
+        'architecture': {
+            'parser': 'shapemask_parser',
+            'backbone': 'resnet',
+            'multilevel_features': 'fpn',
+            'use_bfloat16': True,
+        },
+        'shapemask_parser': {
+            'output_size': [640, 640],
+            'match_threshold': 0.5,
+            'unmatched_threshold': 0.5,
+            'aug_rand_hflip': True,
+            'aug_scale_min': 0.8,
+            'aug_scale_max': 1.2,
+            'skip_crowd_during_training': True,
+            'max_num_instances': 100,
+            'use_bfloat16': True,
+            # Shapemask specific parameters
+            'mask_train_class': 'all',  # 'all', 'voc', or 'nonvoc'.
+            'use_category': True,
+            'outer_box_scale': 1.25,
+            'num_sampled_masks': 8,
+            'mask_crop_size': 32,
+            'mask_min_level': 3,
+            'mask_max_level': 5,
+            'box_jitter_scale': 0.025,
+            'upsample_factor': 4,
+        },
+        'retinanet_head': {
+            'min_level': 3,
+            'max_level': 7,
+            # Note that `num_classes` is the total number of classes including
+            # one background classes whose index is 0.
+            'num_classes': 91,
+            'anchors_per_location': 9,
+            'retinanet_head_num_convs': 4,
+            'retinanet_head_num_filters': 256,
+            'use_separable_conv': False,
+            'use_batch_norm': True,
+            'batch_norm': {
+                'batch_norm_momentum': 0.997,
+                'batch_norm_epsilon': 1e-4,
+                'batch_norm_trainable': True,
+                'use_sync_bn': False,
+            },
+            'activation': 'relu',
+        },
+        'shapemask_head': {
+            'num_classes': 91,
+            'num_downsample_channels': 128,
+            'mask_crop_size': 32,
+            'use_category_for_mask': True,
+            'num_convs': 4,
+            'upsample_factor': 4,
+            'shape_prior_path': '',
+            'batch_norm': {
+                'batch_norm_momentum': 0.997,
+                'batch_norm_epsilon': 1e-4,
+                'batch_norm_trainable': True,
+                'use_sync_bn': False,
+            },
+        },
+        'retinanet_loss': {
+            'num_classes': 91,
+            'focal_loss_alpha': 0.4,
+            'focal_loss_gamma': 1.5,
+            'huber_loss_delta': 0.15,
+            'box_loss_weight': 50,
+        },
+        'shapemask_loss': {
+            'shape_prior_loss_weight': 0.1,
+            'coarse_mask_loss_weight': 1.0,
+            'fine_mask_loss_weight': 1.0,
+        },
+        'postprocess': {
+            'min_level': 3,
+            'max_level': 7,
         },
     },
-    'retinanet_loss': {
-        'num_classes': 91,
-        'focal_loss_alpha': 0.4,
-        'focal_loss_gamma': 1.5,
-        'huber_loss_delta': 0.15,
-        'box_loss_weight': 50,
-    },
-    'shapemask_loss': {
-        'shape_prior_loss_weight': 0.1,
-        'coarse_mask_loss_weight': 1.0,
-        'fine_mask_loss_weight': 1.0,
-    },
-    'postprocess': {
-        'min_level': 3,
-        'max_level': 7,
-    },
-}, is_strict=False)
+    is_strict=False)
 
 SHAPEMASK_RESTRICTIONS = [
     'architecture.use_bfloat16 == shapemask_parser.use_bfloat16',
