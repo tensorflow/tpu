@@ -34,7 +34,7 @@ from utils import input_utils
 
 
 class Parser(object):
-  """Parser to parse an image and its annotations into a dictionary of tensors."""
+  """Base class to parse an image and its annotations into a dictionary of tensors."""
 
   def __init__(self,
                output_size,
@@ -160,6 +160,9 @@ class Parser(object):
     else:
       raise ValueError('mode is not defined.')
 
+  def get_normalized_image(self, decoded_data):
+    return input_utils.normalize_image(decoded_data['image'])
+
   def __call__(self, value):
     """Parses data to an image and associated training labels.
 
@@ -234,16 +237,11 @@ class Parser(object):
       boxes = tf.gather(boxes, indices)
       masks = tf.gather(masks, indices)
 
-    # Gets original image and its size.
-    image = data['image']
-    image_shape = tf.shape(image)[0:2]
-
     # If not using category, makes all categories with id = 0.
     if not self._use_category:
       classes = tf.cast(tf.greater(classes, 0), dtype=tf.float32)
 
-    # Normalizes image with mean and std pixel values.
-    image = input_utils.normalize_image(image)
+    image = self.get_normalized_image(data)
 
     # Flips image randomly during training.
     if self._aug_rand_hflip:
@@ -251,6 +249,7 @@ class Parser(object):
           image, boxes, masks)
 
     # Converts boxes from normalized coordinates to pixel coordinates.
+    image_shape = tf.shape(image)[0:2]
     boxes = box_utils.denormalize_boxes(boxes, image_shape)
 
     # Resizes and crops image.
@@ -394,18 +393,14 @@ class Parser(object):
     boxes = data['groundtruth_boxes']
     masks = data['groundtruth_instance_masks']
 
-    # Gets original image and its size.
-    image = data['image']
-    image_shape = tf.shape(image)[0:2]
-
     # If not using category, makes all categories with id = 0.
     if not self._use_category:
       classes = tf.cast(tf.greater(classes, 0), dtype=tf.float32)
 
-    # Normalizes image with mean and std pixel values.
-    image = input_utils.normalize_image(image)
+    image = self.get_normalized_image(data)
 
     # Converts boxes from normalized coordinates to pixel coordinates.
+    image_shape = tf.shape(image)[0:2]
     boxes = box_utils.denormalize_boxes(boxes, image_shape)
 
     # Resizes and crops image.
