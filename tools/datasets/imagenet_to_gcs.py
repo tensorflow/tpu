@@ -367,7 +367,7 @@ def convert_to_tf_records(raw_data_dir):
   random.seed(0)
   def make_shuffle_idx(n):
     order = range(n)
-    random.shuffle(order)
+    random.shuffle(list(order))
     return order
 
   # Glob all the training files
