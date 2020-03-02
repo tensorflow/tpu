@@ -96,7 +96,7 @@ def main(_):
   config.lock()
 
   model_params = dict(
-      config.as_dict().items(),
+      list(config.as_dict().items()),
       use_tpu=FLAGS.use_tpu,
       mode=tf.estimator.ModeKeys.PREDICT,
       transpose_input=False)
