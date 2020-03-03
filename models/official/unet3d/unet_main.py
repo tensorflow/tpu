@@ -36,9 +36,8 @@ flags.DEFINE_string(
     'mode', 'train', 'Mode to run: train or eval or train_and_eval '
     '(default: train)')
 flags.DEFINE_string('model_dir', None, 'Location of model_dir')
-flags.DEFINE_string('training_file_pattern', None,
-                    'Location of the train data.')
-flags.DEFINE_string('eval_file_pattern', None, 'Location of ther eval data')
+flags.DEFINE_string('training_file_pattern', '', 'Location of the train data.')
+flags.DEFINE_string('eval_file_pattern', '', 'Location of ther eval data')
 flags.DEFINE_string('config_file', '', 'a YAML file which specifies overrides.')
 flags.DEFINE_string('params_override', '',
                     'A JSON-style string that specifies overrides.')
@@ -83,18 +82,33 @@ def main(argv):
                                   unet_config.UNET_RESTRICTIONS)
   params = params_dict.override_params_dict(
       params, FLAGS.config_file, is_strict=False)
-  params = params_dict.override_params_dict(
-      params, FLAGS.params_override, is_strict=False)
+
+  if FLAGS.training_file_pattern:
+    params.override({'training_file_pattern': FLAGS.training_file_pattern},
+                    is_strict=True)
+
+  if FLAGS.eval_file_pattern:
+    params.override({'eval_file_pattern': FLAGS.eval_file_pattern},
+                    is_strict=True)
+
+  train_epoch_steps = params.train_item_count // params.train_batch_size
+  eval_epoch_steps = params.eval_item_count // params.eval_batch_size
+
   params.override(
       {
-          'training_file_pattern': FLAGS.training_file_pattern,
-          'eval_file_pattern': FLAGS.eval_file_pattern,
           'model_dir': FLAGS.model_dir,
           'min_eval_interval': FLAGS.min_eval_interval,
           'eval_timeout': FLAGS.eval_timeout,
-          'tpu_config': tpu_executor.get_tpu_flags()
+          'tpu_config': tpu_executor.get_tpu_flags(),
+          'lr_decay_steps': train_epoch_steps,
+          'train_steps': params.train_epochs * train_epoch_steps,
+          'eval_steps': eval_epoch_steps,
       },
       is_strict=False)
+
+  params = params_dict.override_params_dict(
+      params, FLAGS.params_override, is_strict=True)
+
   params.validate()
   params.lock()
 

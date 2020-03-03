@@ -32,6 +32,9 @@ UNET_CONFIG = {
     'train_batch_size': 8,
     'eval_batch_size': 8,
     'predict_batch_size': 8,
+    'train_epochs': 10,
+    'train_item_count': 1000,
+    'eval_item_count': 100,
     'train_steps': 100000,
     'eval_steps': 10,
     'num_steps_per_eval': 100,
@@ -59,11 +62,11 @@ UNET_CONFIG = {
     'num_segmentation_levels': 2,
     # Use batch norm.
     'use_batch_norm': True,
-    'init_learning_rate': 0.1,
+    'init_learning_rate': 0.00005,
     # learning rate decay steps.
     'lr_decay_steps': 100000,
     # learning rate decay rate.
-    'lr_decay_rate': 1.0,
+    'lr_decay_rate': 0.5,
     # Data format, 'channels_last' and 'channels_first'
     'data_format': 'channels_last',
     # Use class index for training. Otherwise, use one-hot encoding.

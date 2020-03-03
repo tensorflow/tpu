@@ -226,7 +226,11 @@ class TPUEstimatorExecuter(object):
       try:
         eval_results = self._eval_estimator.evaluate(
             input_fn=input_fn, steps=self._params.eval_steps)
-        write_summary(eval_results, summary_writer, current_step)
+
+        # Evaluation task could start before checkpoint is written,
+        # get preempted, or faile to write checkpoint correctly.
+        if eval_results is not None:
+          write_summary(eval_results, summary_writer, current_step)
 
         if current_step >= self._params.train_steps:
           logging.info('Evaluation finished after training step %d',
