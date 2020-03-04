@@ -31,12 +31,18 @@ from modeling import learning_rates
 from utils import benchmark_utils
 
 
-def _build_assigment_map(prefix=None, skip_variables_regex=None):
+def _build_assigment_map(checkpoint_path,
+                         prefix=None,
+                         skip_variables_regex=None):
   """Generate assigment map for loading checkpoints."""
   all_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=prefix)
+  checkpoint_variable_map = {
+      name: shape for name, shape in tf.train.list_variables(checkpoint_path)
+  }
   if not prefix:
     prefix = ''
   assignment_map = {}
+  incompatible_variables = set()
   for var in all_vars:
     var_name = var.name
     # Trim the index of the variable.
@@ -45,7 +51,17 @@ def _build_assigment_map(prefix=None, skip_variables_regex=None):
     if skip_variables_regex and re.match(skip_variables_regex,
                                          var_name[len(prefix):]):
       continue
-    assignment_map[var_name[len(prefix):]] = var
+    var_name_in_target_ckpt = var_name[len(prefix):]
+
+    # Skip variables in checkpoints with incompatible shapes, otherwise errors
+    # will happen when loading checkpoints.
+    if var_name_in_target_ckpt in checkpoint_variable_map and var.get_shape(
+    ).is_compatible_with(checkpoint_variable_map[var_name_in_target_ckpt]):
+      assignment_map[var_name_in_target_ckpt] = var
+    else:
+      incompatible_variables.add(var_name_in_target_ckpt)
+  tf.logging.info('The following variables are not initialized: %s',
+                  incompatible_variables)
   return assignment_map
 
 
@@ -232,8 +248,11 @@ class Model(six.with_metaclass(abc.ABCMeta, object)):
     def scaffold_fn():
       """Loads pretrained model through scaffold function."""
       assignment_map = _build_assigment_map(
+          checkpoint_path=self._checkpoint,
           prefix=self._checkpoint_prefix,
           skip_variables_regex=self._skip_variables_regex)
+      tf.logging.info('Loading checkpoint from %s using assignment_map: %s',
+                      self._checkpoint, assignment_map)
       tf.train.init_from_checkpoint(self._checkpoint, assignment_map)
 
       return tf.train.Scaffold()
