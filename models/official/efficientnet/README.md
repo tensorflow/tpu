@@ -5,7 +5,9 @@
 
 Updates
 
-  - **[Feb 2020] Released EfficientNet checkpoints trained with NoisyStudent: [paper](https://arxiv.org/abs/1911.04252).**
+  - **[Mar 2020] Released mobile/IoT device friendly EfficientNet-lite models: [README](lite/README.md).**
+
+  - [Feb 2020] Released EfficientNet checkpoints trained with NoisyStudent: [paper](https://arxiv.org/abs/1911.04252).
 
   - [Nov 2019] Released EfficientNet checkpoints trained with AdvProp: [paper](https://arxiv.org/abs/1911.09665).
 

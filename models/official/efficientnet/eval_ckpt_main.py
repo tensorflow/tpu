@@ -28,11 +28,9 @@ from absl import flags
 from absl import logging
 import tensorflow.compat.v1 as tf
 
-import efficientnet_builder
+import model_builder_factory
 import preprocessing
 import utils
-from condconv import efficientnet_condconv_builder
-from edgetpu import efficientnet_edgetpu_builder
 
 flags.DEFINE_string('model_name', 'efficientnet-b0', 'Model name to eval.')
 flags.DEFINE_string('runmode', 'examples', 'Running mode: examples or imagenet')
@@ -62,16 +60,8 @@ class EvalCkptDriver(utils.EvalCkptDriver):
 
   def build_model(self, features, is_training):
     """Build model with input features."""
-    if self.model_name.startswith('efficientnet-edgetpu'):
-      model_builder = efficientnet_edgetpu_builder
-    elif self.model_name.startswith('efficientnet-condconv'):
-      model_builder = efficientnet_condconv_builder
-    elif self.model_name.startswith('efficientnet'):
-      model_builder = efficientnet_builder
-    else:
-      raise ValueError(
-          'Model must be either efficientnet-b* or efficientnet-edgetpu* or'
-          'efficientnet-condconv*')
+    tf.logging.info(self.model_name)
+    model_builder = model_builder_factory.get_model_builder(self.model_name)
 
     if self.advprop_preprocessing:
       # AdvProp uses Inception preprocessing.
@@ -96,19 +86,7 @@ def get_eval_driver(model_name,
                     include_background_label=False,
                     advprop_preprocessing=False):
   """Get a eval driver."""
-  if model_name.startswith('efficientnet-edgetpu'):
-    _, _, image_size, _ = (
-        efficientnet_edgetpu_builder.efficientnet_edgetpu_params(model_name))
-  elif model_name.startswith('efficientnet-condconv'):
-    _, _, image_size, _, _ = (
-        efficientnet_condconv_builder.efficientnet_condconv_params(model_name))
-  elif model_name.startswith('efficientnet'):
-    _, _, image_size, _ = efficientnet_builder.efficientnet_params(model_name)
-  else:
-    raise ValueError(
-        'Model must be either efficientnet-b* or efficientnet-edgetpu* or '
-        'efficientnet-condconv*')
-
+  image_size = model_builder_factory.get_model_input_size(model_name)
   return EvalCkptDriver(
       model_name=model_name,
       batch_size=1,

@@ -30,15 +30,15 @@ MEAN_RGB = [127.0, 127.0, 127.0]
 STDDEV_RGB = [128.0, 128.0, 128.0]
 
 
-def efficientnet_edge_params(model_name):
+def efficientnet_lite_params(model_name):
   """Get efficientnet params based on model name."""
   params_dict = {
       # (width_coefficient, depth_coefficient, resolution, dropout_rate)
-      'efficientnet-edge-b0': (1.0, 1.0, 224, 0.2),
-      'efficientnet-edge-b1': (1.0, 1.1, 240, 0.2),
-      'efficientnet-edge-b2': (1.1, 1.2, 260, 0.3),
-      'efficientnet-edge-b3': (1.2, 1.4, 280, 0.3),
-      'efficientnet-edge-b4': (1.4, 1.8, 300, 0.3),
+      'efficientnet-lite0': (1.0, 1.0, 224, 0.2),
+      'efficientnet-lite1': (1.0, 1.1, 240, 0.2),
+      'efficientnet-lite2': (1.1, 1.2, 260, 0.3),
+      'efficientnet-lite3': (1.2, 1.4, 280, 0.3),
+      'efficientnet-lite4': (1.4, 1.8, 300, 0.3),
   }
   return params_dict[model_name]
 
@@ -51,7 +51,7 @@ _DEFAULT_BLOCKS_ARGS = [
 ]
 
 
-def efficientnet_edge(width_coefficient=None,
+def efficientnet_lite(width_coefficient=None,
                       depth_coefficient=None,
                       dropout_rate=0.2,
                       survival_prob=0.8):
@@ -73,17 +73,18 @@ def efficientnet_edge(width_coefficient=None,
       # The alternative is tf.layers.BatchNormalization.
       batch_norm=utils.TpuBatchNormalization,  # TPU-specific requirement.
       clip_projection_output=False,
+      fix_head_stem=True,  # Don't scale stem and head.
       local_pooling=True,  # special cases for tflite issues.
-      use_se=False)  # SE is not well supported on many edge devices.
+      use_se=False)  # SE is not well supported on many lite devices.
   return global_params
 
 
 def get_model_params(model_name, override_params):
   """Get the block args and global params for a given model."""
-  if model_name.startswith('efficientnet-edge-'):
+  if model_name.startswith('efficientnet-lite'):
     width_coefficient, depth_coefficient, _, dropout_rate = (
-        efficientnet_edge_params(model_name))
-    global_params = efficientnet_edge(
+        efficientnet_lite_params(model_name))
+    global_params = efficientnet_lite(
         width_coefficient, depth_coefficient, dropout_rate)
   else:
     raise NotImplementedError('model name is not pre-defined: %s' % model_name)

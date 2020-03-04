@@ -22,9 +22,8 @@ from absl import app
 from absl import flags
 import tensorflow.compat.v1 as tf
 
-import efficientnet_builder
 import imagenet_input
-from edgetpu import efficientnet_edgetpu_builder
+import model_builder_factory
 
 flags.DEFINE_string("model_name", None, "Model name to eval.")
 flags.DEFINE_string("ckpt_dir", None, "Path to the training checkpoint")
@@ -42,18 +41,7 @@ flags.DEFINE_integer("batch_size", 1, "Batch size of input tensor.")
 flags.DEFINE_string("endpoint_name", None, "Endpoint name")
 flags.DEFINE_string("output_saved_model_dir", None,
                     "Directory in which to save the saved_model.")
-
 FLAGS = flags.FLAGS
-
-
-def get_model_builder(model_name):
-  if model_name.startswith("efficientnet-edgetpu"):
-    return efficientnet_edgetpu_builder
-  elif model_name.startswith("efficientnet"):
-    return efficientnet_builder
-  else:
-    raise ValueError(
-        "Model must be either efficientnet-b* or efficientnet-edgetpu")
 
 
 def restore_model(sess, ckpt_dir, enable_ema=True):
@@ -94,7 +82,7 @@ def representative_dataset_gen():
 
   def preprocess_map_fn(images, labels):
     del labels
-    model_builder = get_model_builder(FLAGS.model_name)
+    model_builder = model_builder_factory.get_model_builder(FLAGS.model_name)
     images -= tf.constant(
         model_builder.MEAN_RGB, shape=[1, 1, 3], dtype=images.dtype)
     images /= tf.constant(
@@ -115,7 +103,7 @@ def main(_):
   # TensorFlow training input helper.
   tf.enable_eager_execution()
 
-  model_builder = get_model_builder(FLAGS.model_name)
+  model_builder = model_builder_factory.get_model_builder(FLAGS.model_name)
 
   with tf.Graph().as_default(), tf.Session() as sess:
     images = tf.placeholder(
