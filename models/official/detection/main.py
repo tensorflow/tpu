@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Main function to train various object detection models.
+"""Main function to train various models.
 """
 
 from __future__ import absolute_import
