@@ -25,7 +25,7 @@ Here are the checkpoints, and their accurracy, params, flops, and Pixel4's CPU/G
 
 Comparing with MobileNetV2, ResNet-50, and Inception-V4, our models have
 better trade-offs between accuracy and size/latency.
-The following two figures shows the comparison among quantized versions of
+The following two figures show the comparison among quantized versions of
 these models. The latency numbers are obtained on a Pixel 4 with 4 CPU
 threads.
 
