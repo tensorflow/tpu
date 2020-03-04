@@ -102,16 +102,29 @@ class Anchor(object):
       boxes_all.append(boxes_l)
     return tf.concat(boxes_all, axis=0)
 
-  def unpack_labels(self, labels):
-    """Unpacks an array of labels into multiscales labels."""
+  def unpack_labels(self, labels, is_box=False):
+    """Unpacks an array of labels into multiscales labels.
+
+    Args:
+      labels: labels to unpack.
+      is_box: to unpack anchor boxes or not. If it is true, will unpack to 2D,
+        otherwise, will unpack to 3D.
+
+    Returns:
+      unpacked_labels: a dictionary contains unpack labels in different levels.
+    """
     unpacked_labels = collections.OrderedDict()
     count = 0
     for level in range(self.min_level, self.max_level + 1):
       feat_size_y = tf.cast(self.image_size[0] / 2 ** level, tf.int32)
       feat_size_x = tf.cast(self.image_size[1] / 2 ** level, tf.int32)
       steps = feat_size_y * feat_size_x * self.anchors_per_location
-      unpacked_labels[level] = tf.reshape(
-          labels[count:count + steps], [feat_size_y, feat_size_x, -1])
+      if is_box:
+        unpacked_labels[level] = tf.reshape(labels[count:count + steps],
+                                            [-1, 4])
+      else:
+        unpacked_labels[level] = tf.reshape(labels[count:count + steps],
+                                            [feat_size_y, feat_size_x, -1])
       count += steps
     return unpacked_labels
 
@@ -121,7 +134,7 @@ class Anchor(object):
 
   @property
   def multilevel_boxes(self):
-    return self.unpack_labels(self.boxes)
+    return self.unpack_labels(self.boxes, is_box=True)
 
 
 class AnchorLabeler(object):

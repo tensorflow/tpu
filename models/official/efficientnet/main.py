@@ -27,15 +27,13 @@ import numpy as np
 import tensorflow.compat.v1 as tf
 import tensorflow.compat.v2 as tf2  # used for summaries only.
 
-import efficientnet_builder
 import imagenet_input
+import model_builder_factory
 import utils
-from condconv import efficientnet_condconv_builder
-from edge import efficientnet_edge_builder
-from edgetpu import efficientnet_edgetpu_builder
-from tpu import efficientnet_tpu_builder
+# pylint: disable=g-direct-tensorflow-import
 from tensorflow.core.protobuf import rewriter_config_pb2
 from tensorflow.python.estimator import estimator
+# pylint: enable=g-direct-tensorflow-import
 
 FLAGS = flags.FLAGS
 
@@ -329,21 +327,7 @@ def model_fn(features, labels, mode, params):
 
   def build_model():
     """Build model using the model_name given through the command line."""
-    model_builder = None
-    if FLAGS.model_name.startswith('efficientnet-edgetpu-'):
-      model_builder = efficientnet_edgetpu_builder
-    elif FLAGS.model_name.startswith('efficientnet-edge-'):
-      model_builder = efficientnet_edge_builder
-    elif FLAGS.model_name.startswith('efficientnet-tpu-'):
-      model_builder = efficientnet_tpu_builder
-    elif FLAGS.model_name.startswith('efficientnet-condconv-'):
-      model_builder = efficientnet_condconv_builder
-    elif FLAGS.model_name.startswith('efficientnet-'):
-      model_builder = efficientnet_builder
-    else:
-      raise ValueError('Model must be efficientnet-b*, -edgetpu*, -edge*, '
-                       '-tpu*, or -condconv*')
-
+    model_builder = model_builder_factory.get_model_builder(FLAGS.model_name)
     normalized_features = normalize_features(features, model_builder.MEAN_RGB,
                                              model_builder.STDDEV_RGB)
     logits, _ = model_builder.build_model(
@@ -570,7 +554,7 @@ def _select_tables_from_flags():
   column_qualifier = _verify_non_empty_string(FLAGS.bigtable_column_qualifier,
                                               'column_qualifier')
   return [
-      imagenet_input.BigtableSelection(
+      imagenet_input.BigtableSelection(  # pylint: disable=g-complex-comprehension
           project=project,
           instance=instance,
           table=table,
@@ -601,8 +585,9 @@ def export(est, export_dir, input_image_size=None):
   batch_size = 1 if is_cond_conv else None  # Use fixed batch size for condconv.
 
   logging.info('Starting to export model.')
-  if FLAGS.model_name.startswith('efficientnet-edge'):
-    # edge or edgetpu use binlinear for easier post-quantization.
+  if (FLAGS.model_name.startswith('efficientnet-lite') or
+      FLAGS.model_name.startswith('efficientnet-edgetpu')):
+    # lite or edgetpu use binlinear for easier post-quantization.
     resize_method = tf.image.ResizeMethod.BILINEAR
   else:
     resize_method = None
@@ -617,23 +602,8 @@ def main(unused_argv):
 
   input_image_size = FLAGS.input_image_size
   if not input_image_size:
-    if FLAGS.model_name.startswith('efficientnet-edge-'):
-      _, _, input_image_size, _ = efficientnet_edge_builder.efficientnet_edge_params(
-          FLAGS.model_name)
-    elif FLAGS.model_name.startswith('efficientnet-edgetpu-'):
-      _, _, input_image_size, _ = efficientnet_edgetpu_builder.efficientnet_edgetpu_params(
-          FLAGS.model_name)
-    elif FLAGS.model_name.startswith('efficientnet-tpu-'):
-      _, _, input_image_size, _ = efficientnet_tpu_builder.efficientnet_tpu_params(
-          FLAGS.model_name)
-    elif FLAGS.model_name.startswith('efficientnet-condconv-'):
-      _, _, input_image_size, _, _ = efficientnet_condconv_builder.efficientnet_condconv_params(
-          FLAGS.model_name)
-    elif FLAGS.model_name.startswith('efficientnet-'):
-      _, _, input_image_size, _ = efficientnet_builder.efficientnet_params(
-          FLAGS.model_name)
-    else:
-      raise ValueError('input_image_size must be set except for EfficientNet')
+    input_image_size = model_builder_factory.get_model_input_size(
+        FLAGS.model_name)
 
   # For imagenet dataset, include background label if number of output classes
   # is 1001
@@ -677,8 +647,9 @@ def main(unused_argv):
       export_to_tpu=FLAGS.export_to_tpu,
       params=params)
 
-  if FLAGS.model_name.startswith('efficientnet-edge'):
-    # edge or edgetpu use binlinear for easier post-quantization.
+  if (FLAGS.model_name.startswith('efficientnet-lite') or
+      FLAGS.model_name.startswith('efficientnet-edgetpu')):
+    # lite or edgetpu use binlinear for easier post-quantization.
     resize_method = tf.image.ResizeMethod.BILINEAR
   else:
     resize_method = None

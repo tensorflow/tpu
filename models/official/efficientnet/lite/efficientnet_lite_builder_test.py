@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Tests for efficientnet_edge_builder."""
+"""Tests for efficientnet_lite_builder."""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -21,7 +21,7 @@ from __future__ import print_function
 import numpy as np
 import tensorflow.compat.v1 as tf
 
-from edge import efficientnet_edge_builder
+from lite import efficientnet_lite_builder
 
 
 class EfficientnetBuilderTest(tf.test.TestCase):
@@ -34,7 +34,7 @@ class EfficientnetBuilderTest(tf.test.TestCase):
                          features_only=False,
                          pooled_features_only=False):
     images = tf.zeros((1, input_size, input_size, 3), dtype=tf.float32)
-    efficientnet_edge_builder.build_model(
+    efficientnet_lite_builder.build_model(
         images,
         model_name=model_name,
         override_params=override_params,
@@ -42,27 +42,28 @@ class EfficientnetBuilderTest(tf.test.TestCase):
         features_only=features_only,
         pooled_features_only=pooled_features_only)
     num_params = np.sum([np.prod(v.shape) for v in tf.trainable_variables()])
+
     self.assertEqual(num_params, expected_params)
 
   def test_efficientnet_b0(self):
     self._test_model_params(
-        'efficientnet-edge-b0', 224, expected_params=4652008)
+        'efficientnet-lite0', 224, expected_params=4652008)
 
   def test_efficientnet_b1(self):
     self._test_model_params(
-        'efficientnet-edge-b1', 240, expected_params=6671544)
+        'efficientnet-lite1', 240, expected_params=5416680)
 
   def test_efficientnet_b2(self):
     self._test_model_params(
-        'efficientnet-edge-b2', 260, expected_params=7780856)
+        'efficientnet-lite2', 260, expected_params=6092072)
 
   def test_efficientnet_b3(self):
     self._test_model_params(
-        'efficientnet-edge-b3', 280, expected_params=10353504)
+        'efficientnet-lite3', 280, expected_params=8197096)
 
   def test_efficientnet_b4(self):
     self._test_model_params(
-        'efficientnet-edge-b4', 300, expected_params=16195168)
+        'efficientnet-lite4', 300, expected_params=13006568)
 
 
 if __name__ == '__main__':

@@ -57,7 +57,7 @@ def multilevel_propose_rois(rpn_boxes,
       logit tensors of shape [batch_size, feature_h, feature_w, num_anchors].
     anchor_boxes: a dict with keys representing FPN levels and values
       representing anchor box tensors of shape
-      [batch_size, feature_h, feature_w, num_anchors * 4].
+      [batch_size, feature_h * feature_w * num_anchors, 4].
     image_shape: a tensor of shape [batch_size, 2] where the last dimension are
       [height, width] of the scaled image.
     rpn_pre_nms_top_k: an integer of top scoring RPN proposals *per level* to
@@ -200,7 +200,7 @@ class ROIGenerator(object):
         logit tensors of shape [batch_size, feature_h, feature_w, num_anchors].
       anchor_boxes: a dict with keys representing FPN levels and values
         representing anchor box tensors of shape
-        [batch_size, feature_h, feature_w, num_anchors * 4].
+        [batch_size, feature_h * feature_w * num_anchors, 4].
       image_shape: a tensor of shape [batch_size, 2] where the last dimension
         are [height, width] of the scaled image.
       is_training: a bool indicating whether it is in training or inference
