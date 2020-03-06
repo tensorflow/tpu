@@ -29,7 +29,7 @@ import (
 	"github.com/tensorflow/tpu/tools/ctpu/ctrl"
 )
 
-const version = "1.14"
+const version = "1.15"
 
 var logRequests bool
 

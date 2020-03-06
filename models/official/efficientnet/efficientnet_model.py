@@ -616,6 +616,7 @@ class Model(tf.keras.Model):
         strides=[1, 1],
         kernel_initializer=conv_kernel_initializer,
         padding='same',
+        data_format=self._global_params.data_format,
         use_bias=False)
     self._bn1 = self._batch_norm(
         axis=channel_axis,

@@ -23,20 +23,26 @@ Here are the checkpoints, and their accurracy, params, flops, and Pixel4's CPU/G
 
 * Each checkpoint all contains FP tflite and post-training quantized INT8 tflite files. If you use these models or checkpoints, you can cite this [efficientnet paper](https://arxiv.org/abs/1905.11946).
 
-Compare to previous MobileNetV2, ResNet-50, and Inception-V4 on Pixel4, our models have better trade-offs between accuracy and size/latency. Here are the model size, and CPU/GPU latency accuracy comparison:
+Comparing with MobileNetV2, ResNet-50, and Inception-V4, our models have
+better trade-offs between accuracy and size/latency.
+The following two figures show the comparison among quantized versions of
+these models. The latency numbers are obtained on a Pixel 4 with 4 CPU
+threads.
 
 <p align="center">
-    <img src="../g3doc/lite-size.png" width="60%" />
+    <img src="../g3doc/lite-quant-size.png" width="60%" />
 </p>
 
 <p align="center">
-    <img src="../g3doc/lite-cpu.png", width="60%" />
+    <img src="../g3doc/lite-quant-cpu.png", width="60%" />
 </p>
 
+As Tensorflow Lite also provides GPU acceleration for float models, the
+following shows the latency comparison among float versions of these
+models. Again, the latency numbers are obtained on a Pixel 4.
 <p align="center">
-    <img src="../g3doc/lite-gpu.png" width="60%" />
+    <img src="../g3doc/lite-float-gpu.png" width="60%" />
 </p>
-
 
 A quick way to use these checkpoints is to run:
 
