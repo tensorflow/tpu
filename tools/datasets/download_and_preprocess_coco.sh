@@ -32,11 +32,11 @@ if [ -z "$1" ]; then
   exit
 fi
 
-sudo apt install -y protobuf-compiler python-pil python-lxml\
-  python-pip python-dev git unzip
+sudo apt install -y protobuf-compiler python3-pil python3-lxml\
+  python3-pip python3-dev git unzip
 
-pip install Cython
-pip install git+https://github.com/cocodataset/cocoapi#subdirectory=PythonAPI
+pip3 install Cython
+pip3 install git+https://github.com/cocodataset/cocoapi#subdirectory=PythonAPI
 
 echo "Cloning Tensorflow models directory (for conversion utilities)"
 if [ ! -e tf-models ]; then
@@ -93,7 +93,7 @@ function create_train_dataset() {
   TRAIN_IMAGE_DIR="${SCRATCH_DIR}/train2017"
   TRAIN_OBJ_ANNOTATIONS_FILE="${SCRATCH_DIR}/annotations/instances_train2017.json"
   TRAIN_CAPTION_ANNOTATIONS_FILE="${SCRATCH_DIR}/annotations/captions_train2017.json"
-  PYTHONPATH="tf-models:tf-models/research" python $SCRIPT_DIR/create_coco_tf_record.py \
+  PYTHONPATH="tf-models:tf-models/research" python3 $SCRIPT_DIR/create_coco_tf_record.py \
     --logtostderr \
     --include_masks \
     --image_dir="${TRAIN_IMAGE_DIR}" \
@@ -111,7 +111,7 @@ function create_val_dataset() {
   VAL_IMAGE_DIR="${SCRATCH_DIR}/val2017"
   VAL_OBJ_ANNOTATIONS_FILE="${SCRATCH_DIR}/annotations/instances_val2017.json"
   VAL_CAPTION_ANNOTATIONS_FILE="${SCRATCH_DIR}/annotations/captions_val2017.json"
-  PYTHONPATH="tf-models:tf-models/research" python $SCRIPT_DIR/create_coco_tf_record.py \
+  PYTHONPATH="tf-models:tf-models/research" python3 $SCRIPT_DIR/create_coco_tf_record.py \
     --logtostderr \
     --include_masks \
     --image_dir="${VAL_IMAGE_DIR}" \
@@ -128,7 +128,7 @@ function create_testdev_and_test_dataset() {
   download_and_unzip ${BASE_IMAGE_URL} ${TEST_IMAGE_FILE}
   TEST_IMAGE_DIR="${SCRATCH_DIR}/test2017"
   TEST_IMAGE_INFO_FILE="${SCRATCH_DIR}/annotations/image_info_test2017.json"
-  PYTHONPATH="tf-models:tf-models/research" python $SCRIPT_DIR/create_coco_tf_record.py \
+  PYTHONPATH="tf-models:tf-models/research" python3 $SCRIPT_DIR/create_coco_tf_record.py \
     --logtostderr \
     --include_masks \
     --image_dir="${TEST_IMAGE_DIR}" \
@@ -137,7 +137,7 @@ function create_testdev_and_test_dataset() {
     --num_shards=256
 
   TEST_DEV_IMAGE_INFO_FILE="${SCRATCH_DIR}/annotations/image_info_test-dev2017.json"
-  PYTHONPATH="tf-models:tf-models/research" python $SCRIPT_DIR/create_coco_tf_record.py \
+  PYTHONPATH="tf-models:tf-models/research" python3 $SCRIPT_DIR/create_coco_tf_record.py \
     --logtostderr \
     --include_masks \
     --image_dir="${TEST_IMAGE_DIR}" \
@@ -153,7 +153,7 @@ function create_unlabeled_dataset() {
   download_and_unzip ${BASE_IMAGE_URL} ${UNLABELED_IMAGE_FILE}
   UNLABELED_IMAGE_DIR="${SCRATCH_DIR}/unlabeled2017"
   UNLABELED_IMAGE_INFO_FILE="${SCRATCH_DIR}/annotations/image_info_unlabeled2017.json"
-  PYTHONPATH="tf-models:tf-models/research" python $SCRIPT_DIR/create_coco_tf_record.py \
+  PYTHONPATH="tf-models:tf-models/research" python3 $SCRIPT_DIR/create_coco_tf_record.py \
     --logtostderr \
     --include_masks \
     --image_dir="${UNLABELED_IMAGE_DIR}" \
