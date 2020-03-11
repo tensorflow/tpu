@@ -28,7 +28,7 @@ import numpy as np
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
 import pycocotools.mask as maskUtils
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 import cv2
 
 
@@ -148,7 +148,7 @@ class MaskCOCO(COCO):
             for instance_mask in segments
         ]
 
-      for box_index in range(detection_results['num_detections'][i]):
+      for box_index in range(int(detection_results['num_detections'][i])):
         if current_index % 1000000 == 0:
           print('{}/{}'.format(current_index, num_detections))
         current_index += 1
