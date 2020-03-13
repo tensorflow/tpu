@@ -1,0 +1,64 @@
+# SpineNet-96 + RetinaNet
+#  - With synchronized batchnorm across replicas.
+#  - With training time multiscale augmentation [0.1, 1.9].
+#  - With swish activation.
+#  - 49.1% mAP, 256.5B FLOPs, 42.9M Params.
+
+architecture:
+  backbone: 'spinenet'
+  multilevel_features: 'identity'
+train:
+  total_steps: 185200
+  train_batch_size: 256
+  learning_rate:
+    type: 'step'
+    warmup_learning_rate: 0.0067
+    warmup_steps: 2000
+    init_learning_rate: 0.28
+    learning_rate_levels: [0.028, 0.0028, 0.00028]
+    learning_rate_steps: [166680, 175940, 180570]
+  checkpoint:
+    path: ''
+    prefix: ''
+    skip_variables_regex: ''
+  l2_weight_decay: 0.00004
+  gradient_clip_norm: 10.0
+spinenet:
+  filter_size_scale: 1.0
+  block_repeats: 2
+  resample_alpha: 0.5
+  endpoints_num_filters: 256
+  min_level: 3
+  max_level: 7
+  init_drop_connect_rate: 0.2
+  activation: 'swish'
+  batch_norm:
+    batch_norm_epsilon: 0.001
+    batch_norm_momentum: 0.997
+    batch_norm_trainable: True
+    use_sync_bn: True
+retinanet_head:
+  min_level: 3
+  max_level: 7
+  retinanet_head_num_filters: 256
+  use_separable_conv: False
+  batch_norm:
+    batch_norm_epsilon: 0.001
+    batch_norm_momentum: 0.997
+    batch_norm_trainable: True
+    use_sync_bn: True
+  activation: 'swish'
+anchor:
+  min_level: 3
+  max_level: 7
+  num_scales: 3
+  aspect_ratios: [1.0, 2.0, 0.5]
+  anchor_size: 4.0
+postprocess:
+  min_level: 3
+  max_level: 7
+retinanet_parser:
+  output_size: [1024, 1024]
+  aug_scale_min: 0.1
+  aug_scale_max: 1.9
+  use_autoaugment: False
