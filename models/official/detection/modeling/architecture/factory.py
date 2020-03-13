@@ -25,6 +25,7 @@ from modeling.architecture import identity
 from modeling.architecture import nasfpn
 from modeling.architecture import nn_ops
 from modeling.architecture import resnet
+from modeling.architecture import spinenet
 
 
 def batch_norm_relu_generator(params, activation='relu'):
@@ -53,6 +54,24 @@ def backbone_generator(params):
             resnet_params.batch_norm, activation=resnet_params.activation),
         init_drop_connect_rate=resnet_params.init_drop_connect_rate,
         activation=resnet_params.activation)
+  elif params.architecture.backbone == 'spinenet':
+    spinenet_params = params.spinenet
+    block_specs_list = None
+    if spinenet_params.block_specs:
+      block_specs_list = json.loads(spinenet_params.block_specs)
+    backbone_fn = spinenet.SpineNet(
+        block_specs=spinenet.build_block_specs(block_specs_list),
+        min_level=spinenet_params.min_level,
+        max_level=spinenet_params.max_level,
+        endpoints_num_filters=spinenet_params.endpoints_num_filters,
+        resample_alpha=spinenet_params.resample_alpha,
+        use_native_resize_op=spinenet_params.use_native_resize_op,
+        block_repeats=spinenet_params.block_repeats,
+        filter_size_scale=spinenet_params.filter_size_scale,
+        activation=spinenet_params.activation,
+        batch_norm_relu=batch_norm_relu_generator(
+            spinenet_params.batch_norm, activation=spinenet_params.activation),
+        init_drop_connect_rate=spinenet_params.init_drop_connect_rate)
   else:
     raise ValueError('Backbone model %s is not supported.' %
                      params.architecture.backbone)

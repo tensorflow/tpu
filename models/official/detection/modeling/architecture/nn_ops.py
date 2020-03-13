@@ -23,6 +23,7 @@ from absl import logging
 from six.moves import range
 import tensorflow.compat.v1 as tf
 
+from ops import spatial_transform_ops
 from tensorflow.python.tpu import tpu_function  # pylint: disable=g-direct-tensorflow-import
 from tensorflow.python.tpu.ops import tpu_ops  # pylint: disable=g-direct-tensorflow-import
 
@@ -531,3 +532,28 @@ def aspp_layer(feat,
   output_feat = batch_norm_relu(output_feat, is_training=is_training)
 
   return output_feat
+
+
+def pyramid_feature_fusion(pyramid_feats, target_level):
+  """Fuse all feature maps in the feature pyramid at the target level.
+
+  Args:
+    pyramid_feats: a dictionary containing the feature pyramid.
+    target_level: `int` the target feature level for feature fusion.
+
+  Returns:
+    A float Tensor of shape [batch_size, feature_height, feature_width,
+      feature_channel].
+  """
+  min_level, max_level = min(pyramid_feats.keys()), max(pyramid_feats.keys())
+  resampled_feats = []
+
+  for l in range(min_level, max_level + 1):
+    if l == target_level:
+      resampled_feats.append(pyramid_feats[l])
+    else:
+      resampled_feat = spatial_transform_ops.nearest_upsampling(
+          pyramid_feats[l], 2**(l - target_level))
+      resampled_feats.append(resampled_feat)
+
+  return tf.math.add_n(resampled_feats)
