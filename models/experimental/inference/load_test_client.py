@@ -20,16 +20,16 @@ from __future__ import print_function
 import base64
 import io
 import json
-import Queue
 import threading
 import time
 import grpc
 
 import numpy as np
 from PIL import Image
+import queue as Queue
 from ratelimiter import RateLimiter
 import requests
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 from tensorflow_serving.apis import predict_pb2
 from tensorflow_serving.apis import prediction_service_pb2_grpc
