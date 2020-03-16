@@ -184,7 +184,6 @@ def mbconv_block(inputs,
                  out_filters,
                  expand_ratio,
                  strides,
-                 use_projection,
                  kernel_size=3,
                  se_ratio=None,
                  batch_norm_relu=nn_ops.BatchNormRelu(),
@@ -201,10 +200,6 @@ def mbconv_block(inputs,
     expand_ratio: a `int` number as the feature dimension expansion ratio.
     strides: a `int` block stride. If greater than 1, this block will ultimately
       downsample the input.
-    use_projection: a `bool` for whether this block should use a projection
-      shortcut (versus the default identity shortcut). This is usually `True`
-      for the first block of a block group, which may change the number of
-      filters and the resolution.
     kernel_size: kernel size for the depthwise convolution.
     se_ratio: squeeze and excitation ratio.
     batch_norm_relu: an operation that is added after convolutions, including a
@@ -222,15 +217,6 @@ def mbconv_block(inputs,
   """
   tf.logging.info('-----> Building mbconv block.')
   shortcut = inputs
-  if use_projection:
-    shortcut = nn_ops.conv2d_fixed_padding(
-        inputs=inputs,
-        filters=out_filters,
-        kernel_size=1,
-        strides=strides,
-        data_format=data_format)
-    shortcut = batch_norm_relu(shortcut, is_training=is_training)
-    shortcut = dropblock(shortcut, is_training=is_training)
 
   # First 1x1 conv for channel expansion.
   inputs = nn_ops.conv2d_fixed_padding(
@@ -264,10 +250,12 @@ def mbconv_block(inputs,
       kernel_size=1,
       strides=1,
       data_format=data_format)
-  inputs = batch_norm_relu(inputs, is_training=is_training)
+  inputs = batch_norm_relu(inputs, relu=False, is_training=is_training)
   inputs = dropblock(inputs, is_training=is_training)
 
-  if drop_connect_rate:
-    inputs = nn_ops.drop_connect(inputs, is_training, drop_connect_rate)
+  if in_filters == out_filters and strides == 1:
+    if drop_connect_rate:
+      inputs = nn_ops.drop_connect(inputs, is_training, drop_connect_rate)
+    inputs = tf.add(inputs, shortcut)
 
-  return tf.add(inputs, shortcut)
+  return inputs
