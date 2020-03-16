@@ -26,6 +26,7 @@ from __future__ import division
 from __future__ import print_function
 
 import functools
+import os
 from absl import flags
 import tensorflow.compat.v1 as tf
 
@@ -73,8 +74,10 @@ def main(argv):
   if FLAGS.config_file:
     params = params_dict.override_params_dict(
         params, FLAGS.config_file, is_strict=True)
+  # Use `is_strict=False` to load params_override with run_time variables like
+  # `train.num_shards`.
   params = params_dict.override_params_dict(
-      params, FLAGS.params_override, is_strict=True)
+      params, FLAGS.params_override, is_strict=False)
   params.validate()
   params.lock()
 
@@ -84,17 +87,31 @@ def main(argv):
       mode=tf.estimator.ModeKeys.PREDICT,
       transpose_input=False)
 
+  tf.logging.info('model_params is:\n %s', model_params)
+
+  image_size = [int(x) for x in FLAGS.input_image_size.split(',')]
+
+  if FLAGS.model == 'retinanet':
+    model_fn = serving.serving_model_fn_builder(
+        FLAGS.use_tpu, FLAGS.output_image_info,
+        FLAGS.output_normalized_coordinates,
+        FLAGS.cast_num_detections_to_float)
+    serving_input_receiver_fn = functools.partial(
+        serving.serving_input_fn,
+        batch_size=FLAGS.batch_size,
+        desired_image_size=image_size,
+        stride=(2**params.anchor.max_level),
+        input_type=FLAGS.input_type,
+        input_name=FLAGS.input_name)
+  else:
+    raise ValueError('Model %s is not supported.'% params.type)
+
   print(' - Setting up TPUEstimator...')
   estimator = tf.estimator.tpu.TPUEstimator(
-      model_fn=serving.serving_model_fn_builder(
-          FLAGS.use_tpu,
-          FLAGS.output_image_info,
-          FLAGS.output_normalized_coordinates,
-          FLAGS.cast_num_detections_to_float),
+      model_fn=model_fn,
       model_dir=None,
       config=tf.estimator.tpu.RunConfig(
-          tpu_config=tf.estimator.tpu.TPUConfig(
-              iterations_per_loop=1),
+          tpu_config=tf.estimator.tpu.TPUConfig(iterations_per_loop=1),
           master='local',
           evaluation_master='local'),
       params=model_params,
@@ -105,20 +122,26 @@ def main(argv):
       export_to_cpu=True)
 
   print(' - Exporting the model...')
-  input_type = FLAGS.input_type
-  image_size = [int(x) for x in FLAGS.input_image_size.split(',')]
+
+  dir_name = os.path.dirname(FLAGS.export_dir)
+
+  if not tf.gfile.Exists(dir_name):
+    tf.logging.info('Creating base dir: %s', dir_name)
+    tf.gfile.MakeDirs(dir_name)
+
   export_path = estimator.export_saved_model(
-      export_dir_base=FLAGS.export_dir,
-      serving_input_receiver_fn=functools.partial(
-          serving.serving_input_fn,
-          batch_size=FLAGS.batch_size,
-          desired_image_size=image_size,
-          stride=(2 ** params.anchor.max_level),
-          input_type=input_type,
-          input_name=FLAGS.input_name),
+      export_dir_base=dir_name,
+      serving_input_receiver_fn=serving_input_receiver_fn,
       checkpoint_path=FLAGS.checkpoint_path)
 
-  print(' - Done! path: %s' % export_path)
+  tf.logging.info('Exported SavedModel to %s, renaming to %s', export_path,
+                  FLAGS.export_dir)
+
+  if tf.gfile.Exists(FLAGS.export_dir):
+    tf.logging.info('Deleting existing SavedModel dir: %s', FLAGS.export_dir)
+    tf.gfile.DeleteRecursively(FLAGS.export_dir)
+
+  tf.gfile.Rename(export_path, FLAGS.export_dir)
 
 
 if __name__ == '__main__':
