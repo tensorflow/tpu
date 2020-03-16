@@ -27,6 +27,7 @@ from six.moves import zip
 import tensorflow.compat.v1 as tf
 import tensorflow.compat.v2 as tf2
 
+from dataloader import mode_keys
 from modeling import learning_rates
 from utils import benchmark_utils
 
@@ -127,10 +128,12 @@ class OptimizerFactory(object):
     return self._optimizer(learning_rate)
 
 
-class Model(six.with_metaclass(abc.ABCMeta, object)):
+class BaseModel(six.with_metaclass(abc.ABCMeta, object)):
   """Base class for model function."""
 
   def __init__(self, params):
+    self._transpose_input = params.train.transpose_input
+
     self._use_bfloat16 = params.architecture.use_bfloat16
 
     self._l2_weight_decay = params.train.l2_weight_decay
@@ -162,17 +165,25 @@ class Model(six.with_metaclass(abc.ABCMeta, object)):
     self._use_tpu = params.use_tpu
 
   @abc.abstractmethod
-  def build_outputs(self, features, labels, mode):
-    """Build the graph of the forward path."""
+  def _build_outputs(self, images, labels, mode):
+    """Implements the model forward pass."""
     pass
 
-  def _log_model_statistics(self, batched_input):
-    batch_size, _, _, _ = batched_input.get_shape().as_list()
-    _, _ = benchmark_utils.compute_model_statistics(
-        batch_size)
+  def build_outputs(self, images, labels, mode):
+    """Builds the model forward pass and generates outputs.
 
-  def model_outputs(self, features, labels, mode):
-    """Build the model outputs."""
+    It wraps the implementation in `_build_outputs` with some code to handle
+    bfloat16 scope.
+
+    Args:
+      images: a Tensor of shape [batch_size, height, width, channel],
+        representing the input image.
+      labels: a dict of Tensors that includes labels used for training/eval.
+      mode: one of mode_keys.TRAIN, mode_keys.EVAL, mode_keys.PREDICT.
+
+    Returns:
+      a dict of output tensors.
+    """
     if self._use_bfloat16:
       with tf.tpu.bfloat16_scope():
         def cast_outputs_to_float(d):
@@ -183,30 +194,81 @@ class Model(six.with_metaclass(abc.ABCMeta, object)):
               d[k] = tf.cast(v, tf.float32)
 
         # Casts class and box outputs to tf.float32.
-        outputs = self.build_outputs(features, labels, mode)
+        outputs = self._build_outputs(images, labels, mode)
         cast_outputs_to_float(outputs)
     else:
-      outputs = self.build_outputs(features, labels, mode)
+      outputs = self._build_outputs(images, labels, mode)
+
+    # Log model statistics.
+    batch_size = images.get_shape().as_list()[0]
+    _, _ = benchmark_utils.compute_model_statistics(batch_size)
+
     return outputs
 
   @abc.abstractmethod
-  def train(self, features, labels):
-    """Given features and labels, returns a TPUEstimatorSpec for training."""
+  def build_losses(self, outputs, labels):
+    """Builds the model loss.
+
+    Args:
+      outputs: a dict of output tensors produced by `build_outputs`.
+      labels: a dict of label tensors.
+
+    Returns:
+      model_loss: a scalar Tensor of model loss.
+    """
     pass
 
   @abc.abstractmethod
-  def evaluate(self, features, labels):
-    """Given features and labels, returns a TPUEstimatorSpec for eval."""
+  def build_metrics(self, outputs, labels):
+    """Builds the metrics used for evaluation.
+
+    Args:
+      outputs: a dict of output tensors produced by `build_outputs`.
+      labels: a dict of label tensors.
+
+    Returns:
+      a 2-element tuple of (metric_fn, metric_fn_inputs).
+    """
     pass
 
   @abc.abstractmethod
-  def predict(self, features):
-    """Given features and labels, returns a TPUEstimatorSpec for prediction."""
+  def build_predictions(self, outputs, labels):
+    """Builds the metrics used for evaluation.
+
+    It takes the output tensors from `build_outputs` and applies further
+    necessary post-processing to generate the prediction tensors.
+
+    Args:
+      outputs: a dict of output tensors produced by `build_outputs`.
+      labels: a dict of label tensors.
+
+    Returns:
+      a dict of Tensor containing all the prediction tensors.
+    """
     pass
 
-  def optimize(self, model_loss):
-    """Returns total_loss and train_op for optimization."""
+  def train(self, images, labels):
+    """Returns a TPUEstimatorSpec for training.
+
+    Args:
+      images: a Tensor of shape [batch_size, height, width, channel]
+        representing the input image tensor.
+      labels: a dict of label tensors.
+
+    Returns:
+      a TPUEstimatorSpec object used for training.
+    """
+    # If the input image is transposed (from NHWC to HWCN), we need to revert it
+    # back to the original shape before it's used in the computation.
+    if self._transpose_input:
+      images = tf.transpose(images, [3, 0, 1, 2])
+
+    outputs = self.build_outputs(images, labels, mode=mode_keys.TRAIN)
+
+    model_loss = self.build_losses(outputs, labels)
+
     global_step = tf.train.get_global_step()
+
     learning_rate = self._learning_rate_fn(global_step)
     self.add_scalar_summary('learning_rate', learning_rate)
 
@@ -240,8 +302,63 @@ class Model(six.with_metaclass(abc.ABCMeta, object)):
       grads_and_vars = list(zip(clipped_grads, tvars))
 
     with tf.control_dependencies(update_ops):
-      minimize_op = optimizer.apply_gradients(grads_and_vars, global_step)
-    return total_loss, minimize_op
+      train_op = optimizer.apply_gradients(grads_and_vars, global_step)
+
+    scaffold_fn = self.restore_from_checkpoint()
+    if self._enable_summary:
+      host_call_fn = self.summarize()
+    else:
+      host_call_fn = None
+
+    return tf.estimator.tpu.TPUEstimatorSpec(
+        mode=tf.estimator.ModeKeys.TRAIN,
+        loss=total_loss,
+        train_op=train_op,
+        host_call=host_call_fn,
+        scaffold_fn=scaffold_fn)
+
+  def evaluate(self, images, labels):
+    """Returns a TPUEstimatorSpec for evaluation.
+
+    Args:
+      images: a Tensor of shape [batch_size, height, width, channel]
+        representing the input image tensor.
+      labels: a dict of label tensors.
+
+    Returns:
+      a TPUEstimatorSpec object used for evaluation.
+    """
+    outputs = self.build_outputs(images, labels, mode=mode_keys.EVAL)
+
+    model_loss = self.build_losses(outputs, labels)
+
+    eval_metrics = self.build_metrics(outputs, labels)
+
+    return tf.estimator.tpu.TPUEstimatorSpec(
+        mode=tf.estimator.ModeKeys.EVAL,
+        loss=model_loss,
+        eval_metrics=eval_metrics)
+
+  def predict(self, features):
+    """Returns a TPUEstimatorSpec for prediction.
+
+    Args:
+      features: a dict of Tensors including the input images and other label
+        tensors used for prediction.
+
+    Returns:
+      a TPUEstimatorSpec object used for prediction.
+    """
+    images = features['images']
+    labels = features['labels']
+
+    outputs = self.build_outputs(images, labels, mode=mode_keys.PREDICT)
+
+    predictions = self.build_predictions(outputs, labels)
+
+    return tf.estimator.tpu.TPUEstimatorSpec(
+        mode=tf.estimator.ModeKeys.PREDICT,
+        predictions=predictions)
 
   def restore_from_checkpoint(self):
     """Returns scaffold function to restore parameters from checkpoint."""
@@ -282,7 +399,7 @@ class Model(six.with_metaclass(abc.ABCMeta, object)):
             tf2.summary.image(key, value, step=global_step)
           return tf.summary.all_v2_summary_ops()
     global_step = tf.reshape(tf.train.get_global_step()[None], [1])
-    host_call_inputs = [global_step, self.summaries, self._image_summaries]
+    host_call_inputs = [global_step, self._summaries, self._image_summaries]
     return (host_call_fn, tf.nest.flatten(host_call_inputs))
 
   def add_scalar_summary(self, name, tensor):
@@ -290,25 +407,3 @@ class Model(six.with_metaclass(abc.ABCMeta, object)):
 
   def add_image_summary(self, name, tensor):
     self._image_summaries[name] = tensor
-
-  @property
-  def summaries(self):
-    return self._summaries
-
-  def eval_metrics(self, eval_fn, predictions, groundtruths):
-    """Returns tuple of metric function and its inputs for evaluation."""
-    def metric_fn(*flat_args):
-      """Returns a dictionary that has the evaluation metrics."""
-      output_metrics = {}
-      (predictions, groundtruths,
-       summaries) = tf.nest.pack_sequence_as(metric_fn_inputs, flat_args)
-      # Computes evaluation metrics.
-      eval_metrics = eval_fn(predictions, groundtruths)
-      output_metrics.update(eval_metrics)
-      # Computes mean metrics for summaries.
-      for key, value in summaries.items():
-        output_metrics[key] = tf.metrics.mean(value)
-      return output_metrics
-    # Prepares metric_fn_inputs.
-    metric_fn_inputs = [predictions, groundtruths, self._summaries]
-    return (metric_fn, tf.nest.flatten(metric_fn_inputs))

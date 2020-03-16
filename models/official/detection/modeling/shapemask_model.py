@@ -28,7 +28,7 @@ from ops import postprocess_ops
 from utils import box_utils
 
 
-class ShapeMaskModel(base_model.Model):
+class ShapeMaskModel(base_model.BaseModel):
   """ShapeMask model function."""
 
   def __init__(self, params):
@@ -45,7 +45,6 @@ class ShapeMaskModel(base_model.Model):
         params.shapemask_head)
     self._fine_mask_fn = factory.finemask_head_generator(params.shapemask_head)
     self._outer_box_scale = params.shapemask_parser.outer_box_scale
-    self._transpose_input = params.train.transpose_input
 
     # Loss function.
     self._cls_loss_fn = losses.RetinanetClassLoss(params.retinanet_loss)
@@ -64,9 +63,9 @@ class ShapeMaskModel(base_model.Model):
     self._generate_detections_fn = postprocess_ops.MultilevelDetectionGenerator(
         params.postprocess)
 
-  def build_outputs(self, features, labels, mode):
+  def _build_outputs(self, images, labels, mode):
     is_training = (mode == mode_keys.TRAIN)
-    backbone_features = self._backbone_fn(features, is_training=is_training)
+    backbone_features = self._backbone_fn(images, is_training=is_training)
     fpn_features = self._fpn_fn(backbone_features, is_training=is_training)
     cls_outputs, box_outputs = self._retinanet_head_fn(
         fpn_features, is_training=is_training)
@@ -85,9 +84,9 @@ class ShapeMaskModel(base_model.Model):
       valid_detections = detection_results['num_detections']
 
       # Use list as input to avoide segmentation fault on TPU.
-      feature_size = features.get_shape().as_list()[1:3]
+      image_size = images.get_shape().as_list()[1:3]
       outer_boxes = box_utils.compute_outer_boxes(
-          tf.reshape(boxes, [-1, 4]), feature_size, scale=self._outer_box_scale)
+          tf.reshape(boxes, [-1, 4]), image_size, scale=self._outer_box_scale)
       outer_boxes = tf.reshape(outer_boxes, tf.shape(boxes))
       classes = tf.cast(classes, tf.int32)
 
@@ -113,7 +112,6 @@ class ShapeMaskModel(base_model.Model):
         'prior_masks': prior_masks,
     }
 
-    self._log_model_statistics(features)
     if not is_training:
       model_outputs.update({
           'num_detections': valid_detections,
@@ -125,12 +123,7 @@ class ShapeMaskModel(base_model.Model):
       })
     return model_outputs
 
-  def train(self, features, labels):
-    if self._transpose_input:
-      features = tf.transpose(features, [3, 0, 1, 2])
-
-    outputs = self.model_outputs(features, labels, mode=mode_keys.TRAIN)
-
+  def build_losses(self, outputs, labels):
     # Adds RetinaNet model losses.
     cls_loss = self._cls_loss_fn(
         outputs['cls_outputs'], labels['cls_targets'], labels['num_positives'])
@@ -164,30 +157,12 @@ class ShapeMaskModel(base_model.Model):
     self.add_scalar_summary('shapemask_fine_mask_loss', fine_mask_loss)
     self.add_scalar_summary('model_loss', model_loss)
 
-    total_loss, train_op = self.optimize(model_loss)
-    scaffold_fn = self.restore_from_checkpoint()
-    if self._enable_summary:
-      host_call_fn = self.summarize()
-    else:
-      host_call_fn = None
+    return model_loss
 
-    return tf.estimator.tpu.TPUEstimatorSpec(
-        mode=tf.estimator.ModeKeys.TRAIN,
-        loss=total_loss,
-        train_op=train_op,
-        host_call=host_call_fn,
-        scaffold_fn=scaffold_fn)
+  def build_metrics(self, outputs, labels):
+    raise NotImplementedError('The `build_metrics` is not implemented.')
 
-  def evaluate(self, features, labels):
-    raise NotImplementedError('The estimator evaluation is not implemented.')
-
-  def predict(self, features):
-    images = features['images']
-    labels = features['labels']
-
-    outputs = self.model_outputs(
-        images, labels=labels, mode=mode_keys.PREDICT)
-
+  def build_predictions(self, outputs, labels):
     predictions = {
         'pred_image_info': labels['image_info'],
         'pred_num_detections': outputs['num_detections'],
@@ -223,12 +198,12 @@ class ShapeMaskModel(base_model.Model):
 
       # Tiles the loss from [1] to [batch_size] since Estimator requires all
       # predictions have the same batch dimension.
-      batch_size = tf.shape(images)[0]
+      batch_size = tf.shape(outputs['num_detections'])[0]
       predictions['loss_cls_loss'] = tf.tile(
           tf.reshape(cls_loss, [1]), [batch_size])
       predictions['loss_box_loss'] = tf.tile(
           tf.reshape(box_loss, [1]), [batch_size])
       predictions['loss_model_loss'] = tf.tile(
           tf.reshape(model_loss, [1]), [batch_size])
-    return tf.estimator.tpu.TPUEstimatorSpec(
-        mode=tf.estimator.ModeKeys.PREDICT, predictions=predictions)
+
+    return predictions
