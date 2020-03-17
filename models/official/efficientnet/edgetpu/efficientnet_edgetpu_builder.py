@@ -71,6 +71,7 @@ def efficientnet_edgetpu(width_coefficient=None,
       # The default is TPU-specific batch norm.
       # The alternative is tf.layers.BatchNormalization.
       batch_norm=utils.TpuBatchNormalization,  # TPU-specific requirement.
+      local_pooling=True,  # for EdgeTPU.
       use_se=False)
   decoder = efficientnet_builder.BlockDecoder()
   return decoder.decode(blocks_args), global_params
