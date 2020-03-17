@@ -167,9 +167,9 @@ def main(unused_argv):
       return tf.identity(loss)
 
   dist_train = strategy.experimental_local_results(
-      strategy.experimental_run_v2(train_step, args=(next(train_iterator),)))
+      strategy.run(train_step, args=(next(train_iterator),)))
   dist_test = strategy.experimental_local_results(
-      strategy.experimental_run_v2(test_step, args=(next(test_iterator),)))
+      strategy.run(test_step, args=(next(test_iterator),)))
 
   training_loss_result = training_loss.result()
   training_accuracy_result = training_accuracy.result()
