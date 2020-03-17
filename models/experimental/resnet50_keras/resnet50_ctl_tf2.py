@@ -199,7 +199,7 @@ def main(unused_argv):
       training_loss.update_state(loss)
       training_accuracy.update_state(labels, predictions)
 
-    strategy.experimental_run_v2(step_fn, args=(next(iterator),))
+    strategy.run(step_fn, args=(next(iterator),))
 
   @tf.function
   def test_step(iterator):
@@ -215,7 +215,7 @@ def main(unused_argv):
       test_loss.update_state(loss)
       test_accuracy.update_state(labels, predictions)
 
-    strategy.experimental_run_v2(step_fn, args=(next(iterator),))
+    strategy.run(step_fn, args=(next(iterator),))
 
   train_iterator = iter(train_dataset)
   for epoch in range(initial_epoch, FLAGS.num_epochs):
