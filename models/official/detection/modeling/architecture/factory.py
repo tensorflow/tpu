@@ -199,8 +199,18 @@ def finemask_head_generator(params):
       batch_norm_relu=batch_norm_relu_generator(params.batch_norm))
 
 
+def classification_head_generator(params):
+  """Generator function for classification head architecture."""
+  return heads.ClassificationHead(
+      params.num_classes,
+      params.endpoints_num_filters,
+      params.aggregation,
+      params.dropout_rate,
+      batch_norm_relu=batch_norm_relu_generator(params.batch_norm))
+
+
 def segmentation_head_generator(params):
-  """Generator function for Segmentation head architecture."""
+  """Generator function for segmentation head architecture."""
   return heads.SegmentationHead(
       params.num_classes,
       params.level,

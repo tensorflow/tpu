@@ -902,6 +902,91 @@ class ShapemaskFinemaskHead(object):
     return mask_logits
 
 
+class ClassificationHead(object):
+  """Classification head."""
+
+  def __init__(self,
+               num_classes,
+               endpoints_num_filters=0,
+               aggregation='top',
+               dropout_rate=0.0,
+               batch_norm_relu=nn_ops.BatchNormRelu(),
+               data_format='channels_last'):
+    """Initialize params to build classification head.
+
+    Args:
+      num_classes: the number of classes, including one background class.
+      endpoints_num_filters: the number of filters of the optional embedding
+        layer after the multiscale feature aggregation. If 0, no additional
+        embedding layer is applied.
+      aggregation: the method to aggregate the multiscale feature maps. If
+        `top`, the feature map of the highest level will be directly used.
+      dropout_rate: the dropout rate of the optional dropout layer. If 0.0, no
+        additional dropout layer is applied.
+      batch_norm_relu: an operation that includes a batch normalization layer
+        followed by an optional relu layer.
+      data_format: An optional string from: `channels_last`, `channels_first`.
+        Defaults to `channels_last`.
+    """
+    self._num_classes = num_classes
+    self._endpoints_num_filters = endpoints_num_filters
+    self._aggregation = aggregation
+    self._dropout_rate = dropout_rate
+    self._batch_norm_relu = batch_norm_relu
+    self._data_format = data_format
+
+  def __call__(self, features, is_training):
+    """Generate logits for classification.
+
+    It takes a dict of multiscale feature maps and produces the final logits
+    used for classification.
+
+    Args:
+      features: a dict of Tensors representing the multiscale feature maps with
+        keys being level and values being the feature maps.
+      is_training: a bool indicating whether it's in training mode.
+
+    Returns:
+      logits: a Tensor of shape [batch_size, num_classes] representing the
+        prediction logits.
+    """
+    with tf.variable_scope('classification_head'):
+      if self._aggregation == 'top':
+        bottleneck = features[max(features.keys())]
+      else:
+        raise ValueError(
+            'Un-supported aggregation type: `{}`!'.format(self._aggregation))
+
+      # Optionally project to an embedding space of different dimensions.
+      if self._endpoints_num_filters > 0:
+        bottleneck = nn_ops.conv2d_fixed_padding(
+            inputs=bottleneck,
+            filters=self._endpoints_num_filters,
+            kernel_size=1,
+            strides=1,
+            data_format=self._data_format)
+        bottleneck = self._batch_norm_relu(bottleneck, is_training=is_training)
+
+      # Global average pooling.
+      bottleneck = tf.reduce_mean(
+          bottleneck,
+          axis=([1, 2] if self._data_format == 'channels_last' else [2, 3]))
+      bottleneck = tf.identity(bottleneck, 'final_avg_pool')
+
+      # Dropout layer.
+      if is_training and self._dropout_rate > 0.0:
+        bottleneck = tf.nn.dropout(bottleneck, self._dropout_rate)
+
+      # Prediction layer.
+      logits = tf.layers.dense(
+          inputs=bottleneck,
+          units=self._num_classes,
+          kernel_initializer=tf.random_normal_initializer(stddev=0.01))
+      logits = tf.identity(logits, 'logits')
+
+    return logits
+
+
 class SegmentationHead(object):
   """Semantic segmentation head."""
 
