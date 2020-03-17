@@ -32,7 +32,7 @@ from ops import spatial_transform_ops
 from utils import box_utils
 
 
-class MaskrcnnModel(base_model.Model):
+class MaskrcnnModel(base_model.BaseModel):
   """RetinaNet model function."""
 
   def __init__(self, params):
@@ -65,9 +65,7 @@ class MaskrcnnModel(base_model.Model):
     self._generate_detections_fn = postprocess_ops.GenericDetectionGenerator(
         params.postprocess)
 
-    self._transpose_input = params.train.transpose_input
-
-  def build_outputs(self, features, labels, mode):
+  def _build_outputs(self, images, labels, mode):
     is_training = mode == mode_keys.TRAIN
     model_outputs = {}
 
@@ -80,9 +78,9 @@ class MaskrcnnModel(base_model.Model):
           self._anchor_params.num_scales,
           self._anchor_params.aspect_ratios,
           self._anchor_params.anchor_size,
-          features.get_shape().as_list()[1:3]).multilevel_boxes
+          images.get_shape().as_list()[1:3]).multilevel_boxes
 
-    backbone_features = self._backbone_fn(features, is_training)
+    backbone_features = self._backbone_fn(images, is_training)
     fpn_features = self._fpn_fn(backbone_features, is_training)
 
     rpn_score_outputs, rpn_box_outputs = self._rpn_head_fn(
@@ -136,7 +134,6 @@ class MaskrcnnModel(base_model.Model):
       model_outputs.update(detection_results)
 
     if not self._include_mask:
-      self._log_model_statistics(features)
       return model_outputs
 
     if is_training:
@@ -169,17 +166,9 @@ class MaskrcnnModel(base_model.Model):
           'detection_masks': tf.nn.sigmoid(mask_outputs)
       })
 
-    self._log_model_statistics(features)
     return model_outputs
 
-  def train(self, features, labels):
-    # If the input image is transposed (from NHWC to HWCN), we need to revert it
-    # back to the original shape before it's used in the computation.
-    if self._transpose_input:
-      features = tf.transpose(features, [3, 0, 1, 2])
-
-    outputs = self.model_outputs(features, labels, mode=mode_keys.TRAIN)
-
+  def build_losses(self, outputs, labels):
     rpn_score_loss = self._rpn_score_loss_fn(
         outputs['rpn_score_outputs'], labels['rpn_score_targets'])
     rpn_box_loss = self._rpn_box_loss_fn(
@@ -211,30 +200,12 @@ class MaskrcnnModel(base_model.Model):
       self.add_scalar_summary('mask_loss', mask_loss)
     self.add_scalar_summary('model_loss', model_loss)
 
-    total_loss, train_op = self.optimize(model_loss)
-    scaffold_fn = self.restore_from_checkpoint()
-    if self._enable_summary:
-      host_call_fn = self.summarize()
-    else:
-      host_call_fn = None
+    return model_loss
 
-    return tf.estimator.tpu.TPUEstimatorSpec(
-        mode=tf.estimator.ModeKeys.TRAIN,
-        loss=total_loss,
-        train_op=train_op,
-        host_call=host_call_fn,
-        scaffold_fn=scaffold_fn)
+  def build_metrics(self, outputs, labels):
+    raise NotImplementedError('The `build_metrics` is not implemented.')
 
-  def evaluate(self, features, labels):
-    raise NotImplementedError('The estimator evaluation is not implemented.')
-
-  def predict(self, features):
-    images = features['images']
-    labels = features['labels']
-
-    outputs = self.model_outputs(
-        images, labels=labels, mode=mode_keys.PREDICT)
-
+  def build_predictions(self, outputs, labels):
     predictions = {
         'pred_image_info': labels['image_info'],
         'pred_num_detections': outputs['num_detections'],
@@ -260,5 +231,4 @@ class MaskrcnnModel(base_model.Model):
       predictions['gt_areas'] = labels['groundtruths']['areas']
       predictions['gt_is_crowds'] = labels['groundtruths']['is_crowds']
 
-    return tf.estimator.tpu.TPUEstimatorSpec(
-        mode=tf.estimator.ModeKeys.PREDICT, predictions=predictions)
+    return predictions
