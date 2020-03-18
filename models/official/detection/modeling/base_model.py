@@ -120,7 +120,8 @@ class OptimizerFactory(object):
       self._optimizer = tf.train.AdagradOptimizer
     elif params.type == 'rmsprop':
       self._optimizer = functools.partial(
-          tf.train.RMSPropOptimizer, momentum=params.momentum)
+          tf.train.RMSPropOptimizer,
+          momentum=params.momentum, decay=0.9, epsilon=0.001)
     else:
       raise ValueError('Unsupported optimizer type %s.' % self._optimizer)
 
@@ -166,7 +167,7 @@ class BaseModel(six.with_metaclass(abc.ABCMeta, object)):
 
   @abc.abstractmethod
   def _build_outputs(self, images, labels, mode):
-    """Implements the model forward pass."""
+    """Implements `build_outputs`. See `build_outputs` for more details."""
     pass
 
   def build_outputs(self, images, labels, mode):
