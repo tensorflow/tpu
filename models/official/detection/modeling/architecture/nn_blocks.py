@@ -218,15 +218,16 @@ def mbconv_block(inputs,
   tf.logging.info('-----> Building mbconv block.')
   shortcut = inputs
 
-  # First 1x1 conv for channel expansion.
-  inputs = nn_ops.conv2d_fixed_padding(
-      inputs=inputs,
-      filters=in_filters * expand_ratio,
-      kernel_size=1,
-      strides=1,
-      data_format=data_format)
-  inputs = batch_norm_relu(inputs, is_training=is_training)
-  inputs = dropblock(inputs, is_training=is_training)
+  if expand_ratio != 1.0:
+    # First 1x1 conv for channel expansion.
+    inputs = nn_ops.conv2d_fixed_padding(
+        inputs=inputs,
+        filters=in_filters * expand_ratio,
+        kernel_size=1,
+        strides=1,
+        data_format=data_format)
+    inputs = batch_norm_relu(inputs, is_training=is_training)
+    inputs = dropblock(inputs, is_training=is_training)
 
   # Second depthwise conv.
   inputs = nn_ops.depthwise_conv2d_fixed_padding(

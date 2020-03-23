@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Input and model functions for serving/inference."""
+"""Detection input and model functions for serving/inference."""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -319,13 +319,6 @@ def serving_model_fn_builder(export_tpu_model,
       predictions.update({
           'detection_masks':
               tf.identity(model_outputs['detection_masks'], 'DetectionMasks'),
-      })
-
-    if 'detection_outer_boxes' in model_outputs:
-      predictions.update({
-          'detection_outer_boxes':
-              tf.identity(model_outputs['detection_outer_boxes'],
-                          'DetectionOuterBoxes'),
       })
 
     if output_image_info:

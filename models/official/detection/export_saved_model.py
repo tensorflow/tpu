@@ -31,7 +31,8 @@ from absl import flags
 import tensorflow.compat.v1 as tf
 
 from configs import factory
-from modeling import serving
+from serving import detection
+from serving import segmentation
 from hyperparameters import params_dict
 
 FLAGS = flags.FLAGS
@@ -86,18 +87,17 @@ def main(argv):
       use_tpu=FLAGS.use_tpu,
       mode=tf.estimator.ModeKeys.PREDICT,
       transpose_input=False)
-
   tf.logging.info('model_params is:\n %s', model_params)
 
   image_size = [int(x) for x in FLAGS.input_image_size.split(',')]
 
-  if FLAGS.model == 'retinanet':
-    model_fn = serving.serving_model_fn_builder(
+  if FLAGS.model in ['retinanet', 'mask_rcnn', 'shapemask']:
+    model_fn = detection.serving_model_fn_builder(
         FLAGS.use_tpu, FLAGS.output_image_info,
         FLAGS.output_normalized_coordinates,
         FLAGS.cast_num_detections_to_float)
     serving_input_receiver_fn = functools.partial(
-        serving.serving_input_fn,
+        detection.serving_input_fn,
         batch_size=FLAGS.batch_size,
         desired_image_size=image_size,
         stride=(2**params.anchor.max_level),
@@ -134,8 +134,9 @@ def main(argv):
       serving_input_receiver_fn=serving_input_receiver_fn,
       checkpoint_path=FLAGS.checkpoint_path)
 
-  tf.logging.info('Exported SavedModel to %s, renaming to %s', export_path,
-                  FLAGS.export_dir)
+  tf.logging.info(
+      'Exported SavedModel to %s, renaming to %s',
+      export_path, FLAGS.export_dir)
 
   if tf.gfile.Exists(FLAGS.export_dir):
     tf.logging.info('Deleting existing SavedModel dir: %s', FLAGS.export_dir)

@@ -43,6 +43,9 @@ GlobalParams = collections.namedtuple('GlobalParams', [
     'local_pooling', 'condconv_num_experts', 'clip_projection_output',
     'blocks_args', 'fix_head_stem',
 ])
+# Note: the default value of None is not necessarily valid. It is valid to leave
+# width_coefficient, depth_coefficient at None, which is treated as 1.0 (and
+# which also allows depth_divisor and min_depth to be left at None).
 GlobalParams.__new__.__defaults__ = (None,) * len(GlobalParams._fields)
 
 BlockArgs = collections.namedtuple('BlockArgs', [

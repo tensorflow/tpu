@@ -73,8 +73,8 @@ def backbone_generator(params):
             spinenet_params.batch_norm, activation=spinenet_params.activation),
         init_drop_connect_rate=spinenet_params.init_drop_connect_rate)
   else:
-    raise ValueError('Backbone model %s is not supported.' %
-                     params.architecture.backbone)
+    raise ValueError(
+        'Backbone model %s is not supported.' % params.architecture.backbone)
 
   return backbone_fn
 

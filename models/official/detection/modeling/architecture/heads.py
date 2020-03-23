@@ -921,6 +921,9 @@ class ClassificationHead(object):
         embedding layer is applied.
       aggregation: the method to aggregate the multiscale feature maps. If
         `top`, the feature map of the highest level will be directly used.
+        If `all`, all levels will be used by nearest-neighbor upsampling and
+        averaging to the same size as the lowest level (the number of filters
+        for all levels should match).
       dropout_rate: the dropout rate of the optional dropout layer. If 0.0, no
         additional dropout layer is applied.
       batch_norm_relu: an operation that includes a batch normalization layer
@@ -953,6 +956,22 @@ class ClassificationHead(object):
     with tf.variable_scope('classification_head'):
       if self._aggregation == 'top':
         bottleneck = features[max(features.keys())]
+      elif self._aggregation == 'all':
+        min_level = min(features.keys())
+        max_level = max(features.keys())
+        bottleneck = features[max_level]
+        for level in range(max_level - 1, min_level - 1, -1):
+          target_shape = features[level].get_shape().as_list()
+          if self._data_format == 'channels_last':
+            target_h, target_w = target_shape[1], target_shape[2]
+          else:
+            target_h, target_w = target_shape[2], target_shape[3]
+          data_type = bottleneck.dtype
+          bottleneck = features[level] + tf.cast(
+              tf.image.resize_nearest_neighbor(
+                  tf.cast(bottleneck, dtype=tf.float32), [target_h, target_w]),
+              dtype=data_type)
+        bottleneck = bottleneck / (max_level - min_level + 1)
       else:
         raise ValueError(
             'Un-supported aggregation type: `{}`!'.format(self._aggregation))
