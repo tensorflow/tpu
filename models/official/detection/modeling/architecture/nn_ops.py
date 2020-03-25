@@ -557,3 +557,18 @@ def pyramid_feature_fusion(pyramid_feats, target_level):
       resampled_feats.append(resampled_feat)
 
   return tf.math.add_n(resampled_feats)
+
+
+def round_filters(filters, multiplier, divisor=8):
+  """Round number of filters based on depth multiplier."""
+  min_depth = None
+  if not multiplier:
+    return filters
+
+  filters *= multiplier
+  min_depth = min_depth or divisor
+  new_filters = max(min_depth, int(filters + divisor / 2) // divisor * divisor)
+  # Make sure that round down does not go down by more than 10%.
+  if new_filters < 0.9 * filters:
+    new_filters += divisor
+  return int(new_filters)
