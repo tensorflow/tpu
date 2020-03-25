@@ -152,11 +152,11 @@ class Parser(object):
 
     # Data is parsed depending on the model Modekey.
     if mode == ModeKeys.TRAIN:
-      self._parse_fn = self._parse_train_data
+      self._parse_fn = self.parse_train_data
     elif mode == ModeKeys.EVAL:
       self._parse_fn = self._parse_eval_data
     elif mode == ModeKeys.PREDICT or mode == ModeKeys.PREDICT_WITH_GT:
-      self._parse_fn = self._parse_predict_data
+      self._parse_fn = self.parse_predict_data
     else:
       raise ValueError('mode is not defined.')
 
@@ -219,7 +219,7 @@ class Parser(object):
       data = self._example_decoder.decode(value)
       return self._parse_fn(data)
 
-  def _parse_train_data(self, data):
+  def parse_train_data(self, data):
     """Parse data for ShapeMask training."""
     classes = data['groundtruth_classes']
     boxes = data['groundtruth_boxes']
@@ -259,12 +259,13 @@ class Parser(object):
         self._output_size,
         aug_scale_min=self._aug_scale_min,
         aug_scale_max=self._aug_scale_max)
-    image_scale = image_info[2, :]
-    offset = image_info[3, :]
+    self._train_image_scale = image_info[2, :]
+    self._train_offset = image_info[3, :]
 
     # Resizes and crops boxes and masks.
-    boxes = input_utils.resize_and_crop_boxes(
-        boxes, image_scale, image_info[1, :], offset)
+    boxes = input_utils.resize_and_crop_boxes(boxes, self._train_image_scale,
+                                              image_info[1, :],
+                                              self._train_offset)
 
     # Filters out ground truth boxes that are all zeros.
     indices = box_utils.get_non_empty_box_indices(boxes)
@@ -317,8 +318,10 @@ class Parser(object):
     # Compensate the offset of mask_outer_boxes to map it back to original image
     # scale.
     mask_outer_boxes_ori = mask_outer_boxes
-    mask_outer_boxes_ori += tf.tile(tf.expand_dims(offset, axis=0), [1, 2])
-    mask_outer_boxes_ori /= tf.tile(tf.expand_dims(image_scale, axis=0), [1, 2])
+    mask_outer_boxes_ori += tf.tile(
+        tf.expand_dims(self._train_offset, axis=0), [1, 2])
+    mask_outer_boxes_ori /= tf.tile(
+        tf.expand_dims(self._train_image_scale, axis=0), [1, 2])
     norm_mask_outer_boxes_ori = box_utils.normalize_boxes(
         mask_outer_boxes_ori, mask_shape)
 
@@ -387,7 +390,7 @@ class Parser(object):
     }
     return image, labels
 
-  def _parse_predict_data(self, data):
+  def parse_predict_data(self, data):
     """Parse data for ShapeMask training."""
     classes = data['groundtruth_classes']
     boxes = data['groundtruth_boxes']
