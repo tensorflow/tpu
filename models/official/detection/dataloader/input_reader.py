@@ -18,6 +18,7 @@ import tensorflow.compat.v1 as tf
 
 from dataloader import factory
 from dataloader import mode_keys as ModeKeys
+from ops import spatial_transform_ops
 
 
 class InputFn(object):
@@ -33,10 +34,8 @@ class InputFn(object):
     else:
       raise ValueError('Dataset type %s is not supported.' % dataset_type)
 
-    try:
-      self._transpose_input = params.train.transpose_input
-    except KeyError:
-      self._transpose_input = False
+    self._transpose_input = params.train.transpose_input
+    self._space_to_depth_block_size = params.train.space_to_depth_block_size
 
   def __call__(self, params):
     batch_size = params['batch_size']
@@ -64,13 +63,23 @@ class InputFn(object):
             drop_remainder=True))
     dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
 
-    # Transpose the input images from [N,H,W,C] to [H,W,C,N] since reshape on
-    # TPU is expensive.
-    if self._transpose_input and self._is_training:
+    if self._space_to_depth_block_size > 1:
+      # Transforms (space-to-depth) images for TPU performance.
+      def _fused_transform(images, labels):
+        return spatial_transform_ops.fused_transpose_and_space_to_depth(
+            images, self._space_to_depth_block_size, self._transpose_input and
+            self._is_training), labels
 
-      def _transpose_images(images, labels):
-        return tf.transpose(images, [1, 2, 3, 0]), labels
+      dataset = dataset.map(_fused_transform, num_parallel_calls=64)
 
-      dataset = dataset.map(_transpose_images, num_parallel_calls=64)
+    else:
+      # Transpose the input images from [N,H,W,C] to [H,W,C,N] since reshape on
+      # TPU is expensive.
+      if self._transpose_input and self._is_training:
+
+        def _transpose_images(images, labels):
+          return tf.transpose(images, [1, 2, 3, 0]), labels
+
+        dataset = dataset.map(_transpose_images, num_parallel_calls=64)
 
     return dataset

@@ -601,3 +601,45 @@ def crop_mask_in_target_box(masks,
     cropped_masks = tf.squeeze(cropped_masks, axis=-1)
 
   return cropped_masks
+
+
+def fused_transpose_and_space_to_depth(images,
+                                       block_size=2,
+                                       transpose_input=True):
+  """Fuses space-to-depth and transpose.
+
+  Space-to-depth performas the following permutation, which is equivalent to
+  tf.nn.space_to_depth.
+
+  images = tf.reshape(images, [batch, h // block_size, block_size,
+                               w // block_size, block_size, c])
+  images = tf.transpose(images, [0, 1, 3, 2, 4, 5])
+  images = tf.reshape(images, [batch, h // block_size, w // block_size,
+                               c * (block_size ** 2)])
+
+  Args:
+    images: A tensor with a shape of [batch_size, h, w, c] as the images. The h
+      and w can be dynamic sizes.
+    block_size: A integer for space-to-depth block size.
+    transpose_input: A boolean to indicate if the images tensor should be
+      transposed.
+
+  Returns:
+    A transformed images tensor.
+
+  """
+  batch_size, h, w, c = images.get_shape().as_list()
+  images = tf.reshape(
+      images,
+      [batch_size, h // block_size, block_size, w // block_size, block_size, c])
+  if transpose_input:
+    images = tf.transpose(images, [1, 3, 0, 2, 4, 5])
+    images = tf.reshape(
+        images,
+        [h // block_size, w // block_size, batch_size, c * (block_size**2)])
+  else:
+    images = tf.transpose(images, [0, 1, 3, 2, 4, 5])
+    images = tf.reshape(
+        images,
+        [batch_size, h // block_size, w // block_size, c * (block_size**2)])
+  return images
