@@ -154,7 +154,7 @@ class TPUEstimatorExecuter(object):
           feature_partition,
           label_partition,
       ]
-      num_cores_per_replica = np.prod(dims_overridden)
+      num_cores_per_replica = int(np.prod(dims_overridden))
       num_shards = tpu_flags.num_cores // num_cores_per_replica
     else:
       num_cores_per_replica = None
