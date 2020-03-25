@@ -1,5 +1,5 @@
 # Lint as: python2, python3
-# Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,10 +15,7 @@
 # ==============================================================================
 
 # pylint: disable=line-too-long
-r"""A binary to export the Cloud TPU detection model.
-
-To export to the SavedModel, one needs to specify at least the export directory
-and a given model checkpoint.
+r"""A binary to export the inference graph of TPU detection model.
 """
 # pylint: enable=line-too-long
 
@@ -26,24 +23,22 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import functools
-import os
 from absl import flags
 import tensorflow.compat.v1 as tf
 
 from configs import factory
 from serving import detection
-from serving import segmentation
+from serving import inputs
 from hyperparameters import params_dict
+from tensorflow.python.framework import graph_util  # pylint: disable=g-direct-tensorflow-import
+
 
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string('export_dir', None, 'The export directory.')
-flags.DEFINE_string('checkpoint_path', None, 'Checkpoint path.')
 flags.DEFINE_string(
     'model', 'retinanet',
     'Model to run: `retinanet`, `mask_rcnn` or `shapemask`.')
-flags.DEFINE_boolean('use_tpu', False, 'Whether or not use TPU.')
 flags.DEFINE_string(
     'config_file', '',
     'The JSON/YAML parameter file which serves as the config template.')
@@ -61,6 +56,8 @@ flags.DEFINE_string(
     'The comma-separated string of two integers representing the height,width '
     'of the input to the model.')
 flags.DEFINE_boolean(
+    'optimize_graph', False, 'Whether or not optimize the graph.')
+flags.DEFINE_boolean(
     'output_image_info', True, 'Whether or not output image_info node.')
 flags.DEFINE_boolean(
     'output_normalized_coordinates', False,
@@ -70,7 +67,6 @@ flags.DEFINE_boolean(
     'Whether or not cast the number of detections to float type.')
 
 flags.mark_flag_as_required('export_dir')
-flags.mark_flag_as_required('checkpoint_path')
 flags.mark_flag_as_required('model')
 
 
@@ -88,67 +84,52 @@ def main(argv):
   params.validate()
   params.lock()
 
-  model_params = dict(
-      params.as_dict(),
-      use_tpu=FLAGS.use_tpu,
-      mode=tf.estimator.ModeKeys.PREDICT,
-      transpose_input=False)
-  tf.logging.info('model_params is:\n %s', model_params)
-
   image_size = [int(x) for x in FLAGS.input_image_size.split(',')]
 
-  if FLAGS.model in ['retinanet', 'mask_rcnn', 'shapemask']:
-    model_fn = detection.serving_model_fn_builder(
-        FLAGS.use_tpu, FLAGS.output_image_info,
-        FLAGS.output_normalized_coordinates,
-        FLAGS.cast_num_detections_to_float)
-    serving_input_receiver_fn = functools.partial(
-        detection.serving_input_fn,
+  g = tf.Graph()
+  with g.as_default():
+    # Build the input.
+    _, features = inputs.build_serving_input(
+        input_type=FLAGS.input_type,
         batch_size=FLAGS.batch_size,
         desired_image_size=image_size,
-        stride=(2 ** params.anchor.max_level),
-        input_type=FLAGS.input_type,
-        input_name=FLAGS.input_name)
-  else:
-    raise ValueError('The model type `{} is not supported.'.format(FLAGS.model))
+        stride=(2 ** params.anchor.max_level))
 
-  print(' - Setting up TPUEstimator...')
-  estimator = tf.estimator.tpu.TPUEstimator(
-      model_fn=model_fn,
-      model_dir=None,
-      config=tf.estimator.tpu.RunConfig(
-          tpu_config=tf.estimator.tpu.TPUConfig(iterations_per_loop=1),
-          master='local',
-          evaluation_master='local'),
-      params=model_params,
-      use_tpu=FLAGS.use_tpu,
-      train_batch_size=FLAGS.batch_size,
-      predict_batch_size=FLAGS.batch_size,
-      export_to_tpu=FLAGS.use_tpu,
-      export_to_cpu=True)
+    # Build the model.
+    print(' - Building the graph...')
+    if FLAGS.model in ['retinanet', 'mask_rcnn', 'shapemask']:
+      graph_fn = detection.serving_model_graph_builder(
+          FLAGS.output_image_info,
+          FLAGS.output_normalized_coordinates,
+          FLAGS.cast_num_detections_to_float)
+    else:
+      raise ValueError(
+          'The model type `{}` is not supported.'.format(FLAGS.model))
 
-  print(' - Exporting the model...')
+    predictions = graph_fn(features, params)
 
-  dir_name = os.path.dirname(FLAGS.export_dir)
+    # Add a saver for checkpoint loading.
+    tf.train.Saver()
 
-  if not tf.gfile.Exists(dir_name):
-    tf.logging.info('Creating base dir: %s', dir_name)
-    tf.gfile.MakeDirs(dir_name)
+    inference_graph_def = g.as_graph_def()
+    optimized_graph_def = inference_graph_def
 
-  export_path = estimator.export_saved_model(
-      export_dir_base=dir_name,
-      serving_input_receiver_fn=serving_input_receiver_fn,
-      checkpoint_path=FLAGS.checkpoint_path)
+    if FLAGS.optimize_graph:
+      print(' - Optimizing the graph...')
+      # Trim the unused nodes in the graph.
+      output_nodes = [output_node.op.name
+                      for output_node in predictions.values()]
+      # TODO(pengchong): Consider to use `strip_unused_lib.strip_unused` and/or
+      # `optimize_for_inference_lib.optimize_for_inference` to trim the graph.
+      # Use `optimize_for_inference` if we decide to export the frozen graph
+      # (graph + checkpoint) and want explictily fold in batchnorm variables.
+      optimized_graph_def = graph_util.remove_training_nodes(
+          optimized_graph_def, output_nodes)
 
-  tf.logging.info(
-      'Exported SavedModel to %s, renaming to %s',
-      export_path, FLAGS.export_dir)
-
-  if tf.gfile.Exists(FLAGS.export_dir):
-    tf.logging.info('Deleting existing SavedModel dir: %s', FLAGS.export_dir)
-    tf.gfile.DeleteRecursively(FLAGS.export_dir)
-
-  tf.gfile.Rename(export_path, FLAGS.export_dir)
+  print(' - Saving the graph...')
+  tf.train.write_graph(
+      optimized_graph_def, FLAGS.export_dir, 'inference_graph.pbtxt')
+  print(' - Done!')
 
 
 if __name__ == '__main__':
