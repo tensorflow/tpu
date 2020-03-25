@@ -80,6 +80,11 @@ class MaskrcnnModel(base_model.BaseModel):
           self._anchor_params.anchor_size,
           images.get_shape().as_list()[1:3]).multilevel_boxes
 
+      batch_size = tf.shape(images)[0]
+      for level in anchor_boxes:
+        anchor_boxes[level] = tf.tile(
+            tf.expand_dims(anchor_boxes[level], 0), [batch_size, 1, 1])
+
     backbone_features = self._backbone_fn(images, is_training)
     fpn_features = self._fpn_fn(backbone_features, is_training)
 
