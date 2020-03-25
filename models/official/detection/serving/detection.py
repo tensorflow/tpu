@@ -19,152 +19,16 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from six.moves import range
+import six
+
 import tensorflow.compat.v1 as tf
 
 from dataloader import anchor
 from dataloader import mode_keys
 from modeling import factory
+from serving import inputs
 from utils import box_utils
-from utils import input_utils
 from hyperparameters import params_dict
-
-
-def parse_tf_example(tf_example_string):
-  """Parse the serialized tf.Example and decode it to the image tensor."""
-  decoded_tensors = tf.parse_single_example(
-      serialized=tf_example_string,
-      features={
-          'image/encoded':
-              tf.FixedLenFeature((), tf.string, default_value=''),
-      })
-  image_bytes = decoded_tensors['image/encoded']
-  return image_bytes
-
-
-def decode_image(image_bytes):
-  """Decode the image bytes to the image tensor."""
-  image = tf.image.decode_jpeg(image_bytes)
-  return image
-
-
-def convert_image(image):
-  """Convert the uint8 image tensor to float32."""
-  return tf.image.convert_image_dtype(image, dtype=tf.float32)
-
-
-def preprocess_image(image, desired_size, stride):
-  image = input_utils.normalize_image(image)
-  image, image_info = input_utils.resize_and_crop_image(
-      image,
-      desired_size,
-      padded_size=input_utils.compute_padded_size(desired_size, stride))
-  return image, image_info
-
-
-def raw_image_tensor_input(batch_size,
-                           image_size,
-                           stride):
-  """Raw float32 image tensor input, no resize is preformed."""
-  image_height, image_width = image_size
-  if image_height % stride != 0 or image_width % stride != 0:
-    raise ValueError('Image size is not compatible with the stride.')
-
-  placeholder = tf.placeholder(
-      dtype=tf.float32,
-      shape=(batch_size, image_height, image_width, 3))
-
-  image_info_per_image = [
-      [image_height, image_width],
-      [image_height, image_width],
-      [1.0, 1.0],
-      [0.0, 0.0]]
-  if batch_size == 1:
-    images_info = tf.constant([image_info_per_image], dtype=tf.float32)
-  else:
-    images_info = tf.constant(
-        [image_info_per_image for _ in range(batch_size)],
-        dtype=tf.float32)
-
-  images = placeholder
-  return placeholder, {'images': images, 'image_info': images_info}
-
-
-def image_tensor_input(batch_size,
-                       desired_image_size,
-                       stride):
-  """Image tensor input."""
-  desired_image_height, desired_image_width = desired_image_size
-  placeholder = tf.placeholder(
-      dtype=tf.uint8,
-      shape=(batch_size, desired_image_height, desired_image_width, 3))
-
-  def _prepare(image):
-    return preprocess_image(
-        image, desired_image_size, stride)
-
-  if batch_size == 1:
-    image = tf.squeeze(placeholder, axis=0)
-    image, image_info = _prepare(image)
-    images = tf.expand_dims(image, axis=0)
-    images_info = tf.expand_dims(image_info, axis=0)
-  else:
-    images, images_info = tf.map_fn(
-        _prepare,
-        placeholder,
-        back_prop=False,
-        dtype=(tf.float32, tf.float32))
-  return placeholder, {'images': images, 'image_info': images_info}
-
-
-def image_bytes_input(batch_size,
-                      desired_image_size,
-                      stride):
-  """Image bytes input."""
-  placeholder = tf.placeholder(dtype=tf.string, shape=(batch_size,))
-
-  def _prepare(image_bytes):
-    return preprocess_image(
-        decode_image(image_bytes), desired_image_size, stride)
-
-  if batch_size == 1:
-    image_bytes = tf.squeeze(placeholder, axis=0)
-    image, image_info = _prepare(image_bytes)
-    images = tf.expand_dims(image, axis=0)
-    images_info = tf.expand_dims(image_info, axis=0)
-  else:
-    images, images_info = tf.map_fn(
-        _prepare,
-        placeholder,
-        back_prop=False,
-        dtype=(tf.float32, tf.float32))
-  return placeholder, {'images': images, 'image_info': images_info}
-
-
-def tf_example_input(batch_size,
-                     desired_image_size,
-                     stride):
-  """tf.Example input."""
-  placeholder = tf.placeholder(dtype=tf.string, shape=(batch_size,))
-
-  def _prepare(tf_example_string):
-    return preprocess_image(
-        decode_image(parse_tf_example(tf_example_string)),
-        desired_image_size,
-        stride)
-
-  if batch_size == 1:
-    tf_example_string = tf.squeeze(placeholder, axis=0)
-    image, image_info = _prepare(tf_example_string)
-    images = tf.expand_dims(image, axis=0)
-    images_info = tf.expand_dims(image_info, axis=0)
-  else:
-    images, images_info = tf.map_fn(
-        _prepare,
-        placeholder,
-        back_prop=False,
-        dtype=(tf.float32, tf.float32))
-  return placeholder, {'images': images, 'image_info': images_info}
 
 
 def serving_input_fn(batch_size,
@@ -188,36 +52,12 @@ def serving_input_fn(batch_size,
   Returns:
     a `tf.estimator.export.ServingInputReceiver` for a SavedModel.
   """
-  if input_type == 'image_tensor':
-    placeholder, features = image_tensor_input(
-        batch_size, desired_image_size, stride)
-    return tf.estimator.export.ServingInputReceiver(
-        features=features, receiver_tensors={
-            input_name: placeholder,
-        })
-  elif input_type == 'raw_image_tensor':
-    placeholder, features = raw_image_tensor_input(
-        batch_size, desired_image_size, stride)
-    return tf.estimator.export.ServingInputReceiver(
-        features=features, receiver_tensors={
-            input_name: placeholder,
-        })
-  elif input_type == 'image_bytes':
-    placeholder, features = image_bytes_input(
-        batch_size, desired_image_size, stride)
-    return tf.estimator.export.ServingInputReceiver(
-        features=features, receiver_tensors={
-            input_name: placeholder,
-        })
-  elif input_type == 'tf_example':
-    placeholder, features = tf_example_input(
-        batch_size, desired_image_size, stride)
-    return tf.estimator.export.ServingInputReceiver(
-        features=features, receiver_tensors={
-            input_name: placeholder,
-        })
-  else:
-    raise NotImplementedError('Unknown input type!')
+  placeholder, features = inputs.build_serving_input(
+      input_type, batch_size, desired_image_size, stride)
+  return tf.estimator.export.ServingInputReceiver(
+      features=features, receiver_tensors={
+          input_name: placeholder,
+      })
 
 
 def serving_model_graph_builder(output_image_info,
@@ -239,18 +79,23 @@ def serving_model_graph_builder(output_image_info,
   def _serving_model_graph(features, params):
     """Build the model graph for serving."""
     images = features['images']
-    _, height, width, _ = images.get_shape().as_list()
+    batch_size, height, width, _ = images.get_shape().as_list()
 
     input_anchor = anchor.Anchor(
         params.anchor.min_level, params.anchor.max_level,
         params.anchor.num_scales, params.anchor.aspect_ratios,
         params.anchor.anchor_size, (height, width))
 
+    multilevel_boxes = {}
+    for k, v in six.iteritems(input_anchor.multilevel_boxes):
+      multilevel_boxes[k] = tf.tile(
+          tf.expand_dims(v, 0), [batch_size, 1, 1])
+
     model_fn = factory.model_generator(params)
     model_outputs = model_fn.build_outputs(
         features['images'],
         labels={
-            'anchor_boxes': input_anchor.multilevel_boxes,
+            'anchor_boxes': multilevel_boxes,
             'image_info': features['image_info'],
         },
         mode=mode_keys.PREDICT)
@@ -269,7 +114,27 @@ def serving_model_graph_builder(output_image_info,
           model_outputs['detection_boxes'],
           features['image_info'][:, 1:2, :])
 
-    return model_outputs
+    predictions = {
+        'num_detections': tf.identity(
+            model_outputs['num_detections'], 'NumDetections'),
+        'detection_boxes': tf.identity(
+            model_outputs['detection_boxes'], 'DetectionBoxes'),
+        'detection_classes': tf.identity(
+            model_outputs['detection_classes'], 'DetectionClasses'),
+        'detection_scores': tf.identity(
+            model_outputs['detection_scores'], 'DetectionScores'),
+    }
+    if 'detection_masks' in model_outputs:
+      predictions.update({
+          'detection_masks':
+              tf.identity(model_outputs['detection_masks'], 'DetectionMasks'),
+      })
+
+    if output_image_info:
+      predictions['image_info'] = tf.identity(
+          model_outputs['image_info'], 'ImageInfo')
+
+    return predictions
 
   return _serving_model_graph
 
@@ -303,31 +168,11 @@ def serving_model_fn_builder(export_tpu_model,
         output_image_info,
         output_normalized_coordinates,
         cast_num_detections_to_float)
-    model_outputs = serving_model_graph(features, model_params)
-
-    predictions = {
-        'num_detections': tf.identity(
-            model_outputs['num_detections'], 'NumDetections'),
-        'detection_boxes': tf.identity(
-            model_outputs['detection_boxes'], 'DetectionBoxes'),
-        'detection_classes': tf.identity(
-            model_outputs['detection_classes'], 'DetectionClasses'),
-        'detection_scores': tf.identity(
-            model_outputs['detection_scores'], 'DetectionScores'),
-    }
-    if 'detection_masks' in model_outputs:
-      predictions.update({
-          'detection_masks':
-              tf.identity(model_outputs['detection_masks'], 'DetectionMasks'),
-      })
-
-    if output_image_info:
-      predictions['image_info'] = tf.identity(
-          model_outputs['image_info'], 'ImageInfo')
+    predictions = serving_model_graph(features, model_params)
 
     if export_tpu_model:
-      return tf.estimator.tpu.TPUEstimatorSpec(mode=mode,
-                                               predictions=predictions)
+      return tf.estimator.tpu.TPUEstimatorSpec(
+          mode=mode, predictions=predictions)
     return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions)
 
   return _serving_model_fn
