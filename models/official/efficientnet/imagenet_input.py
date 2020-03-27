@@ -24,6 +24,7 @@ import functools
 import os
 
 from absl import logging
+import six
 import tensorflow.compat.v1 as tf
 
 import preprocessing
@@ -57,31 +58,8 @@ def build_image_serving_input_fn(image_size,
   return _image_serving_input_fn
 
 
-class ImageNetTFExampleInput(object):
-  """Base class for ImageNet input_fn generator.
-
-  Args:
-    is_training: `bool` for whether the input is for training
-    use_bfloat16: If True, use bfloat16 precision; else use float32.
-    num_cores: `int` for the number of TPU cores
-    image_size: `int` for image size (both width and height).
-    transpose_input: 'bool' for whether to use the double transpose trick
-    num_label_classes: number of label classes. Default to 1000 for ImageNet.
-    include_background_label: If true, label #0 is reserved for background.
-    augment_name: `string` that is the name of the augmentation method
-        to apply to the image. `autoaugment` if AutoAugment is to be used or
-        `randaugment` if RandAugment is to be used. If the value is `None` no
-        no augmentation method will be applied applied. See autoaugment.py
-        for more details.
-    mixup_alpha: float to control the strength of Mixup regularization, set
-        to 0.0 to disable.
-    randaug_num_layers: 'int', if RandAug is used, what should the number of
-      layers be. See autoaugment.py for detailed description.
-    randaug_magnitude: 'int', if RandAug is used, what should the magnitude
-      be. See autoaugment.py for detailed description.
-    resize_method: If None, use bicubic in default.
-  """
-  __metaclass__ = abc.ABCMeta
+class ImageNetTFExampleInput(six.with_metaclass(abc.ABCMeta, object)):
+  """Base class for ImageNet input_fn generator."""
 
   def __init__(self,
                is_training,
@@ -96,6 +74,29 @@ class ImageNetTFExampleInput(object):
                randaug_num_layers=None,
                randaug_magnitude=None,
                resize_method=None):
+    """Constructor.
+
+    Args:
+      is_training: `bool` for whether the input is for training
+      use_bfloat16: If True, use bfloat16 precision; else use float32.
+      num_cores: `int` for the number of TPU cores
+      image_size: `int` for image size (both width and height).
+      transpose_input: 'bool' for whether to use the double transpose trick
+      num_label_classes: number of label classes. Default to 1000 for ImageNet.
+      include_background_label: If true, label #0 is reserved for background.
+      augment_name: `string` that is the name of the augmentation method to
+        apply to the image. `autoaugment` if AutoAugment is to be used or
+        `randaugment` if RandAugment is to be used. If the value is `None` no no
+        augmentation method will be applied applied. See autoaugment.py for more
+        details.
+      mixup_alpha: float to control the strength of Mixup regularization, set to
+        0.0 to disable.
+      randaug_num_layers: 'int', if RandAug is used, what should the number of
+        layers be. See autoaugment.py for detailed description.
+      randaug_magnitude: 'int', if RandAug is used, what should the magnitude
+        be. See autoaugment.py for detailed description.
+      resize_method: If None, use bicubic in default.
+    """
     self.image_preprocessing_fn = preprocessing.preprocess_image
     self.is_training = is_training
     self.use_bfloat16 = use_bfloat16

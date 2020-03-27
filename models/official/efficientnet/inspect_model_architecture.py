@@ -60,7 +60,7 @@ def main(unused_argv):
       noise = tf.random.normal(shape=var.shape, stddev=0.001)
       updates.append(var.assign_add(noise))
     sess.run(updates)
-    converter = tf.lite.TFLiteConverter.from_session(sess, [images], [output])
+    converter = tf.lite.TFLiteConverter.from_session(sess, [images], [output])  # pytype: disable=attribute-error
     converter.inference_type = tf.lite.constants.QUANTIZED_UINT8
     converter.quantized_input_stats = {'input': (0, 1.)}
     converter.default_ranges_stats = (-10, 10)
