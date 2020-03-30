@@ -133,6 +133,7 @@ back, you can press Ctrl-C now. Note: Next time you run ctpu, you can pass the
 
 var versionRegex = regexp.MustCompile("^(\\d+)\\.(\\d+)(.*)$")
 var nightlyVersionRegex = regexp.MustCompile("^nightly(.*)$")
+var patchNumberRegex = regexp.MustCompile("^\\.(\\d+)$")
 
 // Expected versions look like one of the following formats:
 //  - 1.6
@@ -142,6 +143,7 @@ var nightlyVersionRegex = regexp.MustCompile("^nightly(.*)$")
 type parsedVersion struct {
 	Major     int
 	Minor     int
+	Patch     int
 	IsNightly bool
 	Modifier  string
 }
@@ -175,6 +177,9 @@ func (s sortedParsedVersions) Less(i, j int) bool {
 		}
 		if s[i].Minor != s[j].Minor {
 			return s[i].Minor > s[j].Minor
+		}
+		if s[i].Patch != s[j].Patch {
+			return s[i].Patch > s[j].Patch
 		}
 		if len(s[i].Modifier) == 0 {
 			return true
@@ -255,7 +260,16 @@ func parseVersion(version string) (parsedVersion, error) {
 			Minor: minor,
 		}
 		if len(versionMatch) == 4 {
-			parsed.Modifier = versionMatch[3]
+			parsed.Patch = 0
+			patchMatch := patchNumberRegex.FindStringSubmatch(versionMatch[3])
+			if len(patchMatch) != 0 {
+				patch, err := strconv.Atoi(patchMatch[1])
+				if err == nil {
+					parsed.Patch = patch
+				}
+			} else {
+				parsed.Modifier = versionMatch[3]
+			}
 		}
 		return parsed, nil
 	}
