@@ -518,6 +518,7 @@ class SegmentationLoss(object):
   def __init__(self, params):
     self._class_weights = params.class_weights
     self._ignore_label = params.ignore_label
+    self._use_groundtruth_dimension = params.use_groundtruth_dimension
 
   def __call__(self, logits, labels):
     _, height, width, num_classes = logits.get_shape().as_list()
@@ -525,8 +526,12 @@ class SegmentationLoss(object):
     # tensorflow 1.14 with TPU. Once the environment is updated, it should be
     # change back to nearest neighbor. For now, it is tested and the performance
     # should be similar.
-    labels = tf.image.resize_images(
-        labels, (height, width), method=tf.image.ResizeMethod.BILINEAR)
+    if self._use_groundtruth_dimension:
+      logits = tf.image.resize_bilinear(
+          logits, tf.shape(labels)[1:3], align_corners=False)
+    else:
+      labels = tf.image.resize_images(
+          labels, (height, width), method=tf.image.ResizeMethod.BILINEAR)
     valid_mask = tf.not_equal(labels, self._ignore_label)
     normalizer = tf.reduce_sum(tf.to_float(valid_mask))
     # Assign pixel with ignore label to class 0 (background). The loss on the
