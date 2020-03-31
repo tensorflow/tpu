@@ -20,6 +20,7 @@ from __future__ import print_function
 
 import tensorflow.compat.v1 as tf
 
+from dataloader import anchor
 from dataloader import mode_keys
 from modeling import base_model
 from modeling import losses
@@ -33,6 +34,8 @@ class ShapeMaskModel(base_model.BaseModel):
 
   def __init__(self, params):
     super(ShapeMaskModel, self).__init__(params)
+
+    self._anchor_params = params.anchor
 
     # Architecture generators.
     self._backbone_fn = factory.backbone_generator(params)
@@ -65,6 +68,23 @@ class ShapeMaskModel(base_model.BaseModel):
 
   def _build_outputs(self, images, labels, mode):
     is_training = (mode == mode_keys.TRAIN)
+
+    if 'anchor_boxes' in labels:
+      anchor_boxes = labels['anchor_boxes']
+    else:
+      anchor_boxes = anchor.Anchor(
+          self._anchor_params.min_level,
+          self._anchor_params.max_level,
+          self._anchor_params.num_scales,
+          self._anchor_params.aspect_ratios,
+          self._anchor_params.anchor_size,
+          images.get_shape().as_list()[1:3]).multilevel_boxes
+
+      batch_size = tf.shape(images)[0]
+      for level in anchor_boxes:
+        anchor_boxes[level] = tf.tile(
+            tf.expand_dims(anchor_boxes[level], 0), [batch_size, 1, 1])
+
     backbone_features = self._backbone_fn(images, is_training=is_training)
     fpn_features = self._fpn_fn(backbone_features, is_training=is_training)
     cls_outputs, box_outputs = self._retinanet_head_fn(
@@ -76,7 +96,7 @@ class ShapeMaskModel(base_model.BaseModel):
       classes = labels['mask_classes']
     else:
       detection_results = self._generate_detections_fn(
-          box_outputs, cls_outputs, labels['anchor_boxes'],
+          box_outputs, cls_outputs, anchor_boxes,
           labels['image_info'][:, 1:2, :])
       boxes = detection_results['detection_boxes']
       scores = detection_results['detection_scores']
