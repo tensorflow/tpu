@@ -181,6 +181,9 @@ func (c *upCmd) gceImageFamily() (string, error) {
 	if c.dlImage {
 		return fmt.Sprintf("tf-%d-%d-gpu", parsed.Major, parsed.Minor), nil
 	}
+	if parsed.Patch != 0 {
+		return fmt.Sprintf("tf-%d-%d-%d", parsed.Major, parsed.Minor, parsed.Patch), nil
+	}
 	return fmt.Sprintf("tf-%d-%d", parsed.Major, parsed.Minor), nil
 }
 
