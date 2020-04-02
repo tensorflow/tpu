@@ -158,7 +158,7 @@ BASE_CFG = {
         'score_threshold': 0.05,
         'pre_nms_num_boxes': 5000,
     },
-    'enable_summary': False,
+    'enable_summary': True,
 }
 
 # pylint: enable=line-too-long
