@@ -20,6 +20,7 @@ from __future__ import division
 from __future__ import print_function
 
 import math
+import numpy as np
 from six.moves import range
 import tensorflow.compat.v1 as tf
 
@@ -60,6 +61,16 @@ def pad_to_fixed_size(input_tensor, size, constant_values=0):
   output_shape[0] = size
   padded_tensor.set_shape(output_shape)
   return padded_tensor
+
+
+def normalize_image_np(image,
+                       offset=(0.485, 0.456, 0.406),
+                       scale=(0.229, 0.224, 0.225)):
+  """Normalizes the image to zero mean and unit variance."""
+  normalized_image = image.astype(np.float32)
+  normalized_image /= 255.0
+  normalized_image = (normalized_image - offset) / scale
+  return normalized_image
 
 
 def normalize_image(image,
