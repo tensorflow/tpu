@@ -1,4 +1,4 @@
-# Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -29,22 +29,23 @@ FLAGS = flags.FLAGS
 flags.DEFINE_string('saved_model_dir', None, 'The saved model directory.')
 flags.DEFINE_string('output_dir', None, 'The export tflite model directory.')
 
-flags.mark_flag_as_required('saved_model_dir')
-flags.mark_flag_as_required('output_dir')
 
-
-def main(argv):
-  del argv  # Unused.
-
-  converter = tf.lite.TFLiteConverter.from_saved_model(FLAGS.saved_model_dir)
-  converter.experimental_new_converter = True
+def export(saved_model_dir, tflite_model_dir):
+  converter = tf.lite.TFLiteConverter.from_saved_model(saved_model_dir)
 
   tflite_model = converter.convert()
-  tflite_model_path = os.path.join(FLAGS.output_dir, 'model.tflite')
+  tflite_model_path = os.path.join(tflite_model_dir, 'model.tflite')
 
   with tf.gfile.GFile(tflite_model_path, 'wb') as f:
     f.write(tflite_model)
 
 
+def main(argv):
+  del argv  # Unused.
+  export(FLAGS.saved_model_dir, FLAGS.output_dir)
+
+
 if __name__ == '__main__':
+  flags.mark_flag_as_required('saved_model_dir')
+  flags.mark_flag_as_required('output_dir')
   tf.app.run(main)

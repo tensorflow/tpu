@@ -66,9 +66,6 @@ flags.DEFINE_boolean(
     'cast_num_detections_to_float', False,
     'Whether or not cast the number of detections to float type.')
 
-flags.mark_flag_as_required('export_dir')
-flags.mark_flag_as_required('model')
-
 
 def main(argv):
   del argv  # Unused.
@@ -133,4 +130,6 @@ def main(argv):
 
 
 if __name__ == '__main__':
+  flags.mark_flag_as_required('export_dir')
+  flags.mark_flag_as_required('model')
   tf.app.run(main)

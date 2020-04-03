@@ -68,7 +68,7 @@ python ~/tpu/models/official/detection/main.py \
 
 * NAS-FPN: [arXiv](https://arxiv.org/abs/1904.07392), [yaml](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/yaml/retinanet_nasfpn.yaml)
 * Auto-augument: [arXiv](https://arxiv.org/abs/1805.09501), [yaml](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/yaml/retinanet_autoaugment.yaml)
-
+* SpineNet: [arXiv](https://arxiv.org/abs/1912.05027), [yaml](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/spinenet/spinenet49_retinanet.yaml)
 
 ## Export to SavedModel for serving
 Once the training is finished, you can export the model in the SavedModel format for serving using the following command.

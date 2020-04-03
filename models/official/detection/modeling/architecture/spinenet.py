@@ -22,6 +22,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import math
 from absl import logging
 import tensorflow.compat.v1 as tf
 
@@ -167,9 +168,6 @@ def resample_with_alpha(feat,
 
     # Down-sample.
     if width > target_width:
-      if width % target_width != 0:
-        raise ValueError('wdith ({}) is not divisible by '
-                         'target_width ({}).'.format(width, target_width))
       # Apply stride-2 conv to reduce feature map size to 1/2.
       feat = nn_ops.conv2d_fixed_padding(
           inputs=feat,
@@ -180,22 +178,28 @@ def resample_with_alpha(feat,
       feat = batch_norm_relu(feat, is_training=is_training)
       # Apply maxpool to further reduce feature map size if necessary.
       if width // target_width > 2:
+        if width % target_width != 0:
+          stride_size = 2
+        else:
+          stride_size = width // target_width // 2
         feat = tf.layers.max_pooling2d(
             inputs=feat,
-            pool_size=3 if width // target_width == 4 else 5,
-            strides=[width // target_width // 2, width // target_width // 2],
+            pool_size=3 if width / target_width <= 4 else 5,
+            strides=stride_size,
             padding='SAME',
             data_format=data_format)
+      # Use NN interpolation to resize if necessary. This could happen in cases
+      # where `wdith` is not divisible by `target_width`.
+      if feat.get_shape().as_list()[2] != target_width:
+        feat = spatial_transform_ops.native_resize(
+            feat, [int(target_width / width * height), target_width])
     # Up-sample with NN interpolation.
     elif width < target_width:
-      if target_width % width != 0:
-        raise ValueError('target_wdith ({}) is not divisible by '
-                         'width ({}).'.format(target_width, width))
-      scale = target_width // width
-      if use_native_resize_op:
-        feat = tf.image.resize_nearest_neighbor(feat,
-                                                [height * scale, width * scale])
+      if target_width % width != 0 or use_native_resize_op:
+        feat = spatial_transform_ops.native_resize(
+            feat, [int(target_width / width * height), target_width])
       else:
+        scale = target_width // width
         feat = spatial_transform_ops.nearest_upsampling(feat, scale=scale)
 
     # Match feature dimension to the target block.
@@ -340,7 +344,7 @@ class SpineNet(object):
       endpoints[level] = feature
     return endpoints
 
-  def _build_scale_permuted_network(self, feats, input_size, is_training):
+  def _build_scale_permuted_network(self, feats, input_width, is_training):
     """Builds the scale permuted network from a given config."""
     # Number of output connections from each feat.
     feats_block_fns = [self._init_block_fn] * len(feats)
@@ -350,7 +354,7 @@ class SpineNet(object):
     for i, block_spec in enumerate(self._block_specs):
       with tf.variable_scope('sub_policy{}'.format(i)):
         # Find feature map size, filter size, and block fn for the target block.
-        target_width = int(input_size / 2 ** block_spec.level)
+        target_width = int(math.ceil(input_width / 2 ** block_spec.level))
         target_num_filters = int(
             FILTER_SIZE_MAP[block_spec.level] * self._filter_size_scale)
         target_block_fn = block_spec.block_fn
@@ -462,11 +466,7 @@ class SpineNet(object):
       features with shape [batch_size, height_l, width_l,
       endpoints_num_filters].
     """
-    _, in_height, in_width, _ = images.get_shape().as_list()
-    if (in_height % 2 ** self._max_level != 0 or
-        in_width % 2 ** self._max_level != 0):
-      raise ValueError(
-          'Input height and width have to be the multiple of 2^max_level.')
+    _, _, in_width, _ = images.get_shape().as_list()
 
     with tf.variable_scope('spinenet'):
       feats = self._build_stem_network(images, is_training)

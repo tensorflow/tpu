@@ -26,6 +26,24 @@ import tensorflow.compat.v1 as tf
 _EPSILON = 1e-8
 
 
+def native_resize(data, target_size):
+  """Resize `data` using native nearest neighbor interpolation.
+
+  Args:
+    data: A tensor with a shape of [batch, height_in, width_in, channels].
+    target_size: A list of 2 integers [`height_out`, `width_out`] specifying the
+      target output size.
+  Returns:
+    resized_data: A tensor with a shape of
+      [batch, height_out, width_out, channels]. Same dtype as input data.
+  """
+  with tf.name_scope('resize_nearest_neighbor'):
+    data_type = data.dtype
+    resized_data = tf.cast(tf.image.resize_nearest_neighbor(
+        tf.cast(data, dtype=tf.float32), target_size), dtype=data_type)
+    return resized_data
+
+
 def nearest_upsampling(data, scale):
   """Nearest neighbor upsampling implementation.
 

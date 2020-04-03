@@ -966,11 +966,8 @@ class ClassificationHead(object):
             target_h, target_w = target_shape[1], target_shape[2]
           else:
             target_h, target_w = target_shape[2], target_shape[3]
-          data_type = bottleneck.dtype
-          bottleneck = features[level] + tf.cast(
-              tf.image.resize_nearest_neighbor(
-                  tf.cast(bottleneck, dtype=tf.float32), [target_h, target_w]),
-              dtype=data_type)
+          bottleneck = spatial_transform_ops.native_resize(
+              bottleneck, [target_h, target_w]) + features[level]
         bottleneck = bottleneck / (max_level - min_level + 1)
       else:
         raise ValueError(
