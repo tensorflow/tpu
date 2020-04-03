@@ -148,7 +148,7 @@ def resample_with_alpha(feat,
                         name=None,
                         is_training=False):
   """Match resolution and feature dimension to the target block."""
-  _, _, width, num_filters = feat.get_shape().as_list()
+  _, height, width, num_filters = feat.get_shape().as_list()
   if width is None or num_filters is None:
     raise ValueError('Shape of feat is None (shape:{}).'.format(feat.shape))
 
@@ -192,12 +192,12 @@ def resample_with_alpha(feat,
       # where `wdith` is not divisible by `target_width`.
       if feat.get_shape().as_list()[2] != target_width:
         feat = spatial_transform_ops.native_resize(
-            feat, [target_width, target_width])
+            feat, [int(target_width / width * height), target_width])
     # Up-sample with NN interpolation.
     elif width < target_width:
       if target_width % width != 0 or use_native_resize_op:
         feat = spatial_transform_ops.native_resize(
-            feat, [target_width, target_width])
+            feat, [int(target_width / width * height), target_width])
       else:
         scale = target_width // width
         feat = spatial_transform_ops.nearest_upsampling(feat, scale=scale)
@@ -344,7 +344,7 @@ class SpineNet(object):
       endpoints[level] = feature
     return endpoints
 
-  def _build_scale_permuted_network(self, feats, input_size, is_training):
+  def _build_scale_permuted_network(self, feats, input_width, is_training):
     """Builds the scale permuted network from a given config."""
     # Number of output connections from each feat.
     feats_block_fns = [self._init_block_fn] * len(feats)
@@ -354,7 +354,7 @@ class SpineNet(object):
     for i, block_spec in enumerate(self._block_specs):
       with tf.variable_scope('sub_policy{}'.format(i)):
         # Find feature map size, filter size, and block fn for the target block.
-        target_width = int(math.ceil(input_size / 2 ** block_spec.level))
+        target_width = int(math.ceil(input_width / 2 ** block_spec.level))
         target_num_filters = int(
             FILTER_SIZE_MAP[block_spec.level] * self._filter_size_scale)
         target_block_fn = block_spec.block_fn
@@ -466,9 +466,7 @@ class SpineNet(object):
       features with shape [batch_size, height_l, width_l,
       endpoints_num_filters].
     """
-    _, in_height, in_width, _ = images.get_shape().as_list()
-    if in_height != in_width:
-      raise ValueError('Input height and width should be the same.')
+    _, _, in_width, _ = images.get_shape().as_list()
 
     with tf.variable_scope('spinenet'):
       feats = self._build_stem_network(images, is_training)
