@@ -27,6 +27,7 @@ from modeling import base_model
 from modeling import losses
 from modeling.architecture import factory
 from ops import postprocess_ops
+from utils import benchmark_utils
 
 
 class RetinanetModel(base_model.BaseModel):
@@ -78,6 +79,10 @@ class RetinanetModel(base_model.BaseModel):
         'cls_outputs': cls_outputs,
         'box_outputs': box_outputs,
     }
+
+    tf.logging.info('Computing number of FLOPs before NMS...')
+    _, _ = benchmark_utils.compute_model_statistics(
+        images.get_shape().as_list()[0])
 
     if mode != mode_keys.TRAIN:
       detection_results = self._generate_detections_fn(
