@@ -23,7 +23,6 @@ from absl import logging
 from six.moves import range
 import tensorflow.compat.v1 as tf
 
-from ops import spatial_transform_ops
 from tensorflow.python.tpu import tpu_function  # pylint: disable=g-direct-tensorflow-import
 from tensorflow.python.tpu.ops import tpu_ops  # pylint: disable=g-direct-tensorflow-import
 
@@ -552,8 +551,11 @@ def pyramid_feature_fusion(pyramid_feats, target_level):
     if l == target_level:
       resampled_feats.append(pyramid_feats[l])
     else:
-      resampled_feat = spatial_transform_ops.nearest_upsampling(
-          pyramid_feats[l], 2**(l - target_level))
+      target_size = pyramid_feats[l].shape.as_list()[1:3]
+      target_size[0] *= 2**(l - target_level)
+      target_size[1] *= 2**(l - target_level)
+      resampled_feat = tf.image.resize_bilinear(
+          pyramid_feats[l], size=target_size, align_corners=False)
       resampled_feats.append(resampled_feat)
 
   return tf.math.add_n(resampled_feats)
