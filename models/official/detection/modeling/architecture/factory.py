@@ -89,7 +89,8 @@ def multilevel_features_generator(params):
         fpn_feat_dims=fpn_params.fpn_feat_dims,
         use_separable_conv=fpn_params.use_separable_conv,
         use_batch_norm=fpn_params.use_batch_norm,
-        batch_norm_relu=batch_norm_relu_generator(fpn_params.batch_norm))
+        batch_norm_relu=batch_norm_relu_generator(
+            fpn_params.batch_norm, fpn_params.activation))
   elif params.architecture.multilevel_features == 'nasfpn':
     nasfpn_params = params.nasfpn
     fpn_fn = nasfpn.Nasfpn(
@@ -137,7 +138,7 @@ def rpn_head_generator(params):
                        params.use_separable_conv,
                        params.use_batch_norm,
                        batch_norm_relu=batch_norm_relu_generator(
-                           params.batch_norm))
+                           params.batch_norm, params.activation))
 
 
 def fast_rcnn_head_generator(params):
@@ -150,7 +151,7 @@ def fast_rcnn_head_generator(params):
                             params.fc_dims,
                             params.use_batch_norm,
                             batch_norm_relu=batch_norm_relu_generator(
-                                params.batch_norm))
+                                params.batch_norm, params.activation))
 
 
 def mask_rcnn_head_generator(params):
@@ -162,7 +163,7 @@ def mask_rcnn_head_generator(params):
                             params.use_separable_conv,
                             params.use_batch_norm,
                             batch_norm_relu=batch_norm_relu_generator(
-                                params.batch_norm))
+                                params.batch_norm, params.activation))
 
 
 def shapeprior_head_generator(params):

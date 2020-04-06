@@ -77,6 +77,7 @@ MASKRCNN_CFG.override({
             'batch_norm_trainable': True,
             'use_sync_bn': False,
         },
+        'activation': 'relu',
     },
     'frcnn_head': {
         # Note that `num_classes` is the total number of classes including
@@ -94,6 +95,7 @@ MASKRCNN_CFG.override({
             'batch_norm_trainable': True,
             'use_sync_bn': False,
         },
+        'activation': 'relu',
     },
     'mrcnn_head': {
         'num_classes': 91,
@@ -108,6 +110,7 @@ MASKRCNN_CFG.override({
             'batch_norm_trainable': True,
             'use_sync_bn': False,
         },
+        'activation': 'relu',
     },
     'rpn_score_loss': {
         'rpn_batch_size_per_im': 256,

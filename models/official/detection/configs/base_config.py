@@ -91,13 +91,13 @@ BASE_CFG = {
             'dropblock_keep_prob': None,
             'dropblock_size': None,
         },
-        'activation': 'relu',
         'batch_norm': {
             'batch_norm_momentum': 0.997,
             'batch_norm_epsilon': 1e-4,
             'batch_norm_trainable': True,
             'use_sync_bn': False,
         },
+        'activation': 'relu',
     },
     'spinenet': {
         'filter_size_scale': 1.0,
@@ -107,13 +107,13 @@ BASE_CFG = {
         'min_level': 3,
         'max_level': 7,
         'init_drop_connect_rate': 0.2,
-        'activation': 'swish',
         'batch_norm': {
             'batch_norm_momentum': 0.99,
             'batch_norm_epsilon': 1e-3,
             'batch_norm_trainable': True,
             'use_sync_bn': True,
         },
+        'activation': 'swish',
         'block_specs': None,
         'use_native_resize_op': False,
     },
@@ -129,6 +129,7 @@ BASE_CFG = {
             'batch_norm_trainable': True,
             'use_sync_bn': False,
         },
+        'activation': 'relu',
     },
     'nasfpn': {
         'min_level': 3,
@@ -142,13 +143,13 @@ BASE_CFG = {
         },
         'init_drop_connect_rate': None,
         'block_fn': 'conv',
-        'activation': 'relu',
         'batch_norm': {
             'batch_norm_momentum': 0.997,
             'batch_norm_epsilon': 1e-4,
             'batch_norm_trainable': True,
             'use_sync_bn': False,
         },
+        'activation': 'relu',
     },
     'postprocess': {
         'apply_nms': True,
