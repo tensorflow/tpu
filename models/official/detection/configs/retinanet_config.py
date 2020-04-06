@@ -14,11 +14,11 @@
 # ==============================================================================
 """Config template to train Retinanet."""
 
-from configs import base_config
+from configs import detection_config
 from hyperparameters import params_dict
 
 # pylint: disable=line-too-long
-RETINANET_CFG = params_dict.ParamsDict(base_config.BASE_CFG)
+RETINANET_CFG = params_dict.ParamsDict(detection_config.DETECTION_CFG)
 RETINANET_CFG.override({
     'type': 'retinanet',
     'architecture': {

@@ -12,19 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Base config template."""
+"""Base config template that defines train, eval and backbones."""
 
 # pylint: disable=line-too-long
-
-# For ResNet, this freezes the variables of the first conv1 and conv2_x
-# layers [1], which leads to higher training speed and slightly better testing
-# accuracy. The intuition is that the low-level architecture (e.g., ResNet-50)
-# is able to capture low-level features such as edges; therefore, it does not
-# need to be fine-tuned for the detection task.
-# Note that we need to trailing `/` to avoid the incorrect match.
-# [1]: https://github.com/facebookresearch/Detectron/blob/master/detectron/core/config.py#L198
-RESNET_FROZEN_VAR_PREFIX = r'(resnet\d+)\/(conv2d(|_([1-9]|10))|batch_normalization(|_([1-9]|10)))\/'
-
 REGULARIZATION_VAR_REGEX = r'.*(kernel|weight):0$'
 BASE_CFG = {
     'model_dir': '',
@@ -53,7 +43,7 @@ BASE_CFG = {
             'prefix': '',
             'skip_variables_regex': '',
         },
-        'frozen_variable_prefix': RESNET_FROZEN_VAR_PREFIX,
+        'frozen_variable_prefix': None,
         'train_file_pattern': '',
         'train_dataset_type': 'tfrecord',
         'transpose_input': True,
@@ -68,21 +58,11 @@ BASE_CFG = {
         'min_eval_interval': 180,
         'eval_timeout': None,
         'num_steps_per_eval': 1000,
-        'type': 'box',
-        'use_json_file': True,
-        'val_json_file': '',
         'eval_file_pattern': '',
         'eval_dataset_type': 'tfrecord',
     },
     'predict': {
         'predict_batch_size': 8,
-    },
-    'anchor': {
-        'min_level': 3,
-        'max_level': 7,
-        'num_scales': 3,
-        'aspect_ratios': [1.0, 2.0, 0.5],
-        'anchor_size': 4.0,
     },
     'resnet': {
         'resnet_depth': 50,
@@ -117,49 +97,6 @@ BASE_CFG = {
         'block_specs': None,
         'use_native_resize_op': False,
     },
-    'fpn': {
-        'min_level': 3,
-        'max_level': 7,
-        'fpn_feat_dims': 256,
-        'use_separable_conv': False,
-        'use_batch_norm': True,
-        'batch_norm': {
-            'batch_norm_momentum': 0.997,
-            'batch_norm_epsilon': 1e-4,
-            'batch_norm_trainable': True,
-            'use_sync_bn': False,
-        },
-        'activation': 'relu',
-    },
-    'nasfpn': {
-        'min_level': 3,
-        'max_level': 7,
-        'fpn_feat_dims': 256,
-        'num_repeats': 5,
-        'use_separable_conv': False,
-        'dropblock': {
-            'dropblock_keep_prob': None,
-            'dropblock_size': None,
-        },
-        'init_drop_connect_rate': None,
-        'block_fn': 'conv',
-        'batch_norm': {
-            'batch_norm_momentum': 0.997,
-            'batch_norm_epsilon': 1e-4,
-            'batch_norm_trainable': True,
-            'use_sync_bn': False,
-        },
-        'activation': 'relu',
-    },
-    'postprocess': {
-        'apply_nms': True,
-        'use_batched_nms': False,
-        'max_total_size': 100,
-        'nms_iou_threshold': 0.5,
-        'score_threshold': 0.05,
-        'pre_nms_num_boxes': 5000,
-    },
-    'enable_summary': True,
+    'enable_summary': False,
 }
-
 # pylint: enable=line-too-long

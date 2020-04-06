@@ -14,14 +14,14 @@
 # ==============================================================================
 """Config template to train ShapeMask."""
 
-from configs import base_config
+from configs import detection_config
 from hyperparameters import params_dict
 
 # pylint: disable=line-too-long
 
 SHAPEMASK_RESNET_FROZEN_VAR_PREFIX = r'(resnet\d+/)conv2d(|_([1-9]|10))\/'
 
-SHAPEMASK_CFG = params_dict.ParamsDict(base_config.BASE_CFG)
+SHAPEMASK_CFG = params_dict.ParamsDict(detection_config.DETECTION_CFG)
 SHAPEMASK_CFG.override(
     {
         'type': 'shapemask',
