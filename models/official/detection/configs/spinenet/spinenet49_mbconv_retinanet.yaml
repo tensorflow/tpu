@@ -24,18 +24,18 @@ anchor:
   min_level: 3
   max_level: 7
   anchor_size: 3.0
+batch_norm_activation:
+  batch_norm_epsilon: 0.001
+  batch_norm_momentum: 0.997
+  batch_norm_trainable: true
+  use_sync_bn: true
+  activation: 'swish'
 retinanet_head:
   min_level: 3
   max_level: 7
   retinanet_head_num_filters: 48
   retinanet_head_num_convs: 4
   use_separable_conv: True
-  batch_norm:
-    batch_norm_epsilon: 0.001
-    batch_norm_momentum: 0.997
-    batch_norm_trainable: True
-    use_sync_bn: True
-  activation: 'swish'
 spinenet_mbconv:
   filter_size_scale: 1.0
   block_repeats: 1
@@ -43,12 +43,6 @@ spinenet_mbconv:
   min_level: 3
   max_level: 7
   use_native_resize_op: False
-  batch_norm:
-    batch_norm_epsilon: 0.001
-    batch_norm_momentum: 0.997
-    batch_norm_trainable: True
-    use_sync_bn: True
-  activation: 'swish'
 postprocess:
   min_level: 3
   max_level: 7

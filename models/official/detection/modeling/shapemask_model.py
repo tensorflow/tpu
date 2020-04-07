@@ -40,13 +40,11 @@ class ShapeMaskModel(base_model.BaseModel):
     # Architecture generators.
     self._backbone_fn = factory.backbone_generator(params)
     self._fpn_fn = factory.multilevel_features_generator(params)
-    self._retinanet_head_fn = factory.retinanet_head_generator(
-        params.retinanet_head)
-    self._shape_prior_head_fn = factory.shapeprior_head_generator(
-        params.shapemask_head)
-    self._coarse_mask_fn = factory.coarsemask_head_generator(
-        params.shapemask_head)
-    self._fine_mask_fn = factory.finemask_head_generator(params.shapemask_head)
+    self._retinanet_head_fn = factory.retinanet_head_generator(params)
+    self._shape_prior_head_fn = factory.shapeprior_head_generator(params)
+    self._coarse_mask_fn = factory.coarsemask_head_generator(params)
+    self._fine_mask_fn = factory.finemask_head_generator(params)
+
     self._outer_box_scale = params.shapemask_parser.outer_box_scale
 
     # Loss function.

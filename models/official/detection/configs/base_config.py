@@ -64,6 +64,13 @@ BASE_CFG = {
     'predict': {
         'predict_batch_size': 8,
     },
+    'batch_norm_activation': {
+        'batch_norm_momentum': 0.997,
+        'batch_norm_epsilon': 1e-4,
+        'batch_norm_trainable': True,
+        'use_sync_bn': False,
+        'activation': 'relu',
+    },
     'resnet': {
         'resnet_depth': 50,
         'init_drop_connect_rate': None,
@@ -71,13 +78,6 @@ BASE_CFG = {
             'dropblock_keep_prob': None,
             'dropblock_size': None,
         },
-        'batch_norm': {
-            'batch_norm_momentum': 0.997,
-            'batch_norm_epsilon': 1e-4,
-            'batch_norm_trainable': True,
-            'use_sync_bn': False,
-        },
-        'activation': 'relu',
     },
     'spinenet': {
         'filter_size_scale': 1.0,
@@ -87,13 +87,6 @@ BASE_CFG = {
         'min_level': 3,
         'max_level': 7,
         'init_drop_connect_rate': None,
-        'batch_norm': {
-            'batch_norm_momentum': 0.997,
-            'batch_norm_epsilon': 1e-4,
-            'batch_norm_trainable': True,
-            'use_sync_bn': True,
-        },
-        'activation': 'relu',
         'block_specs': None,
         'use_native_resize_op': False,
     },
@@ -105,13 +98,6 @@ BASE_CFG = {
         'min_level': 3,
         'max_level': 7,
         'init_drop_connect_rate': None,
-        'batch_norm': {
-            'batch_norm_momentum': 0.997,
-            'batch_norm_epsilon': 1e-4,
-            'batch_norm_trainable': True,
-            'use_sync_bn': True,
-        },
-        'activation': 'relu',
         'block_specs': None,
         'use_native_resize_op': False,
     },

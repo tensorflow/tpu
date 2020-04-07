@@ -75,13 +75,6 @@ SHAPEMASK_CFG.override(
             'retinanet_head_num_filters': 256,
             'use_separable_conv': False,
             'use_batch_norm': True,
-            'batch_norm': {
-                'batch_norm_momentum': 0.997,
-                'batch_norm_epsilon': 1e-4,
-                'batch_norm_trainable': True,
-                'use_sync_bn': False,
-            },
-            'activation': 'relu',
         },
         'shapemask_head': {
             'num_classes': 91,
@@ -91,12 +84,6 @@ SHAPEMASK_CFG.override(
             'num_convs': 4,
             'upsample_factor': 4,
             'shape_prior_path': '',
-            'batch_norm': {
-                'batch_norm_momentum': 0.997,
-                'batch_norm_epsilon': 1e-4,
-                'batch_norm_trainable': True,
-                'use_sync_bn': False,
-            },
         },
         'retinanet_loss': {
             'num_classes': 91,

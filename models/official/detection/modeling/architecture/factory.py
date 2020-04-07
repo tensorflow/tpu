@@ -29,13 +29,13 @@ from modeling.architecture import spinenet
 from modeling.architecture import spinenet_mbconv
 
 
-def batch_norm_relu_generator(params, activation='relu'):
-  return nn_ops.BatchNormRelu(
+def batch_norm_activation_generator(params):
+  return nn_ops.BatchNormActivation(
       momentum=params.batch_norm_momentum,
       epsilon=params.batch_norm_epsilon,
       trainable=params.batch_norm_trainable,
       use_sync_bn=params.use_sync_bn,
-      activation=activation)
+      activation=params.activation)
 
 
 def dropblock_generator(params):
@@ -51,10 +51,10 @@ def backbone_generator(params):
     backbone_fn = resnet.Resnet(
         resnet_depth=resnet_params.resnet_depth,
         dropblock=dropblock_generator(resnet_params.dropblock),
-        batch_norm_relu=batch_norm_relu_generator(
-            resnet_params.batch_norm, activation=resnet_params.activation),
-        init_drop_connect_rate=resnet_params.init_drop_connect_rate,
-        activation=resnet_params.activation)
+        activation=params.batch_norm_activation.activation,
+        batch_norm_activation=batch_norm_activation_generator(
+            params.batch_norm_activation),
+        init_drop_connect_rate=resnet_params.init_drop_connect_rate)
   elif params.architecture.backbone == 'spinenet':
     spinenet_params = params.spinenet
     block_specs_list = None
@@ -69,9 +69,9 @@ def backbone_generator(params):
         use_native_resize_op=spinenet_params.use_native_resize_op,
         block_repeats=spinenet_params.block_repeats,
         filter_size_scale=spinenet_params.filter_size_scale,
-        activation=spinenet_params.activation,
-        batch_norm_relu=batch_norm_relu_generator(
-            spinenet_params.batch_norm, activation=spinenet_params.activation),
+        activation=params.batch_norm_activation.activation,
+        batch_norm_activation=batch_norm_activation_generator(
+            params.batch_norm_activation),
         init_drop_connect_rate=spinenet_params.init_drop_connect_rate)
   elif params.architecture.backbone == 'spinenet_mbconv':
     spinenet_mbconv_params = params.spinenet_mbconv
@@ -87,10 +87,9 @@ def backbone_generator(params):
         block_repeats=spinenet_mbconv_params.block_repeats,
         filter_size_scale=spinenet_mbconv_params.filter_size_scale,
         se_ratio=spinenet_mbconv_params.se_ratio,
-        activation=spinenet_mbconv_params.activation,
-        batch_norm_relu=batch_norm_relu_generator(
-            spinenet_mbconv_params.batch_norm,
-            activation=spinenet_mbconv_params.activation),
+        activation=params.batch_norm_activation.activation,
+        batch_norm_activation=batch_norm_activation_generator(
+            params.batch_norm_activation),
         init_drop_connect_rate=spinenet_mbconv_params.init_drop_connect_rate)
   else:
     raise ValueError(
@@ -109,8 +108,8 @@ def multilevel_features_generator(params):
         fpn_feat_dims=fpn_params.fpn_feat_dims,
         use_separable_conv=fpn_params.use_separable_conv,
         use_batch_norm=fpn_params.use_batch_norm,
-        batch_norm_relu=batch_norm_relu_generator(
-            fpn_params.batch_norm, fpn_params.activation))
+        batch_norm_activation=batch_norm_activation_generator(
+            params.batch_norm_activation))
   elif params.architecture.multilevel_features == 'nasfpn':
     nasfpn_params = params.nasfpn
     fpn_fn = nasfpn.Nasfpn(
@@ -121,9 +120,9 @@ def multilevel_features_generator(params):
         use_separable_conv=nasfpn_params.use_separable_conv,
         dropblock=dropblock_generator(nasfpn_params.dropblock),
         block_fn=nasfpn_params.block_fn,
-        activation=nasfpn_params.activation,
-        batch_norm_relu=batch_norm_relu_generator(
-            nasfpn_params.batch_norm, activation=nasfpn_params.activation),
+        activation=params.batch_norm_activation.activation,
+        batch_norm_activation=batch_norm_activation_generator(
+            params.batch_norm_activation),
         init_drop_connect_rate=nasfpn_params.init_drop_connect_rate)
   elif params.architecture.multilevel_features == 'identity':
     fpn_fn = identity.Identity()
@@ -135,106 +134,123 @@ def multilevel_features_generator(params):
 
 def retinanet_head_generator(params):
   """Generator function for RetinaNet head architecture."""
+  head_params = params.retinanet_head
   return heads.RetinanetHead(
-      params.min_level,
-      params.max_level,
-      params.num_classes,
-      params.anchors_per_location,
-      params.retinanet_head_num_convs,
-      params.retinanet_head_num_filters,
-      params.use_separable_conv,
-      params.use_batch_norm,
-      batch_norm_relu=batch_norm_relu_generator(
-          params.batch_norm, params.activation))
+      head_params.min_level,
+      head_params.max_level,
+      head_params.num_classes,
+      head_params.anchors_per_location,
+      head_params.retinanet_head_num_convs,
+      head_params.retinanet_head_num_filters,
+      head_params.use_separable_conv,
+      head_params.use_batch_norm,
+      batch_norm_activation=batch_norm_activation_generator(
+          params.batch_norm_activation))
 
 
 def rpn_head_generator(params):
   """Generator function for RPN head architecture."""
-  return heads.RpnHead(params.min_level,
-                       params.max_level,
-                       params.anchors_per_location,
-                       params.num_convs,
-                       params.num_filters,
-                       params.use_separable_conv,
-                       params.use_batch_norm,
-                       batch_norm_relu=batch_norm_relu_generator(
-                           params.batch_norm, params.activation))
+  head_params = params.rpn_head
+  return heads.RpnHead(
+      head_params.min_level,
+      head_params.max_level,
+      head_params.anchors_per_location,
+      head_params.num_convs,
+      head_params.num_filters,
+      head_params.use_separable_conv,
+      head_params.use_batch_norm,
+      batch_norm_activation=batch_norm_activation_generator(
+          params.batch_norm_activation))
 
 
 def fast_rcnn_head_generator(params):
   """Generator function for Fast R-CNN head architecture."""
-  return heads.FastrcnnHead(params.num_classes,
-                            params.num_convs,
-                            params.num_filters,
-                            params.use_separable_conv,
-                            params.num_fcs,
-                            params.fc_dims,
-                            params.use_batch_norm,
-                            batch_norm_relu=batch_norm_relu_generator(
-                                params.batch_norm, params.activation))
+  head_params = params.frcnn_head
+  return heads.FastrcnnHead(
+      head_params.num_classes,
+      head_params.num_convs,
+      head_params.num_filters,
+      head_params.use_separable_conv,
+      head_params.num_fcs,
+      head_params.fc_dims,
+      head_params.use_batch_norm,
+      batch_norm_activation=batch_norm_activation_generator(
+          params.batch_norm_activation))
 
 
 def mask_rcnn_head_generator(params):
   """Generator function for Mask R-CNN head architecture."""
-  return heads.MaskrcnnHead(params.num_classes,
-                            params.mask_target_size,
-                            params.num_convs,
-                            params.num_filters,
-                            params.use_separable_conv,
-                            params.use_batch_norm,
-                            batch_norm_relu=batch_norm_relu_generator(
-                                params.batch_norm, params.activation))
+  head_params = params.mrcnn_head
+  return heads.MaskrcnnHead(
+      head_params.num_classes,
+      head_params.mask_target_size,
+      head_params.num_convs,
+      head_params.num_filters,
+      head_params.use_separable_conv,
+      head_params.use_batch_norm,
+      batch_norm_activation=batch_norm_activation_generator(
+          params.batch_norm_activation))
 
 
 def shapeprior_head_generator(params):
-  """Generator function for RetinaNet head architecture."""
+  """Generator function for shape prior head architecture."""
+  head_params = params.shapemask_head
   return heads.ShapemaskPriorHead(
-      params.num_classes,
-      params.num_downsample_channels,
-      params.mask_crop_size,
-      params.use_category_for_mask,
-      params.shape_prior_path,
-      batch_norm_relu=batch_norm_relu_generator(params.batch_norm))
+      head_params.num_classes,
+      head_params.num_downsample_channels,
+      head_params.mask_crop_size,
+      head_params.use_category_for_mask,
+      head_params.shape_prior_path,
+      batch_norm_activation=batch_norm_activation_generator(
+          params.batch_norm_activation))
 
 
 def coarsemask_head_generator(params):
-  """Generator function for RetinaNet head architecture."""
+  """Generator function for ShapeMask coarse mask head architecture."""
+  head_params = params.shapemask_head
   return heads.ShapemaskCoarsemaskHead(
-      params.num_classes,
-      params.num_downsample_channels,
-      params.mask_crop_size,
-      params.use_category_for_mask,
-      params.num_convs,
-      batch_norm_relu=batch_norm_relu_generator(params.batch_norm))
+      head_params.num_classes,
+      head_params.num_downsample_channels,
+      head_params.mask_crop_size,
+      head_params.use_category_for_mask,
+      head_params.num_convs,
+      batch_norm_activation=batch_norm_activation_generator(
+          params.batch_norm_activation))
 
 
 def finemask_head_generator(params):
-  """Generator function for RetinaNet head architecture."""
+  """Generator function for Shapemask fine mask head architecture."""
+  head_params = params.shapemask_head
   return heads.ShapemaskFinemaskHead(
-      params.num_classes,
-      params.num_downsample_channels,
-      params.mask_crop_size,
-      params.use_category_for_mask,
-      params.num_convs,
-      params.upsample_factor,
-      batch_norm_relu=batch_norm_relu_generator(params.batch_norm))
+      head_params.num_classes,
+      head_params.num_downsample_channels,
+      head_params.mask_crop_size,
+      head_params.use_category_for_mask,
+      head_params.num_convs,
+      head_params.upsample_factor,
+      batch_norm_activation=batch_norm_activation_generator(
+          params.batch_norm_activation))
 
 
 def classification_head_generator(params):
   """Generator function for classification head architecture."""
+  head_params = params.classification_head
   return heads.ClassificationHead(
-      params.num_classes,
-      params.endpoints_num_filters,
-      params.aggregation,
-      params.dropout_rate,
-      batch_norm_relu=batch_norm_relu_generator(params.batch_norm))
+      head_params.num_classes,
+      head_params.endpoints_num_filters,
+      head_params.aggregation,
+      head_params.dropout_rate,
+      batch_norm_activation=batch_norm_activation_generator(
+          params.batch_norm_activation))
 
 
 def segmentation_head_generator(params):
   """Generator function for segmentation head architecture."""
+  head_params = params.segmentation_head
   return heads.SegmentationHead(
-      params.num_classes,
-      params.level,
-      params.num_convs,
-      params.use_batch_norm,
-      batch_norm_relu=batch_norm_relu_generator(params.batch_norm))
+      head_params.num_classes,
+      head_params.level,
+      head_params.num_convs,
+      head_params.use_batch_norm,
+      batch_norm_activation=batch_norm_activation_generator(
+          params.batch_norm_activation))

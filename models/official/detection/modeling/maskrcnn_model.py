@@ -45,14 +45,14 @@ class MaskrcnnModel(base_model.BaseModel):
     # Architecture generators.
     self._backbone_fn = factory.backbone_generator(params)
     self._fpn_fn = factory.multilevel_features_generator(params)
-    self._rpn_head_fn = factory.rpn_head_generator(params.rpn_head)
+    self._rpn_head_fn = factory.rpn_head_generator(params)
     self._generate_rois_fn = roi_ops.ROIGenerator(params.roi_proposal)
     self._sample_rois_fn = sampling_ops.ROISampler(params.roi_sampling)
     self._sample_masks_fn = sampling_ops.MaskSampler(params.mask_sampling)
 
-    self._frcnn_head_fn = factory.fast_rcnn_head_generator(params.frcnn_head)
+    self._frcnn_head_fn = factory.fast_rcnn_head_generator(params)
     if self._include_mask:
-      self._mrcnn_head_fn = factory.mask_rcnn_head_generator(params.mrcnn_head)
+      self._mrcnn_head_fn = factory.mask_rcnn_head_generator(params)
 
     # Loss function.
     self._rpn_score_loss_fn = losses.RpnScoreLoss(params.rpn_score_loss)

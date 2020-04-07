@@ -41,7 +41,7 @@ class RetinanetModel(base_model.BaseModel):
     # Architecture generators.
     self._backbone_fn = factory.backbone_generator(params)
     self._fpn_fn = factory.multilevel_features_generator(params)
-    self._head_fn = factory.retinanet_head_generator(params.retinanet_head)
+    self._head_fn = factory.retinanet_head_generator(params)
 
     # Loss function.
     self._cls_loss_fn = losses.RetinanetClassLoss(params.retinanet_loss)

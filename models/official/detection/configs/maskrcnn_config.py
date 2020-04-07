@@ -71,13 +71,6 @@ MASKRCNN_CFG.override({
         'num_filters': 256,
         'use_separable_conv': False,
         'use_batch_norm': False,
-        'batch_norm': {
-            'batch_norm_momentum': 0.997,
-            'batch_norm_epsilon': 1e-4,
-            'batch_norm_trainable': True,
-            'use_sync_bn': False,
-        },
-        'activation': 'relu',
     },
     'frcnn_head': {
         # Note that `num_classes` is the total number of classes including
@@ -89,13 +82,6 @@ MASKRCNN_CFG.override({
         'num_fcs': 2,
         'fc_dims': 1024,
         'use_batch_norm': False,
-        'batch_norm': {
-            'batch_norm_momentum': 0.997,
-            'batch_norm_epsilon': 1e-4,
-            'batch_norm_trainable': True,
-            'use_sync_bn': False,
-        },
-        'activation': 'relu',
     },
     'mrcnn_head': {
         'num_classes': 91,
@@ -104,13 +90,6 @@ MASKRCNN_CFG.override({
         'num_filters': 256,
         'use_separable_conv': False,
         'use_batch_norm': False,
-        'batch_norm': {
-            'batch_norm_momentum': 0.997,
-            'batch_norm_epsilon': 1e-4,
-            'batch_norm_trainable': True,
-            'use_sync_bn': False,
-        },
-        'activation': 'relu',
     },
     'rpn_score_loss': {
         'rpn_batch_size_per_im': 256,

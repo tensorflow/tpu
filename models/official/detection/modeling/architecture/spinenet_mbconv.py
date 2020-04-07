@@ -14,6 +14,8 @@
 # ==============================================================================
 """Implementation of SpineNet-MBConv model.
 
+SpineNet with MBConv blocks.
+
 X. Du, T-Y. Lin, P. Jin, G. Ghiasi, M. Tan, Y. Cui, Q. V. Le, X. Song
 SpineNet: Learning Scale-Permuted Backbone for Recognition and Localization
 https://arxiv.org/abs/1912.05027
@@ -91,7 +93,7 @@ def block_group(inputs,
                 expand_ratio,
                 block_repeats,
                 se_ratio=0.2,
-                batch_norm_relu=nn_ops.BatchNormRelu(),
+                batch_norm_activation=nn_ops.BatchNormActivation(),
                 dropblock=nn_ops.Dropblock(),
                 drop_connect_rate=None,
                 data_format='channels_last',
@@ -106,7 +108,7 @@ def block_group(inputs,
       expand_ratio,
       strides,
       se_ratio=se_ratio,
-      batch_norm_relu=batch_norm_relu,
+      batch_norm_activation=batch_norm_activation,
       dropblock=dropblock,
       drop_connect_rate=drop_connect_rate,
       data_format=data_format,
@@ -119,7 +121,7 @@ def block_group(inputs,
         expand_ratio,
         1,  # strides
         se_ratio=se_ratio,
-        batch_norm_relu=batch_norm_relu,
+        batch_norm_activation=batch_norm_activation,
         dropblock=dropblock,
         drop_connect_rate=drop_connect_rate,
         data_format=data_format,
@@ -131,7 +133,7 @@ def resample_with_sepconv(feat,
                           target_width,
                           target_num_filters,
                           use_native_resize_op=False,
-                          batch_norm_relu=nn_ops.BatchNormRelu(),
+                          batch_norm_activation=nn_ops.BatchNormActivation(),
                           data_format='channels_last',
                           name=None,
                           is_training=False):
@@ -150,7 +152,7 @@ def resample_with_sepconv(feat,
       while width > target_width:
         feat = nn_ops.depthwise_conv2d_fixed_padding(
             inputs=feat, kernel_size=3, strides=2, data_format=data_format)
-        feat = batch_norm_relu(feat, is_training=is_training)
+        feat = batch_norm_activation(feat, is_training=is_training)
         width /= 2
 
     # Up-sample with NN interpolation.
@@ -172,7 +174,7 @@ def resample_with_sepconv(feat,
         kernel_size=1,
         strides=1,
         data_format=data_format)
-    feat = batch_norm_relu(feat, relu=False, is_training=is_training)
+    feat = batch_norm_activation(feat, relu=False, is_training=is_training)
 
   return feat
 
@@ -200,7 +202,7 @@ class SpineNetMBConv(object):
                filter_size_scale=1.0,
                activation='swish',
                se_ratio=0.2,
-               batch_norm_relu=nn_ops.BatchNormRelu(),
+               batch_norm_activation=nn_ops.BatchNormActivation(),
                init_drop_connect_rate=None,
                data_format='channels_last'):
     """SpineNetMBConv initialization function.
@@ -221,8 +223,8 @@ class SpineNetMBConv(object):
       activation: the activation function after cross-scale feature fusion.
         Support 'relu' and 'swish'.
       se_ratio: squeeze and excitation ratio for MBConv blocks.
-      batch_norm_relu: An operation that includes a batch normalization layer
-        followed by a relu layer(optional).
+      batch_norm_activation: An operation that includes a batch normalization
+        layer followed by an optional activation layer.
       init_drop_connect_rate: `float` initial drop connect rate.
       data_format: An optional string from: "channels_last", "channels_first".
         Defaults to "channels_last".
@@ -235,7 +237,7 @@ class SpineNetMBConv(object):
     self._max_level = max_level
     self._init_dc_rate = init_drop_connect_rate
     self._dropblock = nn_ops.Dropblock()
-    self._batch_norm_relu = batch_norm_relu
+    self._batch_norm_activation = batch_norm_activation
     self._use_native_resize_op = use_native_resize_op
     self._se_ratio = se_ratio
     self._data_format = data_format
@@ -258,7 +260,7 @@ class SpineNetMBConv(object):
         strides=2,
         data_format=self._data_format)
     inputs = tf.identity(inputs, 'initial_conv')
-    inputs = self._batch_norm_relu(inputs, is_training=is_training)
+    inputs = self._batch_norm_activation(inputs, is_training=is_training)
 
     # Build the initial L1 block and L2 block.
     base0 = block_group(
@@ -271,7 +273,7 @@ class SpineNetMBConv(object):
         block_repeats=self._block_repeats,
         strides=1,
         se_ratio=self._se_ratio,
-        batch_norm_relu=self._batch_norm_relu,
+        batch_norm_activation=self._batch_norm_activation,
         dropblock=self._dropblock,
         data_format=self._data_format,
         name='stem_block_0',
@@ -286,7 +288,7 @@ class SpineNetMBConv(object):
         block_repeats=self._block_repeats,
         strides=2,
         se_ratio=self._se_ratio,
-        batch_norm_relu=self._batch_norm_relu,
+        batch_norm_activation=self._batch_norm_activation,
         dropblock=self._dropblock,
         data_format=self._data_format,
         name='stem_block_1',
@@ -304,7 +306,7 @@ class SpineNetMBConv(object):
           kernel_size=1,
           strides=1,
           data_format=self._data_format)
-      feature = self._batch_norm_relu(feature, is_training=is_training)
+      feature = self._batch_norm_activation(feature, is_training=is_training)
       endpoints[level] = feature
     return endpoints
 
@@ -339,7 +341,7 @@ class SpineNetMBConv(object):
             target_width,
             target_num_filters,
             use_native_resize_op=self._use_native_resize_op,
-            batch_norm_relu=self._batch_norm_relu,
+            batch_norm_activation=self._batch_norm_activation,
             data_format=self._data_format,
             name='resample_{}_0'.format(i),
             is_training=is_training)
@@ -351,7 +353,7 @@ class SpineNetMBConv(object):
             target_width,
             target_num_filters,
             use_native_resize_op=self._use_native_resize_op,
-            batch_norm_relu=self._batch_norm_relu,
+            batch_norm_activation=self._batch_norm_activation,
             data_format=self._data_format,
             name='resample_{}_1'.format(i),
             is_training=is_training)
@@ -382,7 +384,7 @@ class SpineNetMBConv(object):
               block_repeats=self._block_repeats,
               strides=1,
               se_ratio=self._se_ratio,
-              batch_norm_relu=self._batch_norm_relu,
+              batch_norm_activation=self._batch_norm_activation,
               drop_connect_rate=get_drop_connect_rate(self._init_dc_rate, i,
                                                       len(self._block_specs)),
               dropblock=self._dropblock,

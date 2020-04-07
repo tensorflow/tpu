@@ -52,13 +52,6 @@ RETINANET_CFG.override({
         'retinanet_head_num_filters': 256,
         'use_separable_conv': False,
         'use_batch_norm': True,
-        'batch_norm': {
-            'batch_norm_momentum': 0.997,
-            'batch_norm_epsilon': 1e-4,
-            'batch_norm_trainable': True,
-            'use_sync_bn': False,
-        },
-        'activation': 'relu',
     },
     'retinanet_loss': {
         'num_classes': 91,

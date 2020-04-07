@@ -97,7 +97,7 @@ class BatchNormalization(tf.layers.BatchNormalization):
       return (shard_mean, shard_variance)
 
 
-class BatchNormRelu(object):
+class BatchNormActivation(object):
   """Combined Batch Normalization and ReLU layers."""
 
   def __init__(self,
@@ -437,7 +437,7 @@ def squeeze_excitation(inputs,
 
 def aspp_layer(feat,
                aspp_conv_filters=256,
-               batch_norm_relu=BatchNormRelu(),
+               batch_norm_activation=BatchNormActivation(),
                data_format='channels_last',
                is_training=False):
   """Atrous Spatial Pyramid Pooling (ASPP) layer.
@@ -449,8 +449,8 @@ def aspp_layer(feat,
     feat: A float Tensor of shape [batch_size, feature_height, feature_width,
       feature_channel1]. The input features.
     aspp_conv_filters: `int` number of filters in the aspp layer.
-    batch_norm_relu: an operation that is added after convolutions, including a
-      batch norm layer and an optional relu activation.
+    batch_norm_activation: an operation that includes a batch normalization
+      layer followed by an optional activation layer.
     data_format: Data format. It has to match with the backbone data_format.
     is_training: a `bool` if True, the model is in training mode.
 
@@ -486,7 +486,7 @@ def aspp_layer(feat,
     resize_width = None
   image_feature.set_shape(
       [None, resize_height, resize_width, aspp_conv_filters])
-  image_feature = batch_norm_relu(image_feature, is_training=is_training)
+  image_feature = batch_norm_activation(image_feature, is_training=is_training)
 
   feat_list.append(image_feature)
 
@@ -499,7 +499,7 @@ def aspp_layer(feat,
       use_bias=False,
       kernel_initializer=tf.variance_scaling_initializer(),
       data_format=data_format)
-  conv1x1 = batch_norm_relu(conv1x1, is_training=is_training)
+  conv1x1 = batch_norm_activation(conv1x1, is_training=is_training)
   feat_list.append(conv1x1)
 
   atrous_rates = [6, 12, 18]
@@ -514,7 +514,7 @@ def aspp_layer(feat,
         kernel_initializer=tf.variance_scaling_initializer(),
         data_format=data_format,
         dilation_rate=rate)
-    conv3x3 = batch_norm_relu(conv3x3, is_training=is_training)
+    conv3x3 = batch_norm_activation(conv3x3, is_training=is_training)
     feat_list.append(conv3x3)
 
   concat_feat = tf.concat(feat_list, 3)
@@ -528,7 +528,7 @@ def aspp_layer(feat,
       use_bias=False,
       kernel_initializer=tf.variance_scaling_initializer(),
       data_format=data_format)
-  output_feat = batch_norm_relu(output_feat, is_training=is_training)
+  output_feat = batch_norm_activation(output_feat, is_training=is_training)
 
   return output_feat
 
@@ -574,3 +574,7 @@ def round_filters(filters, multiplier, divisor=8):
   if new_filters < 0.9 * filters:
     new_filters += divisor
   return int(new_filters)
+
+
+# Alias to maintain the backward compatibility.
+BatchNormRelu = BatchNormActivation

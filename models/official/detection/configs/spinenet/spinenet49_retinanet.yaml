@@ -23,6 +23,12 @@ train:
     skip_variables_regex: ''
   l2_weight_decay: 0.00004
   gradient_clip_norm: 10.0
+batch_norm_activation:
+  batch_norm_epsilon: 0.001
+  batch_norm_momentum: 0.997
+  batch_norm_trainable: true
+  use_sync_bn: true
+  activation: 'swish'
 spinenet:
   filter_size_scale: 1.0
   block_repeats: 1
@@ -31,23 +37,11 @@ spinenet:
   min_level: 3
   max_level: 7
   init_drop_connect_rate: 0.2
-  activation: 'swish'
-  batch_norm:
-    batch_norm_epsilon: 0.001
-    batch_norm_momentum: 0.997
-    batch_norm_trainable: True
-    use_sync_bn: True
 retinanet_head:
   min_level: 3
   max_level: 7
   retinanet_head_num_filters: 256
-  use_separable_conv: False
-  batch_norm:
-    batch_norm_epsilon: 0.001
-    batch_norm_momentum: 0.997
-    batch_norm_trainable: True
-    use_sync_bn: True
-  activation: 'swish'
+  use_separable_conv: false
 anchor:
   min_level: 3
   max_level: 7
@@ -61,4 +55,4 @@ retinanet_parser:
   output_size: [640, 640]
   aug_scale_min: 0.1
   aug_scale_max: 1.9
-  use_autoaugment: False
+  use_autoaugment: false

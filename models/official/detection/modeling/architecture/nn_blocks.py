@@ -31,7 +31,7 @@ def residual_block(inputs,
                    strides,
                    use_projection,
                    activation=tf.nn.relu,
-                   batch_norm_relu=nn_ops.BatchNormRelu(),
+                   batch_norm_activation=nn_ops.BatchNormActivation(),
                    dropblock=nn_ops.Dropblock(),
                    drop_connect_rate=None,
                    data_format='channels_last',
@@ -48,8 +48,8 @@ def residual_block(inputs,
       for the first block of a block group, which may change the number of
       filters and the resolution.
     activation: activation function. Support 'relu' and 'swish'.
-    batch_norm_relu: an operation that is added after convolutions, including a
-      batch norm layer and an optional relu activation.
+    batch_norm_activation: an operation that includes a batch normalization
+      layer followed by an optional activation layer.
     dropblock: a drop block layer that is added after convluations. Note that
       the default implementation does not apply any drop block.
     drop_connect_rate: a 'float' number that specifies the drop connection rate
@@ -70,7 +70,8 @@ def residual_block(inputs,
         kernel_size=1,
         strides=strides,
         data_format=data_format)
-    shortcut = batch_norm_relu(shortcut, relu=False, is_training=is_training)
+    shortcut = batch_norm_activation(
+        shortcut, relu=False, is_training=is_training)
   shortcut = dropblock(shortcut, is_training=is_training)
 
   inputs = nn_ops.conv2d_fixed_padding(
@@ -79,7 +80,7 @@ def residual_block(inputs,
       kernel_size=3,
       strides=strides,
       data_format=data_format)
-  inputs = batch_norm_relu(inputs, is_training=is_training)
+  inputs = batch_norm_activation(inputs, is_training=is_training)
   inputs = dropblock(inputs, is_training=is_training)
 
   inputs = nn_ops.conv2d_fixed_padding(
@@ -88,7 +89,7 @@ def residual_block(inputs,
       kernel_size=3,
       strides=1,
       data_format=data_format)
-  inputs = batch_norm_relu(inputs, relu=False, is_training=is_training)
+  inputs = batch_norm_activation(inputs, relu=False, is_training=is_training)
   inputs = dropblock(inputs, is_training=is_training)
 
   if drop_connect_rate:
@@ -102,7 +103,7 @@ def bottleneck_block(inputs,
                      strides,
                      use_projection,
                      activation=tf.nn.relu,
-                     batch_norm_relu=nn_ops.BatchNormRelu(),
+                     batch_norm_activation=nn_ops.BatchNormActivation(),
                      dropblock=nn_ops.Dropblock(),
                      drop_connect_rate=None,
                      data_format='channels_last',
@@ -120,8 +121,8 @@ def bottleneck_block(inputs,
       for the first block of a block group, which may change the number of
       filters and the resolution.
     activation: activation function. Support 'relu' and 'swish'.
-    batch_norm_relu: an operation that is added after convolutions, including a
-      batch norm layer and an optional relu activation.
+    batch_norm_activation: an operation that includes a batch normalization
+      layer followed by an optional activation layer.
     dropblock: a drop block layer that is added after convluations. Note that
       the default implementation does not apply any drop block.
     drop_connect_rate: a 'float' number that specifies the drop connection rate
@@ -143,7 +144,8 @@ def bottleneck_block(inputs,
         kernel_size=1,
         strides=strides,
         data_format=data_format)
-    shortcut = batch_norm_relu(shortcut, relu=False, is_training=is_training)
+    shortcut = batch_norm_activation(
+        shortcut, relu=False, is_training=is_training)
   shortcut = dropblock(shortcut, is_training=is_training)
 
   inputs = nn_ops.conv2d_fixed_padding(
@@ -152,7 +154,7 @@ def bottleneck_block(inputs,
       kernel_size=1,
       strides=1,
       data_format=data_format)
-  inputs = batch_norm_relu(inputs, is_training=is_training)
+  inputs = batch_norm_activation(inputs, is_training=is_training)
   inputs = dropblock(inputs, is_training=is_training)
 
   inputs = nn_ops.conv2d_fixed_padding(
@@ -161,7 +163,7 @@ def bottleneck_block(inputs,
       kernel_size=3,
       strides=strides,
       data_format=data_format)
-  inputs = batch_norm_relu(inputs, is_training=is_training)
+  inputs = batch_norm_activation(inputs, is_training=is_training)
   inputs = dropblock(inputs, is_training=is_training)
 
   inputs = nn_ops.conv2d_fixed_padding(
@@ -170,7 +172,7 @@ def bottleneck_block(inputs,
       kernel_size=1,
       strides=1,
       data_format=data_format)
-  inputs = batch_norm_relu(inputs, relu=False, is_training=is_training)
+  inputs = batch_norm_activation(inputs, relu=False, is_training=is_training)
   inputs = dropblock(inputs, is_training=is_training)
 
   if drop_connect_rate:
@@ -186,7 +188,7 @@ def mbconv_block(inputs,
                  strides,
                  kernel_size=3,
                  se_ratio=None,
-                 batch_norm_relu=nn_ops.BatchNormRelu(),
+                 batch_norm_activation=nn_ops.BatchNormActivation(),
                  dropblock=nn_ops.Dropblock(),
                  drop_connect_rate=None,
                  data_format='channels_last',
@@ -202,8 +204,8 @@ def mbconv_block(inputs,
       downsample the input.
     kernel_size: kernel size for the depthwise convolution.
     se_ratio: squeeze and excitation ratio.
-    batch_norm_relu: an operation that is added after convolutions, including a
-      batch norm layer and an optional relu activation.
+    batch_norm_activation: an operation that includes a batch normalization
+      layer followed by an optional activation layer.
     dropblock: a drop block layer that is added after convluations. Note that
       the default implementation does not apply any drop block.
     drop_connect_rate: a 'float' number that specifies the drop connection rate
@@ -226,7 +228,7 @@ def mbconv_block(inputs,
         kernel_size=1,
         strides=1,
         data_format=data_format)
-    inputs = batch_norm_relu(inputs, is_training=is_training)
+    inputs = batch_norm_activation(inputs, is_training=is_training)
     inputs = dropblock(inputs, is_training=is_training)
 
   # Second depthwise conv.
@@ -235,7 +237,7 @@ def mbconv_block(inputs,
       kernel_size=kernel_size,
       strides=strides,
       data_format=data_format)
-  inputs = batch_norm_relu(inputs, is_training=is_training)
+  inputs = batch_norm_activation(inputs, is_training=is_training)
   inputs = dropblock(inputs, is_training=is_training)
 
   # Squeeze and excitation.
@@ -251,7 +253,7 @@ def mbconv_block(inputs,
       kernel_size=1,
       strides=1,
       data_format=data_format)
-  inputs = batch_norm_relu(inputs, relu=False, is_training=is_training)
+  inputs = batch_norm_activation(inputs, relu=False, is_training=is_training)
   inputs = dropblock(inputs, is_training=is_training)
 
   if in_filters == out_filters and strides == 1:
