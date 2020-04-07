@@ -1,4 +1,4 @@
-# Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,13 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""SpineNetv2 for multiscale feature pyramid generation."""
+"""Implementation of SpineNet-MBConv model.
 
+X. Du, T-Y. Lin, P. Jin, G. Ghiasi, M. Tan, Y. Cui, Q. V. Le, X. Song
+SpineNet: Learning Scale-Permuted Backbone for Recognition and Localization
+https://arxiv.org/abs/1912.05027
+"""
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
 import math
+from absl import logging
 import tensorflow.compat.v1 as tf
 
 from modeling.architecture import nn_blocks
@@ -27,61 +32,46 @@ from ops import spatial_transform_ops
 
 DEFAULT_EXPAND_RATIO = 6
 
-DEFAULT_SCALING_MAP = dict(
-    m0=dict(
-        block_repeat=[1] * 18, filter_size_scale=0.4, endpoints_num_filters=24),
-    m1=dict(
-        block_repeat=[1] * 18, filter_size_scale=0.5, endpoints_num_filters=40),
-    m2=dict(
-        block_repeat=[1] * 18, filter_size_scale=0.8, endpoints_num_filters=64),
-    d0=dict(
-        block_repeat=[1] * 18, filter_size_scale=1.0, endpoints_num_filters=64),
-    d1=dict(
-        block_repeat=[2, 2, 1, 1, 2, 2, 2, 1, 1, 2, 1, 2, 1, 1, 1, 1, 1, 1],
-        filter_size_scale=1.0,
-        endpoints_num_filters=88),
-    d2=dict(
-        block_repeat=[2, 2, 1, 1, 2, 2, 2, 1, 1, 2, 1, 2, 1, 1, 1, 1, 1, 1],
-        filter_size_scale=1.1,
-        endpoints_num_filters=112),
-    d3=dict(
-        block_repeat=[2, 2, 1, 1, 2, 2, 2, 1, 2, 2, 1, 2, 2, 2, 1, 1, 1, 1],
-        filter_size_scale=1.2,
-        endpoints_num_filters=160),
-    d4=dict(
-        block_repeat=[2, 2, 2, 1, 3, 2, 3, 1, 2, 3, 1, 2, 2, 2, 2, 2, 1, 1],
-        filter_size_scale=1.4,
-        endpoints_num_filters=224),
-)
+FILTER_SIZE_MAP = {
+    0: 8,
+    1: 16,
+    2: 24,
+    3: 40,
+    4: 80,
+    5: 112,
+    6: 112,
+    7: 112,
+}
 
 # The static SpineNet architecture discovered by NAS.
 # Each element represents a specification of a building block:
-#   (block_level, filter_size, (input_offset0, input_offset1), is_output).
+#   (block_level, block_fn, (input_offset0, input_offset1), is_output).
 SPINENET_BLOCK_SPECS = [
-    (2, 16, (0, 1), False),
-    (4, 104, (0, 1), False),
-    (3, 48, (2, 3), False),
-    (4, 120, (2, 4), False),
-    (6, 40, (3, 5), False),
-    (4, 120, (3, 5), False),
-    (5, 168, (6, 7), False),
-    (7, 96, (6, 8), False),
-    (5, 192, (8, 9), False),
-    (5, 136, (8, 10), False),
-    (4, 104, (5, 10), True),
-    (3, 40, (4, 10), True),
-    (5, 136, (7, 12), True),
-    (7, 136, (5, 14), True),
-    (6, 40, (12, 14), True),
+    (2, 'mbconv', (0, 1), False),
+    (2, 'mbconv', (1, 2), False),
+    (4, 'mbconv', (1, 2), False),
+    (3, 'mbconv', (3, 4), False),
+    (4, 'mbconv', (3, 5), False),
+    (6, 'mbconv', (4, 6), False),
+    (4, 'mbconv', (4, 6), False),
+    (5, 'mbconv', (7, 8), False),
+    (7, 'mbconv', (7, 9), False),
+    (5, 'mbconv', (9, 10), False),
+    (5, 'mbconv', (9, 11), False),
+    (4, 'mbconv', (6, 11), True),
+    (3, 'mbconv', (5, 11), True),
+    (5, 'mbconv', (8, 13), True),
+    (7, 'mbconv', (6, 15), True),
+    (6, 'mbconv', (13, 15), True),
 ]
 
 
 class BlockSpec(object):
   """A container class that specifies the block configuration for SpineNet."""
 
-  def __init__(self, level, filter_size, input_offsets, is_output):
+  def __init__(self, level, block_fn, input_offsets, is_output):
     self.level = level
-    self.filter_size = filter_size
+    self.block_fn = block_fn
     self.input_offsets = input_offsets
     self.is_output = is_output
 
@@ -90,7 +80,7 @@ def build_block_specs(block_specs=None):
   """Builds the list of BlockSpec objects for SpineNet."""
   if not block_specs:
     block_specs = SPINENET_BLOCK_SPECS
-  tf.logging.info('Building SpineNet block specs: %s', block_specs)
+  logging.info('Building SpineNet block specs: %s', block_specs)
   return [BlockSpec(*b) for b in block_specs]
 
 
@@ -127,7 +117,7 @@ def block_group(inputs,
         out_filters,
         out_filters,
         expand_ratio,
-        1,
+        1,  # strides
         se_ratio=se_ratio,
         batch_norm_relu=batch_norm_relu,
         dropblock=dropblock,
@@ -156,17 +146,12 @@ def resample_with_sepconv(feat,
       if width % target_width != 0:
         raise ValueError('width ({}) is not divisible by '
                          'target_width ({}).'.format(width, target_width))
-      # Use space to depth for the first stride-2 down-sample.
-      feat = tf.nn.space_to_depth(feat, 2)
-      feat = batch_norm_relu(feat, is_training=is_training)
 
-      if width // target_width > 2:
+      while width > target_width:
         feat = nn_ops.depthwise_conv2d_fixed_padding(
-            inputs=feat,
-            kernel_size=3 if width // target_width == 4 else 5,
-            strides=width // target_width // 2,
-            data_format=data_format)
+            inputs=feat, kernel_size=3, strides=2, data_format=data_format)
         feat = batch_norm_relu(feat, is_training=is_training)
+        width /= 2
 
     # Up-sample with NN interpolation.
     elif width < target_width:
@@ -196,37 +181,43 @@ def get_drop_connect_rate(init_rate, i, n):
   """Get drop connect rate for the ith block."""
   if (init_rate is not None) and (init_rate > 0 and init_rate < 1):
     dc_rate = init_rate * float(i + 1) / n
-    tf.logging.info('Drop connect rate {} for block_{}.'.format(dc_rate, i))
+    logging.info('Drop connect rate %f for block_%d.', dc_rate, i)
   else:
     dc_rate = None
   return dc_rate
 
 
-class SpineNetV2(object):
+class SpineNetMBConv(object):
   """Class to build SpineNet family models with MBConv blocks."""
 
   def __init__(self,
-               model_id='d0',
                min_level=3,
                max_level=7,
+               endpoints_num_filters=48,
                use_native_resize_op=False,
                block_specs=build_block_specs(),
+               block_repeats=1,
+               filter_size_scale=1.0,
                activation='swish',
                se_ratio=0.2,
                batch_norm_relu=nn_ops.BatchNormRelu(),
                init_drop_connect_rate=None,
                data_format='channels_last'):
-    """SpineNetV2 initialization function.
+    """SpineNetMBConv initialization function.
 
     Args:
-      model_id: Model id of SpineNetV2.
       min_level: `int` minimum level in SpineNet endpoints.
       max_level: `int` maximum level in SpineNet endpoints.
+      endpoints_num_filters: `int` feature dimension applied to endpoints before
+        sharing conv layers in head.
       use_native_resize_op: Whether to use native
         tf.image.nearest_neighbor_resize or the broadcast implmentation to do
         upsampling.
       block_specs: a list of BlockSpec objects that specifies the SpineNet
         network topology.
+      block_repeats: `int` number of repeats per block.
+      filter_size_scale: `float` a scaling factor to uniformaly scale feature
+        dimension in SpineNet.
       activation: the activation function after cross-scale feature fusion.
         Support 'relu' and 'swish'.
       se_ratio: squeeze and excitation ratio for MBConv blocks.
@@ -237,10 +228,9 @@ class SpineNetV2(object):
         Defaults to "channels_last".
     """
     self._block_specs = block_specs
-    self._filter_size_scale = DEFAULT_SCALING_MAP[model_id]['filter_size_scale']
-    self._block_repeats = DEFAULT_SCALING_MAP[model_id]['block_repeat']
-    self._endpoints_num_filters = DEFAULT_SCALING_MAP[model_id][
-        'endpoints_num_filters']
+    self._filter_size_scale = filter_size_scale
+    self._block_repeats = block_repeats
+    self._endpoints_num_filters = endpoints_num_filters
     self._min_level = min_level
     self._max_level = max_level
     self._init_dc_rate = init_drop_connect_rate
@@ -256,70 +246,80 @@ class SpineNetV2(object):
     else:
       raise ValueError('Activation {} not implemented.'.format(activation))
 
-  def __call__(self, images, is_training=False):
-    """Generate a multiscale feature pyramid.
+  def _build_stem_network(self, inputs, is_training):
+    """Build the stem network."""
 
-    Args:
-      images: The input image tensor.
-      is_training: `bool` if True, the model is in training mode.
+    # Build the first conv layer.
+    inputs = nn_ops.conv2d_fixed_padding(
+        inputs=inputs,
+        filters=nn_ops.round_filters(FILTER_SIZE_MAP[0],
+                                     self._filter_size_scale),
+        kernel_size=3,
+        strides=2,
+        data_format=self._data_format)
+    inputs = tf.identity(inputs, 'initial_conv')
+    inputs = self._batch_norm_relu(inputs, is_training=is_training)
 
-    Returns:
-      a `dict` containing `int` keys for continuous feature levels
-      [min_level, min_level + 1, ..., max_level]. The values are corresponding
-      features with shape [batch_size, height_l, width_l,
-      endpoints_num_filters].
-    """
-    assert isinstance(images, tf.Tensor)
-    _, in_height, in_width, _ = images.get_shape().as_list()
-    if in_height % 2**self._max_level != 0 or in_width % 2**self._max_level != 0:
-      raise ValueError(
-          'Input height and width have to be multiple of 2**max_level.')
+    # Build the initial L1 block and L2 block.
+    base0 = block_group(
+        inputs=inputs,
+        in_filters=nn_ops.round_filters(FILTER_SIZE_MAP[0],
+                                        self._filter_size_scale),
+        out_filters=nn_ops.round_filters(FILTER_SIZE_MAP[1],
+                                         self._filter_size_scale),
+        expand_ratio=DEFAULT_EXPAND_RATIO,
+        block_repeats=self._block_repeats,
+        strides=1,
+        se_ratio=self._se_ratio,
+        batch_norm_relu=self._batch_norm_relu,
+        dropblock=self._dropblock,
+        data_format=self._data_format,
+        name='stem_block_0',
+        is_training=is_training)
+    base1 = block_group(
+        inputs=base0,
+        in_filters=nn_ops.round_filters(FILTER_SIZE_MAP[1],
+                                        self._filter_size_scale),
+        out_filters=nn_ops.round_filters(FILTER_SIZE_MAP[2],
+                                         self._filter_size_scale),
+        expand_ratio=DEFAULT_EXPAND_RATIO,
+        block_repeats=self._block_repeats,
+        strides=2,
+        se_ratio=self._se_ratio,
+        batch_norm_relu=self._batch_norm_relu,
+        dropblock=self._dropblock,
+        data_format=self._data_format,
+        name='stem_block_1',
+        is_training=is_training)
 
-    with tf.variable_scope('spinenetv2'):
-      init_feats = self._build_stem_network(images, is_training)
+    return [base0, base1]
 
-      feats = self._build_scale_permuted_network(init_feats, in_width,
-                                                 is_training)
-
-      endpoints = self._build_endpoints(feats, is_training)
-
-      for level in range(self._min_level, self._max_level + 1):
-        if level not in endpoints:
-          raise ValueError('Expect level_{} in endpoints'.format(level))
-
-    return endpoints
-
-  def _build_endpoints(self, feats, is_training):
+  def _build_endpoints(self, features, is_training):
     """Match filter size for endpoints before sharing conv layers."""
-    new_feats = {}
+    endpoints = {}
     for level in range(self._min_level, self._max_level + 1):
-      images = nn_ops.conv2d_fixed_padding(
-          inputs=feats[level],
+      feature = nn_ops.conv2d_fixed_padding(
+          inputs=features[level],
           filters=self._endpoints_num_filters,
           kernel_size=1,
           strides=1,
           data_format=self._data_format)
-      new_feats[level] = self._batch_norm_relu(images, is_training=is_training)
-    return new_feats
+      feature = self._batch_norm_relu(feature, is_training=is_training)
+      endpoints[level] = feature
+    return endpoints
 
   def _build_scale_permuted_network(self, feats, input_width, is_training):
     """Builds the scale permuted network from a given config."""
-    tf.logging.info('Building SpineNet blocks with policy: {}'.format(
-        self._block_specs))
+    # Number of output connections from each feat.
+    num_outgoing_connections = [0] * len(feats)
 
     output_feats = {}
-    # Number of output connections from each feat.
-    num_output_connections = [0 for _ in feats]
-
     for i, block_spec in enumerate(self._block_specs):
       with tf.variable_scope('sub_policy{}'.format(i)):
         # Find feature map size, filter size, and block fn for the target block.
         target_width = int(math.ceil(input_width / 2 ** block_spec.level))
-        target_num_filters = nn_ops.round_filters(block_spec.filter_size,
-                                                  self._filter_size_scale)
-        tf.logging.info(
-            'Build a new block at resolution {}, feature dimension {}.'.format(
-                target_width, target_num_filters))
+        target_num_filters = nn_ops.round_filters(
+            FILTER_SIZE_MAP[block_spec.level], self._filter_size_scale)
 
         def _input_ind(input_offset):
           if input_offset < len(feats):
@@ -334,7 +334,6 @@ class SpineNetV2(object):
         input1 = _input_ind(block_spec.input_offsets[1])
 
         parent0_feat = feats[input0]
-        num_output_connections[input0] += 1
         parent0_feat = resample_with_sepconv(
             parent0_feat,
             target_width,
@@ -344,9 +343,9 @@ class SpineNetV2(object):
             data_format=self._data_format,
             name='resample_{}_0'.format(i),
             is_training=is_training)
+        num_outgoing_connections[input0] += 1
 
         parent1_feat = feats[input1]
-        num_output_connections[input1] += 1
         parent1_feat = resample_with_sepconv(
             parent1_feat,
             target_width,
@@ -356,18 +355,20 @@ class SpineNetV2(object):
             data_format=self._data_format,
             name='resample_{}_1'.format(i),
             is_training=is_training)
+        num_outgoing_connections[input1] += 1
 
         # Sum parent0 and parent1 to create the target feat.
         target_feat = parent0_feat + parent1_feat
 
         # Connect intermediate blocks with outdegree 0 to the output block.
         if block_spec.is_output:
-          for cnt, (feat, num_output) in enumerate(
-              zip(feats, num_output_connections)):
-            if num_output == 0 and (feat.shape[2] == target_width and
-                                    feat.shape[3] == target_feat.shape[3]):
-              num_output_connections[cnt] += 1
-              target_feat += feat
+          for j, (j_feat, j_connections) in enumerate(
+              zip(feats, num_outgoing_connections)):
+            if j_connections == 0 and (
+                j_feat.shape[2] == target_width and
+                j_feat.shape[3] == target_feat.shape[3]):
+              target_feat += j_feat
+              num_outgoing_connections[j] += 1
 
         with tf.variable_scope('scale_permuted_block_{}'.format(len(feats))):
           target_feat = self._activation(target_feat)
@@ -378,19 +379,19 @@ class SpineNetV2(object):
               in_filters=target_num_filters,
               out_filters=target_num_filters,
               expand_ratio=DEFAULT_EXPAND_RATIO,
-              block_repeats=self._block_repeats[i + 3],
+              block_repeats=self._block_repeats,
               strides=1,
               se_ratio=self._se_ratio,
               batch_norm_relu=self._batch_norm_relu,
-              drop_connect_rate=get_drop_connect_rate(
-                  self._init_dc_rate, i, len(self._block_specs)),
+              drop_connect_rate=get_drop_connect_rate(self._init_dc_rate, i,
+                                                      len(self._block_specs)),
               dropblock=self._dropblock,
               data_format=self._data_format,
               name='scale_permuted_block_{}'.format(i),
               is_training=is_training)
 
         feats.append(target_feat)
-        num_output_connections.append(0)
+        num_outgoing_connections.append(0)
 
         # Save output feats.
         if block_spec.is_output:
@@ -398,65 +399,34 @@ class SpineNetV2(object):
             raise ValueError(
                 'Duplicate feats found for output level {}.'.format(
                     block_spec.level))
-          if block_spec.level < self._min_level or block_spec.level > self._max_level:
+          if (block_spec.level < self._min_level or
+              block_spec.level > self._max_level):
             raise ValueError('Output level is out of range [{}, {}]'.format(
                 self._min_level, self._max_level))
           output_feats[block_spec.level] = target_feat
 
     return output_feats
 
-  def _build_stem_network(self, inputs, is_training):
-    """Build the stem network."""
+  def __call__(self, images, is_training=False):
+    """Generate a multiscale feature pyramid.
 
-    # Build the first conv layer.
-    inputs = nn_ops.conv2d_fixed_padding(
-        inputs=inputs,
-        filters=nn_ops.round_filters(8, self._filter_size_scale),
-        kernel_size=3,
-        strides=2,
-        data_format=self._data_format)
-    inputs = tf.identity(inputs, 'initial_conv')
-    inputs = self._batch_norm_relu(inputs, is_training=is_training)
+    Args:
+      images: The input image tensor.
+      is_training: `bool` if True, the model is in training mode.
 
-    # Build one initial L1 block and two initial L2 blocks.
-    base0 = block_group(
-        inputs=inputs,
-        in_filters=nn_ops.round_filters(8, self._filter_size_scale),
-        out_filters=nn_ops.round_filters(16, self._filter_size_scale),
-        expand_ratio=DEFAULT_EXPAND_RATIO,
-        block_repeats=self._block_repeats[0],
-        strides=1,
-        se_ratio=self._se_ratio,
-        batch_norm_relu=self._batch_norm_relu,
-        dropblock=self._dropblock,
-        data_format=self._data_format,
-        name='stem_block_0',
-        is_training=is_training)
-    base1 = block_group(
-        inputs=base0,
-        in_filters=nn_ops.round_filters(16, self._filter_size_scale),
-        out_filters=nn_ops.round_filters(24, self._filter_size_scale),
-        expand_ratio=DEFAULT_EXPAND_RATIO,
-        block_repeats=self._block_repeats[1],
-        strides=2,
-        se_ratio=self._se_ratio,
-        batch_norm_relu=self._batch_norm_relu,
-        dropblock=self._dropblock,
-        data_format=self._data_format,
-        name='stem_block_1',
-        is_training=is_training)
-    base2 = block_group(
-        inputs=base1,
-        in_filters=nn_ops.round_filters(24, self._filter_size_scale),
-        out_filters=nn_ops.round_filters(16, self._filter_size_scale),
-        expand_ratio=DEFAULT_EXPAND_RATIO,
-        block_repeats=self._block_repeats[2],
-        strides=1,
-        se_ratio=self._se_ratio,
-        batch_norm_relu=self._batch_norm_relu,
-        dropblock=self._dropblock,
-        data_format=self._data_format,
-        name='stem_block_2',
-        is_training=is_training)
+    Returns:
+      a `dict` containing `int` keys for continuous feature levels
+      [min_level, min_level + 1, ..., max_level]. The values are corresponding
+      features with shape [batch_size, height_l, width_l,
+      endpoints_num_filters].
+    """
+    _, _, in_width, _ = images.get_shape().as_list()
 
-    return [base1, base2]
+    with tf.variable_scope('spinenet_mbconv'):
+      feats = self._build_stem_network(images, is_training)
+
+      feats = self._build_scale_permuted_network(feats, in_width, is_training)
+
+      endpoints = self._build_endpoints(feats, is_training)
+
+    return endpoints

@@ -26,6 +26,7 @@ from modeling.architecture import nasfpn
 from modeling.architecture import nn_ops
 from modeling.architecture import resnet
 from modeling.architecture import spinenet
+from modeling.architecture import spinenet_mbconv
 
 
 def batch_norm_relu_generator(params, activation='relu'):
@@ -72,6 +73,25 @@ def backbone_generator(params):
         batch_norm_relu=batch_norm_relu_generator(
             spinenet_params.batch_norm, activation=spinenet_params.activation),
         init_drop_connect_rate=spinenet_params.init_drop_connect_rate)
+  elif params.architecture.backbone == 'spinenet_mbconv':
+    spinenet_mbconv_params = params.spinenet_mbconv
+    block_specs_list = None
+    if spinenet_mbconv_params.block_specs:
+      block_specs_list = json.loads(spinenet_mbconv_params.block_specs)
+    backbone_fn = spinenet_mbconv.SpineNetMBConv(
+        block_specs=spinenet_mbconv.build_block_specs(block_specs_list),
+        min_level=spinenet_mbconv_params.min_level,
+        max_level=spinenet_mbconv_params.max_level,
+        endpoints_num_filters=spinenet_mbconv_params.endpoints_num_filters,
+        use_native_resize_op=spinenet_mbconv_params.use_native_resize_op,
+        block_repeats=spinenet_mbconv_params.block_repeats,
+        filter_size_scale=spinenet_mbconv_params.filter_size_scale,
+        se_ratio=spinenet_mbconv_params.se_ratio,
+        activation=spinenet_mbconv_params.activation,
+        batch_norm_relu=batch_norm_relu_generator(
+            spinenet_mbconv_params.batch_norm,
+            activation=spinenet_mbconv_params.activation),
+        init_drop_connect_rate=spinenet_mbconv_params.init_drop_connect_rate)
   else:
     raise ValueError(
         'Backbone model %s is not supported.' % params.architecture.backbone)
