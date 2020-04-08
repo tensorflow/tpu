@@ -42,6 +42,7 @@ SHAPEMASK_CFG.override(
             'backbone': 'resnet',
             'multilevel_features': 'fpn',
             'use_bfloat16': True,
+            'outer_box_scale': 1.25,
         },
         'shapemask_parser': {
             'output_size': [640, 640],
@@ -113,6 +114,7 @@ SHAPEMASK_RESTRICTIONS = [
     'retinanet_head.num_classes == retinanet_loss.num_classes',
     'shapemask_head.mask_crop_size == shapemask_parser.mask_crop_size',
     'shapemask_head.upsample_factor == shapemask_parser.upsample_factor',
+    'shapemask_parser.outer_box_scale ==  architecture.outer_box_scale',
 ]
 
 # pylint: enable=line-too-long

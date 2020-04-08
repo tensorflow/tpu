@@ -251,6 +251,8 @@ def segmentation_head_generator(params):
       head_params.num_classes,
       head_params.level,
       head_params.num_convs,
+      head_params.upsample_factor,
+      head_params.num_downsample_channels,
       head_params.use_batch_norm,
       batch_norm_activation=batch_norm_activation_generator(
           params.batch_norm_activation))

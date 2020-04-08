@@ -1011,6 +1011,8 @@ class SegmentationHead(object):
                num_classes,
                level,
                num_convs,
+               upsample_factor,
+               num_downsample_channels,
                use_batch_norm=True,
                batch_norm_activation=nn_ops.BatchNormActivation()):
     """Initialize params to build segmentation head.
@@ -1021,6 +1023,8 @@ class SegmentationHead(object):
       level: `int` feature level used for prediction.
       num_convs: `int` number of stacked convolution before the last prediction
         layer.
+      upsample_factor: `int` number of fine mask upsampling factor.
+      num_downsample_channels: `int` number of filters at mask head.
       use_batch_norm: 'bool', indicating whether batchnorm layers are added.
       batch_norm_activation: an operation that includes a batch normalization
         layer followed by an optional activation layer.
@@ -1030,6 +1034,8 @@ class SegmentationHead(object):
     self._num_convs = num_convs
     self._use_batch_norm = use_batch_norm
     self._batch_norm_activation = batch_norm_activation
+    self.upsample_factor = upsample_factor
+    self._num_downsample_channels = num_downsample_channels
 
   def __call__(self,
                features,
@@ -1064,6 +1070,13 @@ class SegmentationHead(object):
               features,
               is_training=is_training,
               name='class-%d-bn' % i)
+
+      if self.upsample_factor > 1:
+        features = tf.layers.conv2d_transpose(
+            features, self._num_downsample_channels,
+            (self.upsample_factor, self.upsample_factor),
+            (self.upsample_factor, self.upsample_factor))
+
       logits = tf.layers.conv2d(
           features,
           self._num_classes,  # This include background class 0.
