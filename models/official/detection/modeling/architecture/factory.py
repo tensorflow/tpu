@@ -60,15 +60,12 @@ def backbone_generator(params):
     block_specs_list = None
     if spinenet_params.block_specs:
       block_specs_list = json.loads(spinenet_params.block_specs)
-    backbone_fn = spinenet.SpineNet(
-        block_specs=spinenet.build_block_specs(block_specs_list),
+    backbone_fn = spinenet.spinenet_builder(
+        model_id=spinenet_params.model_id,
         min_level=spinenet_params.min_level,
         max_level=spinenet_params.max_level,
-        endpoints_num_filters=spinenet_params.endpoints_num_filters,
-        resample_alpha=spinenet_params.resample_alpha,
+        block_specs=spinenet.build_block_specs(block_specs_list),
         use_native_resize_op=spinenet_params.use_native_resize_op,
-        block_repeats=spinenet_params.block_repeats,
-        filter_size_scale=spinenet_params.filter_size_scale,
         activation=params.batch_norm_activation.activation,
         batch_norm_activation=batch_norm_activation_generator(
             params.batch_norm_activation),
@@ -78,14 +75,12 @@ def backbone_generator(params):
     block_specs_list = None
     if spinenet_mbconv_params.block_specs:
       block_specs_list = json.loads(spinenet_mbconv_params.block_specs)
-    backbone_fn = spinenet_mbconv.SpineNetMBConv(
-        block_specs=spinenet_mbconv.build_block_specs(block_specs_list),
+    backbone_fn = spinenet_mbconv.spinenet_mbconv_builder(
+        model_id=spinenet_params.model_id,
         min_level=spinenet_mbconv_params.min_level,
         max_level=spinenet_mbconv_params.max_level,
-        endpoints_num_filters=spinenet_mbconv_params.endpoints_num_filters,
+        block_specs=spinenet_mbconv.build_block_specs(block_specs_list),
         use_native_resize_op=spinenet_mbconv_params.use_native_resize_op,
-        block_repeats=spinenet_mbconv_params.block_repeats,
-        filter_size_scale=spinenet_mbconv_params.filter_size_scale,
         se_ratio=spinenet_mbconv_params.se_ratio,
         activation=params.batch_norm_activation.activation,
         batch_norm_activation=batch_norm_activation_generator(

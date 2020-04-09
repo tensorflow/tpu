@@ -68,6 +68,15 @@ SPINENET_BLOCK_SPECS = [
 ]
 
 
+SCALING_MAP = {
+    '49': {
+        'endpoints_num_filters': 48,
+        'filter_size_scale': 1.0,
+        'block_repeats': 1,
+    },
+}
+
+
 class BlockSpec(object):
   """A container class that specifies the block configuration for SpineNet."""
 
@@ -195,14 +204,15 @@ class SpineNetMBConv(object):
   def __init__(self,
                min_level=3,
                max_level=7,
+               block_specs=build_block_specs(),
                endpoints_num_filters=48,
                use_native_resize_op=False,
-               block_specs=build_block_specs(),
+               se_ratio=0.2,
                block_repeats=1,
                filter_size_scale=1.0,
                activation='swish',
-               se_ratio=0.2,
-               batch_norm_activation=nn_ops.BatchNormActivation(),
+               batch_norm_activation=nn_ops.BatchNormActivation(
+                   activation='swish'),
                init_drop_connect_rate=None,
                data_format='channels_last'):
     """SpineNetMBConv initialization function.
@@ -210,43 +220,44 @@ class SpineNetMBConv(object):
     Args:
       min_level: `int` minimum level in SpineNet endpoints.
       max_level: `int` maximum level in SpineNet endpoints.
+      block_specs: a list of BlockSpec objects that specifies the SpineNet
+        network topology. By default, the previously discovered architecture is
+        used.
       endpoints_num_filters: `int` feature dimension applied to endpoints before
         sharing conv layers in head.
       use_native_resize_op: Whether to use native
         tf.image.nearest_neighbor_resize or the broadcast implmentation to do
         upsampling.
-      block_specs: a list of BlockSpec objects that specifies the SpineNet
-        network topology.
+      se_ratio: squeeze and excitation ratio for MBConv blocks.
       block_repeats: `int` number of repeats per block.
       filter_size_scale: `float` a scaling factor to uniformaly scale feature
         dimension in SpineNet.
       activation: the activation function after cross-scale feature fusion.
         Support 'relu' and 'swish'.
-      se_ratio: squeeze and excitation ratio for MBConv blocks.
       batch_norm_activation: An operation that includes a batch normalization
         layer followed by an optional activation layer.
       init_drop_connect_rate: `float` initial drop connect rate.
       data_format: An optional string from: "channels_last", "channels_first".
         Defaults to "channels_last".
     """
-    self._block_specs = block_specs
-    self._filter_size_scale = filter_size_scale
-    self._block_repeats = block_repeats
-    self._endpoints_num_filters = endpoints_num_filters
     self._min_level = min_level
     self._max_level = max_level
-    self._init_dc_rate = init_drop_connect_rate
-    self._dropblock = nn_ops.Dropblock()
-    self._batch_norm_activation = batch_norm_activation
+    self._block_specs = block_specs
+    self._endpoints_num_filters = endpoints_num_filters
     self._use_native_resize_op = use_native_resize_op
     self._se_ratio = se_ratio
-    self._data_format = data_format
+    self._block_repeats = block_repeats
+    self._filter_size_scale = filter_size_scale
     if activation == 'relu':
       self._activation = tf.nn.relu
     elif activation == 'swish':
       self._activation = tf.nn.swish
     else:
       raise ValueError('Activation {} not implemented.'.format(activation))
+    self._batch_norm_activation = batch_norm_activation
+    self._init_dc_rate = init_drop_connect_rate
+    self._data_format = data_format
+    self._dropblock = nn_ops.Dropblock()
 
   def _build_stem_network(self, inputs, is_training):
     """Build the stem network."""
@@ -432,3 +443,34 @@ class SpineNetMBConv(object):
       endpoints = self._build_endpoints(feats, is_training)
 
     return endpoints
+
+
+def spinenet_mbconv_builder(model_id,
+                            min_level=3,
+                            max_level=7,
+                            block_specs=build_block_specs(),
+                            use_native_resize_op=False,
+                            se_ratio=0.2,
+                            activation='swish',
+                            batch_norm_activation=nn_ops.BatchNormActivation(
+                                activation='swish'),
+                            init_drop_connect_rate=None,
+                            data_format='channels_last'):
+  """Builds the SpineNet-MBConv network."""
+  if model_id not in SCALING_MAP:
+    raise ValueError('SpineNetMBConv {} is not a valid architecture.'
+                     .format(model_id))
+  scaling_params = SCALING_MAP[model_id]
+  return SpineNetMBConv(
+      min_level=min_level,
+      max_level=max_level,
+      block_specs=block_specs,
+      endpoints_num_filters=scaling_params['endpoints_num_filters'],
+      use_native_resize_op=use_native_resize_op,
+      se_ratio=se_ratio,
+      block_repeats=scaling_params['block_repeats'],
+      filter_size_scale=scaling_params['filter_size_scale'],
+      activation=activation,
+      batch_norm_activation=batch_norm_activation,
+      init_drop_connect_rate=init_drop_connect_rate,
+      data_format=data_format)

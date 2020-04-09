@@ -16,10 +16,7 @@ batch_norm_activation:
   use_sync_bn: true
   activation: 'swish'
 spinenet:
-  filter_size_scale: 1.0
-  block_repeats: 1
-  resample_alpha: 0.5
-  endpoints_num_filters: 256
+  model_id: '49'
   init_drop_connect_rate: 0.2
 anchor:
   anchor_size: 3.0

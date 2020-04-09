@@ -16,10 +16,7 @@ batch_norm_activation:
   use_sync_bn: true
   activation: 'swish'
 spinenet:
-  filter_size_scale: 0.65
-  block_repeats: 1
-  resample_alpha: 0.5
-  endpoints_num_filters: 128
+  model_id: '49S'
   init_drop_connect_rate: 0.2
 retinanet_head:
   retinanet_head_num_filters: 128
