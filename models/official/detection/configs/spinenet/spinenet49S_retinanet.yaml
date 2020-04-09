@@ -1,5 +1,4 @@
-# SpineNet-96 + RetinaNet with stochastic depth and swish. 49.0% mAP.
-
+# SpineNet-49S + RetinaNet with stochastic depth and swish. 41.5% mAP.
 architecture:
   backbone: 'spinenet'
   multilevel_features: 'identity'
@@ -17,11 +16,13 @@ batch_norm_activation:
   use_sync_bn: true
   activation: 'swish'
 spinenet:
-  model_id: '96'
+  model_id: '49S'
   init_drop_connect_rate: 0.2
+retinanet_head:
+  retinanet_head_num_filters: 128
 anchor:
   anchor_size: 3.0
 retinanet_parser:
-  output_size: [1024, 1024]
+  output_size: [640, 640]
   aug_scale_min: 0.5
   aug_scale_max: 2.0

@@ -1,26 +1,27 @@
-# SpineNet-49 + RetinaNet with stochastic depth and swish. 44.3% mAP.
+# SpineNet49-MBConv + RetinaNet with swish. 28.5% mAP.
 architecture:
-  backbone: 'spinenet'
+  backbone: 'spinenet_mbconv'
   multilevel_features: 'identity'
 train:
-  total_steps: 231500
+  total_steps: 277800
   train_batch_size: 256
   learning_rate:
-    warmup_steps: 2000
+    type: 'step'
     init_learning_rate: 0.28
     learning_rate_levels: [0.028, 0.0028]
-    learning_rate_steps: [217610, 226870]
-  l2_weight_decay: 0.00004
-  gradient_clip_norm: 10.0
+    learning_rate_steps: [263910, 273170]
+  l2_weight_decay: 0.00003
 batch_norm_activation:
   use_sync_bn: true
   activation: 'swish'
-spinenet:
+retinanet_head:
+  retinanet_head_num_filters: 48
+  use_separable_conv: true
+spinenet_mbconv:
   model_id: '49'
-  init_drop_connect_rate: 0.2
 anchor:
   anchor_size: 3.0
 retinanet_parser:
-  output_size: [640, 640]
+  output_size: [384, 384]
   aug_scale_min: 0.5
   aug_scale_max: 2.0

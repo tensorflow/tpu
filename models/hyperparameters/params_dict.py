@@ -116,6 +116,24 @@ class ParamsDict(object):
       raise KeyError('The key `{}` does not exist. '.format(k))
     return self.__dict__[k]
 
+  def __delattr__(self, k):
+    """Deletes the key and removes its values.
+
+    Args:
+      k: the key string.
+
+    Raises:
+      KeyError: if k is not defined in the ParamsDict.
+    """
+    if k in ParamsDict.RESERVED_ATTR:
+      raise KeyError('The key `{}` is reserved. '
+                     'No change is allowes. '.format(k))
+    if k not in self.__dict__.keys():
+      raise KeyError('The key `{}` does not exist. '.format(k))
+    if self._locked:
+      raise ValueError('The ParamsDict has been locked. No change is allowed.')
+    del self.__dict__[k]
+
   def override(self, override_params, is_strict=True):
     """Override the ParamsDict with a set of given params.
 

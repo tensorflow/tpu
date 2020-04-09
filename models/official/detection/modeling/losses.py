@@ -519,6 +519,7 @@ class SegmentationLoss(object):
     self._class_weights = params.class_weights
     self._ignore_label = params.ignore_label
     self._use_groundtruth_dimension = params.use_groundtruth_dimension
+    self._label_smoothing = params.label_smoothing
 
   def __call__(self, logits, labels):
     _, height, width, num_classes = logits.get_shape().as_list()
@@ -540,8 +541,11 @@ class SegmentationLoss(object):
 
     labels = tf.squeeze(tf.cast(labels, tf.int32), axis=3)
     valid_mask = tf.squeeze(tf.cast(valid_mask, tf.float32), axis=3)
-    cross_entropy_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(
-        labels=labels, logits=logits)
+    onehot_labels = tf.one_hot(labels, num_classes)
+    onehot_labels = onehot_labels * (
+        1 - self._label_smoothing) + self._label_smoothing / num_classes
+    cross_entropy_loss = tf.nn.softmax_cross_entropy_with_logits(
+        labels=onehot_labels, logits=logits)
 
     if not self._class_weights:
       class_weights = [1] * num_classes

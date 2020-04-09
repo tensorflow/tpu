@@ -53,6 +53,7 @@ def create_optimizer(learning_rate, params):
 
 def create_convolution_block(input_layer,
                              n_filters,
+                             is_training,
                              batch_normalization=False,
                              kernel=(3, 3, 3),
                              activation=tf.nn.relu,
@@ -65,6 +66,7 @@ def create_convolution_block(input_layer,
   Args:
     input_layer: tf.Tensor, the input tensor.
     n_filters: integer, the number of the output channels of the convolution.
+    is_training: bool, the training bit.
     batch_normalization: boolean, use batch normalization after the convolution.
     kernel: kernel size of the convolution.
     activation: Tensorflow activation layer to use. (default is 'relu')
@@ -87,7 +89,16 @@ def create_convolution_block(input_layer,
       activation=None,
   )(inputs=input_layer)
   if batch_normalization:
-    layer = tf.layers.batch_normalization(inputs=layer, axis=1)
+    axis = None
+    if data_format == 'channels_last':
+      axis = -1
+    elif data_format == 'channels_first':
+      axis = 1
+    else:
+      raise ValueError('Unsupported data_format {} for batchnorm'.format(
+          data_format))
+    layer = tf.layers.batch_normalization(
+        inputs=layer, axis=axis, training=is_training)
   elif instance_normalization:
     layer = tf.layers.instance_norm(layer)
   return activation(layer)
@@ -122,6 +133,7 @@ def apply_up_convolution(inputs,
 
 
 def unet3d_base(inputs,
+                is_training,
                 pool_size=(2, 2, 2),
                 n_labels=1,
                 deconvolution=False,
@@ -133,6 +145,7 @@ def unet3d_base(inputs,
 
   Args:
     inputs: the input Tensor.
+    is_training: bool, the training bit.
     pool_size: Pool size for the max pooling operations.
     n_labels: Number of binary labels that the model is learning.
     deconvolution: If set to True, will use transpose convolution(deconvolution)
@@ -165,6 +178,7 @@ def unet3d_base(inputs,
     layer1 = create_convolution_block(
         input_layer=current_layer,
         n_filters=n_base_filters * (2**layer_depth),
+        is_training=is_training,
         batch_normalization=batch_normalization,
         kernel=(3, 3, 3),
         activation=tf.nn.relu,
@@ -175,6 +189,7 @@ def unet3d_base(inputs,
     layer2 = create_convolution_block(
         input_layer=layer1,
         n_filters=n_base_filters * (2**layer_depth) * 2,
+        is_training=is_training,
         batch_normalization=batch_normalization,
         kernel=(3, 3, 3),
         activation=tf.nn.relu,
@@ -205,6 +220,7 @@ def unet3d_base(inputs,
     current_layer = create_convolution_block(
         n_filters=levels[layer_depth][1].get_shape().as_list()[channel_dim],
         input_layer=concat,
+        is_training=is_training,
         batch_normalization=batch_normalization,
         kernel=(3, 3, 3),
         activation=tf.nn.relu,
@@ -215,6 +231,7 @@ def unet3d_base(inputs,
     current_layer = create_convolution_block(
         n_filters=levels[layer_depth][1].get_shape().as_list()[channel_dim],
         input_layer=current_layer,
+        is_training=is_training,
         batch_normalization=batch_normalization,
         kernel=(3, 3, 3),
         activation=tf.nn.relu,
@@ -281,11 +298,13 @@ def _unet_model_fn(image, labels, mode, params):
   Returns:
     EstimatorSpec or TPUEstimatorSpec.
   """
+  is_training = mode == tf.estimator.ModeKeys.TRAIN
   with tf.variable_scope('base', reuse=tf.AUTO_REUSE):
     if params['use_bfloat16']:
       with tf.tpu.bfloat16_scope():
         logits = unet3d_base(
             image,
+            is_training=is_training,
             pool_size=(2, 2, 2),
             n_labels=params['num_classes'],
             deconvolution=params['deconvolution'],
@@ -297,6 +316,7 @@ def _unet_model_fn(image, labels, mode, params):
       with tf.variable_scope(''):
         logits = unet3d_base(
             image,
+            is_training=is_training,
             pool_size=(2, 2, 2),
             n_labels=params['num_classes'],
             deconvolution=params['deconvolution'],
@@ -344,13 +364,20 @@ def _unet_model_fn(image, labels, mode, params):
         decay_rate=params['lr_decay_rate'])
 
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+    if params['use_batch_norm'] and not update_ops:
+      raise ValueError('Batchnorm is enabled, but UPDATE_OPS collection is '
+                       'empty. This must be model code error somewhere.')
     optimizer = create_optimizer(learning_rate, params)
     if params['use_tpu']:
       optimizer = tf.tpu.CrossShardOptimizer(optimizer)
 
-    minimize_op = optimizer.minimize(loss, tf.train.get_global_step())
+    train_op = optimizer.minimize(loss, tf.train.get_global_step())
+
     with tf.control_dependencies(update_ops):
-      train_op = minimize_op
+      # To correctly insert the control dependencies, new Op must be created.
+      # Here we use identity to create the Op so it will have control
+      # dependencies.
+      loss = tf.identity(loss)
 
       def host_call_fn(gs, lr):
         """Training host call. Creates scalar summaries for training metrics.

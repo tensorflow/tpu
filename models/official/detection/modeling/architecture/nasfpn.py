@@ -49,7 +49,7 @@ def block_group(inputs,
                 block_repeats,
                 conv2d_op=None,
                 activation=tf.nn.swish,
-                batch_norm_relu=nn_ops.BatchNormRelu(),
+                batch_norm_activation=nn_ops.BatchNormActivation(),
                 dropblock=nn_ops.Dropblock(),
                 drop_connect_rate=None,
                 data_format='channels_last',
@@ -63,7 +63,7 @@ def block_group(inputs,
         kernel_size=(3, 3),
         padding='same',
         name='conv')
-    inputs = batch_norm_relu(
+    inputs = batch_norm_activation(
         inputs, is_training=is_training, relu=False, name='bn')
     inputs = dropblock(inputs, is_training=is_training)
     return inputs
@@ -82,7 +82,7 @@ def block_group(inputs,
       block_fn=block_fn,
       block_repeats=block_repeats,
       activation=activation,
-      batch_norm_relu=batch_norm_relu,
+      batch_norm_activation=batch_norm_activation,
       dropblock=dropblock,
       drop_connect_rate=drop_connect_rate,
       data_format=data_format,
@@ -93,7 +93,7 @@ def block_group(inputs,
 def resample_feature_map(feat, level, target_level, is_training,
                          target_feat_dims=256,
                          conv2d_op=tf.layers.conv2d,
-                         batch_norm_relu=nn_ops.BatchNormRelu(),
+                         batch_norm_activation=nn_ops.BatchNormActivation(),
                          name=None):
   """Resample input feature map to have target number of channels and width."""
   feat_dims = feat.get_shape().as_list()[3]
@@ -101,7 +101,7 @@ def resample_feature_map(feat, level, target_level, is_training,
     if feat_dims != target_feat_dims:
       feat = conv2d_op(
           feat, filters=target_feat_dims, kernel_size=(1, 1), padding='same')
-      feat = batch_norm_relu(
+      feat = batch_norm_activation(
           feat,
           is_training=is_training,
           relu=False,
@@ -173,7 +173,7 @@ class Nasfpn(object):
                block_fn='conv',
                block_repeats=1,
                activation='swish',
-               batch_norm_relu=nn_ops.BatchNormRelu(),
+               batch_norm_activation=nn_ops.BatchNormActivation(),
                init_drop_connect_rate=None):
     """NAS-FPN initialization function.
 
@@ -190,8 +190,8 @@ class Nasfpn(object):
       block_repeats: `int` representing the number of repeats per block group
         when block group is bottleneck.
       activation: activation function. Support 'relu' and 'swish'.
-      batch_norm_relu: an operation that includes a batch normalization layer
-        followed by a relu layer(optional).
+      batch_norm_activation: an operation that includes a batch normalization
+        layer followed by an optional activation layer.
       init_drop_connect_rate: a 'float' number that specifies the initial drop
         connection rate. Note that the default `None` means no drop connection
         is applied.
@@ -228,13 +228,13 @@ class Nasfpn(object):
       self._activation = tf.nn.swish
     else:
       raise ValueError('Activation {} not implemented.'.format(activation))
-    self._batch_norm_relu = batch_norm_relu
+    self._batch_norm_activation = batch_norm_activation
     self._init_drop_connect_rate = init_drop_connect_rate
     self._resample_feature_map = functools.partial(
         resample_feature_map,
         target_feat_dims=fpn_feat_dims,
         conv2d_op=self._conv2d_op,
-        batch_norm_relu=batch_norm_relu)
+        batch_norm_activation=batch_norm_activation)
 
   def __call__(self, multilevel_features, is_training=False):
     """Returns the FPN features for a given multilevel features.
@@ -340,7 +340,7 @@ class Nasfpn(object):
               block_repeats=self._block_repeats,
               conv2d_op=self._conv2d_op,
               activation=self._activation,
-              batch_norm_relu=self._batch_norm_relu,
+              batch_norm_activation=self._batch_norm_activation,
               dropblock=self._dropblock,
               drop_connect_rate=self._init_drop_connect_rate,
               name='block_{}'.format(i),

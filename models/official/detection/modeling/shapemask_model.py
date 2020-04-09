@@ -40,14 +40,12 @@ class ShapeMaskModel(base_model.BaseModel):
     # Architecture generators.
     self._backbone_fn = factory.backbone_generator(params)
     self._fpn_fn = factory.multilevel_features_generator(params)
-    self._retinanet_head_fn = factory.retinanet_head_generator(
-        params.retinanet_head)
-    self._shape_prior_head_fn = factory.shapeprior_head_generator(
-        params.shapemask_head)
-    self._coarse_mask_fn = factory.coarsemask_head_generator(
-        params.shapemask_head)
-    self._fine_mask_fn = factory.finemask_head_generator(params.shapemask_head)
-    self._outer_box_scale = params.shapemask_parser.outer_box_scale
+    self._retinanet_head_fn = factory.retinanet_head_generator(params)
+    self._shape_prior_head_fn = factory.shapeprior_head_generator(params)
+    self._coarse_mask_fn = factory.coarsemask_head_generator(params)
+    self._fine_mask_fn = factory.finemask_head_generator(params)
+
+    self._outer_box_scale = params.architecture.outer_box_scale
 
     # Loss function.
     self._cls_loss_fn = losses.RetinanetClassLoss(params.retinanet_loss)
@@ -130,6 +128,7 @@ class ShapeMaskModel(base_model.BaseModel):
         'fine_mask_logits': fine_mask_logits,
         'coarse_mask_logits': coarse_mask_logits,
         'prior_masks': prior_masks,
+        'fpn_features': fpn_features,
     }
 
     if not is_training:

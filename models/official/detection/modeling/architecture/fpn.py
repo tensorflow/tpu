@@ -43,7 +43,7 @@ class Fpn(object):
                fpn_feat_dims=256,
                use_separable_conv=False,
                use_batch_norm=True,
-               batch_norm_relu=nn_ops.BatchNormRelu()):
+               batch_norm_activation=nn_ops.BatchNormActivation()):
     """FPN initialization function.
 
     Args:
@@ -53,8 +53,8 @@ class Fpn(object):
       use_separable_conv: `bool`, if True use separable convolution for
         convolution in FPN layers.
       use_batch_norm: 'bool', indicating whether batchnorm layers are added.
-      batch_norm_relu: an operation that includes a batch normalization layer
-        followed by a relu layer(optional).
+      batch_norm_activation: an operation that includes a batch normalization
+        layer followed by an optional activation layer.
     """
     self._min_level = min_level
     self._max_level = max_level
@@ -65,7 +65,7 @@ class Fpn(object):
     else:
       self._conv2d_op = tf.layers.conv2d
     self._use_batch_norm = use_batch_norm
-    self._batch_norm_relu = batch_norm_relu
+    self._batch_norm_activation = batch_norm_activation
 
   def __call__(self, multilevel_features, is_training=False):
     """Returns the FPN features for a given multilevel features.
@@ -130,7 +130,7 @@ class Fpn(object):
       if self._use_batch_norm:
         # Adds batch_norm layer.
         for level in range(self._min_level, self._max_level + 1):
-          feats[level] = self._batch_norm_relu(
+          feats[level] = self._batch_norm_activation(
               feats[level], relu=False, is_training=is_training,
               name='p%d-bn' % level)
     return feats

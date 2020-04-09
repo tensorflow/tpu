@@ -14,14 +14,14 @@
 # ==============================================================================
 """Config template to train ShapeMask."""
 
-from configs import base_config
+from configs import detection_config
 from hyperparameters import params_dict
 
 # pylint: disable=line-too-long
 
 SHAPEMASK_RESNET_FROZEN_VAR_PREFIX = r'(resnet\d+/)conv2d(|_([1-9]|10))\/'
 
-SHAPEMASK_CFG = params_dict.ParamsDict(base_config.BASE_CFG)
+SHAPEMASK_CFG = params_dict.ParamsDict(detection_config.DETECTION_CFG)
 SHAPEMASK_CFG.override(
     {
         'type': 'shapemask',
@@ -42,6 +42,7 @@ SHAPEMASK_CFG.override(
             'backbone': 'resnet',
             'multilevel_features': 'fpn',
             'use_bfloat16': True,
+            'outer_box_scale': 1.25,
         },
         'shapemask_parser': {
             'output_size': [640, 640],
@@ -75,13 +76,6 @@ SHAPEMASK_CFG.override(
             'retinanet_head_num_filters': 256,
             'use_separable_conv': False,
             'use_batch_norm': True,
-            'batch_norm': {
-                'batch_norm_momentum': 0.997,
-                'batch_norm_epsilon': 1e-4,
-                'batch_norm_trainable': True,
-                'use_sync_bn': False,
-            },
-            'activation': 'relu',
         },
         'shapemask_head': {
             'num_classes': 91,
@@ -91,12 +85,6 @@ SHAPEMASK_CFG.override(
             'num_convs': 4,
             'upsample_factor': 4,
             'shape_prior_path': '',
-            'batch_norm': {
-                'batch_norm_momentum': 0.997,
-                'batch_norm_epsilon': 1e-4,
-                'batch_norm_trainable': True,
-                'use_sync_bn': False,
-            },
         },
         'retinanet_loss': {
             'num_classes': 91,
@@ -126,6 +114,7 @@ SHAPEMASK_RESTRICTIONS = [
     'retinanet_head.num_classes == retinanet_loss.num_classes',
     'shapemask_head.mask_crop_size == shapemask_parser.mask_crop_size',
     'shapemask_head.upsample_factor == shapemask_parser.upsample_factor',
+    'shapemask_parser.outer_box_scale ==  architecture.outer_box_scale',
 ]
 
 # pylint: enable=line-too-long

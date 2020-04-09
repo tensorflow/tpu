@@ -30,11 +30,11 @@ from six.moves import range
 import tensorflow.compat.v1 as tf
 
 from configs import factory
-from configs import io
 from dataloader import input_reader
 from dataloader import mode_keys as ModeKeys
 from executor import tpu_executor
 from modeling import model_builder
+from utils import config_utils
 import sys
 sys.path.insert(0, 'tpu/models')
 from hyperparameters import common_hparams_flags
@@ -119,7 +119,7 @@ def main(argv):
 
   # Runs the model.
   if FLAGS.mode == 'train':
-    io.save_config(params, params.model_dir)
+    config_utils.save_config(params, params.model_dir)
     executor.train(train_input_fn, params.train.total_steps)
     if FLAGS.eval_after_training:
       executor.evaluate(
@@ -159,7 +159,7 @@ def main(argv):
                      ckpt)
 
   elif FLAGS.mode == 'train_and_eval':
-    io.save_config(params, params.model_dir)
+    config_utils.save_config(params, params.model_dir)
     num_cycles = int(params.train.total_steps / params.eval.num_steps_per_eval)
     for cycle in range(num_cycles):
       logging.info('Start training cycle %d.', cycle)
