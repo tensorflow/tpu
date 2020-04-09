@@ -1,0 +1,27 @@
+# SpineNet-190 ImageNet classification with stochastic depth, swish and label smoothing.
+# 80.8 Top-1, 95.3 Top-5 accuracy.
+architecture:
+  backbone: 'spinenet'
+  multilevel_features: 'identity'
+  parser: 'classification_parser'
+  num_classes: 1001
+train:
+  total_steps: 62557
+  train_batch_size: 4096
+  learning_rate:
+    type: cosine
+    warmup_steps: 1564
+    init_learning_rate: 1.6
+  l2_weight_decay: 0.0001
+  label_smoothing: 0.1
+batch_norm_activation:
+  batch_norm_epsilon: 1.0e-05
+  batch_norm_momentum: 0.9
+  use_sync_bn: false
+  activation: 'swish'
+spinenet:
+  model_id: '190'
+  init_drop_connect_rate: 0.2
+classification_head:
+  aggregation: 'all'
+  num_classes: 1001
