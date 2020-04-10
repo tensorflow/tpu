@@ -31,11 +31,9 @@ MASKRCNN_CFG.override({
         'parser': 'maskrcnn_parser',
         'backbone': 'resnet',
         'multilevel_features': 'fpn',
-        'use_bfloat16': True,
         'include_mask': True,
     },
     'maskrcnn_parser': {
-        'use_bfloat16': True,
         'output_size': [1024, 1024],
         'rpn_match_threshold': 0.7,
         'rpn_unmatched_threshold': 0.3,
@@ -46,7 +44,6 @@ MASKRCNN_CFG.override({
         'aug_scale_max': 1.0,
         'skip_crowd_during_training': True,
         'max_num_instances': 100,
-        'include_mask': True,
         'mask_crop_size': 112,
     },
     'anchor': {
@@ -136,11 +133,8 @@ MASKRCNN_CFG.override({
 
 
 MASKRCNN_RESTRICTIONS = [
-    'architecture.use_bfloat16 == maskrcnn_parser.use_bfloat16',
-    'architecture.include_mask == maskrcnn_parser.include_mask',
     'anchor.min_level == rpn_head.min_level',
     'anchor.max_level == rpn_head.max_level',
     'mrcnn_head.mask_target_size == mask_sampling.mask_target_size',
 ]
-
 # pylint: enable=line-too-long

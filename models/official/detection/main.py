@@ -51,7 +51,7 @@ flags.DEFINE_string(
 
 flags.DEFINE_string(
     'model', default='retinanet',
-    help='Model to run: `retinanet`, `mask_rcnn` or `shapemask`.')
+    help='Support `retinanet`, `mask_rcnn`, `shapemask` and `classification`.')
 
 flags.DEFINE_integer(
     'num_cores', default=8, help='Number of TPU cores for training.')
@@ -75,6 +75,15 @@ def main(argv):
 
   params = params_dict.override_params_dict(
       params, FLAGS.params_override, is_strict=True)
+  if not FLAGS.use_tpu:
+    params.override({
+        'architecture': {
+            'use_bfloat16': False,
+        },
+        'batch_norm_activation': {
+            'use_sync_bn': False,
+        },
+    }, is_strict=True)
   params.override({
       'platform': {
           'eval_master': FLAGS.eval_master,

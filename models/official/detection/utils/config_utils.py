@@ -22,9 +22,16 @@ from hyperparameters import params_dict
 
 
 _PARSERS = [
+    'classification_parser',
     'retinanet_parser',
     'maskrcnn_parser',
     'shapemask_parser',
+]
+
+_BACKBONES = [
+    'resnet',
+    'spinenet',
+    'spinenet_mbconv',
 ]
 
 _MULTILEVEL_FEATURES = [

@@ -20,6 +20,9 @@ BASE_CFG = {
     'model_dir': '',
     'use_tpu': True,
     'isolate_session_state': False,
+    'architecture': {
+        'use_bfloat16': True,
+    },
     'train': {
         'iterations_per_loop': 100,
         'train_batch_size': 64,
