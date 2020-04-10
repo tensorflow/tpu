@@ -48,9 +48,6 @@ _REQUIRED_INPUTS = [
     'label',
 ]
 _VERSION = '0.1.0'
-_TRAIN_SHARDS = 1000
-_VALIDATION_SHARDS = 5
-_TEST_SHARDS = 100
 
 
 class ImageClassificationBuilder(tfds.core.GeneratorBasedBuilder):
@@ -109,7 +106,6 @@ class ImageClassificationBuilder(tfds.core.GeneratorBasedBuilder):
       split_generators.append(
           tfds.core.SplitGenerator(
               name=tfds.Split.TRAIN,
-              num_shards=_TRAIN_SHARDS,
               gen_kwargs={
                   'mode': 'train',
               },
@@ -119,7 +115,6 @@ class ImageClassificationBuilder(tfds.core.GeneratorBasedBuilder):
       split_generators.append(
           tfds.core.SplitGenerator(
               name=tfds.Split.VALIDATION,
-              num_shards=_VALIDATION_SHARDS,
               gen_kwargs={
                   'mode': 'validation',
               },
@@ -129,7 +124,6 @@ class ImageClassificationBuilder(tfds.core.GeneratorBasedBuilder):
       split_generators.append(
           tfds.core.SplitGenerator(
               name=tfds.Split.TEST,
-              num_shards=_TEST_SHARDS,
               gen_kwargs={
                   'mode': 'test',
               },
