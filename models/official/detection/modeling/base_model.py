@@ -21,6 +21,7 @@ from __future__ import print_function
 
 import abc
 import functools
+import os
 import re
 import six
 from six.moves import zip
@@ -200,10 +201,6 @@ class BaseModel(six.with_metaclass(abc.ABCMeta, object)):
     else:
       outputs = self._build_outputs(images, labels, mode)
 
-    # Log model statistics.
-    batch_size = images.get_shape().as_list()[0]
-    _, _ = benchmark_utils.compute_model_statistics(batch_size)
-
     return outputs
 
   @abc.abstractmethod
@@ -265,6 +262,11 @@ class BaseModel(six.with_metaclass(abc.ABCMeta, object)):
       images = tf.transpose(images, [3, 0, 1, 2])
 
     outputs = self.build_outputs(images, labels, mode=mode_keys.TRAIN)
+    # Log model statistics.
+    batch_size = images.get_shape().as_list()[0]
+    _, _ = benchmark_utils.compute_model_statistics(
+        batch_size=batch_size,
+        json_file_path=os.path.join(self._model_dir, 'train_model_stats.json'))
 
     model_loss = self.build_losses(outputs, labels)
 
@@ -330,6 +332,11 @@ class BaseModel(six.with_metaclass(abc.ABCMeta, object)):
       a TPUEstimatorSpec object used for evaluation.
     """
     outputs = self.build_outputs(images, labels, mode=mode_keys.EVAL)
+    # Log model statistics.
+    batch_size = images.get_shape().as_list()[0]
+    _, _ = benchmark_utils.compute_model_statistics(
+        batch_size=batch_size,
+        json_file_path=os.path.join(self._model_dir, 'eval_model_stats.json'))
 
     model_loss = self.build_losses(outputs, labels)
 
@@ -354,6 +361,12 @@ class BaseModel(six.with_metaclass(abc.ABCMeta, object)):
     labels = features['labels']
 
     outputs = self.build_outputs(images, labels, mode=mode_keys.PREDICT)
+    # Log model statistics.
+    batch_size = images.get_shape().as_list()[0]
+    _, _ = benchmark_utils.compute_model_statistics(
+        batch_size=batch_size,
+        json_file_path=os.path.join(self._model_dir,
+                                    'predict_model_stats.json'))
 
     predictions = self.build_predictions(outputs, labels)
 
