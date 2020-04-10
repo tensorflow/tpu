@@ -14,6 +14,7 @@
 # ==============================================================================
 """Factory to provide model configs."""
 
+from configs import classification_config
 from configs import maskrcnn_config
 from configs import retinanet_config
 from configs import shapemask_config
@@ -22,7 +23,10 @@ from hyperparameters import params_dict
 
 def config_generator(model):
   """Model function generator."""
-  if model == 'retinanet':
+  if model == 'classification':
+    default_config = classification_config.CLASSIFICATION_CFG
+    restrictions = classification_config.CLASSIFICATION_RESTRICTIONS
+  elif model == 'retinanet':
     default_config = retinanet_config.RETINANET_CFG
     restrictions = retinanet_config.RETINANET_RESTRICTIONS
   elif model == 'mask_rcnn':

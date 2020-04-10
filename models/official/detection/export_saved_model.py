@@ -41,8 +41,7 @@ FLAGS = flags.FLAGS
 flags.DEFINE_string('export_dir', None, 'The export directory.')
 flags.DEFINE_string('checkpoint_path', None, 'Checkpoint path.')
 flags.DEFINE_string(
-    'model', 'retinanet',
-    'Model to run: `retinanet`, `mask_rcnn` or `shapemask`.')
+    'model', 'retinanet', 'Support `retinanet`, `mask_rcnn` and `shapemask`.')
 flags.DEFINE_boolean('use_tpu', False, 'Whether or not use TPU.')
 flags.DEFINE_string(
     'config_file', '',

@@ -18,6 +18,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from dataloader import classification_parser
 from dataloader import maskrcnn_parser
 from dataloader import retinanet_parser
 from dataloader import shapemask_parser
@@ -25,7 +26,14 @@ from dataloader import shapemask_parser
 
 def parser_generator(params, mode):
   """Generator function for various dataset parser."""
-  if params.architecture.parser == 'retinanet_parser':
+  if params.architecture.parser == 'classification_parser':
+    parser_params = params.classification_parser
+    parser_fn = classification_parser.Parser(
+        output_size=parser_params.output_size,
+        aug_rand_hflip=parser_params.aug_rand_hflip,
+        use_bfloat16=parser_params.use_bfloat16,
+        mode=mode)
+  elif params.architecture.parser == 'retinanet_parser':
     anchor_params = params.anchor
     parser_params = params.retinanet_parser
     parser_fn = retinanet_parser.Parser(
@@ -98,7 +106,6 @@ def parser_generator(params, mode):
         use_bfloat16=parser_params.use_bfloat16,
         mask_train_class=parser_params.mask_train_class,
         mode=mode)
-
   else:
     raise ValueError('Parser %s is not supported.' % params.architecture.parser)
 

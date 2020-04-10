@@ -51,7 +51,7 @@ flags.DEFINE_string(
 
 flags.DEFINE_string(
     'model', default='retinanet',
-    help='Model to run: `retinanet`, `mask_rcnn` or `shapemask`.')
+    help='Support `retinanet`, `mask_rcnn`, `shapemask` and `classification`.')
 
 flags.DEFINE_integer(
     'num_cores', default=8, help='Number of TPU cores for training.')

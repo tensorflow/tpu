@@ -12,8 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Factory to build detection model."""
+"""Factory to build different models."""
 
+from modeling import classification_model
 from modeling import maskrcnn_model
 from modeling import retinanet_model
 from modeling import shapemask_model
@@ -21,12 +22,14 @@ from modeling import shapemask_model
 
 def model_generator(params):
   """Model function generator."""
-  if params.type == 'retinanet':
+  if params.type == 'classification':
+    model_fn = classification_model.ClassificationModel(params)
+  elif params.type == 'retinanet':
     model_fn = retinanet_model.RetinanetModel(params)
-  elif params.type == 'shapemask':
-    model_fn = shapemask_model.ShapeMaskModel(params)
   elif params.type == 'mask_rcnn':
     model_fn = maskrcnn_model.MaskrcnnModel(params)
+  elif params.type == 'shapemask':
+    model_fn = shapemask_model.ShapeMaskModel(params)
   else:
     raise ValueError('Model %s is not supported.'% params.type)
 

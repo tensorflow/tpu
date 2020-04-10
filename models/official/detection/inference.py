@@ -48,9 +48,7 @@ from hyperparameters import params_dict
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string(
-    'model', 'retinanet',
-    'Only retinanet and faster_rcnn (i.e. mask_rcnn with include_mask=False) '
-    'are supported.')
+    'model', 'retinanet', 'Support `retinanet`, `mask_rcnn` and `shapemask`.')
 flags.DEFINE_integer('image_size', 640, 'The image size.')
 flags.DEFINE_string(
     'checkpoint_path', '', 'The path to the checkpoint file.')
