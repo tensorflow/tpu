@@ -27,7 +27,6 @@ CLASSIFICATION_CFG.override({
         # Note that `num_classes` is the total number of classes including one
         # background class whose index is 0.
         'num_classes': 1001,
-        'use_bfloat16': True,
     },
     'train': {
         'iterations_per_loop': 1000,
@@ -52,7 +51,6 @@ CLASSIFICATION_CFG.override({
         'type': 'customized',
     },
     'classification_parser': {
-        'use_bfloat16': True,
         'output_size': [224, 224],
         'aug_rand_hflip': True,
     },
@@ -79,6 +77,5 @@ CLASSIFICATION_CFG.override({
 
 CLASSIFICATION_RESTRICTIONS = [
     'architecture.num_classes == classification_head.num_classes',
-    'architecture.use_bfloat16 == classification_parser.use_bfloat16',
 ]
 # pylint: enable=line-too-long

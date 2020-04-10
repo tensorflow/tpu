@@ -25,10 +25,8 @@ RETINANET_CFG.override({
         'parser': 'retinanet_parser',
         'backbone': 'resnet',
         'multilevel_features': 'fpn',
-        'use_bfloat16': True,
     },
     'retinanet_parser': {
-        'use_bfloat16': True,
         'output_size': [640, 640],
         'match_threshold': 0.5,
         'unmatched_threshold': 0.5,
@@ -67,7 +65,6 @@ RETINANET_CFG.override({
 }, is_strict=False)
 
 RETINANET_RESTRICTIONS = [
-    'architecture.use_bfloat16 == retinanet_parser.use_bfloat16',
     'anchor.min_level == retinanet_head.min_level',
     'anchor.max_level == retinanet_head.max_level',
     'anchor.min_level == postprocess.min_level',

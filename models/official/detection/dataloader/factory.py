@@ -31,7 +31,7 @@ def parser_generator(params, mode):
     parser_fn = classification_parser.Parser(
         output_size=parser_params.output_size,
         aug_rand_hflip=parser_params.aug_rand_hflip,
-        use_bfloat16=parser_params.use_bfloat16,
+        use_bfloat16=params.architecture.use_bfloat16,
         mode=mode)
   elif params.architecture.parser == 'retinanet_parser':
     anchor_params = params.anchor
@@ -52,7 +52,7 @@ def parser_generator(params, mode):
         autoaugment_policy_name=parser_params.autoaugment_policy_name,
         skip_crowd_during_training=parser_params.skip_crowd_during_training,
         max_num_instances=parser_params.max_num_instances,
-        use_bfloat16=parser_params.use_bfloat16,
+        use_bfloat16=params.architecture.use_bfloat16,
         mode=mode,
         regenerate_source_id=parser_params.regenerate_source_id)
   elif params.architecture.parser == 'maskrcnn_parser':
@@ -74,9 +74,9 @@ def parser_generator(params, mode):
         aug_scale_max=parser_params.aug_scale_max,
         skip_crowd_during_training=parser_params.skip_crowd_during_training,
         max_num_instances=parser_params.max_num_instances,
-        include_mask=parser_params.include_mask,
+        include_mask=params.architecture.include_mask,
         mask_crop_size=parser_params.mask_crop_size,
-        use_bfloat16=parser_params.use_bfloat16,
+        use_bfloat16=params.architecture.use_bfloat16,
         mode=mode)
   elif params.architecture.parser == 'shapemask_parser':
     anchor_params = params.anchor
@@ -103,7 +103,7 @@ def parser_generator(params, mode):
         aug_scale_max=parser_params.aug_scale_max,
         skip_crowd_during_training=parser_params.skip_crowd_during_training,
         max_num_instances=parser_params.max_num_instances,
-        use_bfloat16=parser_params.use_bfloat16,
+        use_bfloat16=params.architecture.use_bfloat16,
         mask_train_class=parser_params.mask_train_class,
         mode=mode)
   else:
