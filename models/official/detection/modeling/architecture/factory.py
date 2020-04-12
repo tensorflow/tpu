@@ -76,7 +76,7 @@ def backbone_generator(params):
     if spinenet_mbconv_params.block_specs:
       block_specs_list = json.loads(spinenet_mbconv_params.block_specs)
     backbone_fn = spinenet_mbconv.spinenet_mbconv_builder(
-        model_id=spinenet_params.model_id,
+        model_id=spinenet_mbconv_params.model_id,
         min_level=spinenet_mbconv_params.min_level,
         max_level=spinenet_mbconv_params.max_level,
         block_specs=spinenet_mbconv.build_block_specs(block_specs_list),
