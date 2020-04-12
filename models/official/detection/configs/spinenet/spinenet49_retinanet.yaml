@@ -1,4 +1,6 @@
-# SpineNet-49 + RetinaNet with stochastic depth and swish. 44.3% mAP.
+# SpineNet-49 + RetinaNet:
+# - 42.8% mAP with init_drop_connect_rate null, activation 'relu', total_steps 162050, learning_rate_steps [148160, 157420]
+# - 44.3% mAP with init_drop_connect_rate: 0.2, activation: 'swish', total_steps 231500, learning_rate_steps [217610, 226870]
 architecture:
   backbone: 'spinenet'
   multilevel_features: 'identity'

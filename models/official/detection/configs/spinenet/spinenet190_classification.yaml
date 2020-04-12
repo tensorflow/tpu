@@ -1,5 +1,5 @@
-# SpineNet-190 ImageNet classification with stochastic depth, swish and label smoothing.
-# 80.8 Top-1, 95.3 Top-5 accuracy.
+# SpineNet-190 ImageNet classification:
+# - 80.8 Top-1, 95.3 Top-5 accuracy with init_drop_connect_rate 0.2, activation 'swish', label_smoothing 0.1
 architecture:
   backbone: 'spinenet'
   multilevel_features: 'identity'
