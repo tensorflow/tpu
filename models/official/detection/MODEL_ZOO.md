@@ -53,9 +53,9 @@ Coming soon.
 #### Mask R-CNN (Trained from scratch)
 | model        | resolution    | epochs  | FLOPs      | params  |  box AP |  mask AP  |   download |
 | ------------ |:-------------:| ---------:|-----------:|--------:|--------:|-----------:|-----------:|
-| SpineNet-49  | 640x640       |    350    | 168.1B | 40.8M | 42.8 | 37.8 | [ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/maskrcnn/spinenet-49.tar.gz?organizationId=433637338589) \| [config](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/spinenet/spinenet49_mrcnn.yaml) |
-| SpineNet-96  | 1024x1024     |    350    | 267.5B | 55.2M | 46.8 | 41.2 | [ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/maskrcnn/spinenet-96.tar.gz?organizationId=433637338589) \| [config](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/spinenet/spinenet96_mrcnn.yaml) |
-| SpineNet-143 | 1280x1280     |    350    | 452.3B | 79.2M | 48.7 | 42.6 | [ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/maskrcnn/spinenet-143.tar.gz?organizationId=433637338589) \| [config](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/spinenet/spinenet143_mrcnn.yaml) |
+| SpineNet-49  | 640x640       |    350    | 215.7B | 40.8M | 42.8 | 37.8 | [ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/maskrcnn/spinenet-49.tar.gz?organizationId=433637338589) \| [config](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/spinenet/spinenet49_mrcnn.yaml) |
+| SpineNet-96  | 1024x1024     |    350    | 314.6B | 55.2M | 46.8 | 41.2 | [ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/maskrcnn/spinenet-96.tar.gz?organizationId=433637338589) \| [config](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/spinenet/spinenet96_mrcnn.yaml) |
+| SpineNet-143 | 1280x1280     |    350    | 498.4B | 79.2M | 48.7 | 42.6 | [ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/maskrcnn/spinenet-143.tar.gz?organizationId=433637338589) \| [config](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/spinenet/spinenet143_mrcnn.yaml) |
 
 
 ## Image Classification
