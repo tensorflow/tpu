@@ -70,9 +70,6 @@ MASKRCNN_CFG.override({
         'use_batch_norm': False,
     },
     'frcnn_head': {
-        # Note that `num_classes` is the total number of classes including
-        # one background classes whose index is 0.
-        'num_classes': 91,
         'num_convs': 0,
         'num_filters': 256,
         'use_separable_conv': False,
@@ -81,7 +78,6 @@ MASKRCNN_CFG.override({
         'use_batch_norm': False,
     },
     'mrcnn_head': {
-        'num_classes': 91,
         'mask_target_size': 28,
         'num_convs': 4,
         'num_filters': 256,

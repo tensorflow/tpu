@@ -44,7 +44,8 @@ class RetinanetModel(base_model.BaseModel):
     self._head_fn = factory.retinanet_head_generator(params)
 
     # Loss function.
-    self._cls_loss_fn = losses.RetinanetClassLoss(params.retinanet_loss)
+    self._cls_loss_fn = losses.RetinanetClassLoss(
+        params.retinanet_loss, params.architecture.num_classes)
     self._box_loss_fn = losses.RetinanetBoxLoss(params.retinanet_loss)
     self._box_loss_weight = params.retinanet_loss.box_loss_weight
 

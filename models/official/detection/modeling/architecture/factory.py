@@ -133,7 +133,7 @@ def retinanet_head_generator(params):
   return heads.RetinanetHead(
       head_params.min_level,
       head_params.max_level,
-      head_params.num_classes,
+      params.architecture.num_classes,
       head_params.anchors_per_location,
       head_params.retinanet_head_num_convs,
       head_params.retinanet_head_num_filters,
@@ -162,7 +162,7 @@ def fast_rcnn_head_generator(params):
   """Generator function for Fast R-CNN head architecture."""
   head_params = params.frcnn_head
   return heads.FastrcnnHead(
-      head_params.num_classes,
+      params.architecture.num_classes,
       head_params.num_convs,
       head_params.num_filters,
       head_params.use_separable_conv,
@@ -177,7 +177,7 @@ def mask_rcnn_head_generator(params):
   """Generator function for Mask R-CNN head architecture."""
   head_params = params.mrcnn_head
   return heads.MaskrcnnHead(
-      head_params.num_classes,
+      params.architecture.num_classes,
       head_params.mask_target_size,
       head_params.num_convs,
       head_params.num_filters,
@@ -191,7 +191,7 @@ def shapeprior_head_generator(params):
   """Generator function for shape prior head architecture."""
   head_params = params.shapemask_head
   return heads.ShapemaskPriorHead(
-      head_params.num_classes,
+      params.architecture.num_classes,
       head_params.num_downsample_channels,
       head_params.mask_crop_size,
       head_params.use_category_for_mask,
@@ -204,7 +204,7 @@ def coarsemask_head_generator(params):
   """Generator function for ShapeMask coarse mask head architecture."""
   head_params = params.shapemask_head
   return heads.ShapemaskCoarsemaskHead(
-      head_params.num_classes,
+      params.architecture.num_classes,
       head_params.num_downsample_channels,
       head_params.mask_crop_size,
       head_params.use_category_for_mask,
@@ -217,7 +217,7 @@ def finemask_head_generator(params):
   """Generator function for Shapemask fine mask head architecture."""
   head_params = params.shapemask_head
   return heads.ShapemaskFinemaskHead(
-      head_params.num_classes,
+      params.architecture.num_classes,
       head_params.num_downsample_channels,
       head_params.mask_crop_size,
       head_params.use_category_for_mask,
@@ -231,7 +231,7 @@ def classification_head_generator(params):
   """Generator function for classification head architecture."""
   head_params = params.classification_head
   return heads.ClassificationHead(
-      head_params.num_classes,
+      params.architecture.num_classes,
       head_params.endpoints_num_filters,
       head_params.aggregation,
       head_params.dropout_rate,
@@ -243,7 +243,7 @@ def segmentation_head_generator(params):
   """Generator function for segmentation head architecture."""
   head_params = params.segmentation_head
   return heads.SegmentationHead(
-      head_params.num_classes,
+      params.architecture.num_classes,
       head_params.level,
       head_params.num_convs,
       head_params.upsample_factor,

@@ -24,4 +24,3 @@ spinenet:
   init_drop_connect_rate: 0.2
 classification_head:
   aggregation: 'all'
-  num_classes: 1001
