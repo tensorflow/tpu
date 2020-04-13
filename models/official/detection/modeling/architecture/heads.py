@@ -1010,9 +1010,9 @@ class SegmentationHead(object):
   def __init__(self,
                num_classes,
                level,
-               num_convs,
-               upsample_factor,
-               num_downsample_channels,
+               num_convs=2,
+               upsample_factor=1,
+               upsample_num_filters=256,
                use_batch_norm=True,
                batch_norm_activation=nn_ops.BatchNormActivation()):
     """Initialize params to build segmentation head.
@@ -1023,8 +1023,10 @@ class SegmentationHead(object):
       level: `int` feature level used for prediction.
       num_convs: `int` number of stacked convolution before the last prediction
         layer.
-      upsample_factor: `int` number of fine mask upsampling factor.
-      num_downsample_channels: `int` number of filters at mask head.
+      upsample_factor: `int` number to specify the upsampling factor to generate
+        finer mask. Default 1 means no upsampling is applied.
+      upsample_num_filters: `int` number to specify the number of filters used
+        in deconv for the upsampling operation. Default is 256.
       use_batch_norm: 'bool', indicating whether batchnorm layers are added.
       batch_norm_activation: an operation that includes a batch normalization
         layer followed by an optional activation layer.
@@ -1032,20 +1034,17 @@ class SegmentationHead(object):
     self._num_classes = num_classes
     self._level = level
     self._num_convs = num_convs
+    self._upsample_factor = upsample_factor
+    self._upsample_num_filters = upsample_num_filters
     self._use_batch_norm = use_batch_norm
     self._batch_norm_activation = batch_norm_activation
-    self.upsample_factor = upsample_factor
-    self._num_downsample_channels = num_downsample_channels
 
-  def __call__(self,
-               features,
-               is_training):
-    """Generate logits for semantic segmentation.
+  def __call__(self, features, is_training):
+    """Generates logits for semantic segmentation.
 
     Args:
-      features: a float Tensor of shape [batch_size, num_instances,
-        mask_crop_size, mask_crop_size, num_downsample_channels]. This is the
-        instance feature crop.
+      features: a dict of Tensors representing the multiscale feature maps with
+        keys being level and values being the feature maps.
       is_training: a bool indicating whether in training mode.
 
     Returns:
@@ -1064,18 +1063,26 @@ class SegmentationHead(object):
             kernel_initializer=tf.random_normal_initializer(stddev=0.01),
             activation=(None if self._use_batch_norm else tf.nn.relu),
             padding='same',
-            name='class-%d' % i)
+            name='conv-%d' % i)
         if self._use_batch_norm:
           features = self._batch_norm_activation(
-              features,
-              is_training=is_training,
-              name='class-%d-bn' % i)
+              features, is_training=is_training, name='conv-%d-bn' % i)
 
-      if self.upsample_factor > 1:
+      if self._upsample_factor > 1:
         features = tf.layers.conv2d_transpose(
-            features, self._num_downsample_channels,
-            (self.upsample_factor, self.upsample_factor),
-            (self.upsample_factor, self.upsample_factor))
+            features,
+            self._upsample_num_filters,
+            kernel_size=(self._upsample_factor, self._upsample_factor),
+            strides=(self._upsample_factor, self._upsample_factor),
+            padding='valid',
+            activation=(None if self._use_batch_norm else tf.nn.relu),
+            kernel_initializer=tf.keras.initializers.VarianceScaling(
+                scale=2, mode='fan_out', distribution='untruncated_normal'),
+            bias_initializer=tf.zeros_initializer(),
+            name='deconv-upsample')
+        if self._use_batch_norm:
+          features = self._batch_norm_activation(
+              features, is_training=is_training, name='conv-upsample-bn')
 
       logits = tf.layers.conv2d(
           features,
