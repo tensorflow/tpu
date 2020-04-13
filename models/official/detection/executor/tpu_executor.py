@@ -56,12 +56,17 @@ class TpuExecutor(object):
       construct a new `TPUClusterResolver` during construction.
   """
 
-  def __init__(self, model_fn, params, tpu_cluster_resolver=None):
+  def __init__(self,
+               model_fn,
+               params,
+               tpu_cluster_resolver=None,
+               keep_checkpoint_max=5):
     self._model_dir = params.model_dir
     self._params = params
     self._tpu_job_name = params.tpu_job_name
     self._evaluator = None
     self._tpu_cluster_resolver = tpu_cluster_resolver
+    self._keep_checkpoint_max = keep_checkpoint_max
 
     input_partition_dims = None
     num_cores_per_replica = None
@@ -112,6 +117,7 @@ class TpuExecutor(object):
         model_dir=params.model_dir,
         log_step_count_steps=params.train.iterations_per_loop,
         tpu_config=tpu_config,
+        keep_checkpoint_max=self._keep_checkpoint_max,
     )
     self._estimator = tf.estimator.tpu.TPUEstimator(
         model_fn=model_fn,
