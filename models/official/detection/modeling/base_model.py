@@ -33,10 +33,10 @@ from modeling import learning_rates
 from utils import benchmark_utils
 
 
-def _build_assigment_map(checkpoint_path,
+def build_assignment_map(checkpoint_path,
                          prefix=None,
                          skip_variables_regex=None):
-  """Generate assigment map for loading checkpoints."""
+  """Generate assignment map for loading checkpoints."""
   all_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=prefix)
   checkpoint_variable_map = {
       name: shape for name, shape in tf.train.list_variables(checkpoint_path)
@@ -378,7 +378,7 @@ class BaseModel(six.with_metaclass(abc.ABCMeta, object)):
     """Returns scaffold function to restore parameters from checkpoint."""
     def scaffold_fn():
       """Loads pretrained model through scaffold function."""
-      assignment_map = _build_assigment_map(
+      assignment_map = build_assignment_map(
           checkpoint_path=self._checkpoint,
           prefix=self._checkpoint_prefix,
           skip_variables_regex=self._skip_variables_regex)
