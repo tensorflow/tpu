@@ -197,7 +197,6 @@ class TpuExecutor(object):
             groundtruths=(None if self._params.eval.use_json_file
                           else groundtruths))
       metrics = self._evaluator.evaluate()
-      logging.info('Eval result: %s', metrics)
 
       # Summary writer writes out eval metrics.
       output_dir = os.path.join(self._model_dir, 'eval')
@@ -206,6 +205,8 @@ class TpuExecutor(object):
       write_summary(metrics, summary_writer, current_step)
       write_summary(losses, summary_writer, current_step)
       summary_writer.close()
+
+    logging.info('Eval result: %s', metrics)
     return metrics
 
   def predict(self, input_fn):
