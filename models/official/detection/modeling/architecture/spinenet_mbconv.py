@@ -74,6 +74,16 @@ SCALING_MAP = {
         'filter_size_scale': 1.0,
         'block_repeats': 1,
     },
+    '49S': {
+        'endpoints_num_filters': 40,
+        'filter_size_scale': 0.65,
+        'block_repeats': 1,
+    },
+    '49XS': {
+        'endpoints_num_filters': 24,
+        'filter_size_scale': 0.6,
+        'block_repeats': 1,
+    },
 }
 
 
@@ -265,8 +275,7 @@ class SpineNetMBConv(object):
     # Build the first conv layer.
     inputs = nn_ops.conv2d_fixed_padding(
         inputs=inputs,
-        filters=nn_ops.round_filters(FILTER_SIZE_MAP[0],
-                                     self._filter_size_scale),
+        filters=int(FILTER_SIZE_MAP[0] * self._filter_size_scale),
         kernel_size=3,
         strides=2,
         data_format=self._data_format)
@@ -276,10 +285,8 @@ class SpineNetMBConv(object):
     # Build the initial L1 block and L2 block.
     base0 = block_group(
         inputs=inputs,
-        in_filters=nn_ops.round_filters(FILTER_SIZE_MAP[0],
-                                        self._filter_size_scale),
-        out_filters=nn_ops.round_filters(FILTER_SIZE_MAP[1],
-                                         self._filter_size_scale),
+        in_filters=int(FILTER_SIZE_MAP[0] * self._filter_size_scale),
+        out_filters=int(FILTER_SIZE_MAP[1] * self._filter_size_scale),
         expand_ratio=DEFAULT_EXPAND_RATIO,
         block_repeats=self._block_repeats,
         strides=1,
@@ -291,10 +298,8 @@ class SpineNetMBConv(object):
         is_training=is_training)
     base1 = block_group(
         inputs=base0,
-        in_filters=nn_ops.round_filters(FILTER_SIZE_MAP[1],
-                                        self._filter_size_scale),
-        out_filters=nn_ops.round_filters(FILTER_SIZE_MAP[2],
-                                         self._filter_size_scale),
+        in_filters=int(FILTER_SIZE_MAP[1] * self._filter_size_scale),
+        out_filters=int(FILTER_SIZE_MAP[2] * self._filter_size_scale),
         expand_ratio=DEFAULT_EXPAND_RATIO,
         block_repeats=self._block_repeats,
         strides=2,
@@ -331,8 +336,8 @@ class SpineNetMBConv(object):
       with tf.variable_scope('sub_policy{}'.format(i)):
         # Find feature map size, filter size, and block fn for the target block.
         target_width = int(math.ceil(input_width / 2 ** block_spec.level))
-        target_num_filters = nn_ops.round_filters(
-            FILTER_SIZE_MAP[block_spec.level], self._filter_size_scale)
+        target_num_filters = int(FILTER_SIZE_MAP[block_spec.level] *
+                                 self._filter_size_scale)
 
         def _input_ind(input_offset):
           if input_offset < len(feats):
