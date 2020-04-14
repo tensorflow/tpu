@@ -138,6 +138,7 @@ def retinanet_head_generator(params):
       head_params.retinanet_head_num_convs,
       head_params.retinanet_head_num_filters,
       head_params.use_separable_conv,
+      params.batch_norm_activation.activation,
       head_params.use_batch_norm,
       batch_norm_activation=batch_norm_activation_generator(
           params.batch_norm_activation))
@@ -153,6 +154,7 @@ def rpn_head_generator(params):
       head_params.num_convs,
       head_params.num_filters,
       head_params.use_separable_conv,
+      params.batch_norm_activation.activation,
       head_params.use_batch_norm,
       batch_norm_activation=batch_norm_activation_generator(
           params.batch_norm_activation))
@@ -168,6 +170,7 @@ def fast_rcnn_head_generator(params):
       head_params.use_separable_conv,
       head_params.num_fcs,
       head_params.fc_dims,
+      params.batch_norm_activation.activation,
       head_params.use_batch_norm,
       batch_norm_activation=batch_norm_activation_generator(
           params.batch_norm_activation))
@@ -182,6 +185,7 @@ def mask_rcnn_head_generator(params):
       head_params.num_convs,
       head_params.num_filters,
       head_params.use_separable_conv,
+      params.batch_norm_activation.activation,
       head_params.use_batch_norm,
       batch_norm_activation=batch_norm_activation_generator(
           params.batch_norm_activation))
@@ -248,6 +252,7 @@ def segmentation_head_generator(params):
       head_params.num_convs,
       head_params.upsample_factor,
       head_params.upsample_num_filters,
+      params.batch_norm_activation.activation,
       head_params.use_batch_norm,
       batch_norm_activation=batch_norm_activation_generator(
           params.batch_norm_activation))
