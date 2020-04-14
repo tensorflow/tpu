@@ -129,6 +129,12 @@ def serving_model_graph_builder(output_image_info,
           'detection_masks':
               tf.identity(model_outputs['detection_masks'], 'DetectionMasks'),
       })
+      if 'detection_outer_boxes' in model_outputs:
+        predictions.update({
+            'detection_outer_boxes':
+                tf.identity(model_outputs['detection_outer_boxes'],
+                            'DetectionOuterBoxes'),
+        })
 
     if output_image_info:
       predictions['image_info'] = tf.identity(
