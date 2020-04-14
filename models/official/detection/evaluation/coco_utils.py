@@ -218,7 +218,7 @@ def convert_groundtruths_to_coco_dataset(groundtruths, label_map=None):
   batch_size = groundtruths['source_id'][0].shape[0]
   for i in range(num_batches):
     for j in range(batch_size):
-      num_instances = groundtruths['num_detections'][i][j]
+      num_instances = int(groundtruths['num_detections'][i][j])
       for k in range(num_instances):
         ann = {}
         ann['image_id'] = int(groundtruths['source_id'][i][j])

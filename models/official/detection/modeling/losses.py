@@ -352,10 +352,10 @@ class MaskrcnnLoss(object):
 class RetinanetClassLoss(object):
   """RetinaNet class loss."""
 
-  def __init__(self, params):
-    self._num_classes = params.num_classes
+  def __init__(self, params, num_classes):
     self._focal_loss_alpha = params.focal_loss_alpha
     self._focal_loss_gamma = params.focal_loss_gamma
+    self._num_classes = num_classes
 
   def __call__(self, cls_outputs, labels, num_positives):
     """Computes total detection loss.

@@ -65,9 +65,6 @@ SHAPEMASK_CFG.override({
     'retinanet_head': {
         'min_level': 3,
         'max_level': 7,
-        # Note that `num_classes` is the total number of classes including
-        # one background classes whose index is 0.
-        'num_classes': 91,
         'anchors_per_location': 9,
         'retinanet_head_num_convs': 4,
         'retinanet_head_num_filters': 256,
@@ -75,7 +72,6 @@ SHAPEMASK_CFG.override({
         'use_batch_norm': True,
     },
     'shapemask_head': {
-        'num_classes': 91,
         'num_downsample_channels': 128,
         'mask_crop_size': 32,
         'use_category_for_mask': True,
@@ -84,7 +80,6 @@ SHAPEMASK_CFG.override({
         'shape_prior_path': '',
     },
     'retinanet_loss': {
-        'num_classes': 91,
         'focal_loss_alpha': 0.4,
         'focal_loss_gamma': 1.5,
         'huber_loss_delta': 0.15,
@@ -106,7 +101,6 @@ SHAPEMASK_RESTRICTIONS = [
     'anchor.max_level == retinanet_head.max_level',
     'anchor.min_level == postprocess.min_level',
     'anchor.max_level == postprocess.max_level',
-    'retinanet_head.num_classes == retinanet_loss.num_classes',
     'shapemask_head.mask_crop_size == shapemask_parser.mask_crop_size',
     'shapemask_head.upsample_factor == shapemask_parser.upsample_factor',
     'shapemask_parser.outer_box_scale ==  architecture.outer_box_scale',

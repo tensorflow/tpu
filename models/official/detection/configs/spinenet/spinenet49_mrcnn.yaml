@@ -15,14 +15,13 @@ train:
 anchor:
   min_level: 3
   max_level: 7
+  anchor_size: 3.0
 batch_norm_activation:
   batch_norm_epsilon: 0.001
   batch_norm_momentum: 0.99
   use_sync_bn: true
 spinenet:
   model_id: '49'
-anchor:
-  anchor_size: 3.0
 maskrcnn_parser:
   output_size: [640, 640]
   aug_scale_min: 0.5

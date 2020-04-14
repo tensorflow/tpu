@@ -30,6 +30,11 @@ RESNET_FROZEN_VAR_PREFIX = r'(resnet\d+)\/(conv2d(|_([1-9]|10))|batch_normalizat
 
 DETECTION_CFG = params_dict.ParamsDict(base_config.BASE_CFG)
 DETECTION_CFG.override({
+    'architecture': {
+        # Note that `num_classes` is the total number of classes including
+        # one background classes whose index is 0.
+        'num_classes': 91
+    },
     'eval': {
         'type': 'box',
         'eval_samples': 5000,

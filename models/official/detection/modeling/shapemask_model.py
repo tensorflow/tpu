@@ -48,7 +48,8 @@ class ShapeMaskModel(base_model.BaseModel):
     self._outer_box_scale = params.architecture.outer_box_scale
 
     # Loss function.
-    self._cls_loss_fn = losses.RetinanetClassLoss(params.retinanet_loss)
+    self._cls_loss_fn = losses.RetinanetClassLoss(
+        params.retinanet_loss, params.architecture.num_classes)
     self._box_loss_fn = losses.RetinanetBoxLoss(params.retinanet_loss)
     self._box_loss_weight = params.retinanet_loss.box_loss_weight
     # Mask loss function.

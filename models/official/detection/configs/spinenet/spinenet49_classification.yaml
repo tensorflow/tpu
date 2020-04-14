@@ -1,5 +1,6 @@
-# SpineNet-49 ImageNet classification with stochastic depth, swish and label smoothing.
-# 78.1 Top-1, 94.0 Top-5 accuracy.
+# SpineNet-49 ImageNet classification:
+# - 77.0 Top-1, 93.3 Top-5 accuracy with init_drop_connect_rate null, activation 'relu', label_smoothing 0.0
+# - 78.1 Top-1, 94.0 Top-5 accuracy with init_drop_connect_rate 0.2, activation 'swish', label_smoothing 0.1
 architecture:
   backbone: 'spinenet'
   multilevel_features: 'identity'
@@ -24,4 +25,3 @@ spinenet:
   init_drop_connect_rate: 0.2
 classification_head:
   aggregation: 'all'
-  num_classes: 1001

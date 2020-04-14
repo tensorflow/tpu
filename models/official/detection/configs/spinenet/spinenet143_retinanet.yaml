@@ -1,4 +1,6 @@
-# SpineNet-143 + RetinaNet with stochastic depth and swish. 50.6% mAP
+# SpineNet-143 + RetinaNet:
+# - 48.0% mAP with init_drop_connect_rate null, activation 'relu', total_steps 162050, learning_rate_steps [148160, 157420], aug_scale_min 0.5, aug_scale_max 2.0
+# - 50.6% mAP with init_drop_connect_rate: 0.16, activation: 'swish', total_steps 231500, learning_rate_steps [217610, 226870], aug_scale_min 0.1, aug_scale_max 1.9
 architecture:
   backbone: 'spinenet'
   multilevel_features: 'identity'
@@ -17,8 +19,8 @@ batch_norm_activation:
   activation: 'swish'
 spinenet:
   model_id: '143'
-  init_drop_connect_rate: 0.2
+  init_drop_connect_rate: 0.16
 retinanet_parser:
   output_size: [1280, 1280]
-  aug_scale_min: 0.5
-  aug_scale_max: 2.0
+  aug_scale_min: 0.1
+  aug_scale_max: 1.9

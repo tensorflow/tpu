@@ -68,7 +68,6 @@ CLASSIFICATION_CFG.override({
         'init_drop_connect_rate': None,
     },
     'classification_head': {
-        'num_classes': 1001,
         'endpoints_num_filters': 0,
         'aggregation': 'top',  # `top` or `all`.
         'dropout_rate': 0.0,
@@ -76,6 +75,5 @@ CLASSIFICATION_CFG.override({
 }, is_strict=False)
 
 CLASSIFICATION_RESTRICTIONS = [
-    'architecture.num_classes == classification_head.num_classes',
 ]
 # pylint: enable=line-too-long

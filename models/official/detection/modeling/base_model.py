@@ -21,6 +21,7 @@ from __future__ import print_function
 
 import abc
 import functools
+import os
 import re
 import six
 from six.moves import zip
@@ -32,10 +33,10 @@ from modeling import learning_rates
 from utils import benchmark_utils
 
 
-def _build_assigment_map(checkpoint_path,
+def build_assignment_map(checkpoint_path,
                          prefix=None,
                          skip_variables_regex=None):
-  """Generate assigment map for loading checkpoints."""
+  """Generate assignment map for loading checkpoints."""
   all_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=prefix)
   checkpoint_variable_map = {
       name: shape for name, shape in tf.train.list_variables(checkpoint_path)
@@ -200,10 +201,6 @@ class BaseModel(six.with_metaclass(abc.ABCMeta, object)):
     else:
       outputs = self._build_outputs(images, labels, mode)
 
-    # Log model statistics.
-    batch_size = images.get_shape().as_list()[0]
-    _, _ = benchmark_utils.compute_model_statistics(batch_size)
-
     return outputs
 
   @abc.abstractmethod
@@ -265,6 +262,11 @@ class BaseModel(six.with_metaclass(abc.ABCMeta, object)):
       images = tf.transpose(images, [3, 0, 1, 2])
 
     outputs = self.build_outputs(images, labels, mode=mode_keys.TRAIN)
+    # Log model statistics.
+    batch_size = images.get_shape().as_list()[0]
+    _, _ = benchmark_utils.compute_model_statistics(
+        batch_size=batch_size,
+        json_file_path=os.path.join(self._model_dir, 'train_model_stats.json'))
 
     model_loss = self.build_losses(outputs, labels)
 
@@ -330,6 +332,11 @@ class BaseModel(six.with_metaclass(abc.ABCMeta, object)):
       a TPUEstimatorSpec object used for evaluation.
     """
     outputs = self.build_outputs(images, labels, mode=mode_keys.EVAL)
+    # Log model statistics.
+    batch_size = images.get_shape().as_list()[0]
+    _, _ = benchmark_utils.compute_model_statistics(
+        batch_size=batch_size,
+        json_file_path=os.path.join(self._model_dir, 'eval_model_stats.json'))
 
     model_loss = self.build_losses(outputs, labels)
 
@@ -354,6 +361,12 @@ class BaseModel(six.with_metaclass(abc.ABCMeta, object)):
     labels = features['labels']
 
     outputs = self.build_outputs(images, labels, mode=mode_keys.PREDICT)
+    # Log model statistics.
+    batch_size = images.get_shape().as_list()[0]
+    _, _ = benchmark_utils.compute_model_statistics(
+        batch_size=batch_size,
+        json_file_path=os.path.join(self._model_dir,
+                                    'predict_model_stats.json'))
 
     predictions = self.build_predictions(outputs, labels)
 
@@ -365,7 +378,7 @@ class BaseModel(six.with_metaclass(abc.ABCMeta, object)):
     """Returns scaffold function to restore parameters from checkpoint."""
     def scaffold_fn():
       """Loads pretrained model through scaffold function."""
-      assignment_map = _build_assigment_map(
+      assignment_map = build_assignment_map(
           checkpoint_path=self._checkpoint,
           prefix=self._checkpoint_prefix,
           skip_variables_regex=self._skip_variables_regex)

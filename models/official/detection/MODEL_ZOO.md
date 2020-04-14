@@ -8,13 +8,12 @@ Model zoo provides a large collection of baselines and checkpoints for object de
 * We provide models based on two detection frameworks, [RetinaNet](https://arxiv.org/abs/1708.02002) or [Mask R-CNN](https://arxiv.org/abs/1703.06870), and three backbones, [ResNet-FPN](https://arxiv.org/abs/1612.03144), [ResNet-NAS-FPN](https://arxiv.org/abs/1904.07392), or [SpineNet](https://arxiv.org/abs/1912.05027).
 * Models are all trained on COCO train2017 and evaluated on COCO val2017.
 * Training details:
-  * Models finetuned from ImageNet pretrained checkpoints adopt the 36 epochs (~1x) schedule, where 1x is around 12 COCO epochs.
+  * Models finetuned from ImageNet pretrained checkpoints adopt the 36 epochs (~3x) schedule, where 1x is around 12 COCO epochs.
   * Most models trained from scratch adopt the 72 or 350 epochs schedule.
   * The default training data augmentation implements horizontal flipping and scale jittering with a random scale between [0.5, 2.0].
   * Unless noted, all models are trained with l2 weight regularization and ReLU activation.
   * We use batch size 256 and stepwise learning rate that decays at the last 30 and 10 epoch.
-  * We use square image as input by resizing the long side of an image to.
-the target size then padding the short side with zeros.
+  * We use square image as input by resizing the long side of an image to the target size then padding the short side with zeros.
 
 ### COCO Object Detection Baselines
 #### RetinaNet (ImageNet pretrained)
@@ -54,9 +53,9 @@ Coming soon.
 #### Mask R-CNN (Trained from scratch)
 | model        | resolution    | epochs  | FLOPs      | params  |  box AP |  mask AP  |   download |
 | ------------ |:-------------:| ---------:|-----------:|--------:|--------:|-----------:|-----------:|
-| SpineNet-49  | 640x640       |    350    | 168.1B | 40.8M | 42.8 | 37.8 | [ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/maskrcnn/spinenet-49.tar.gz?organizationId=433637338589) \| [config](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/spinenet/spinenet49_mrcnn.yaml) |
-| SpineNet-96  | 1024x1024     |    350    | 267.5B | 55.2M | 46.8 | 41.2 | [ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/maskrcnn/spinenet-96.tar.gz?organizationId=433637338589) \| [config](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/spinenet/spinenet96_mrcnn.yaml) |
-| SpineNet-143 | 1280x1280     |    350    | 452.3B | 79.2M | 48.7 | 42.6 | [ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/maskrcnn/spinenet-143.tar.gz?organizationId=433637338589) \| [config](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/spinenet/spinenet143_mrcnn.yaml) |
+| SpineNet-49  | 640x640       |    350    | 215.7B | 40.8M | 42.8 | 37.8 | [ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/maskrcnn/spinenet-49.tar.gz?organizationId=433637338589) \| [config](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/spinenet/spinenet49_mrcnn.yaml) |
+| SpineNet-96  | 1024x1024     |    350    | 314.6B | 55.2M | 46.8 | 41.2 | [ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/maskrcnn/spinenet-96.tar.gz?organizationId=433637338589) \| [config](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/spinenet/spinenet96_mrcnn.yaml) |
+| SpineNet-143 | 1280x1280     |    350    | 498.4B | 79.2M | 48.7 | 42.6 | [ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/maskrcnn/spinenet-143.tar.gz?organizationId=433637338589) \| [config](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/spinenet/spinenet143_mrcnn.yaml) |
 
 
 ## Image Classification
