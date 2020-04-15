@@ -116,7 +116,7 @@ python ~/tpu/models/official/detection/main.py \
 
 ### Customize configurations
 
-The framework supports three levels of parameter overrides to accomendate different use cases.
+The framework supports three levels of parameter overrides to accommodate different use cases.
 
 1. `<xxx>_config.py` under [`./configs`](https://github.com/tensorflow/tpu/tree/master/models/official/detection/configs) directory.
 

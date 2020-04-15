@@ -551,12 +551,17 @@ def pyramid_feature_fusion(pyramid_feats, target_level):
     if l == target_level:
       resampled_feats.append(pyramid_feats[l])
     else:
-      target_size = pyramid_feats[l].shape.as_list()[1:3]
+      feat = pyramid_feats[l]
+      target_size = feat.shape.as_list()[1:3]
       target_size[0] *= 2**(l - target_level)
       target_size[1] *= 2**(l - target_level)
-      resampled_feat = tf.image.resize_bilinear(
-          pyramid_feats[l], size=target_size, align_corners=False)
-      resampled_feats.append(resampled_feat)
+      # Casts feat to float32 so the resize_bilinear op can be run on TPU.
+      feat = tf.cast(feat, tf.float32)
+      feat = tf.image.resize_bilinear(
+          feat, size=target_size, align_corners=False)
+      # Casts it back to be compatible with the rest opetations.
+      feat = tf.cast(feat, pyramid_feats[l].dtype)
+      resampled_feats.append(feat)
 
   return tf.math.add_n(resampled_feats)
 

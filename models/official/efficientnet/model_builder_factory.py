@@ -50,11 +50,14 @@ def get_model_input_size(model_name):
   elif model_name.startswith('efficientnet-condconv-'):
     _, _, image_size, _, _ = (
         efficientnet_condconv_builder.efficientnet_condconv_params(model_name))
+  elif model_name.startswith('efficientnet-tpu'):
+    _, _, image_size, _ = efficientnet_tpu_builder.efficientnet_tpu_params(
+        model_name)
   elif model_name.startswith('efficientnet'):
     _, _, image_size, _ = efficientnet_builder.efficientnet_params(model_name)
   else:
     raise ValueError(
-        'Model must be either efficientnet-b* or efficientnet-edgetpu* or '
+        'Model must be either efficientnet-b* or efficientnet-tpu-b* or efficientnet-edgetpu* or '
         'efficientnet-condconv*, efficientnet-lite*')
   return image_size
 
