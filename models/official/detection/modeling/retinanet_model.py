@@ -36,7 +36,7 @@ class RetinanetModel(base_model.BaseModel):
   def __init__(self, params):
     super(RetinanetModel, self).__init__(params)
 
-    self._anchor_params = params.anchor
+    self._params = params
 
     # Architecture generators.
     self._backbone_fn = factory.backbone_generator(params)
@@ -51,6 +51,8 @@ class RetinanetModel(base_model.BaseModel):
 
     # Predict function.
     self._generate_detections_fn = postprocess_ops.MultilevelDetectionGenerator(
+        params.architecture.min_level,
+        params.architecture.max_level,
         params.postprocess)
 
   def _build_outputs(self, images, labels, mode):
@@ -58,11 +60,11 @@ class RetinanetModel(base_model.BaseModel):
       anchor_boxes = labels['anchor_boxes']
     else:
       anchor_boxes = anchor.Anchor(
-          self._anchor_params.min_level,
-          self._anchor_params.max_level,
-          self._anchor_params.num_scales,
-          self._anchor_params.aspect_ratios,
-          self._anchor_params.anchor_size,
+          self._params.achitecture.min_level,
+          self._params.achitecture.max_level,
+          self._params.anchor.num_scales,
+          self._params.anchor.aspect_ratios,
+          self._params.anchor.anchor_size,
           images.get_shape().as_list()[1:3]).multilevel_boxes
 
       batch_size = tf.shape(images)[0]

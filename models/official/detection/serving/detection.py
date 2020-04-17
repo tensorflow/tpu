@@ -82,7 +82,7 @@ def serving_model_graph_builder(output_image_info,
     batch_size, height, width, _ = images.get_shape().as_list()
 
     input_anchor = anchor.Anchor(
-        params.anchor.min_level, params.anchor.max_level,
+        params.architecture.min_level, params.architecture.max_level,
         params.anchor.num_scales, params.anchor.aspect_ratios,
         params.anchor.anchor_size, (height, width))
 

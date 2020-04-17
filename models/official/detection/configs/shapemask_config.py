@@ -63,11 +63,9 @@ SHAPEMASK_CFG.override({
         'upsample_factor': 4,
     },
     'retinanet_head': {
-        'min_level': 3,
-        'max_level': 7,
         'anchors_per_location': 9,
-        'retinanet_head_num_convs': 4,
-        'retinanet_head_num_filters': 256,
+        'num_convs': 4,
+        'num_filters': 256,
         'use_separable_conv': False,
         'use_batch_norm': True,
     },
@@ -90,17 +88,9 @@ SHAPEMASK_CFG.override({
         'coarse_mask_loss_weight': 1.0,
         'fine_mask_loss_weight': 1.0,
     },
-    'postprocess': {
-        'min_level': 3,
-        'max_level': 7,
-    },
 }, is_strict=False)
 
 SHAPEMASK_RESTRICTIONS = [
-    'anchor.min_level == retinanet_head.min_level',
-    'anchor.max_level == retinanet_head.max_level',
-    'anchor.min_level == postprocess.min_level',
-    'anchor.max_level == postprocess.max_level',
     'shapemask_head.mask_crop_size == shapemask_parser.mask_crop_size',
     'shapemask_head.upsample_factor == shapemask_parser.upsample_factor',
     'shapemask_parser.outer_box_scale ==  architecture.outer_box_scale',

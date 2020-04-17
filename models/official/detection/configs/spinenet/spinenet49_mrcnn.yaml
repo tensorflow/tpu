@@ -1,6 +1,8 @@
 # SpineNet-49 + Mask R-CNN with l2 weight regularization. 42.8 mAP.
 architecture:
   backbone: 'spinenet'
+  min_level: 3
+  max_level: 7
   multilevel_features: 'identity'
   parser: 'maskrcnn_parser'
 train:
@@ -13,8 +15,6 @@ train:
     learning_rate_steps: [150080, 159460]
   l2_weight_decay: 0.00004
 anchor:
-  min_level: 3
-  max_level: 7
   anchor_size: 3.0
 batch_norm_activation:
   batch_norm_epsilon: 0.001
