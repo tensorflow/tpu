@@ -15,7 +15,7 @@ batch_norm_activation:
   use_sync_bn: true
   activation: 'swish'
 retinanet_head:
-  retinanet_head_num_filters: 48
+  num_filters: 48
   use_separable_conv: true
 spinenet_mbconv:
   model_id: '49'

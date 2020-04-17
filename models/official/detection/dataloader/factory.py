@@ -38,8 +38,8 @@ def parser_generator(params, mode):
     parser_params = params.retinanet_parser
     parser_fn = retinanet_parser.Parser(
         output_size=parser_params.output_size,
-        min_level=anchor_params.min_level,
-        max_level=anchor_params.max_level,
+        min_level=params.architecture.min_level,
+        max_level=params.architecture.max_level,
         num_scales=anchor_params.num_scales,
         aspect_ratios=anchor_params.aspect_ratios,
         anchor_size=anchor_params.anchor_size,
@@ -60,8 +60,8 @@ def parser_generator(params, mode):
     parser_params = params.maskrcnn_parser
     parser_fn = maskrcnn_parser.Parser(
         output_size=parser_params.output_size,
-        min_level=anchor_params.min_level,
-        max_level=anchor_params.max_level,
+        min_level=params.architecture.min_level,
+        max_level=params.architecture.max_level,
         num_scales=anchor_params.num_scales,
         aspect_ratios=anchor_params.aspect_ratios,
         anchor_size=anchor_params.anchor_size,
@@ -83,8 +83,8 @@ def parser_generator(params, mode):
     parser_params = params.shapemask_parser
     parser_fn = shapemask_parser.Parser(
         output_size=parser_params.output_size,
-        min_level=anchor_params.min_level,
-        max_level=anchor_params.max_level,
+        min_level=params.architecture.min_level,
+        max_level=params.architecture.max_level,
         num_scales=anchor_params.num_scales,
         aspect_ratios=anchor_params.aspect_ratios,
         anchor_size=anchor_params.anchor_size,

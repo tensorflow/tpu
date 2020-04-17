@@ -21,6 +21,8 @@ BASE_CFG = {
     'use_tpu': True,
     'isolate_session_state': False,
     'architecture': {
+        'min_level': 3,
+        'max_level': 7,
         'use_bfloat16': True,
     },
     'train': {
@@ -74,26 +76,22 @@ BASE_CFG = {
         'use_sync_bn': False,
         'activation': 'relu',
     },
+    'dropblock': {
+        'dropblock_keep_prob': None,
+        'dropblock_size': None,
+    },
     'resnet': {
         'resnet_depth': 50,
         'init_drop_connect_rate': None,
-        'dropblock': {
-            'dropblock_keep_prob': None,
-            'dropblock_size': None,
-        },
     },
     'spinenet': {
         'model_id': '49',
-        'min_level': 3,
-        'max_level': 7,
         'block_specs': None,
         'init_drop_connect_rate': None,
         'use_native_resize_op': False,
     },
     'spinenet_mbconv': {
         'model_id': '49',
-        'min_level': 3,
-        'max_level': 7,
         'block_specs': None,
         'se_ratio': 0.2,
         'init_drop_connect_rate': None,

@@ -38,7 +38,7 @@ class MaskrcnnModel(base_model.BaseModel):
   def __init__(self, params):
     super(MaskrcnnModel, self).__init__(params)
 
-    self._anchor_params = params.anchor
+    self._params = params
 
     self._include_mask = params.architecture.include_mask
 
@@ -48,7 +48,9 @@ class MaskrcnnModel(base_model.BaseModel):
     self._rpn_head_fn = factory.rpn_head_generator(params)
     self._generate_rois_fn = roi_ops.ROIGenerator(params.roi_proposal)
     self._sample_rois_fn = sampling_ops.ROISampler(params.roi_sampling)
-    self._sample_masks_fn = sampling_ops.MaskSampler(params.mask_sampling)
+    self._sample_masks_fn = sampling_ops.MaskSampler(
+        params.architecture.mask_target_size,
+        params.mask_sampling.num_mask_samples_per_image)
 
     self._frcnn_head_fn = factory.fast_rcnn_head_generator(params)
     if self._include_mask:
@@ -73,11 +75,11 @@ class MaskrcnnModel(base_model.BaseModel):
       anchor_boxes = labels['anchor_boxes']
     else:
       anchor_boxes = anchor.Anchor(
-          self._anchor_params.min_level,
-          self._anchor_params.max_level,
-          self._anchor_params.num_scales,
-          self._anchor_params.aspect_ratios,
-          self._anchor_params.anchor_size,
+          self._params.achitecture.min_level,
+          self._params.achitecture.max_level,
+          self._params.anchor.num_scales,
+          self._params.anchor.aspect_ratios,
+          self._params.anchor.anchor_size,
           images.get_shape().as_list()[1:3]).multilevel_boxes
 
       batch_size = tf.shape(images)[0]

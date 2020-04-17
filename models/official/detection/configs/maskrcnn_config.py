@@ -30,8 +30,11 @@ MASKRCNN_CFG.override({
     'architecture': {
         'parser': 'maskrcnn_parser',
         'backbone': 'resnet',
+        'min_level': 2,
+        'max_level': 6,
         'multilevel_features': 'fpn',
         'include_mask': True,
+        'mask_target_size': 28,
     },
     'maskrcnn_parser': {
         'output_size': [1024, 1024],
@@ -47,22 +50,10 @@ MASKRCNN_CFG.override({
         'mask_crop_size': 112,
     },
     'anchor': {
-        'min_level': 2,
-        'max_level': 6,
         'num_scales': 1,
         'anchor_size': 8,
     },
-    'fpn': {
-        'min_level': 2,
-        'max_level': 6,
-    },
-    'nasfpn': {
-        'min_level': 2,
-        'max_level': 6,
-    },
     'rpn_head': {
-        'min_level': 2,
-        'max_level': 6,
         'anchors_per_location': 3,
         'num_convs': 2,
         'num_filters': 256,
@@ -78,7 +69,6 @@ MASKRCNN_CFG.override({
         'use_batch_norm': False,
     },
     'mrcnn_head': {
-        'mask_target_size': 28,
         'num_convs': 4,
         'num_filters': 256,
         'use_separable_conv': False,
@@ -116,7 +106,6 @@ MASKRCNN_CFG.override({
     },
     'mask_sampling': {
         'num_mask_samples_per_image': 128,  # Typically = `num_samples_per_image` * `fg_fraction`.
-        'mask_target_size': 28,
     },
     'postprocess': {
         'use_batched_nms': False,
@@ -129,8 +118,5 @@ MASKRCNN_CFG.override({
 
 
 MASKRCNN_RESTRICTIONS = [
-    'anchor.min_level == rpn_head.min_level',
-    'anchor.max_level == rpn_head.max_level',
-    'mrcnn_head.mask_target_size == mask_sampling.mask_target_size',
 ]
 # pylint: enable=line-too-long

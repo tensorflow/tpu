@@ -50,7 +50,7 @@ def backbone_generator(params):
     resnet_params = params.resnet
     backbone_fn = resnet.Resnet(
         resnet_depth=resnet_params.resnet_depth,
-        dropblock=dropblock_generator(resnet_params.dropblock),
+        dropblock=dropblock_generator(params.dropblock),
         activation=params.batch_norm_activation.activation,
         batch_norm_activation=batch_norm_activation_generator(
             params.batch_norm_activation),
@@ -62,8 +62,8 @@ def backbone_generator(params):
       block_specs_list = json.loads(spinenet_params.block_specs)
     backbone_fn = spinenet.spinenet_builder(
         model_id=spinenet_params.model_id,
-        min_level=spinenet_params.min_level,
-        max_level=spinenet_params.max_level,
+        min_level=params.architecture.min_level,
+        max_level=params.architecture.max_level,
         block_specs=spinenet.build_block_specs(block_specs_list),
         use_native_resize_op=spinenet_params.use_native_resize_op,
         activation=params.batch_norm_activation.activation,
@@ -77,8 +77,8 @@ def backbone_generator(params):
       block_specs_list = json.loads(spinenet_mbconv_params.block_specs)
     backbone_fn = spinenet_mbconv.spinenet_mbconv_builder(
         model_id=spinenet_mbconv_params.model_id,
-        min_level=spinenet_mbconv_params.min_level,
-        max_level=spinenet_mbconv_params.max_level,
+        min_level=params.architecture.min_level,
+        max_level=params.architecture.max_level,
         block_specs=spinenet_mbconv.build_block_specs(block_specs_list),
         use_native_resize_op=spinenet_mbconv_params.use_native_resize_op,
         se_ratio=spinenet_mbconv_params.se_ratio,
@@ -98,8 +98,8 @@ def multilevel_features_generator(params):
   if params.architecture.multilevel_features == 'fpn':
     fpn_params = params.fpn
     fpn_fn = fpn.Fpn(
-        min_level=fpn_params.min_level,
-        max_level=fpn_params.max_level,
+        min_level=params.architecture.min_level,
+        max_level=params.architecture.max_level,
         fpn_feat_dims=fpn_params.fpn_feat_dims,
         use_separable_conv=fpn_params.use_separable_conv,
         use_batch_norm=fpn_params.use_batch_norm,
@@ -108,12 +108,12 @@ def multilevel_features_generator(params):
   elif params.architecture.multilevel_features == 'nasfpn':
     nasfpn_params = params.nasfpn
     fpn_fn = nasfpn.Nasfpn(
-        min_level=nasfpn_params.min_level,
-        max_level=nasfpn_params.max_level,
+        min_level=params.architecture.min_level,
+        max_level=params.architecture.max_level,
         fpn_feat_dims=nasfpn_params.fpn_feat_dims,
         num_repeats=nasfpn_params.num_repeats,
         use_separable_conv=nasfpn_params.use_separable_conv,
-        dropblock=dropblock_generator(nasfpn_params.dropblock),
+        dropblock=dropblock_generator(params.dropblock),
         block_fn=nasfpn_params.block_fn,
         activation=params.batch_norm_activation.activation,
         batch_norm_activation=batch_norm_activation_generator(
@@ -131,12 +131,12 @@ def retinanet_head_generator(params):
   """Generator function for RetinaNet head architecture."""
   head_params = params.retinanet_head
   return heads.RetinanetHead(
-      head_params.min_level,
-      head_params.max_level,
+      params.architecture.min_level,
+      params.architecture.max_level,
       params.architecture.num_classes,
       head_params.anchors_per_location,
-      head_params.retinanet_head_num_convs,
-      head_params.retinanet_head_num_filters,
+      head_params.num_convs,
+      head_params.num_filters,
       head_params.use_separable_conv,
       params.batch_norm_activation.activation,
       head_params.use_batch_norm,
@@ -148,8 +148,8 @@ def rpn_head_generator(params):
   """Generator function for RPN head architecture."""
   head_params = params.rpn_head
   return heads.RpnHead(
-      head_params.min_level,
-      head_params.max_level,
+      params.architecture.min_level,
+      params.architecture.max_level,
       head_params.anchors_per_location,
       head_params.num_convs,
       head_params.num_filters,
@@ -181,7 +181,7 @@ def mask_rcnn_head_generator(params):
   head_params = params.mrcnn_head
   return heads.MaskrcnnHead(
       params.architecture.num_classes,
-      head_params.mask_target_size,
+      params.architecture.mask_target_size,
       head_params.num_convs,
       head_params.num_filters,
       head_params.use_separable_conv,

@@ -21,7 +21,7 @@ spinenet:
   model_id: '49S'
   init_drop_connect_rate: 0.2
 retinanet_head:
-  retinanet_head_num_filters: 128
+  num_filters: 128
 anchor:
   anchor_size: 3.0
 retinanet_parser:
