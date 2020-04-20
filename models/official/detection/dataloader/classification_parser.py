@@ -88,29 +88,29 @@ class Parser(object):
 
   def _parse_train_data(self, data):
     """Parses data for training."""
-    image = tf.io.decode_image(data['image/encoded'], channels=3)
-    image.set_shape([None, None, 3])
-
     label = tf.cast(data['image/class/label'], dtype=tf.int32)
-
-    # Normalizes image with mean and std pixel values.
-    image = input_utils.normalize_image(image)
-
-    # Flips image randomly during training.
-    if self._aug_rand_hflip:
-      image = input_utils.random_horizontal_flip(image)
+    image_bytes = data['image/encoded']
+    image_shape = tf.image.extract_jpeg_shape(image_bytes)
 
     # Crops image.
-    cropped_image = input_utils.random_crop_image(image)
+    cropped_image = input_utils.random_crop_image_v2(
+        image_bytes, image_shape)
     cropped_image = tf.cond(
-        tf.reduce_all(tf.equal(tf.shape(cropped_image), tf.shape(image))),
-        lambda: input_utils.center_crop_image(image),
+        tf.reduce_all(tf.equal(tf.shape(cropped_image), image_shape)),
+        lambda: input_utils.center_crop_image_v2(image_bytes, image_shape),
         lambda: cropped_image)
+
+    # Normalizes image with mean and std pixel values.
+    image = input_utils.normalize_image(cropped_image)
 
     # Resizes image.
     image = tf.image.resize_images(
-        cropped_image, self._output_size, method=tf.image.ResizeMethod.BILINEAR)
-    image.set_shape([self._output_size[0], self._output_size[1], 3])
+        image, self._output_size, method=tf.image.ResizeMethod.BILINEAR)
+
+    if self._aug_rand_hflip:
+      image = tf.image.random_flip_left_right(image)
+
+    image = tf.reshape(image, [self._output_size[0], self._output_size[1], 3])
 
     # If bfloat16 is used, casts input image to tf.bfloat16.
     if self._use_bfloat16:
