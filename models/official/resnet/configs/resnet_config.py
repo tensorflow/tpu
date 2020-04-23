@@ -42,6 +42,7 @@ RESNET_CFG = {
     'dropblock_groups': '',
     'dropblock_keep_prob': None,
     'dropblock_size': 7,
+    'pre_activation': False,
     'data_format': 'channels_last',
 }
 

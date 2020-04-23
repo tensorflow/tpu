@@ -12,17 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Contains definitions for the post-activation form of Residual Networks.
+"""Contains definitions for post- and pre-activation forms of Residual Networks.
 
 Residual networks (ResNets) were proposed in:
 [1] Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun
     Deep Residual Learning for Image Recognition. arXiv:1512.03385
+[2] Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun
+    Identity Mappings in Deep Residual Networks. arXiv:1603.05027
 """
 
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import functools
 import tensorflow.compat.v1 as tf
 
 BATCH_NORM_DECAY = 0.9
@@ -210,7 +213,8 @@ def conv2d_fixed_padding(inputs, filters, kernel_size, strides,
 
 def residual_block(inputs, filters, is_training, strides,
                    use_projection=False, data_format='channels_first',
-                   dropblock_keep_prob=None, dropblock_size=None):
+                   dropblock_keep_prob=None, dropblock_size=None,
+                   pre_activation=False):
   """Standard building block for residual networks with BN after convolutions.
 
   Args:
@@ -230,19 +234,23 @@ def residual_block(inputs, filters, is_training, strides,
       blocks
     dropblock_size: unused; needed to give method same signature as other
       blocks
+    pre_activation: whether to use pre-activation ResNet (ResNet-v2).
   Returns:
     The output `Tensor` of the block.
   """
   del dropblock_keep_prob
   del dropblock_size
   shortcut = inputs
+  if pre_activation:
+    inputs = batch_norm_relu(inputs, is_training, data_format=data_format)
   if use_projection:
     # Projection shortcut in first layer to match filters and strides
     shortcut = conv2d_fixed_padding(
         inputs=inputs, filters=filters, kernel_size=1, strides=strides,
         data_format=data_format)
-    shortcut = batch_norm_relu(shortcut, is_training, relu=False,
-                               data_format=data_format)
+    if not pre_activation:
+      shortcut = batch_norm_relu(shortcut, is_training, relu=False,
+                                 data_format=data_format)
 
   inputs = conv2d_fixed_padding(
       inputs=inputs, filters=filters, kernel_size=3, strides=strides,
@@ -252,15 +260,19 @@ def residual_block(inputs, filters, is_training, strides,
   inputs = conv2d_fixed_padding(
       inputs=inputs, filters=filters, kernel_size=3, strides=1,
       data_format=data_format)
-  inputs = batch_norm_relu(inputs, is_training, relu=False, init_zero=True,
-                           data_format=data_format)
+  if pre_activation:
+    return inputs + shortcut
+  else:
+    inputs = batch_norm_relu(inputs, is_training, relu=False, init_zero=True,
+                             data_format=data_format)
 
-  return tf.nn.relu(inputs + shortcut)
+    return tf.nn.relu(inputs + shortcut)
 
 
 def bottleneck_block(inputs, filters, is_training, strides,
                      use_projection=False, data_format='channels_first',
-                     dropblock_keep_prob=None, dropblock_size=None):
+                     dropblock_keep_prob=None, dropblock_size=None,
+                     pre_activation=False):
   """Bottleneck block variant for residual networks with BN after convolutions.
 
   Args:
@@ -280,11 +292,14 @@ def bottleneck_block(inputs, filters, is_training, strides,
         "None" means no DropBlock.
     dropblock_size: `int` size parameter of DropBlock. Will not be used if
         dropblock_keep_prob is "None".
+    pre_activation: whether to use pre-activation ResNet (ResNet-v2).
 
   Returns:
     The output `Tensor` of the block.
   """
   shortcut = inputs
+  if pre_activation:
+    inputs = batch_norm_relu(inputs, is_training, data_format=data_format)
   if use_projection:
     # Projection shortcut only in first block within a group. Bottleneck blocks
     # end with 4 times the number of filters.
@@ -292,8 +307,9 @@ def bottleneck_block(inputs, filters, is_training, strides,
     shortcut = conv2d_fixed_padding(
         inputs=inputs, filters=filters_out, kernel_size=1, strides=strides,
         data_format=data_format)
-    shortcut = batch_norm_relu(shortcut, is_training, relu=False,
-                               data_format=data_format)
+    if not pre_activation:
+      shortcut = batch_norm_relu(shortcut, is_training, relu=False,
+                                 data_format=data_format)
   shortcut = dropblock(
       shortcut, is_training=is_training, data_format=data_format,
       keep_prob=dropblock_keep_prob, dropblock_size=dropblock_size)
@@ -317,18 +333,22 @@ def bottleneck_block(inputs, filters, is_training, strides,
   inputs = conv2d_fixed_padding(
       inputs=inputs, filters=4 * filters, kernel_size=1, strides=1,
       data_format=data_format)
-  inputs = batch_norm_relu(inputs, is_training, relu=False, init_zero=True,
-                           data_format=data_format)
-  inputs = dropblock(
-      inputs, is_training=is_training, data_format=data_format,
-      keep_prob=dropblock_keep_prob, dropblock_size=dropblock_size)
 
-  return tf.nn.relu(inputs + shortcut)
+  if pre_activation:
+    return inputs + shortcut
+  else:
+    inputs = batch_norm_relu(inputs, is_training, relu=False, init_zero=True,
+                             data_format=data_format)
+    inputs = dropblock(
+        inputs, is_training=is_training, data_format=data_format,
+        keep_prob=dropblock_keep_prob, dropblock_size=dropblock_size)
+
+    return tf.nn.relu(inputs + shortcut)
 
 
 def block_group(inputs, filters, block_fn, blocks, strides, is_training, name,
                 data_format='channels_first', dropblock_keep_prob=None,
-                dropblock_size=None):
+                dropblock_size=None, pre_activation=False):
   """Creates one group of blocks for the ResNet model.
 
   Args:
@@ -346,6 +366,7 @@ def block_group(inputs, filters, block_fn, blocks, strides, is_training, name,
         "None" means no DropBlock.
     dropblock_size: `int` size parameter of DropBlock. Will not be used if
         dropblock_keep_prob is "None".
+    pre_activation: whether to use pre-activation ResNet (ResNet-v2).
 
   Returns:
     The output `Tensor` of the block layer.
@@ -354,21 +375,23 @@ def block_group(inputs, filters, block_fn, blocks, strides, is_training, name,
   inputs = block_fn(inputs, filters, is_training, strides,
                     use_projection=True, data_format=data_format,
                     dropblock_keep_prob=dropblock_keep_prob,
-                    dropblock_size=dropblock_size)
+                    dropblock_size=dropblock_size,
+                    pre_activation=pre_activation)
 
   for _ in range(1, blocks):
     inputs = block_fn(inputs, filters, is_training, 1,
                       data_format=data_format,
                       dropblock_keep_prob=dropblock_keep_prob,
-                      dropblock_size=dropblock_size)
+                      dropblock_size=dropblock_size,
+                      pre_activation=pre_activation)
 
   return tf.identity(inputs, name)
 
 
-def resnet_v1_generator(block_fn, layers, num_classes,
-                        data_format='channels_first', dropblock_keep_probs=None,
-                        dropblock_size=None):
-  """Generator for ResNet v1 models.
+def resnet_generator(block_fn, layers, num_classes,
+                     data_format='channels_first', dropblock_keep_probs=None,
+                     dropblock_size=None, pre_activation=False):
+  """Generator for ResNet models.
 
   Args:
     block_fn: `function` for the block to use within the model. Either
@@ -383,6 +406,7 @@ def resnet_v1_generator(block_fn, layers, num_classes,
       for each block group. None indicates no DropBlock for the corresponding
       block group.
     dropblock_size: `int`: size parameter of DropBlock.
+    pre_activation: whether to use pre-activation ResNet (ResNet-v2).
 
   Returns:
     Model `function` that takes in `inputs` and `is_training` and returns the
@@ -403,7 +427,8 @@ def resnet_v1_generator(block_fn, layers, num_classes,
         inputs=inputs, filters=64, kernel_size=7, strides=2,
         data_format=data_format)
     inputs = tf.identity(inputs, 'initial_conv')
-    inputs = batch_norm_relu(inputs, is_training, data_format=data_format)
+    if not pre_activation:
+      inputs = batch_norm_relu(inputs, is_training, data_format=data_format)
 
     inputs = tf.layers.max_pooling2d(
         inputs=inputs, pool_size=3, strides=2, padding='SAME',
@@ -414,22 +439,25 @@ def resnet_v1_generator(block_fn, layers, num_classes,
         inputs=inputs, filters=64, block_fn=block_fn, blocks=layers[0],
         strides=1, is_training=is_training, name='block_group1',
         data_format=data_format, dropblock_keep_prob=dropblock_keep_probs[0],
-        dropblock_size=dropblock_size)
+        dropblock_size=dropblock_size, pre_activation=pre_activation)
     inputs = block_group(
         inputs=inputs, filters=128, block_fn=block_fn, blocks=layers[1],
         strides=2, is_training=is_training, name='block_group2',
         data_format=data_format, dropblock_keep_prob=dropblock_keep_probs[1],
-        dropblock_size=dropblock_size)
+        dropblock_size=dropblock_size, pre_activation=pre_activation)
     inputs = block_group(
         inputs=inputs, filters=256, block_fn=block_fn, blocks=layers[2],
         strides=2, is_training=is_training, name='block_group3',
         data_format=data_format, dropblock_keep_prob=dropblock_keep_probs[2],
-        dropblock_size=dropblock_size)
+        dropblock_size=dropblock_size, pre_activation=pre_activation)
     inputs = block_group(
         inputs=inputs, filters=512, block_fn=block_fn, blocks=layers[3],
         strides=2, is_training=is_training, name='block_group4',
         data_format=data_format, dropblock_keep_prob=dropblock_keep_probs[3],
-        dropblock_size=dropblock_size)
+        dropblock_size=dropblock_size, pre_activation=pre_activation)
+
+    if pre_activation:
+      inputs = batch_norm_relu(inputs, is_training, data_format=data_format)
 
     # The activation is 7x7 so this is a global average pool.
     # TODO(huangyp): reduce_mean will be faster.
@@ -451,8 +479,9 @@ def resnet_v1_generator(block_fn, layers, num_classes,
   return model
 
 
-def resnet_v1(resnet_depth, num_classes, data_format='channels_first',
-              dropblock_keep_probs=None, dropblock_size=None):
+def resnet(resnet_depth, num_classes, data_format='channels_first',
+           dropblock_keep_probs=None, dropblock_size=None,
+           pre_activation=False):
   """Returns the ResNet model for a given size and number of output classes."""
   model_params = {
       18: {'block': residual_block, 'layers': [2, 2, 2, 2]},
@@ -467,7 +496,14 @@ def resnet_v1(resnet_depth, num_classes, data_format='channels_first',
     raise ValueError('Not a valid resnet_depth:', resnet_depth)
 
   params = model_params[resnet_depth]
-  return resnet_v1_generator(
+  return resnet_generator(
       params['block'], params['layers'], num_classes,
       dropblock_keep_probs=dropblock_keep_probs, dropblock_size=dropblock_size,
-      data_format=data_format)
+      data_format=data_format, pre_activation=pre_activation)
+
+
+resnet_v1 = functools.partial(resnet, pre_activation=False)
+resnet_v2 = functools.partial(resnet, pre_activation=True)
+resnet_v1_generator = functools.partial(resnet_generator, pre_activation=False)
+resnet_v2_generator = functools.partial(resnet_generator, pre_activation=True)
+

@@ -111,7 +111,7 @@ def export(export_dir,
         detection.serving_input_fn,
         batch_size=batch_size,
         desired_image_size=image_size,
-        stride=(2 ** params.anchor.max_level),
+        stride=(2 ** params.architecture.max_level),
         input_type=input_type,
         input_name=input_name)
   else:

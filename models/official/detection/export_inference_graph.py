@@ -90,7 +90,7 @@ def main(argv):
         input_type=FLAGS.input_type,
         batch_size=FLAGS.batch_size,
         desired_image_size=image_size,
-        stride=(2 ** params.anchor.max_level))
+        stride=(2 ** params.architecture.max_level))
 
     # Build the model.
     print(' - Building the graph...')
