@@ -96,6 +96,10 @@ flags.DEFINE_integer(
     help=('size parameter of DropBlock. Will not be used if dropblock_groups '
           'is empty.'))
 
+flags.DEFINE_boolean(
+    'pre_activation', default=None,
+    help=('Whether to use pre-activation ResNet (ResNet-v2)'))
+
 flags.DEFINE_integer(
     'profile_every_n_steps', default=0,
     help=('Number of steps between collecting profiles if larger than 0'))
@@ -328,11 +332,12 @@ def resnet_model_fn(features, labels, mode, params):
   # This nested function allows us to avoid duplicating the logic which
   # builds the network, for different values of --precision.
   def build_network():
-    network = resnet_model.resnet_v1(
+    network = resnet_model.resnet(
         resnet_depth=params['resnet_depth'],
         num_classes=params['num_label_classes'],
         dropblock_size=params['dropblock_size'],
         dropblock_keep_probs=dropblock_keep_probs,
+        pre_activation=params['pre_activation'],
         data_format=params['data_format'])
     return network(
         inputs=features, is_training=(mode == tf.estimator.ModeKeys.TRAIN))

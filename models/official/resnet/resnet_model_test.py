@@ -25,8 +25,20 @@ from official.resnet import resnet_model
 
 class ResnetModelTest(tf.test.TestCase):
 
-  def test_load_resnet18(self):
+  def test_load_resnet18_v1(self):
     network = resnet_model.resnet_v1(resnet_depth=18,
+                                     num_classes=10,
+                                     data_format='channels_last')
+    input_bhw3 = tf.placeholder(tf.float32, [1, 28, 28, 3])
+    resnet_output = network(inputs=input_bhw3, is_training=True)
+
+    sess = tf.Session()
+    sess.run(tf.global_variables_initializer())
+    _ = sess.run(resnet_output,
+                 feed_dict={input_bhw3: np.random.randn(1, 28, 28, 3)})
+
+  def test_load_resnet18_v2(self):
+    network = resnet_model.resnet_v2(resnet_depth=18,
                                      num_classes=10,
                                      data_format='channels_last')
     input_bhw3 = tf.placeholder(tf.float32, [1, 28, 28, 3])
