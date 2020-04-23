@@ -101,4 +101,4 @@ SpineNet models trained with stochastic depth, swish activation, and label smoot
 | SpineNet-49  | 224x224       |    200    | 3.5B | 23.1M | 63.3 | 85.1 |
 | SpineNet-96  | 224x224       |    200    | 5.7B | 37.6M | 64.7 | 85.9 |
 | SpineNet-143 | 224x224       |    200    | 9.1B | 61.6M | 66.7 | 87.1 |
-| SpineNet-190 | 224x224       |    200    | 9.1B | 61.6M | 67.6 | 87.4 |
+| SpineNet-190 | 224x224       |    200    | 19.1B | 129.2M | 67.6 | 87.4 |
