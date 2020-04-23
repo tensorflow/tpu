@@ -21,6 +21,34 @@ from dataloader import mode_keys as ModeKeys
 from ops import spatial_transform_ops
 
 
+def transform_image_for_tpu(batch_images,
+                            space_to_depth_block_size=1,
+                            transpose_images=True):
+  """Transforms batched images to optimize memory usage on TPU.
+
+  Args:
+    batch_images: Batched images in the shape [batch_size, image_height,
+      image_width, num_channel].
+    space_to_depth_block_size: As integer for space-to-depth block size. The
+      input image's height and width must be divisible by block_size. The block
+      size also needs to match the stride length of the first conv layer. See
+      go/auto-space-to-depth and tf.nn.space_to_depth.
+    transpose_images: Whether or not transpose image dimensions.
+
+  Returns:
+    transformed batched images.
+  """
+  if space_to_depth_block_size > 1:
+    return spatial_transform_ops.fused_transpose_and_space_to_depth(
+        batch_images, space_to_depth_block_size, transpose_images)
+  elif transpose_images:
+    # Transpose the input images from [N,H,W,C] to [H,W,C,N] since reshape on
+    # TPU is expensive.
+    return tf.transpose(batch_images, [1, 2, 3, 0])
+  else:
+    return batch_images
+
+
 class InputFn(object):
   """Input function for tf.Estimator."""
 
@@ -63,23 +91,12 @@ class InputFn(object):
             drop_remainder=True))
     dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
 
-    if self._space_to_depth_block_size > 1:
-      # Transforms (space-to-depth) images for TPU performance.
-      def _fused_transform(images, labels):
-        return spatial_transform_ops.fused_transpose_and_space_to_depth(
-            images, self._space_to_depth_block_size, self._transpose_input and
-            self._is_training), labels
+    def _transform_fn(images, labels):
+      transformed_images = transform_image_for_tpu(
+          images, self._space_to_depth_block_size, self._transpose_input)
+      return transformed_images, labels
 
-      dataset = dataset.map(_fused_transform, num_parallel_calls=64)
-
-    else:
-      # Transpose the input images from [N,H,W,C] to [H,W,C,N] since reshape on
-      # TPU is expensive.
-      if self._transpose_input and self._is_training:
-
-        def _transpose_images(images, labels):
-          return tf.transpose(images, [1, 2, 3, 0]), labels
-
-        dataset = dataset.map(_transpose_images, num_parallel_calls=64)
+    if self._is_training:
+      dataset = dataset.map(_transform_fn, num_parallel_calls=64)
 
     return dataset
