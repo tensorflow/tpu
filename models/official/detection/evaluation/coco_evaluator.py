@@ -170,6 +170,46 @@ class COCOEvaluator(object):
     metrics_dict = {}
     for i, name in enumerate(self._metric_names):
       metrics_dict[name] = metrics[i].astype(np.float32)
+
+    # Adds metrics per category.
+    if hasattr(coco_eval, 'category_stats'):
+      for category_index, category_id in enumerate(coco_eval.params.catIds):
+        metrics_dict['Precision mAP ByCategory/{}'.format(
+            category_id)] = coco_eval.category_stats[0][category_index].astype(
+                np.float32)
+        metrics_dict['Precision mAP ByCategory@50IoU/{}'.format(
+            category_id)] = coco_eval.category_stats[1][category_index].astype(
+                np.float32)
+        metrics_dict['Precision mAP ByCategory@75IoU/{}'.format(
+            category_id)] = coco_eval.category_stats[2][category_index].astype(
+                np.float32)
+        metrics_dict['Precision mAP ByCategory (small) /{}'.format(
+            category_id)] = coco_eval.category_stats[3][category_index].astype(
+                np.float32)
+        metrics_dict['Precision mAP ByCategory (medium) /{}'.format(
+            category_id)] = coco_eval.category_stats[4][category_index].astype(
+                np.float32)
+        metrics_dict['Precision mAP ByCategory (large) /{}'.format(
+            category_id)] = coco_eval.category_stats[5][category_index].astype(
+                np.float32)
+        metrics_dict['Recall AR@1 ByCategory/{}'.format(
+            category_id)] = coco_eval.category_stats[6][category_index].astype(
+                np.float32)
+        metrics_dict['Recall AR@10 ByCategory/{}'.format(
+            category_id)] = coco_eval.category_stats[7][category_index].astype(
+                np.float32)
+        metrics_dict['Recall AR@100 ByCategory/{}'.format(
+            category_id)] = coco_eval.category_stats[8][category_index].astype(
+                np.float32)
+        metrics_dict['Recall AR (small) ByCategory/{}'.format(
+            category_id)] = coco_eval.category_stats[9][category_index].astype(
+                np.float32)
+        metrics_dict['Recall AR (medium) ByCategory/{}'.format(
+            category_id)] = coco_eval.category_stats[10][category_index].astype(
+                np.float32)
+        metrics_dict['Recall AR (large) ByCategory/{}'.format(
+            category_id)] = coco_eval.category_stats[11][category_index].astype(
+                np.float32)
     return metrics_dict
 
   def _process_predictions(self, predictions):
