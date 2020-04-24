@@ -24,7 +24,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import enum
 import functools
 
 from absl import logging
@@ -38,8 +37,36 @@ from modeling.architecture import resnet
 from ops import spatial_transform_ops
 
 
-COMBINATION_OPS = enum.Enum('COMBINATION_OPS', ['SUM', 'GLOBAL_ATTENTION'])
-NODE_TYPES = enum.Enum('NODE_TYPES', ['INTERMEDIATE', 'OUTPUT'])
+# The fixed NAS-FPN architecture discovered by NAS.
+# Each element represents a specification of a building block:
+#   (block_level, combine_fn, (input_offset0, input_offset1), is_output).
+NASFPN_BLOCK_SPECS = [
+    (4, 'attention', (1, 3), False),
+    (4, 'sum', (1, 5), False),
+    (3, 'sum', (0, 6), True),
+    (4, 'sum', (6, 7), True),
+    (5, 'attention', (7, 8), True),
+    (7, 'attention', (6, 9), True),
+    (6, 'attention', (9, 10), True),
+]
+
+
+class BlockSpec(object):
+  """A container class that specifies the block configuration for NAS-FPN."""
+
+  def __init__(self, level, combine_fn, input_offsets, is_output):
+    self.level = level
+    self.combine_fn = combine_fn
+    self.input_offsets = input_offsets
+    self.is_output = is_output
+
+
+def build_block_specs(block_specs=None):
+  """Builds the list of BlockSpec objects for NAS-FPN."""
+  if not block_specs:
+    block_specs = NASFPN_BLOCK_SPECS
+  logging.info('Building NAS-FPN block specs: %s', block_specs)
+  return [BlockSpec(*b) for b in block_specs]
 
 
 def block_group(inputs,
@@ -62,6 +89,7 @@ def block_group(inputs,
         filters=filters,
         kernel_size=(3, 3),
         padding='same',
+        data_format=data_format,
         name='conv')
     inputs = batch_norm_activation(
         inputs, is_training=is_training, relu=False, name='bn')
@@ -90,17 +118,25 @@ def block_group(inputs,
       is_training=is_training)
 
 
-def resample_feature_map(feat, level, target_level, is_training,
+def resample_feature_map(feat,
+                         level,
+                         target_level,
+                         is_training,
                          target_feat_dims=256,
                          conv2d_op=tf.layers.conv2d,
                          batch_norm_activation=nn_ops.BatchNormActivation(),
+                         data_format='channels_last',
                          name=None):
   """Resample input feature map to have target number of channels and width."""
   feat_dims = feat.get_shape().as_list()[3]
   with tf.variable_scope('resample_{}'.format(name)):
     if feat_dims != target_feat_dims:
       feat = conv2d_op(
-          feat, filters=target_feat_dims, kernel_size=(1, 1), padding='same')
+          feat,
+          filters=target_feat_dims,
+          kernel_size=(1, 1),
+          padding='same',
+          data_format=data_format)
       feat = batch_norm_activation(
           feat,
           is_training=is_training,
@@ -126,60 +162,32 @@ def global_attention(feat0, feat1):
     return feat0 + feat1 * m
 
 
-class Config(object):
-  """NAS-FPN model config."""
-
-  def __init__(self, model_config, min_level, max_level):
-    self.min_level = min_level
-    self.max_level = max_level
-    self.nodes = self._parse(model_config)
-
-  def _parse(self, config):
-    """Parse model config from list of integer."""
-    if len(config) % 4 != 0:
-      raise ValueError('The length of node configs `{}` needs to be'
-                       'divisible by 4.'.format(len(config)))
-    num_nodes = int(len(config) / 4)
-    num_output_nodes = self.max_level - self.min_level + 1
-    levels = list(range(self.max_level, self.min_level - 1, -1))
-
-    nodes = []
-    for i in range(num_nodes):
-      node_type = (NODE_TYPES.INTERMEDIATE if i < num_nodes - num_output_nodes
-                   else NODE_TYPES.OUTPUT)
-      level = levels[config[4*i]]
-      combine_method = (COMBINATION_OPS.SUM if config[4*i + 1] == 0
-                        else COMBINATION_OPS.GLOBAL_ATTENTION)
-      input_offsets = [config[4*i + 2], config[4*i + 3]]
-      nodes.append({
-          'node_type': node_type,
-          'level': level,
-          'combine_method': combine_method,
-          'input_offsets': input_offsets
-      })
-    return nodes
-
-
 class Nasfpn(object):
   """Feature pyramid networks."""
 
   def __init__(self,
                min_level=3,
                max_level=7,
+               block_specs=build_block_specs(),
                fpn_feat_dims=256,
                num_repeats=7,
                use_separable_conv=False,
                dropblock=nn_ops.Dropblock(),
                block_fn='conv',
                block_repeats=1,
-               activation='swish',
-               batch_norm_activation=nn_ops.BatchNormActivation(),
-               init_drop_connect_rate=None):
+               activation='relu',
+               batch_norm_activation=nn_ops.BatchNormActivation(
+                   activation='relu'),
+               init_drop_connect_rate=None,
+               data_format='channels_last'):
     """NAS-FPN initialization function.
 
     Args:
       min_level: `int` minimum level in NAS-FPN output feature maps.
       max_level: `int` maximum level in NAS-FPN output feature maps.
+      block_specs: a list of BlockSpec objects that specifies the SpineNet
+        network topology. By default, the previously discovered architecture is
+        used.
       fpn_feat_dims: `int` number of filters in FPN layers.
       num_repeats: number of repeats for feature pyramid network.
       use_separable_conv: `bool`, if True use separable convolution for
@@ -195,25 +203,14 @@ class Nasfpn(object):
       init_drop_connect_rate: a 'float' number that specifies the initial drop
         connection rate. Note that the default `None` means no drop connection
         is applied.
+      data_format: An optional string from: "channels_last", "channels_first".
+        Defaults to "channels_last".
     """
-
     self._min_level = min_level
     self._max_level = max_level
-    if min_level == 3 and max_level == 7:
-      model_config = [
-          3, 1, 1, 3,
-          3, 0, 1, 5,
-          4, 0, 0, 6,  # Output to level 3.
-          3, 0, 6, 7,  # Output to level 4.
-          2, 1, 7, 8,  # Output to level 5.
-          0, 1, 6, 9,  # Output to level 7.
-          1, 1, 9, 10]  # Output to level 6.
-    else:
-      raise ValueError('The NAS-FPN with min level {} and max level {} '
-                       'is not supported.'.format(min_level, max_level))
-    self._config = Config(model_config, self._min_level, self._max_level)
-    self._num_repeats = num_repeats
+    self._block_specs = block_specs
     self._fpn_feat_dims = fpn_feat_dims
+    self._num_repeats = num_repeats
     self._block_fn = block_fn
     self._block_repeats = block_repeats
     if use_separable_conv:
@@ -230,11 +227,13 @@ class Nasfpn(object):
       raise ValueError('Activation {} not implemented.'.format(activation))
     self._batch_norm_activation = batch_norm_activation
     self._init_drop_connect_rate = init_drop_connect_rate
+    self._data_format = data_format
     self._resample_feature_map = functools.partial(
         resample_feature_map,
         target_feat_dims=fpn_feat_dims,
         conv2d_op=self._conv2d_op,
-        batch_norm_activation=batch_norm_activation)
+        batch_norm_activation=batch_norm_activation,
+        data_format=self._data_format)
 
   def __call__(self, multilevel_features, is_training=False):
     """Returns the FPN features for a given multilevel features.
@@ -262,6 +261,7 @@ class Nasfpn(object):
         feats.append(self._resample_feature_map(
             feats[-1], level - 1, level, is_training,
             name='p%d' % level))
+
     with tf.variable_scope('fpn_cells'):
       for i in range(self._num_repeats):
         with tf.variable_scope('cell_{}'.format(i)):
@@ -278,19 +278,19 @@ class Nasfpn(object):
     num_output_levels = self._max_level - self._min_level + 1
     feat_levels = list(range(self._min_level, self._max_level + 1))
 
-    for i, sub_policy in enumerate(self._config.nodes):
+    for i, sub_policy in enumerate(self._block_specs):
       with tf.variable_scope('sub_policy{}'.format(i)):
         logging.info('sub_policy %d : %s', i, sub_policy)
-        new_level = sub_policy['level']
+        new_level = sub_policy.level
 
         # Checks the range of input_offsets.
-        for input_offset in sub_policy['input_offsets']:
+        for input_offset in sub_policy.input_offsets:
           if input_offset >= len(feats):
             raise ValueError(
                 'input_offset ({}) is larger than num feats({})'.format(
                     input_offset, len(feats)))
-        input0 = sub_policy['input_offsets'][0]
-        input1 = sub_policy['input_offsets'][1]
+        input0 = sub_policy.input_offsets[0]
+        input1 = sub_policy.input_offsets[1]
 
         # Update graph with inputs.
         node0 = feats[input0]
@@ -307,19 +307,19 @@ class Nasfpn(object):
             name='1_{}_{}'.format(input1, len(feats)))
 
         # Combine node0 and node1 to create new feat.
-        if sub_policy['combine_method'] == COMBINATION_OPS.SUM:
+        if sub_policy.combine_fn == 'sum':
           new_node = node0 + node1
-        elif sub_policy['combine_method'] == COMBINATION_OPS.GLOBAL_ATTENTION:
+        elif sub_policy.combine_fn == 'attention':
           if node0_level >= node1_level:
             new_node = global_attention(node0, node1)
           else:
             new_node = global_attention(node1, node0)
         else:
-          raise ValueError('unknown combine_method {}'.format(
-              sub_policy['combine_method']))
+          raise ValueError('unknown combine_fn `{}`.'
+                           .format(sub_policy.combine_fn))
 
         # Add intermediate nodes that do not have any connections to output.
-        if sub_policy['node_type'] == NODE_TYPES.OUTPUT:
+        if sub_policy.is_output:
           for j, (feat, feat_level, num_output) in enumerate(
               zip(feats, feat_levels, num_output_connections)):
             if num_output == 0 and feat_level == new_level:
@@ -343,6 +343,7 @@ class Nasfpn(object):
               batch_norm_activation=self._batch_norm_activation,
               dropblock=self._dropblock,
               drop_connect_rate=self._init_drop_connect_rate,
+              data_format=self._data_format,
               name='block_{}'.format(i),
               is_training=is_training)
         feats.append(new_node)
