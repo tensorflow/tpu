@@ -25,15 +25,22 @@ def evaluator_generator(params):
   """Generator function for various evaluators."""
   if params.type == 'box':
     evaluator = coco_evaluator.COCOEvaluator(
-        annotation_file=params.val_json_file, include_mask=False)
+        annotation_file=params.val_json_file,
+        include_mask=False,
+        per_category_metrics=params.per_category_metrics)
   elif params.type == 'box_and_mask':
     evaluator = coco_evaluator.COCOEvaluator(
-        annotation_file=params.val_json_file, include_mask=True)
+        annotation_file=params.val_json_file,
+        include_mask=True,
+        per_category_metrics=params.per_category_metrics)
   elif params.type == 'shapemask_box_and_mask':
     evaluator = coco_evaluator.ShapeMaskCOCOEvaluator(
         mask_eval_class=params.mask_eval_class,
-        annotation_file=params.val_json_file, include_mask=True)
+        annotation_file=params.val_json_file,
+        include_mask=True,
+        per_category_metrics=params.per_category_metrics)
   else:
-    raise ValueError('Evaluator %s is not supported.' % params.type)
+    raise ValueError('The detection evaluation type `{}` is not supported.'
+                     .format(params.type))
 
   return evaluator

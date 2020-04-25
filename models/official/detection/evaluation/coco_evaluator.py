@@ -48,7 +48,11 @@ from utils import class_utils
 class COCOEvaluator(object):
   """COCO evaluation metric class."""
 
-  def __init__(self, annotation_file, include_mask, need_rescale_bboxes=True):
+  def __init__(self,
+               annotation_file,
+               include_mask,
+               need_rescale_bboxes=True,
+               per_category_metrics=False):
     """Constructs COCO evaluation class.
 
     The class provides the interface to metrics_fn in TPUEstimator. The
@@ -64,6 +68,7 @@ class COCOEvaluator(object):
         eval.
       need_rescale_bboxes: If true bboxes in `predictions` will be rescaled back
         to absolute values (`image_info` is needed in this case).
+      per_category_metrics: Whether to return per category metrics.
     """
     if annotation_file:
       if annotation_file.startswith('gs://'):
@@ -79,6 +84,7 @@ class COCOEvaluator(object):
           annotation_file=local_val_json)
     self._annotation_file = annotation_file
     self._include_mask = include_mask
+    self._per_category_metrics = per_category_metrics
     self._metric_names = [
         'AP', 'AP50', 'AP75', 'APs', 'APm', 'APl', 'ARmax1', 'ARmax10',
         'ARmax100', 'ARs', 'ARm', 'ARl'
@@ -172,7 +178,7 @@ class COCOEvaluator(object):
       metrics_dict[name] = metrics[i].astype(np.float32)
 
     # Adds metrics per category.
-    if hasattr(coco_eval, 'category_stats'):
+    if self._per_category_metrics and hasattr(coco_eval, 'category_stats'):
       for category_index, category_id in enumerate(coco_eval.params.catIds):
         metrics_dict['Precision mAP ByCategory/{}'.format(
             category_id)] = coco_eval.category_stats[0][category_index].astype(

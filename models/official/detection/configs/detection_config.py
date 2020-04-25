@@ -40,6 +40,7 @@ DETECTION_CFG.override({
         'eval_samples': 5000,
         'use_json_file': True,
         'val_json_file': '',
+        'per_category_metrics': False,
     },
     'anchor': {
         'num_scales': 3,
