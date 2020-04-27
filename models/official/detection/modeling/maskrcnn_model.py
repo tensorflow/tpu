@@ -75,8 +75,8 @@ class MaskrcnnModel(base_model.BaseModel):
       anchor_boxes = labels['anchor_boxes']
     else:
       anchor_boxes = anchor.Anchor(
-          self._params.achitecture.min_level,
-          self._params.achitecture.max_level,
+          self._params.architecture.min_level,
+          self._params.architecture.max_level,
           self._params.anchor.num_scales,
           self._params.anchor.aspect_ratios,
           self._params.anchor.anchor_size,

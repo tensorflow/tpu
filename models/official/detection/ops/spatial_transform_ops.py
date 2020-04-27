@@ -626,7 +626,7 @@ def fused_transpose_and_space_to_depth(images,
                                        transpose_input=True):
   """Fuses space-to-depth and transpose.
 
-  Space-to-depth performas the following permutation, which is equivalent to
+  Space-to-depth performs the following permutation, which is equivalent to
   tf.nn.space_to_depth.
 
   images = tf.reshape(images, [batch, h // block_size, block_size,
@@ -638,7 +638,7 @@ def fused_transpose_and_space_to_depth(images,
   Args:
     images: A tensor with a shape of [batch_size, h, w, c] as the images. The h
       and w can be dynamic sizes.
-    block_size: A integer for space-to-depth block size.
+    block_size: An integer for space-to-depth block size.
     transpose_input: A boolean to indicate if the images tensor should be
       transposed.
 
