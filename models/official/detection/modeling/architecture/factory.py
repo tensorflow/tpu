@@ -57,14 +57,10 @@ def backbone_generator(params):
         init_drop_connect_rate=resnet_params.init_drop_connect_rate)
   elif params.architecture.backbone == 'spinenet':
     spinenet_params = params.spinenet
-    block_specs_list = None
-    if spinenet_params.block_specs:
-      block_specs_list = json.loads(spinenet_params.block_specs)
     backbone_fn = spinenet.spinenet_builder(
         model_id=spinenet_params.model_id,
         min_level=params.architecture.min_level,
         max_level=params.architecture.max_level,
-        block_specs=spinenet.build_block_specs(block_specs_list),
         use_native_resize_op=spinenet_params.use_native_resize_op,
         activation=params.batch_norm_activation.activation,
         batch_norm_activation=batch_norm_activation_generator(
@@ -72,14 +68,10 @@ def backbone_generator(params):
         init_drop_connect_rate=spinenet_params.init_drop_connect_rate)
   elif params.architecture.backbone == 'spinenet_mbconv':
     spinenet_mbconv_params = params.spinenet_mbconv
-    block_specs_list = None
-    if spinenet_mbconv_params.block_specs:
-      block_specs_list = json.loads(spinenet_mbconv_params.block_specs)
     backbone_fn = spinenet_mbconv.spinenet_mbconv_builder(
         model_id=spinenet_mbconv_params.model_id,
         min_level=params.architecture.min_level,
         max_level=params.architecture.max_level,
-        block_specs=spinenet_mbconv.build_block_specs(block_specs_list),
         use_native_resize_op=spinenet_mbconv_params.use_native_resize_op,
         se_ratio=spinenet_mbconv_params.se_ratio,
         activation=params.batch_norm_activation.activation,

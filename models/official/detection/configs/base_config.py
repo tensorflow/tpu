@@ -86,13 +86,11 @@ BASE_CFG = {
     },
     'spinenet': {
         'model_id': '49',
-        'block_specs': None,
         'init_drop_connect_rate': None,
         'use_native_resize_op': False,
     },
     'spinenet_mbconv': {
         'model_id': '49',
-        'block_specs': None,
         'se_ratio': 0.2,
         'init_drop_connect_rate': None,
         'use_native_resize_op': False,
