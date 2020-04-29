@@ -24,13 +24,12 @@ from absl import app as absl_app
 from absl import flags
 import numpy as np
 import tensorflow.compat.v1 as tf
-
+from official.r1.utils.logs import hooks_helper
 from official.recommendation import constants as rconst
 from official.recommendation import movielens
 from official.recommendation import ncf_input_pipeline
 from official.recommendation import neumf_model
 from official.utils.flags import core as flags_core
-from official.utils.logs import hooks_helper
 
 
 FLAGS = flags.FLAGS
