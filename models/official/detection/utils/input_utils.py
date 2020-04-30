@@ -31,7 +31,7 @@ from utils.object_detection import preprocessor
 CENTER_CROP_FRACTION = 0.875
 
 
-def pad_to_fixed_size(input_tensor, size, constant_values=0):
+def clip_or_pad_to_fixed_size(input_tensor, size, constant_values=0):
   """Pads data to a fixed length at the first dimension.
 
   Args:
@@ -45,12 +45,14 @@ def pad_to_fixed_size(input_tensor, size, constant_values=0):
   input_shape = input_tensor.get_shape().as_list()
   padding_shape = []
 
-  # Computes the padding length on the first dimension.
-  padding_length = tf.maximum(0, size - tf.shape(input_tensor)[0])
-  assert_length = tf.Assert(
-      tf.greater_equal(padding_length, 0), [padding_length])
-  with tf.control_dependencies([assert_length]):
-    padding_shape.append(padding_length)
+  # Computes the padding length on the first dimension, clip input tensor if it
+  # is longer than `size`.
+  input_length = tf.shape(input_tensor)[0]
+  input_length = tf.clip_by_value(input_length, 0, size)
+  input_tensor = input_tensor[:input_length]
+
+  padding_length = tf.maximum(0, size - input_length)
+  padding_shape.append(padding_length)
 
   # Copies shapes of the rest of input shape dimensions.
   for i in range(1, len(input_shape)):

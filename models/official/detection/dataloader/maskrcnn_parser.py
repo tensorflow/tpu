@@ -282,12 +282,12 @@ class Parser(object):
         'rpn_score_targets': rpn_score_targets,
         'rpn_box_targets': rpn_box_targets,
     }
-    labels['gt_boxes'] = input_utils.pad_to_fixed_size(
+    labels['gt_boxes'] = input_utils.clip_or_pad_to_fixed_size(
         boxes, self._max_num_instances, -1)
-    labels['gt_classes'] = input_utils.pad_to_fixed_size(
+    labels['gt_classes'] = input_utils.clip_or_pad_to_fixed_size(
         classes, self._max_num_instances, -1)
     if self._include_mask:
-      labels['gt_masks'] = input_utils.pad_to_fixed_size(
+      labels['gt_masks'] = input_utils.clip_or_pad_to_fixed_size(
           masks, self._max_num_instances, -1)
 
     return image, labels
