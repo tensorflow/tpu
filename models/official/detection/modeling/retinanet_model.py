@@ -64,7 +64,7 @@ class RetinanetModel(base_model.Model):
     }
 
     # Print number of parameters and FLOPS in model.
-    batch_size, _, _, _ = backbone_features.values()[0].get_shape().as_list()
+    batch_size, _, _, _ = list(backbone_features.values())[0].get_shape().as_list()
     benchmark_utils.compute_model_statistics(
         batch_size, is_training=(mode == mode_keys.TRAIN))
 

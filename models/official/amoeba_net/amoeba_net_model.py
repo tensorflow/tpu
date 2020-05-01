@@ -208,7 +208,7 @@ def formatted_hparams(hparams):
 
   # Format hparams.
   readable_items = [
-      '%s: %s' % (k, v) for k, v in sorted(hparams.values().iteritems())]
+      '%s: %s' % (k, v) for k, v in sorted(hparams.values().items())]
   readable_items.append('Bad keys: %s' % ','.join(bad_keys))
   readable_string = ('\n'.join(readable_items))
   return readable_string
