@@ -40,7 +40,7 @@ Release initial models.
   - FPN
   - **[NAS-FPN](https://arxiv.org/abs/1904.07392)**
 * Other model features:
-  - **[Auto-Augument](https://arxiv.org/abs/1805.09501)**
+  - **[Auto-Augment](https://arxiv.org/abs/1805.09501)**
 * Training platforms:
   - Single machine GPUs
   - [Cloud TPU](https://cloud.google.com/tpu)
