@@ -140,7 +140,7 @@ class ShapeMaskModel(base_model.BaseModel):
           'detection_boxes': boxes,
           'detection_outer_boxes': outer_boxes,
           'detection_masks': fine_mask_logits,
-          'detection_classes': classes,
+          'detection_classes': tf.cast(classes, dtype=tf.int32),
           'detection_scores': scores,
       })
     return model_outputs
