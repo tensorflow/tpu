@@ -58,8 +58,7 @@ flags.DEFINE_string('input_name', 'input', 'The name of the input node.')
 flags.DEFINE_string(
     'input_image_size', '640,640',
     'The comma-separated string of two integers representing the height,width '
-    'of the input to the model. If `--input_type=raw_image_tensor` and '
-    '`--batch_size=1`, the `input_image_size` can be specified by `None,None`.')
+    'of the input to the model.')
 flags.DEFINE_boolean(
     'output_image_info', True, 'Whether or not output image_info node.')
 flags.DEFINE_boolean(
@@ -160,14 +159,6 @@ def export(export_dir,
 def main(argv):
   del argv  # Unused.
 
-  image_sizes_str = FLAGS.input_image_size.split(',')
-  image_sizes = [int(x) if x != 'None' else None for x in image_sizes_str]
-  if FLAGS.batch_size != 1 or FLAGS.input_type != 'raw_image_tensor':
-    if None in image_sizes:
-      raise ValueError(
-          'The `None` size can only be specified when `--batch_size=1` and '
-          '`--input_type=raw_image_tensor`.')
-
   export(FLAGS.export_dir,
          FLAGS.checkpoint_path,
          FLAGS.model,
@@ -175,7 +166,7 @@ def main(argv):
          FLAGS.params_override,
          FLAGS.use_tpu,
          FLAGS.batch_size,
-         image_sizes,
+         [int(x) for x in FLAGS.input_image_size.split(',')],
          FLAGS.input_type,
          FLAGS.input_name,
          FLAGS.output_image_info,

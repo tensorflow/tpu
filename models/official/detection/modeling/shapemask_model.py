@@ -73,16 +73,15 @@ class ShapeMaskModel(base_model.BaseModel):
     if 'anchor_boxes' in labels:
       anchor_boxes = labels['anchor_boxes']
     else:
-      images_shape = tf.shape(images)
       anchor_boxes = anchor.Anchor(
           self._params.architecture.min_level,
           self._params.architecture.max_level,
           self._params.anchor.num_scales,
           self._params.anchor.aspect_ratios,
           self._params.anchor.anchor_size,
-          images_shape[1:3]).multilevel_boxes
+          images.get_shape().as_list()[1:3]).multilevel_boxes
 
-      batch_size = images_shape[0]
+      batch_size = tf.shape(images)[0]
       for level in anchor_boxes:
         anchor_boxes[level] = tf.tile(
             tf.expand_dims(anchor_boxes[level], 0), [batch_size, 1, 1])

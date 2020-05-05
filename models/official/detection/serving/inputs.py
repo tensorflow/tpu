@@ -61,26 +61,24 @@ def raw_image_tensor_input(batch_size,
                            stride):
   """Raw float32 image tensor input, no resize is preformed."""
   image_height, image_width = image_size
-  if ((image_height and image_height % stride != 0) or
-      (image_width and image_width % stride != 0)):
+  if image_height % stride != 0 or image_width % stride != 0:
     raise ValueError('Image size is not compatible with the stride.')
 
   placeholder = tf.placeholder(
       dtype=tf.float32,
       shape=(batch_size, image_height, image_width, 3))
 
-  image_shape = tf.cast(tf.shape(placeholder)[1:3], dtype=tf.float32)
-
-  image_info_per_image = tf.stack(
-      [image_shape,
-       image_shape,
-       tf.constant([1.0, 1.0], dtype=tf.float32),
-       tf.constant([0.0, 0.0], dtype=tf.float32)])
+  image_info_per_image = [
+      [image_height, image_width],
+      [image_height, image_width],
+      [1.0, 1.0],
+      [0.0, 0.0]]
   if batch_size == 1:
-    images_info = tf.expand_dims(image_info_per_image, axis=0)
+    images_info = tf.constant([image_info_per_image], dtype=tf.float32)
   else:
-    images_info = tf.tile(
-        tf.expand_dims(image_info_per_image, axis=0), [batch_size, 1, 1])
+    images_info = tf.constant(
+        [image_info_per_image for _ in range(batch_size)],
+        dtype=tf.float32)
 
   images = placeholder
   return placeholder, {'images': images, 'image_info': images_info}
