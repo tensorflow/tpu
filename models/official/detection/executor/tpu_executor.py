@@ -26,7 +26,6 @@ from absl import logging
 
 import numpy as np
 import six
-from six.moves import range
 import tensorflow.compat.v1 as tf
 
 from evaluation import coco_utils
@@ -151,12 +150,12 @@ class TpuExecutor(object):
       eval_params.override({'val_json_file': val_json_file})
     self._evaluator = factory.evaluator_generator(eval_params)
 
-  def evaluate(self, input_fn, eval_steps, checkpoint_path=None):
+  def evaluate(self, input_fn, eval_times, checkpoint_path=None):
     """Evaluating the model with data and labels in input_fn.
 
     Args:
       input_fn: Eval `input function` for tf.Estimator.
-      eval_steps: Int -  the number of steps to evaluate.
+      eval_times: Int -  the number of times to evaluate.
       checkpoint_path: String - the checkpoint path to evaluate. If it is None,
         the latest checkpoint will be inferred from `model_dir` of `Estimator`.
 
@@ -167,8 +166,8 @@ class TpuExecutor(object):
       checkpoint_path = self._estimator.latest_checkpoint()
 
     if self._params.eval.type == 'customized':
-      metrics = self._estimator.evaluate(input_fn, steps=eval_steps,
-                                         checkpoint_path=checkpoint_path)
+      metrics = self._estimator.evaluate(
+          input_fn, steps=eval_times, checkpoint_path=checkpoint_path)
     else:
       if not self._evaluator:
         self.prepare_evaluation()
@@ -181,21 +180,32 @@ class TpuExecutor(object):
           checkpoint_path=checkpoint_path,
           yield_single_examples=False)
       losses = collections.defaultdict(lambda: 0.0)
-      for _ in range(eval_steps):
-        outputs = six.next(predictor)
-        predictions = {}
-        groundtruths = {}
-        for key, val in outputs.items():
-          if key[0:5] == 'pred_':
-            predictions[key[5::]] = val
-          if key[0:3] == 'gt_':
-            groundtruths[key[3::]] = val
-          if key[0:5] == 'loss_':
-            losses[key[5::]] += (np.mean(val) / eval_steps)
-        self._evaluator.update(
-            predictions,
-            groundtruths=(None if self._params.eval.use_json_file
-                          else groundtruths))
+
+      counter = 0
+      try:
+        while eval_times is None or counter < eval_times:
+          outputs = six.next(predictor)
+          predictions = {}
+          groundtruths = {}
+          for key, val in outputs.items():
+            if key[0:5] == 'pred_':
+              predictions[key[5::]] = val
+            if key[0:3] == 'gt_':
+              groundtruths[key[3::]] = val
+            if key[0:5] == 'loss_':
+              losses[key[5::]] += np.mean(val)
+          self._evaluator.update(
+              predictions,
+              groundtruths=(None if self._params.eval.use_json_file
+                            else groundtruths))
+          counter = counter + 1
+      except (tf.errors.OutOfRangeError, StopIteration):
+        logging.info(
+            'Evaluation reaches the end after running %d times.', counter)
+
+      for key, val in outputs.items():
+        if key[0:5] == 'loss_':
+          losses[key[5::]] /= counter
       metrics = self._evaluator.evaluate()
 
       # Summary writer writes out eval metrics.

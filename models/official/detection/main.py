@@ -126,14 +126,17 @@ def main(argv):
         params.eval.eval_file_pattern, params, mode=ModeKeys.PREDICT_WITH_GT,
         dataset_type=params.eval.eval_dataset_type)
 
+  if params.eval.eval_samples:
+    eval_times = params.eval.eval_samples // params.eval.eval_batch_size
+  else:
+    eval_times = None
+
   # Runs the model.
   if FLAGS.mode == 'train':
     config_utils.save_config(params, params.model_dir)
     executor.train(train_input_fn, params.train.total_steps)
     if FLAGS.eval_after_training:
-      executor.evaluate(
-          eval_input_fn,
-          params.eval.eval_samples // params.eval.eval_batch_size)
+      executor.evaluate(eval_input_fn, eval_times)
 
   elif FLAGS.mode == 'eval':
     def terminate_eval():
@@ -151,9 +154,7 @@ def main(argv):
 
       logging.info('Starting to evaluate.')
       try:
-        executor.evaluate(
-            eval_input_fn,
-            params.eval.eval_samples // params.eval.eval_batch_size, ckpt)
+        executor.evaluate(eval_input_fn, eval_times, ckpt)
 
         if current_step >= params.train.total_steps:
           logging.info('Evaluation finished after training step %d',
@@ -175,9 +176,7 @@ def main(argv):
       current_cycle_last_train_step = ((cycle + 1)
                                        * params.eval.num_steps_per_eval)
       executor.train(train_input_fn, current_cycle_last_train_step)
-      executor.evaluate(
-          eval_input_fn,
-          params.eval.eval_samples // params.eval.eval_batch_size)
+      executor.evaluate(eval_input_fn, eval_times)
   else:
     logging.info('Mode not found.')
 
