@@ -63,7 +63,7 @@ class InputFn(object):
       raise ValueError('Dataset type %s is not supported.' % dataset_type)
 
     self._transpose_input = params.train.transpose_input
-    self._space_to_depth_block_size = params.train.space_to_depth_block_size
+    self._space_to_depth_block_size = params.architecture.space_to_depth_block_size
 
   def __call__(self, params):
     batch_size = params['batch_size']

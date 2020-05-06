@@ -54,7 +54,8 @@ def backbone_generator(params):
         activation=params.batch_norm_activation.activation,
         batch_norm_activation=batch_norm_activation_generator(
             params.batch_norm_activation),
-        init_drop_connect_rate=resnet_params.init_drop_connect_rate)
+        init_drop_connect_rate=resnet_params.init_drop_connect_rate,
+        space_to_depth_block_size=params.architecture.space_to_depth_block_size)
   elif params.architecture.backbone == 'spinenet':
     spinenet_params = params.spinenet
     backbone_fn = spinenet.spinenet_builder(

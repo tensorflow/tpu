@@ -116,7 +116,8 @@ class Resnet(object):
                activation='relu',
                batch_norm_activation=nn_ops.BatchNormActivation(),
                init_drop_connect_rate=None,
-               data_format='channels_last'):
+               data_format='channels_last',
+               space_to_depth_block_size=1):
     """ResNet initialization function.
 
     Args:
@@ -130,6 +131,9 @@ class Resnet(object):
         is applied.
       data_format: `str` either "channels_first" for `[batch, channels, height,
         width]` or "channels_last for `[batch, height, width, channels]`.
+      space_to_depth_block_size: an integer indicates the block size of
+        space-to-depth convolution for conv0. `0` means use the original conv2d
+        in ResNet
     """
     self._resnet_depth = resnet_depth
 
@@ -144,6 +148,7 @@ class Resnet(object):
     self._init_drop_connect_rate = init_drop_connect_rate
 
     self._data_format = data_format
+    self._space_to_depth_block_size = space_to_depth_block_size
 
     model_params = {
         10: {'block': nn_blocks.residual_block, 'layers': [1, 1, 1, 1]},
@@ -164,8 +169,9 @@ class Resnet(object):
           'The resnet_depth should be in [%s]. Not a valid resnet_depth:'%(
               valid_resnet_depths), self._resnet_depth)
     params = model_params[resnet_depth]
-    self._resnet_fn = self.resnet_v1_generator(
-        params['block'], params['layers'])
+    self._resnet_fn = self.resnet_v1_generator(params['block'],
+                                               params['layers'],
+                                               self._space_to_depth_block_size)
 
   def __call__(self, inputs, is_training=False):
     """Returns the ResNet model for a given size and number of output classes.
@@ -183,7 +189,7 @@ class Resnet(object):
     with tf.variable_scope('resnet%s' % self._resnet_depth):
       return self._resnet_fn(inputs, is_training)
 
-  def resnet_v1_generator(self, block_fn, layers):
+  def resnet_v1_generator(self, block_fn, layers, space_to_depth_block_size=1):
     """Generator for ResNet v1 models.
 
     Args:
@@ -192,6 +198,9 @@ class Resnet(object):
       layers: list of 4 `int`s denoting the number of blocks to include in each
         of the 4 block groups. Each group consists of blocks that take inputs of
         the same resolution.
+      space_to_depth_block_size: an integer indicates the block size of
+        space-to-depth convolution for conv0. `0` means use the original conv2d
+        in ResNet.
 
     Returns:
       Model `function` that takes in `inputs` and `is_training` and returns the
@@ -199,9 +208,22 @@ class Resnet(object):
     """
     def model(inputs, is_training=False):
       """Creation of the model graph."""
-      inputs = nn_ops.conv2d_fixed_padding(
-          inputs=inputs, filters=64, kernel_size=7, strides=2,
-          data_format=self._data_format)
+      if space_to_depth_block_size > 1:
+        # conv0 uses space-to-depth transform for TPU performance.
+        inputs = nn_ops.conv0_space_to_depth(
+            inputs=inputs,
+            filters=64,
+            kernel_size=7,
+            strides=2,
+            data_format=self._data_format,
+            space_to_depth_block_size=space_to_depth_block_size)
+      else:
+        inputs = nn_ops.conv2d_fixed_padding(
+            inputs=inputs,
+            filters=64,
+            kernel_size=7,
+            strides=2,
+            data_format=self._data_format)
       inputs = tf.identity(inputs, 'initial_conv')
       inputs = self._batch_norm_activation(inputs, is_training=is_training)
 

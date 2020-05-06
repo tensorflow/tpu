@@ -24,6 +24,7 @@ BASE_CFG = {
         'min_level': 3,
         'max_level': 7,
         'use_bfloat16': True,
+        'space_to_depth_block_size': 1,
     },
     'train': {
         'iterations_per_loop': 100,
