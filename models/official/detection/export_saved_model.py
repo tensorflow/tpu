@@ -35,6 +35,8 @@ from configs import factory
 from serving import detection
 from serving import segmentation
 from hyperparameters import params_dict
+from tensorflow.python.ops import control_flow_util  # pylint: disable=g-direct-tensorflow-import
+
 
 FLAGS = flags.FLAGS
 
@@ -83,6 +85,8 @@ def export(export_dir,
            output_normalized_coordinates=False,
            cast_num_detections_to_float=False):
   """Exports the SavedModel."""
+  control_flow_util.enable_control_flow_v2()
+
   params = factory.config_generator(model)
   if config_file:
     params = params_dict.override_params_dict(
