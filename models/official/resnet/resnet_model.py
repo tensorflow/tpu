@@ -31,6 +31,30 @@ import tensorflow.compat.v1 as tf
 BATCH_NORM_DECAY = 0.9
 BATCH_NORM_EPSILON = 1e-5
 
+LAYER_BN_RELU = 'bn_relu'
+LAYER_EVONORM_B0 = 'evonorm_b0'
+LAYER_EVONORM_S0 = 'evonorm_s0'
+LAYER_EVONORMS = [
+    LAYER_EVONORM_B0,
+    LAYER_EVONORM_S0,
+]
+
+
+def norm_activation(
+    inputs, is_training, layer=LAYER_BN_RELU, nonlinearity=True,
+    init_zero=False, data_format='channels_first'):
+  """Normalization-activation layer."""
+  if layer == LAYER_BN_RELU:
+    return batch_norm_relu(
+        inputs, is_training, relu=nonlinearity,
+        init_zero=init_zero, data_format=data_format)
+  elif layer in LAYER_EVONORMS:
+    return evonorm(
+        inputs, is_training, layer=layer, nonlinearity=nonlinearity,
+        init_zero=init_zero, data_format=data_format)
+  else:
+    raise ValueError('Unknown normalization-activation layer: {}'.format(layer))
+
 
 def batch_norm_relu(inputs, is_training, relu=True, init_zero=False,
                     data_format='channels_first'):
@@ -72,6 +96,126 @@ def batch_norm_relu(inputs, is_training, relu=True, init_zero=False,
   if relu:
     inputs = tf.nn.relu(inputs)
   return inputs
+
+
+def _instance_std(inputs, data_format='channels_first'):
+  """Instance standard deviation."""
+  axes = [1, 2] if data_format == 'channels_last' else [2, 3]
+  _, variance = tf.nn.moments(inputs, axes=axes, keepdims=True)
+  return tf.sqrt(variance + BATCH_NORM_EPSILON)
+
+
+def _batch_std(inputs,
+               training,
+               data_format='channels_first',
+               name='moving_variance'):
+  """Batch standard deviation."""
+  if data_format == 'channels_last':
+    var_shape, axes = (1, 1, 1, inputs.shape[3]), [0, 1, 2]
+  else:
+    var_shape, axes = (1, inputs.shape[1], 1, 1), [0, 2, 3]
+  moving_variance = tf.get_variable(
+      name=name,
+      shape=var_shape,
+      initializer=tf.initializers.ones(),
+      dtype=tf.float32,
+      collections=[
+          tf.GraphKeys.MOVING_AVERAGE_VARIABLES,
+          tf.GraphKeys.GLOBAL_VARIABLES
+      ],
+      trainable=False)
+  if training:
+    _, variance = tf.nn.moments(inputs, axes, keep_dims=True)
+    variance = tf.cast(variance, tf.float32)
+    update_op = tf.assign_sub(
+        moving_variance,
+        (moving_variance - variance) * (1 - BATCH_NORM_DECAY))
+    tf.add_to_collection(tf.GraphKeys.UPDATE_OPS, update_op)
+  else:
+    variance = moving_variance
+  std = tf.sqrt(variance + BATCH_NORM_EPSILON)
+  return tf.cast(std, inputs.dtype)
+
+
+def _group_std(inputs, data_format='channels_first', num_groups=32):
+  """Grouped standard deviation along the channel dimension."""
+  axis = 3 if data_format == 'channels_last' else 1
+  while num_groups > 1:
+    if inputs.shape[axis] % num_groups == 0:
+      break
+    num_groups -= 1
+  if data_format == 'channels_last':
+    n, h, w, c = inputs.shape
+    x = tf.reshape(inputs, [n, h, w, num_groups, c // num_groups])
+    _, variance = tf.nn.moments(x, [1, 2, 4], keep_dims=True)
+  else:
+    n, c, h, w = inputs.shape
+    x = tf.reshape(inputs, [n, num_groups, c // num_groups, h, w])
+    _, variance = tf.nn.moments(x, [2, 3, 4], keep_dims=True)
+  std = tf.sqrt(variance + BATCH_NORM_EPSILON)
+  std = tf.broadcast_to(std, x.shape)
+  return tf.reshape(std, inputs.shape)
+
+
+def evonorm(inputs, is_training, layer=LAYER_EVONORM_B0, nonlinearity=True,
+            init_zero=False, data_format='channels_first'):
+  """Apply an EvoNorm transformation (an alternative to BN-ReLU).
+
+     Hanxiao Liu, Andrew Brock, Karen Simonyan, Quoc V. Le.
+     Evolving Normalization-Activation Layers.
+     https://arxiv.org/abs/2004.02967
+
+  Args:
+    inputs: `Tensor` whose shape is either `[batch, channels, ...]` with
+        the "channels_first" format or `[batch, height, width, channels]`
+        with the "channels_last" format.
+    is_training: `bool` for whether the model is training.
+    layer: `String` specifies the EvoNorm instantiation.
+    nonlinearity: `bool` if False, apply an affine transform only.
+    init_zero: `bool` if True, initializes scale parameter of batch
+        normalization with 0 instead of 1 (default).
+    data_format: `str` either "channels_first" for `[batch, channels, height,
+        width]` or "channels_last for `[batch, height, width, channels]`.
+
+  Returns:
+    A normalized `Tensor` with the same `data_format`.
+  """
+  if init_zero:
+    gamma_initializer = tf.zeros_initializer()
+  else:
+    gamma_initializer = tf.ones_initializer()
+
+  if data_format == 'channels_last':
+    var_shape = (1, 1, 1, inputs.shape[3])
+  else:
+    var_shape = (1, inputs.shape[1], 1, 1)
+  with tf.variable_scope(None, default_name='evonorm'):
+    beta = tf.get_variable(
+        'beta',
+        shape=var_shape,
+        dtype=inputs.dtype,
+        initializer=tf.zeros_initializer())
+    gamma = tf.get_variable(
+        'gamma',
+        shape=var_shape,
+        dtype=inputs.dtype,
+        initializer=gamma_initializer)
+    if nonlinearity:
+      v = tf.get_variable(
+          'v',
+          shape=var_shape,
+          dtype=inputs.dtype,
+          initializer=tf.ones_initializer())
+      if layer == LAYER_EVONORM_S0:
+        den = _group_std(inputs, data_format=data_format)
+        inputs = inputs * tf.nn.sigmoid(v * inputs) / den
+      elif layer == LAYER_EVONORM_B0:
+        left = _batch_std(inputs, data_format=data_format, training=is_training)
+        right = v * inputs + _instance_std(inputs, data_format=data_format)
+        inputs = inputs / tf.maximum(left, right)
+      else:
+        raise ValueError('Unknown EvoNorm layer: {}'.format(layer))
+  return inputs * gamma + beta
 
 
 def dropblock(net, is_training, keep_prob, dropblock_size,
@@ -214,7 +358,7 @@ def conv2d_fixed_padding(inputs, filters, kernel_size, strides,
 def residual_block(inputs, filters, is_training, strides,
                    use_projection=False, data_format='channels_first',
                    dropblock_keep_prob=None, dropblock_size=None,
-                   pre_activation=False):
+                   pre_activation=False, norm_act_layer=LAYER_BN_RELU):
   """Standard building block for residual networks with BN after convolutions.
 
   Args:
@@ -235,6 +379,8 @@ def residual_block(inputs, filters, is_training, strides,
     dropblock_size: unused; needed to give method same signature as other
       blocks
     pre_activation: whether to use pre-activation ResNet (ResNet-v2).
+    norm_act_layer: name of the normalization-activation layer.
+
   Returns:
     The output `Tensor` of the block.
   """
@@ -242,20 +388,23 @@ def residual_block(inputs, filters, is_training, strides,
   del dropblock_size
   shortcut = inputs
   if pre_activation:
-    inputs = batch_norm_relu(inputs, is_training, data_format=data_format)
+    inputs = norm_activation(inputs, is_training, data_format=data_format,
+                             layer=norm_act_layer)
   if use_projection:
     # Projection shortcut in first layer to match filters and strides
     shortcut = conv2d_fixed_padding(
         inputs=inputs, filters=filters, kernel_size=1, strides=strides,
         data_format=data_format)
     if not pre_activation:
-      shortcut = batch_norm_relu(shortcut, is_training, relu=False,
-                                 data_format=data_format)
+      shortcut = norm_activation(
+          shortcut, is_training, nonlinearity=False, data_format=data_format,
+          layer=norm_act_layer)
 
   inputs = conv2d_fixed_padding(
       inputs=inputs, filters=filters, kernel_size=3, strides=strides,
       data_format=data_format)
-  inputs = batch_norm_relu(inputs, is_training, data_format=data_format)
+  inputs = norm_activation(inputs, is_training, data_format=data_format,
+                           layer=norm_act_layer)
 
   inputs = conv2d_fixed_padding(
       inputs=inputs, filters=filters, kernel_size=3, strides=1,
@@ -263,8 +412,9 @@ def residual_block(inputs, filters, is_training, strides,
   if pre_activation:
     return inputs + shortcut
   else:
-    inputs = batch_norm_relu(inputs, is_training, relu=False, init_zero=True,
-                             data_format=data_format)
+    inputs = norm_activation(
+        inputs, is_training, nonlinearity=False, init_zero=True,
+        data_format=data_format, layer=norm_act_layer)
 
     return tf.nn.relu(inputs + shortcut)
 
@@ -272,7 +422,7 @@ def residual_block(inputs, filters, is_training, strides,
 def bottleneck_block(inputs, filters, is_training, strides,
                      use_projection=False, data_format='channels_first',
                      dropblock_keep_prob=None, dropblock_size=None,
-                     pre_activation=False):
+                     pre_activation=False, norm_act_layer=LAYER_BN_RELU):
   """Bottleneck block variant for residual networks with BN after convolutions.
 
   Args:
@@ -293,13 +443,15 @@ def bottleneck_block(inputs, filters, is_training, strides,
     dropblock_size: `int` size parameter of DropBlock. Will not be used if
         dropblock_keep_prob is "None".
     pre_activation: whether to use pre-activation ResNet (ResNet-v2).
+    norm_act_layer: name of the normalization-activation layer.
 
   Returns:
     The output `Tensor` of the block.
   """
   shortcut = inputs
   if pre_activation:
-    inputs = batch_norm_relu(inputs, is_training, data_format=data_format)
+    inputs = norm_activation(inputs, is_training, data_format=data_format,
+                             layer=norm_act_layer)
   if use_projection:
     # Projection shortcut only in first block within a group. Bottleneck blocks
     # end with 4 times the number of filters.
@@ -308,8 +460,9 @@ def bottleneck_block(inputs, filters, is_training, strides,
         inputs=inputs, filters=filters_out, kernel_size=1, strides=strides,
         data_format=data_format)
     if not pre_activation:
-      shortcut = batch_norm_relu(shortcut, is_training, relu=False,
-                                 data_format=data_format)
+      shortcut = norm_activation(
+          shortcut, is_training, nonlinearity=False,
+          data_format=data_format, layer=norm_act_layer)
   shortcut = dropblock(
       shortcut, is_training=is_training, data_format=data_format,
       keep_prob=dropblock_keep_prob, dropblock_size=dropblock_size)
@@ -317,7 +470,8 @@ def bottleneck_block(inputs, filters, is_training, strides,
   inputs = conv2d_fixed_padding(
       inputs=inputs, filters=filters, kernel_size=1, strides=1,
       data_format=data_format)
-  inputs = batch_norm_relu(inputs, is_training, data_format=data_format)
+  inputs = norm_activation(inputs, is_training, data_format=data_format,
+                           layer=norm_act_layer)
   inputs = dropblock(
       inputs, is_training=is_training, data_format=data_format,
       keep_prob=dropblock_keep_prob, dropblock_size=dropblock_size)
@@ -325,7 +479,8 @@ def bottleneck_block(inputs, filters, is_training, strides,
   inputs = conv2d_fixed_padding(
       inputs=inputs, filters=filters, kernel_size=3, strides=strides,
       data_format=data_format)
-  inputs = batch_norm_relu(inputs, is_training, data_format=data_format)
+  inputs = norm_activation(inputs, is_training, data_format=data_format,
+                           layer=norm_act_layer)
   inputs = dropblock(
       inputs, is_training=is_training, data_format=data_format,
       keep_prob=dropblock_keep_prob, dropblock_size=dropblock_size)
@@ -337,8 +492,9 @@ def bottleneck_block(inputs, filters, is_training, strides,
   if pre_activation:
     return inputs + shortcut
   else:
-    inputs = batch_norm_relu(inputs, is_training, relu=False, init_zero=True,
-                             data_format=data_format)
+    inputs = norm_activation(inputs, is_training, nonlinearity=False,
+                             init_zero=True, data_format=data_format,
+                             layer=norm_act_layer)
     inputs = dropblock(
         inputs, is_training=is_training, data_format=data_format,
         keep_prob=dropblock_keep_prob, dropblock_size=dropblock_size)
@@ -348,7 +504,8 @@ def bottleneck_block(inputs, filters, is_training, strides,
 
 def block_group(inputs, filters, block_fn, blocks, strides, is_training, name,
                 data_format='channels_first', dropblock_keep_prob=None,
-                dropblock_size=None, pre_activation=False):
+                dropblock_size=None, pre_activation=False,
+                norm_act_layer=LAYER_BN_RELU):
   """Creates one group of blocks for the ResNet model.
 
   Args:
@@ -367,6 +524,7 @@ def block_group(inputs, filters, block_fn, blocks, strides, is_training, name,
     dropblock_size: `int` size parameter of DropBlock. Will not be used if
         dropblock_keep_prob is "None".
     pre_activation: whether to use pre-activation ResNet (ResNet-v2).
+    norm_act_layer: name of the normalization-activation layer.
 
   Returns:
     The output `Tensor` of the block layer.
@@ -376,21 +534,24 @@ def block_group(inputs, filters, block_fn, blocks, strides, is_training, name,
                     use_projection=True, data_format=data_format,
                     dropblock_keep_prob=dropblock_keep_prob,
                     dropblock_size=dropblock_size,
-                    pre_activation=pre_activation)
+                    pre_activation=pre_activation,
+                    norm_act_layer=norm_act_layer)
 
   for _ in range(1, blocks):
     inputs = block_fn(inputs, filters, is_training, 1,
                       data_format=data_format,
                       dropblock_keep_prob=dropblock_keep_prob,
                       dropblock_size=dropblock_size,
-                      pre_activation=pre_activation)
+                      pre_activation=pre_activation,
+                      norm_act_layer=norm_act_layer)
 
   return tf.identity(inputs, name)
 
 
 def resnet_generator(block_fn, layers, num_classes,
                      data_format='channels_first', dropblock_keep_probs=None,
-                     dropblock_size=None, pre_activation=False):
+                     dropblock_size=None, pre_activation=False,
+                     norm_act_layer=LAYER_BN_RELU):
   """Generator for ResNet models.
 
   Args:
@@ -407,6 +568,7 @@ def resnet_generator(block_fn, layers, num_classes,
       block group.
     dropblock_size: `int`: size parameter of DropBlock.
     pre_activation: whether to use pre-activation ResNet (ResNet-v2).
+    norm_act_layer: name of the normalization-activation layer.
 
   Returns:
     Model `function` that takes in `inputs` and `is_training` and returns the
@@ -428,40 +590,48 @@ def resnet_generator(block_fn, layers, num_classes,
         data_format=data_format)
     inputs = tf.identity(inputs, 'initial_conv')
     if not pre_activation:
-      inputs = batch_norm_relu(inputs, is_training, data_format=data_format)
+      inputs = norm_activation(inputs, is_training, data_format=data_format,
+                               layer=norm_act_layer)
 
     inputs = tf.layers.max_pooling2d(
         inputs=inputs, pool_size=3, strides=2, padding='SAME',
         data_format=data_format)
     inputs = tf.identity(inputs, 'initial_max_pool')
 
-    inputs = block_group(
+    custom_block_group = functools.partial(
+        block_group,
+        data_format=data_format,
+        dropblock_size=dropblock_size,
+        pre_activation=pre_activation,
+        norm_act_layer=norm_act_layer)
+
+    inputs = custom_block_group(
         inputs=inputs, filters=64, block_fn=block_fn, blocks=layers[0],
         strides=1, is_training=is_training, name='block_group1',
-        data_format=data_format, dropblock_keep_prob=dropblock_keep_probs[0],
-        dropblock_size=dropblock_size, pre_activation=pre_activation)
-    inputs = block_group(
+        dropblock_keep_prob=dropblock_keep_probs[0])
+    inputs = custom_block_group(
         inputs=inputs, filters=128, block_fn=block_fn, blocks=layers[1],
         strides=2, is_training=is_training, name='block_group2',
-        data_format=data_format, dropblock_keep_prob=dropblock_keep_probs[1],
-        dropblock_size=dropblock_size, pre_activation=pre_activation)
-    inputs = block_group(
+        dropblock_keep_prob=dropblock_keep_probs[1])
+    inputs = custom_block_group(
         inputs=inputs, filters=256, block_fn=block_fn, blocks=layers[2],
         strides=2, is_training=is_training, name='block_group3',
-        data_format=data_format, dropblock_keep_prob=dropblock_keep_probs[2],
-        dropblock_size=dropblock_size, pre_activation=pre_activation)
-    inputs = block_group(
+        dropblock_keep_prob=dropblock_keep_probs[2])
+    inputs = custom_block_group(
         inputs=inputs, filters=512, block_fn=block_fn, blocks=layers[3],
         strides=2, is_training=is_training, name='block_group4',
-        data_format=data_format, dropblock_keep_prob=dropblock_keep_probs[3],
-        dropblock_size=dropblock_size, pre_activation=pre_activation)
+        dropblock_keep_prob=dropblock_keep_probs[3])
 
     if pre_activation:
-      inputs = batch_norm_relu(inputs, is_training, data_format=data_format)
+      inputs = norm_activation(inputs, is_training, data_format=data_format,
+                               layer=norm_act_layer)
 
     # The activation is 7x7 so this is a global average pool.
     # TODO(huangyp): reduce_mean will be faster.
-    pool_size = (inputs.shape[1], inputs.shape[2])
+    if data_format == 'channels_last':
+      pool_size = (inputs.shape[1], inputs.shape[2])
+    else:
+      pool_size = (inputs.shape[2], inputs.shape[3])
     inputs = tf.layers.average_pooling2d(
         inputs=inputs, pool_size=pool_size, strides=1, padding='VALID',
         data_format=data_format)
@@ -481,7 +651,7 @@ def resnet_generator(block_fn, layers, num_classes,
 
 def resnet(resnet_depth, num_classes, data_format='channels_first',
            dropblock_keep_probs=None, dropblock_size=None,
-           pre_activation=False):
+           pre_activation=False, norm_act_layer=LAYER_BN_RELU):
   """Returns the ResNet model for a given size and number of output classes."""
   model_params = {
       18: {'block': residual_block, 'layers': [2, 2, 2, 2]},
@@ -495,11 +665,15 @@ def resnet(resnet_depth, num_classes, data_format='channels_first',
   if resnet_depth not in model_params:
     raise ValueError('Not a valid resnet_depth:', resnet_depth)
 
+  if norm_act_layer in LAYER_EVONORMS and not pre_activation:
+    raise ValueError('Evonorms require the pre-activation form.')
+
   params = model_params[resnet_depth]
   return resnet_generator(
       params['block'], params['layers'], num_classes,
       dropblock_keep_probs=dropblock_keep_probs, dropblock_size=dropblock_size,
-      data_format=data_format, pre_activation=pre_activation)
+      data_format=data_format, pre_activation=pre_activation,
+      norm_act_layer=norm_act_layer)
 
 
 resnet_v1 = functools.partial(resnet, pre_activation=False)

@@ -93,5 +93,5 @@ def init_lars_optimizer(current_epoch, params):
       learning_rate,
       momentum=params['momentum'],
       weight_decay=params['weight_decay'],
-      skip_list=['batch_normalization', 'bias'])
+      skip_list=['batch_normalization', 'evonorm', 'bias'])
   return optimizer
