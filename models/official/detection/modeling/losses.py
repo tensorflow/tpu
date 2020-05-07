@@ -80,7 +80,7 @@ def focal_loss(logits, targets, alpha, gamma, normalizer):
     loss = modulator * cross_entropy
     weighted_loss = tf.where(positive_label_mask, alpha * loss,
                              (1.0 - alpha) * loss)
-    weighted_loss /= normalizer
+    weighted_loss /= normalizer + 1e-20
   return weighted_loss
 
 
@@ -453,7 +453,7 @@ class RetinanetBoxLoss(object):
         weights=mask,
         delta=self._huber_loss_delta,
         reduction=tf.losses.Reduction.SUM)
-    box_loss /= normalizer
+    box_loss /= normalizer + 1e-20
     return box_loss
 
 
@@ -480,7 +480,7 @@ class ShapemaskMseLoss(object):
       diff = labels - probs
       diff *= tf.cast(tf.reshape(
           valid_mask, [batch_size, num_instances, 1, 1]), diff.dtype)
-      loss = tf.nn.l2_loss(diff) / tf.reduce_sum(labels)
+      loss = tf.nn.l2_loss(diff) / (tf.reduce_sum(labels) + 1e-20)
     return loss
 
 
@@ -508,7 +508,7 @@ class ShapemaskLoss(object):
           labels=labels, logits=logits)
       loss *= tf.cast(tf.reshape(
           valid_mask, [batch_size, num_instances, 1, 1]), loss.dtype)
-      loss = tf.reduce_sum(loss) / tf.reduce_sum(labels)
+      loss = tf.reduce_sum(loss) / (tf.reduce_sum(labels) + 1e-20)
     return loss
 
 
