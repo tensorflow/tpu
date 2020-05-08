@@ -100,6 +100,14 @@ def build_predictions(features, params, output_image_info,
       },
       mode=mode_keys.PREDICT)
 
+  # Return flattened raw outputs.
+  if not params.postprocess.apply_nms:
+    predictions = {
+        'raw_boxes': tf.identity(model_outputs['raw_boxes'], 'RawBoxes'),
+        'raw_scores': tf.identity(model_outputs['raw_scores'], 'RawScores'),
+    }
+    return predictions, model_outputs
+
   if cast_num_detections_to_float:
     model_outputs['num_detections'] = tf.cast(
         model_outputs['num_detections'], dtype=tf.float32)

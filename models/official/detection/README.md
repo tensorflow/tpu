@@ -16,7 +16,8 @@ It also features latest research including
 
 
 ## Updates
-
+* **May 3, 2020: Update inference latency on V100/P100 GPUs for RetinaNet models in
+[MODEL_ZOO.md](https://github.com/tensorflow/tpu/blob/master/models/official/detection/MODEL_ZOO.md).**
 * April 10, 2020: Launch the new
 [README.md](https://github.com/tensorflow/tpu/blob/master/models/official/detection/README.md),
 [GETTING_STARTED.md](https://github.com/tensorflow/tpu/blob/master/models/official/detection/GETTING_STARTED.md), and
