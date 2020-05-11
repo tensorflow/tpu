@@ -16,6 +16,6 @@ resnet:
   resnet_depth: 50
 
 retinanet_parser:
-  use_autoaugment: true
+  aug_policy: 'v0'
   aug_scale_min: 0.8
   aug_scale_max: 1.2
