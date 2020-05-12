@@ -60,6 +60,88 @@ def serving_input_fn(batch_size,
       })
 
 
+def build_predictions(features, params, output_image_info,
+                      output_normalized_coordinates,
+                      cast_num_detections_to_float):
+  """Builds the model graph for serving.
+
+  Args:
+    features: features to be passed to the serving model graph
+    params: hyperparameters to be passed to the serving model graph
+    output_image_info: bool, whether output the image_info node.
+    output_normalized_coordinates: bool, whether box outputs are in the
+      normalized coordinates.
+    cast_num_detections_to_float: bool, whether to cast the number of detections
+      to float type.
+
+  Returns:
+    predictions: model outputs for serving.
+    model_outputs: a dict of model output tensors.
+  """
+  images = features['images']
+  batch_size, height, width, _ = images.get_shape().as_list()
+
+  input_anchor = anchor.Anchor(params.architecture.min_level,
+                               params.architecture.max_level,
+                               params.anchor.num_scales,
+                               params.anchor.aspect_ratios,
+                               params.anchor.anchor_size, (height, width))
+
+  multilevel_boxes = {}
+  for k, v in six.iteritems(input_anchor.multilevel_boxes):
+    multilevel_boxes[k] = tf.tile(tf.expand_dims(v, 0), [batch_size, 1, 1])
+
+  model_fn = factory.model_generator(params)
+  model_outputs = model_fn.build_outputs(
+      features['images'],
+      labels={
+          'anchor_boxes': multilevel_boxes,
+          'image_info': features['image_info'],
+      },
+      mode=mode_keys.PREDICT)
+
+  if cast_num_detections_to_float:
+    model_outputs['num_detections'] = tf.cast(
+        model_outputs['num_detections'], dtype=tf.float32)
+
+  if output_image_info:
+    model_outputs.update({
+        'image_info': features['image_info'],
+    })
+
+  if output_normalized_coordinates:
+    model_outputs['detection_boxes'] = box_utils.normalize_boxes(
+        model_outputs['detection_boxes'], features['image_info'][:, 1:2, :])
+
+  predictions = {
+      'num_detections':
+          tf.identity(model_outputs['num_detections'], 'NumDetections'),
+      'detection_boxes':
+          tf.identity(model_outputs['detection_boxes'], 'DetectionBoxes'),
+      'detection_classes':
+          tf.identity(model_outputs['detection_classes'], 'DetectionClasses'),
+      'detection_scores':
+          tf.identity(model_outputs['detection_scores'], 'DetectionScores'),
+  }
+  if 'detection_masks' in model_outputs:
+    predictions.update({
+        'detection_masks':
+            tf.identity(model_outputs['detection_masks'], 'DetectionMasks'),
+    })
+    if 'detection_outer_boxes' in model_outputs:
+      predictions.update({
+          'detection_outer_boxes':
+              tf.identity(model_outputs['detection_outer_boxes'],
+                          'DetectionOuterBoxes'),
+      })
+
+  if output_image_info:
+    predictions['image_info'] = tf.identity(model_outputs['image_info'],
+                                            'ImageInfo')
+
+  return predictions, model_outputs
+
+
 def serving_model_graph_builder(output_image_info,
                                 output_normalized_coordinates,
                                 cast_num_detections_to_float):
@@ -69,8 +151,8 @@ def serving_model_graph_builder(output_image_info,
     output_image_info: bool, whether output the image_info node.
     output_normalized_coordinates: bool, whether box outputs are in the
       normalized coordinates.
-    cast_num_detections_to_float: bool, whether to cast the number of
-      detections to float type.
+    cast_num_detections_to_float: bool, whether to cast the number of detections
+      to float type.
 
   Returns:
     a function that builds the model graph for serving.
@@ -78,68 +160,9 @@ def serving_model_graph_builder(output_image_info,
 
   def _serving_model_graph(features, params):
     """Build the model graph for serving."""
-    images = features['images']
-    batch_size, height, width, _ = images.get_shape().as_list()
-
-    input_anchor = anchor.Anchor(
-        params.architecture.min_level, params.architecture.max_level,
-        params.anchor.num_scales, params.anchor.aspect_ratios,
-        params.anchor.anchor_size, (height, width))
-
-    multilevel_boxes = {}
-    for k, v in six.iteritems(input_anchor.multilevel_boxes):
-      multilevel_boxes[k] = tf.tile(
-          tf.expand_dims(v, 0), [batch_size, 1, 1])
-
-    model_fn = factory.model_generator(params)
-    model_outputs = model_fn.build_outputs(
-        features['images'],
-        labels={
-            'anchor_boxes': multilevel_boxes,
-            'image_info': features['image_info'],
-        },
-        mode=mode_keys.PREDICT)
-
-    if cast_num_detections_to_float:
-      model_outputs['num_detections'] = tf.cast(
-          model_outputs['num_detections'], dtype=tf.float32)
-
-    if output_image_info:
-      model_outputs.update({
-          'image_info': features['image_info'],
-      })
-
-    if output_normalized_coordinates:
-      model_outputs['detection_boxes'] = box_utils.normalize_boxes(
-          model_outputs['detection_boxes'],
-          features['image_info'][:, 1:2, :])
-
-    predictions = {
-        'num_detections': tf.identity(
-            model_outputs['num_detections'], 'NumDetections'),
-        'detection_boxes': tf.identity(
-            model_outputs['detection_boxes'], 'DetectionBoxes'),
-        'detection_classes': tf.identity(
-            model_outputs['detection_classes'], 'DetectionClasses'),
-        'detection_scores': tf.identity(
-            model_outputs['detection_scores'], 'DetectionScores'),
-    }
-    if 'detection_masks' in model_outputs:
-      predictions.update({
-          'detection_masks':
-              tf.identity(model_outputs['detection_masks'], 'DetectionMasks'),
-      })
-      if 'detection_outer_boxes' in model_outputs:
-        predictions.update({
-            'detection_outer_boxes':
-                tf.identity(model_outputs['detection_outer_boxes'],
-                            'DetectionOuterBoxes'),
-        })
-
-    if output_image_info:
-      predictions['image_info'] = tf.identity(
-          model_outputs['image_info'], 'ImageInfo')
-
+    predictions, _ = build_predictions(features, params, output_image_info,
+                                       output_normalized_coordinates,
+                                       cast_num_detections_to_float)
     return predictions
 
   return _serving_model_graph

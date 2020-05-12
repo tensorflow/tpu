@@ -32,9 +32,8 @@ def process_source_id(source_id):
 
 def pad_groundtruths_to_fixed_size(gt, n):
   """Pads the first dimension of groundtruths labels to the fixed size."""
-  gt['boxes'] = input_utils.pad_to_fixed_size(gt['boxes'], n, -1)
-  gt['is_crowds'] = input_utils.pad_to_fixed_size(gt['is_crowds'], n, 0)
-  gt['areas'] = input_utils.pad_to_fixed_size(gt['areas'], n, -1)
-  gt['classes'] = input_utils.pad_to_fixed_size(gt['classes'], n, -1)
+  gt['boxes'] = input_utils.clip_or_pad_to_fixed_size(gt['boxes'], n, -1)
+  gt['is_crowds'] = input_utils.clip_or_pad_to_fixed_size(gt['is_crowds'], n, 0)
+  gt['areas'] = input_utils.clip_or_pad_to_fixed_size(gt['areas'], n, -1)
+  gt['classes'] = input_utils.clip_or_pad_to_fixed_size(gt['classes'], n, -1)
   return gt
-

@@ -289,31 +289,29 @@ class Parser(object):
     num_masks = tf.shape(masks)[0]
     mask_shape = tf.shape(masks)[1:3]
 
-    # Pad sampled boxes/masks/classes to a constant batch size.
-    padded_boxes = input_utils.pad_to_fixed_size(boxes, self._num_sampled_masks)
-    padded_classes = input_utils.pad_to_fixed_size(
-        classes, self._num_sampled_masks)
-    padded_masks = input_utils.pad_to_fixed_size(masks, self._num_sampled_masks)
+    # Randomly shuffle groundtruth masks for mask branch training.
+    rand_indices = tf.random.shuffle(tf.range(num_masks))
+    shuffled_boxes = tf.gather(boxes, rand_indices)
+    shuffled_classes = tf.gather(classes, rand_indices)
+    shuffled_masks = tf.gather(masks, rand_indices)
 
-    # Randomly sample groundtruth masks for mask branch training. For the image
-    # without groundtruth masks, it will sample the dummy padded tensors.
-    rand_indices = tf.random.shuffle(
-        tf.range(tf.maximum(num_masks, self._num_sampled_masks)))
-    rand_indices = tf.mod(rand_indices, tf.maximum(num_masks, 1))
-    rand_indices = rand_indices[0:self._num_sampled_masks]
-    rand_indices = tf.reshape(rand_indices, [self._num_sampled_masks])
+    # Pad sampled boxes/masks/classes to a constant batch size. If the image
+    # has more masks than `num_sampled_masks`, the tensor will be clipped.
+    padded_boxes = input_utils.clip_or_pad_to_fixed_size(
+        shuffled_boxes, self._num_sampled_masks)
+    padded_classes = input_utils.clip_or_pad_to_fixed_size(
+        shuffled_classes, self._num_sampled_masks)
+    padded_masks = input_utils.clip_or_pad_to_fixed_size(
+        shuffled_masks, self._num_sampled_masks)
 
-    sampled_boxes = tf.gather(padded_boxes, rand_indices)
-    sampled_classes = tf.gather(padded_classes, rand_indices)
-    sampled_masks = tf.gather(padded_masks, rand_indices)
     # Jitter the sampled boxes to mimic the noisy detections.
-    sampled_boxes = box_utils.jitter_boxes(
-        sampled_boxes, noise_scale=self._box_jitter_scale)
-    sampled_boxes = box_utils.clip_boxes(sampled_boxes, self._output_size)
+    padded_boxes = box_utils.jitter_boxes(
+        padded_boxes, noise_scale=self._box_jitter_scale)
+    padded_boxes = box_utils.clip_boxes(padded_boxes, self._output_size)
     # Compute mask targets in feature crop. A feature crop fully contains a
     # sampled box.
     mask_outer_boxes = box_utils.compute_outer_boxes(
-        sampled_boxes, tf.shape(image)[0:2], scale=self._outer_box_scale)
+        padded_boxes, tf.shape(image)[0:2], scale=self._outer_box_scale)
     mask_outer_boxes = box_utils.clip_boxes(mask_outer_boxes, self._output_size)
     # Compensate the offset of mask_outer_boxes to map it back to original image
     # scale.
@@ -326,9 +324,9 @@ class Parser(object):
         mask_outer_boxes_ori, mask_shape)
 
     # Set sampled_masks shape to [batch_size, height, width, 1].
-    sampled_masks = tf.cast(tf.expand_dims(sampled_masks, axis=-1), tf.float32)
+    padded_masks = tf.cast(tf.expand_dims(padded_masks, axis=-1), tf.float32)
     mask_targets = tf.image.crop_and_resize(
-        sampled_masks,
+        padded_masks,
         norm_mask_outer_boxes_ori,
         box_ind=tf.range(self._num_sampled_masks),
         crop_size=[self._mask_crop_size, self._mask_crop_size],
@@ -341,11 +339,13 @@ class Parser(object):
     mask_targets = tf.squeeze(mask_targets, axis=-1)
     if self._up_sample_factor > 1:
       fine_mask_targets = tf.image.crop_and_resize(
-          sampled_masks,
+          padded_masks,
           norm_mask_outer_boxes_ori,
           box_ind=tf.range(self._num_sampled_masks),
-          crop_size=[self._mask_crop_size * self._up_sample_factor,
-                     self._mask_crop_size * self._up_sample_factor],
+          crop_size=[
+              self._mask_crop_size * self._up_sample_factor,
+              self._mask_crop_size * self._up_sample_factor
+          ],
           method='bilinear',
           extrapolation_value=0,
           name='train_mask_targets')
@@ -362,15 +362,15 @@ class Parser(object):
 
     valid_image = tf.cast(tf.not_equal(num_masks, 0), tf.int32)
     if self._mask_train_class == 'all':
-      mask_is_valid = valid_image * tf.ones_like(sampled_classes, tf.int32)
+      mask_is_valid = valid_image * tf.ones_like(padded_classes, tf.int32)
     else:
       # Get the intersection of sampled classes with training splits.
       mask_valid_classes = tf.cast(
           tf.expand_dims(
-              class_utils.coco_split_class_ids(self._mask_train_class),
-              1), sampled_classes.dtype)
-      match = tf.reduce_any(tf.equal(
-          tf.expand_dims(sampled_classes, 0), mask_valid_classes), 0)
+              class_utils.coco_split_class_ids(self._mask_train_class), 1),
+          padded_classes.dtype)
+      match = tf.reduce_any(
+          tf.equal(tf.expand_dims(padded_classes, 0), mask_valid_classes), 0)
       mask_is_valid = valid_image * tf.cast(match, tf.int32)
 
     # Packs labels for model_fn outputs.
@@ -381,11 +381,11 @@ class Parser(object):
         'num_positives': num_positives,
         'image_info': image_info,
         # For ShapeMask.
-        'mask_boxes': sampled_boxes,
+        'mask_boxes': padded_boxes,
         'mask_outer_boxes': mask_outer_boxes,
         'mask_targets': mask_targets,
         'fine_mask_targets': fine_mask_targets,
-        'mask_classes': sampled_classes,
+        'mask_classes': padded_classes,
         'mask_is_valid': mask_is_valid,
     }
     return image, labels

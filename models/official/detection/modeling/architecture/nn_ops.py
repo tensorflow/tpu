@@ -210,7 +210,8 @@ class Dropblock(object):
     Returns:
       A version of input tensor with DropBlock applied.
     """
-    if not is_training or self._dropblock_keep_prob is None:
+    if (not is_training or self._dropblock_keep_prob is None or
+        self._dropblock_keep_prob == 1.0):
       return net
 
     logging.info('Applying DropBlock: dropblock_size %d,'
@@ -299,7 +300,7 @@ def fixed_padding(inputs, kernel_size, data_format='channels_last'):
     kernel_size: `int` kernel size to be used for `conv2d` or max_pool2d`
       operations. Should be a positive integer.
     data_format: An optional string from: "channels_last", "channels_first".
-        Defaults to "channels_last".
+      Defaults to "channels_last".
 
   Returns:
     A padded `Tensor` of the same `data_format` with size either intact
@@ -334,7 +335,7 @@ def conv2d_fixed_padding(inputs,
     kernel_size: `int` size of the kernel to be used in the convolution.
     strides: `int` strides of the convolution.
     data_format: An optional string from: "channels_last", "channels_first".
-        Defaults to "channels_last".
+      Defaults to "channels_last".
 
   Returns:
     A `Tensor` of shape `[batch, filters, height_out, width_out]`.
@@ -372,7 +373,7 @@ def depthwise_conv2d_fixed_padding(inputs,
     kernel_size: `int` kernel size of the convolution.
     strides: `int` strides of the convolution.
     data_format: An optional string from: "channels_last", "channels_first".
-        Defaults to "channels_last".
+      Defaults to "channels_last".
 
   Returns:
     A `Tensor` of shape `[batch, filters, height_out, width_out]`.
@@ -401,7 +402,7 @@ def squeeze_excitation(inputs,
     se_ratio: `float` a se ratio between 0 and 1 for squeeze and excitation.
     expand_ratio: `int` expansion ratio for the block.
     data_format: An optional string from: "channels_last", "channels_first".
-        Defaults to "channels_last".
+      Defaults to "channels_last".
 
   Returns:
     A `Tensor` of shape `[batch, filters, height_out, width_out]`.
