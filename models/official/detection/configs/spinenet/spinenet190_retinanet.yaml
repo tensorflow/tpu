@@ -1,5 +1,5 @@
 # SpineNet-190 + RetinaNet:
-- 52.0% mAP with init_drop_connect_rate: 0.2, activation: 'swish'
+# - 52.0% mAP with init_drop_connect_rate: 0.2, activation: 'swish'
 architecture:
   backbone: 'spinenet'
   multilevel_features: 'identity'
