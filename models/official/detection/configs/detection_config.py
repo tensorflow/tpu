@@ -37,6 +37,8 @@ DETECTION_CFG.override({
     },
     'eval': {
         'type': 'box',
+        # Setting `eval_samples` = None will exhaust all the samples in the eval
+        # dataset once. This only works if `type` != customized.
         'eval_samples': 5000,
         'use_json_file': True,
         'val_json_file': '',

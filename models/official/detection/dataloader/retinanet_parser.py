@@ -20,7 +20,6 @@ into (image, labels) tuple for RetinaNet.
 T.-Y. Lin, P. Goyal, R. Girshick, K. He,  and P. Dollar
 Focal Loss for Dense Object Detection. arXiv:1708.02002
 """
-from absl import logging
 import tensorflow.compat.v1 as tf
 from dataloader import anchor
 from dataloader import mode_keys as ModeKeys
@@ -28,6 +27,16 @@ from dataloader import tf_example_decoder
 from utils import box_utils
 from utils import dataloader_utils
 from utils import input_utils
+
+# Currently there are import errors related to AutoAugment and TF 2.x,
+# so we guard the import with a try/except.
+try:
+  from utils import autoaugment_utils  # pylint: disable=g-import-not-at-top
+  autoaug_imported = True
+except ImportError:
+  autoaug_imported = False
+
+AUTOAUG_POLICIES = ('v0', 'test')
 
 
 class Parser(object):
@@ -45,8 +54,7 @@ class Parser(object):
                aug_rand_hflip=False,
                aug_scale_min=1.0,
                aug_scale_max=1.0,
-               use_autoaugment=False,
-               autoaugment_policy_name='v0',
+               aug_policy='',
                skip_crowd_during_training=True,
                max_num_instances=100,
                use_bfloat16=True,
@@ -80,10 +88,11 @@ class Parser(object):
         data augmentation during training.
       aug_scale_max: `float`, the maximum scale applied to `output_size` for
         data augmentation during training.
-      use_autoaugment: `bool`, if True, use the AutoAugment augmentation policy
-        during training.
-      autoaugment_policy_name: `string` that specifies the name of the
-        AutoAugment policy that will be used during training.
+      aug_policy: `str`, the augmentation policy to use.
+        This can be an autoaugment policy name, for example 'v0'.
+        An empty string indicates no augmentation policy.
+        The augment policy is independent from `aug_rand_hflip`,
+        `aug_scale_min`, and `aug_scale_max`.
       skip_crowd_during_training: `bool`, if True, skip annotations labeled with
         `is_crowd` equals to 1.
       max_num_instances: `int` number of maximum number of instances in an
@@ -116,10 +125,7 @@ class Parser(object):
     self._aug_rand_hflip = aug_rand_hflip
     self._aug_scale_min = aug_scale_min
     self._aug_scale_max = aug_scale_max
-
-    # Data Augmentation with AutoAugment.
-    self._use_autoaugment = use_autoaugment
-    self._autoaugment_policy_name = autoaugment_policy_name
+    self._aug_policy = aug_policy
 
     # Device.
     self._use_bfloat16 = use_bfloat16
@@ -198,17 +204,14 @@ class Parser(object):
     # Gets original image and its size.
     image = data['image']
 
-    # NOTE: The autoaugment method works best when used alongside the standard
-    # horizontal flipping of images along with size jittering and normalization.
-    if self._use_autoaugment:
-      try:
-        from utils import autoaugment_utils  # pylint: disable=g-import-not-at-top
-      except ImportError as e:
-        logging.exception('Autoaugment is not supported in TF 2.x.')
-        raise e
-
-      image, boxes = autoaugment_utils.distort_image_with_autoaugment(
-          image, boxes, self._autoaugment_policy_name)
+    if self._aug_policy:
+      if self._aug_policy in AUTOAUG_POLICIES:
+        if autoaug_imported:
+          image, boxes = autoaugment_utils.distort_image_with_autoaugment(
+              image, boxes, self._aug_policy)
+        else:
+          raise ImportError('Unable to get autoaugment_utils, likely due '
+                            'to imcompatability with TF 2.X.')
 
     image_shape = tf.shape(image)[0:2]
 

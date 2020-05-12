@@ -214,7 +214,9 @@ are a few differences to the model and training compared to the original paper:
 * We use a larger batch size of 1024 (by default) instead of 256 and
   linearly scale the learning rate. In addition, we adopt the learning rate
   schedule suggested by [Accurate, Large Minibatch SGD: Training ImageNet in 1
-  Hour](https://arxiv.org/abs/1706.02677) and train for 90 epochs.
+  Hour](https://arxiv.org/abs/1706.02677) and train for 90 epochs. Besides
+  BatchNorm-ReLU (default), we have also implemented [EvoNorms](https://arxiv.org/abs/2004.02967) that perform better
+  across a much wider range of batch sizes.
 * We use a slightly different weight initialization for batch normalization in
   the last batch norm per block, as inspired by the above paper.
 * Evaluation is performed on a single center crop of the validation set rather

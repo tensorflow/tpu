@@ -31,7 +31,11 @@ flags.DEFINE_string('output_dir', None, 'The export tflite model directory.')
 
 
 def export(saved_model_dir, tflite_model_dir):
+  """Exports tflite model."""
   converter = tf.lite.TFLiteConverter.from_saved_model(saved_model_dir)
+  converter.target_spec.supported_ops = [
+      tf.lite.OpsSet.TFLITE_BUILTINS, tf.lite.OpsSet.SELECT_TF_OPS
+  ]
 
   tflite_model = converter.convert()
   tflite_model_path = os.path.join(tflite_model_dir, 'model.tflite')

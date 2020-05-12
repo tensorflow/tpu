@@ -100,6 +100,10 @@ flags.DEFINE_boolean(
     'pre_activation', default=None,
     help=('Whether to use pre-activation ResNet (ResNet-v2)'))
 
+flags.DEFINE_string(
+    'norm_act_layer', default=None,
+    help='One of {"bn_relu", "evonorm_b0", "evonorm_s0"}.')
+
 flags.DEFINE_integer(
     'profile_every_n_steps', default=0,
     help=('Number of steps between collecting profiles if larger than 0'))
@@ -338,6 +342,7 @@ def resnet_model_fn(features, labels, mode, params):
         dropblock_size=params['dropblock_size'],
         dropblock_keep_probs=dropblock_keep_probs,
         pre_activation=params['pre_activation'],
+        norm_act_layer=params['norm_act_layer'],
         data_format=params['data_format'])
     return network(
         inputs=features, is_training=(mode == tf.estimator.ModeKeys.TRAIN))
@@ -379,7 +384,7 @@ def resnet_model_fn(features, labels, mode, params):
     loss = cross_entropy + params['weight_decay'] * tf.add_n([
         tf.nn.l2_loss(v)
         for v in tf.trainable_variables()
-        if 'batch_normalization' not in v.name
+        if 'batch_normalization' not in v.name and 'evonorm' not in v.name
     ])
 
   host_call = None
