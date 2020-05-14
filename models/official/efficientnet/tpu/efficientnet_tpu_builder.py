@@ -35,21 +35,23 @@ STDDEV_RGB = [0.229 * 255, 0.224 * 255, 0.225 * 255]
 def efficientnet_tpu_params(model_name):
   """Get efficientnet params based on model name."""
   params_dict = {
-      # (width_coefficient, depth_coefficient, resolution, dropout_rate)
-      'efficientnet-tpu-b0': (1.0, 1.0, 224, 0.2),
-      'efficientnet-tpu-b1': (1.0, 1.1, 240, 0.2),
-      'efficientnet-tpu-b2': (1.1, 1.2, 260, 0.3),
-      'efficientnet-tpu-b3': (1.2, 1.4, 300, 0.3),
-      'efficientnet-tpu-b4': (1.4, 1.8, 380, 0.4),
-      'efficientnet-tpu-b5': (1.6, 2.2, 456, 0.4),
-      'efficientnet-tpu-b6': (1.8, 2.6, 528, 0.5),
-      'efficientnet-tpu-b7': (2.0, 3.1, 600, 0.5),
+      # (width_coefficient, depth_coefficient, resolution, dropout_rate,
+      #  se_coefficient)
+      'efficientnet-tpu-b0': (1.0, 1.0, 224, 0.2, 4),
+      'efficientnet-tpu-b1': (1.0, 1.1, 240, 0.2, 2),
+      'efficientnet-tpu-b2': (1.1, 1.2, 260, 0.3, 1),
+      'efficientnet-tpu-b3': (1.2, 1.4, 300, 0.3, 1),
+      'efficientnet-tpu-b4': (1.4, 1.8, 380, 0.4, 1),
+      'efficientnet-tpu-b5': (1.6, 2.2, 456, 0.4, 1),
+      'efficientnet-tpu-b6': (1.8, 2.6, 528, 0.5, 1),
+      'efficientnet-tpu-b7': (2.0, 3.1, 600, 0.5, 1),
   }
   return params_dict[model_name]
 
 
 def efficientnet_tpu(width_coefficient=None,
                      depth_coefficient=None,
+                     se_coefficient=None,
                      dropout_rate=0.2,
                      survival_prob=0.8):
   """Creates a efficientnet model."""
@@ -70,11 +72,12 @@ def efficientnet_tpu(width_coefficient=None,
       depth_coefficient=depth_coefficient,
       depth_divisor=8,
       min_depth=None,
-      relu_fn=tf.nn.swish,
+      relu_fn=tf.nn.relu,
       # The default is TPU-specific batch norm.
       # The alternative is tf.layers.BatchNormalization.
       batch_norm=utils.TpuBatchNormalization,  # TPU-specific requirement.
-      use_se=True)
+      use_se=True,
+      se_coefficient=se_coefficient)
   decoder = efficientnet_builder.BlockDecoder()
   return decoder.decode(blocks_args), global_params
 
@@ -82,10 +85,10 @@ def efficientnet_tpu(width_coefficient=None,
 def get_model_params(model_name, override_params):
   """Get the block args and global params for a given model."""
   if model_name.startswith('efficientnet'):
-    width_coefficient, depth_coefficient, _, dropout_rate = (
+    width_coefficient, depth_coefficient, _, dropout_rate, se_coefficient = (
         efficientnet_tpu_params(model_name))
     blocks_args, global_params = efficientnet_tpu(
-        width_coefficient, depth_coefficient, dropout_rate)
+        width_coefficient, depth_coefficient, se_coefficient, dropout_rate)
   else:
     raise NotImplementedError('model name is not pre-defined: %s' % model_name)
 
@@ -136,8 +139,9 @@ def build_model(images,
     if not override_params:
       override_params = {}
     override_params['batch_norm'] = utils.BatchNormalization
-    override_params['relu_fn'] = functools.partial(
-        efficientnet_builder.swish, use_native=False)
+    if fine_tuning:
+      override_params['relu_fn'] = functools.partial(
+          efficientnet_builder.swish, use_native=False)
   blocks_args, global_params = get_model_params(model_name, override_params)
 
   if model_dir:
