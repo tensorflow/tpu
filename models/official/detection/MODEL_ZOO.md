@@ -23,16 +23,18 @@ Model zoo provides a large collection of baselines and checkpoints for object de
 Coming soon.
 
 #### RetinaNet (Trained from scratch)
-| model        | resolution    | epochs  | FLOPs (B)     | params (M) | V100 latency (ms/im) | P100 latency (ms/im)  |  box AP |   download |
-| ------------ |:-------------:| ---------:|-----------:|--------:|------:|------:|---------:|-----------:|
-| R50-FPN      | 640x640       |    350    | 97.0 | 34.0 | 23 | 37 |40.4 |[ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/retinanet/r50-fpn.tar.gz?organizationId=433637338589) \| config|
-| R50-NAS-FPN  | 640x640       |    72     | 140.6 | 60.3 | 29 |48 |37.3 | N/A |
-| R50-NAS-FPN  | 640x640       |    350    | 140.6 | 60.3 | 29 |48 |42.4 |[ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/retinanet/r50-nasfpn.tar.gz?organizationId=433637338589) \| config|
-| SpineNet-49  | 640x640       |    72     | 85.4| 28.5 | 24 |38 |37.7| N/A |
-| SpineNet-49  | 640x640       |    350    | 85.4| 28.5 | 24 |38 |42.8|[ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/retinanet/spinenet-49.tar.gz?organizationId=433637338589) \| [config](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/spinenet/spinenet49_retinanet.yaml) |
-| SpineNet-49S | 640x640     |    350    | 33.8 | 11.9 | 19 | 26|39.7 | [ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/retinanet/spinenet-49S.tar.gz?organizationId=433637338589) \| [config](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/spinenet/spinenet49S_retinanet.yaml) |
-| SpineNet-96  | 1024x1024     |    350    | 265.4 | 43.0 | 53 |87 |46.7 | [ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/retinanet/spinenet-96.tar.gz?organizationId=433637338589) \| [config](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/spinenet/spinenet96_retinanet.yaml) |
-| SpineNet-143 | 1280x1280     |    350    | 524.0 | 67.0 |97 | 159 |48.0 | [ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/retinanet/spinenet-143.tar.gz?organizationId=433637338589) \| [config](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/spinenet/spinenet143_retinanet.yaml) |
+| model        | resolution    | epochs  | FLOPs (B)     | params (M) | V100 / P100 <br /> lat (ms/im)  |  box AP |   download |
+| ------------ |:-------------:| ---------:|-----------:|--------:|------:|---------:|-----------:|
+| R50-FPN      | 640x640       |    350    | 97.0 | 34.0 | 23 / 37 |40.4 |[ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/retinanet/r50-fpn.tar.gz?organizationId=433637338589) \| config|
+| R101-FPN  | 1024x1024       |    350     | 326.3 | 53.1 | 55 / 95 | 43.9 | ckpt \| config |
+| R152-FPN  | 1280x1280       |    350     | 630.5 | 68.7 | 100 / 167 |45.2 | ckpt \| config |
+| R50-NAS-FPN  | 640x640       |    72     | 140.6 | 60.3 | 29 / 48 |37.3 | N/A |
+| R50-NAS-FPN  | 640x640       |    350    | 140.6 | 60.3 | 29 / 48 |42.4 |[ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/retinanet/r50-nasfpn.tar.gz?organizationId=433637338589) \| config|
+| SpineNet-49  | 640x640       |    72     | 85.4| 28.5 | 24 / 38 |37.7| N/A |
+| SpineNet-49  | 640x640       |    350    | 85.4| 28.5 | 24 /38 |42.8|[ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/retinanet/spinenet-49.tar.gz?organizationId=433637338589) \| [config](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/spinenet/spinenet49_retinanet.yaml) |
+| SpineNet-49S | 640x640     |    350    | 33.8 | 11.9 | 19 / 26|39.7 | [ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/retinanet/spinenet-49S.tar.gz?organizationId=433637338589) \| [config](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/spinenet/spinenet49S_retinanet.yaml) |
+| SpineNet-96  | 1024x1024     |    350    | 265.4 | 43.0 | 53 / 87 |46.7 | [ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/retinanet/spinenet-96.tar.gz?organizationId=433637338589) \| [config](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/spinenet/spinenet96_retinanet.yaml) |
+| SpineNet-143 | 1280x1280     |    350    | 524.0 | 67.0 |97 / 159 |48.0 | [ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/retinanet/spinenet-143.tar.gz?organizationId=433637338589) \| [config](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/spinenet/spinenet143_retinanet.yaml) |
 
 
 SpineNet models trained with stochastic depth and swish activation for a longer shedule:
