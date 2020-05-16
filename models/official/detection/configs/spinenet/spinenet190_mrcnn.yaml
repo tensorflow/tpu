@@ -1,0 +1,43 @@
+# SpineNet-190 + Mask R-CNN with stochastic depth and swish activation. 52.0 mAP.
+architecture:
+  backbone: 'spinenet'
+  min_level: 3
+  max_level: 7
+  multilevel_features: 'identity'
+  parser: 'maskrcnn_parser'
+train:
+  total_steps: 187600
+  train_batch_size: 256
+  learning_rate:
+    warmup_steps: 2000
+    init_learning_rate: 0.28
+    learning_rate_levels: [0.028, 0.0028]
+    learning_rate_steps: [173530, 182910]
+  l2_weight_decay: 0.00004
+anchor:
+  anchor_size: 5.0
+batch_norm_activation:
+  batch_norm_epsilon: 0.001
+  batch_norm_momentum: 0.99
+  use_sync_bn: true
+  activation: 'swish'
+spinenet:
+  model_id: '190'
+  init_drop_connect_rate: 0.2
+maskrcnn_parser:
+  output_size: [1536, 1536]
+  aug_scale_min: 0.1
+  aug_scale_max: 2.0
+rpn_head:
+  num_convs: 7
+  num_filters: 384
+  use_batch_norm: true
+frcnn_head:
+  num_convs: 7
+  num_filters: 384
+  num_fcs: 1
+  use_batch_norm: true
+mrcnn_head:
+  num_convs: 7
+  num_filters: 384
+  use_batch_norm: true

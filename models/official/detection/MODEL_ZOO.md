@@ -32,7 +32,7 @@ Coming soon.
 | R50-NAS-FPN  | 640x640       |    350    | 140.6 | 60.3 | 29 / 48 |42.4 |[ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/retinanet/r50-nasfpn.tar.gz?organizationId=433637338589) \| config|
 | SpineNet-49  | 640x640       |    72     | 85.4| 28.5 | 24 / 38 |37.7| N/A |
 | SpineNet-49  | 640x640       |    350    | 85.4| 28.5 | 24 /38 |42.8|[ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/retinanet/spinenet-49.tar.gz?organizationId=433637338589) \| [config](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/spinenet/spinenet49_retinanet.yaml) |
-| SpineNet-49S | 640x640     |    350    | 33.8 | 11.9 | 19 / 26|39.7 | [ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/retinanet/spinenet-49S.tar.gz?organizationId=433637338589) \| [config](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/spinenet/spinenet49S_retinanet.yaml) |
+| SpineNet-49S | 640x640     |    350    | 33.8 | 11.9 | 19 / 26|39.5 | [ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/retinanet/spinenet-49S.tar.gz) \| [config](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/spinenet/spinenet49S_retinanet.yaml) |
 | SpineNet-96  | 1024x1024     |    350    | 265.4 | 43.0 | 53 / 87 |46.7 | [ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/retinanet/spinenet-96.tar.gz?organizationId=433637338589) \| [config](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/spinenet/spinenet96_retinanet.yaml) |
 | SpineNet-143 | 1280x1280     |    350    | 524.0 | 67.0 |97 / 159 |48.0 | [ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/retinanet/spinenet-143.tar.gz?organizationId=433637338589) \| [config](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/spinenet/spinenet143_retinanet.yaml) |
 
@@ -62,6 +62,10 @@ Coming soon.
 | SpineNet-96  | 1024x1024     |    350    | 314.6 | 55.2 | 46.8 | 41.2 | [ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/maskrcnn/spinenet-96.tar.gz?organizationId=433637338589) \| [config](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/spinenet/spinenet96_mrcnn.yaml) |
 | SpineNet-143 | 1280x1280     |    350    | 498.4 | 79.2 | 48.7 | 42.6 | [ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/maskrcnn/spinenet-143.tar.gz?organizationId=433637338589) \| [config](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/spinenet/spinenet143_mrcnn.yaml) |
 
+SpineNet-190 trained with stochastic depth and swish activation for a longer shedule:
+| model        | resolution    | epochs  | FLOPs (B)  | params (M)  |  box AP |  mask AP  |   download |
+| ------------ |:-------------:| ---------:|-----------:|--------:|--------:|-----------:|-----------:|
+| SpineNet-190  | 1536x1536      |    400    | 1685.7 | 168.2 | 52.0 | 45.9 | [ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/maskrcnn/spinenet-190.tar.gz) \| [config](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/spinenet/spinenet190_mrcnn.yaml) |
 
 ## Image Classification
 ### Common Settings and Notes
