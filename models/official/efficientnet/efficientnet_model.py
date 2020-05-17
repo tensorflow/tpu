@@ -40,8 +40,8 @@ GlobalParams = collections.namedtuple('GlobalParams', [
     'batch_norm_momentum', 'batch_norm_epsilon', 'dropout_rate', 'data_format',
     'num_classes', 'width_coefficient', 'depth_coefficient', 'depth_divisor',
     'min_depth', 'survival_prob', 'relu_fn', 'batch_norm', 'use_se',
-    'local_pooling', 'condconv_num_experts', 'clip_projection_output',
-    'blocks_args', 'fix_head_stem',
+    'se_coefficient', 'local_pooling', 'condconv_num_experts',
+    'clip_projection_output', 'blocks_args', 'fix_head_stem',
 ])
 # Note: the default value of None is not necessarily valid. It is valid to leave
 # width_coefficient, depth_coefficient at None, which is treated as 1.0 (and
@@ -187,6 +187,7 @@ class MBConvBlock(tf.keras.layers.Layer):
     self._batch_norm = global_params.batch_norm
     self._condconv_num_experts = global_params.condconv_num_experts
     self._data_format = global_params.data_format
+    self._se_coefficient = global_params.se_coefficient
     if self._data_format == 'channels_first':
       self._channel_axis = 1
       self._spatial_dims = [2, 3]
@@ -285,7 +286,9 @@ class MBConvBlock(tf.keras.layers.Layer):
 
     if self._has_se:
       num_reduced_filters = max(
-          1, int(self._block_args.input_filters * self._block_args.se_ratio))
+          1, int(
+              self._block_args.input_filters * (self._block_args.se_ratio * (
+                  self._se_coefficient if self._se_coefficient else 1))))
       # Squeeze and Excitation layer.
       self._se_reduce = tf.layers.Conv2D(
           num_reduced_filters,
@@ -417,7 +420,7 @@ class MBConvBlock(tf.keras.layers.Layer):
     if self._block_args.id_skip:
       if all(
           s == 1 for s in self._block_args.strides
-      ) and self._block_args.input_filters == self._block_args.output_filters:
+      ) and inputs.get_shape().as_list()[-1] == x.get_shape().as_list()[-1]:
         # Apply only if skip connection presents.
         if survival_prob:
           x = utils.drop_connect(x, training, survival_prob)

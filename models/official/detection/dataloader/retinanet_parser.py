@@ -32,11 +32,9 @@ from utils import input_utils
 # so we guard the import with a try/except.
 try:
   from utils import autoaugment_utils  # pylint: disable=g-import-not-at-top
-  autoaug_imported = True
+  AUTOAUG_IMPORTED = True
 except ImportError:
-  autoaug_imported = False
-
-AUTOAUG_POLICIES = ('v0', 'test')
+  AUTOAUG_IMPORTED = False
 
 
 class Parser(object):
@@ -205,13 +203,12 @@ class Parser(object):
     image = data['image']
 
     if self._aug_policy:
-      if self._aug_policy in AUTOAUG_POLICIES:
-        if autoaug_imported:
-          image, boxes = autoaugment_utils.distort_image_with_autoaugment(
-              image, boxes, self._aug_policy)
-        else:
-          raise ImportError('Unable to get autoaugment_utils, likely due '
-                            'to imcompatability with TF 2.X.')
+      if AUTOAUG_IMPORTED:
+        image, boxes = autoaugment_utils.distort_image_with_autoaugment(
+            image, boxes, self._aug_policy)
+      else:
+        raise ImportError('Unable to get autoaugment_utils, likely due '
+                          'to imcompatability with TF 2.X.')
 
     image_shape = tf.shape(image)[0:2]
 

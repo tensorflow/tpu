@@ -38,18 +38,23 @@ class BatchNormalization(tf.layers.BatchNormalization):
   https://www.tensorflow.org/api_docs/python/tf/keras/layers/BatchNormalization
   """
 
-  def __init__(self, fused=False, **kwargs):
+  def __init__(self, fused=False, max_shards_for_local=8, **kwargs):
     """Builds the batch normalization layer.
 
     Arguments:
       fused: If `False`, use the system recommended implementation. Only support
         `False` in the current implementation.
+      max_shards_for_local: The maximum number of TPU shards that should use
+        local Batch Normalization. Any larger number of shards will use
+        cross-replica Batch Normalization. Defaults to using local for slices
+        that are 2x2 or smaller.
       **kwargs: input augments that are forwarded to
         tf.layers.BatchNormalization.
     """
     if fused in (True, None):
       raise ValueError('The TPU version of BatchNormalization does not support '
                        'fused=True.')
+    self.max_shards_for_local = max_shards_for_local
     super(BatchNormalization, self).__init__(fused=fused, **kwargs)
 
   def _cross_replica_average(self, t, num_shards_per_group):
@@ -74,10 +79,11 @@ class BatchNormalization(tf.layers.BatchNormalization):
         inputs, reduction_axes, keep_dims=keep_dims)
 
     num_shards = tpu_function.get_tpu_context().number_of_shards or 1
-    if num_shards <= 8:  # Skip cross_replica for 2x2 or smaller slices.
+    # Skip cross_replica for small slices.
+    if num_shards <= self.max_shards_for_local:
       num_shards_per_group = 1
     else:
-      num_shards_per_group = max(8, num_shards // 1)
+      num_shards_per_group = num_shards
     logging.info('BatchNormalization with num_shards_per_group %s',
                  num_shards_per_group)
     if num_shards_per_group > 1:

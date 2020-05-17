@@ -118,8 +118,11 @@ def build_predictions(features, params, output_image_info,
     })
 
   if output_normalized_coordinates:
+    detection_boxes = (
+        model_outputs['detection_boxes'] /
+        tf.tile(features['image_info'][:, 2:3, :], [1, 1, 2]))
     model_outputs['detection_boxes'] = box_utils.normalize_boxes(
-        model_outputs['detection_boxes'], features['image_info'][:, 1:2, :])
+        detection_boxes, features['image_info'][:, 0:1, :])
 
   predictions = {
       'num_detections':
