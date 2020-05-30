@@ -21,7 +21,7 @@ pip install --user Cython matplotlib opencv-python-headless pyyaml Pillow && \
 pip install --user 'git+https://github.com/cocodataset/cocoapi#egg=pycocotools&subdirectory=PythonAPI'
 ```
 
-## Dataset download and convesion
+## Dataset download and conversion
 
 Next, download the latest code from [tpu github](https://github.com/tensorflow/tpu) repository.
 
