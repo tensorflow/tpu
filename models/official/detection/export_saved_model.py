@@ -40,10 +40,10 @@ from tensorflow.python.ops import control_flow_util  # pylint: disable=g-direct-
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_string('export_dir', None, 'The export directory.')
-flags.DEFINE_string('checkpoint_path', None, 'Checkpoint path.')
 flags.DEFINE_string(
     'model', 'retinanet', 'Support `retinanet`, `mask_rcnn` and `shapemask`.')
+flags.DEFINE_string('export_dir', None, 'The export directory.')
+flags.DEFINE_string('checkpoint_path', None, 'Checkpoint path.')
 flags.DEFINE_boolean('use_tpu', False, 'Whether or not use TPU.')
 flags.DEFINE_string(
     'config_file', '',
@@ -52,7 +52,9 @@ flags.DEFINE_string(
     'params_override', '',
     'The JSON/YAML file or string which specifies the parameter to be overriden'
     ' on top of `config_file` template.')
-flags.DEFINE_integer('batch_size', 1, 'The batch size.')
+flags.DEFINE_integer(
+    'batch_size', 1,
+    'The batch size. Can be -1, which means batch size is not determined.')
 flags.DEFINE_string(
     'input_type', 'image_bytes',
     'One of `raw_image_tensor`, `image_tensor`, `image_bytes`, `tf_example`.')
@@ -69,6 +71,9 @@ flags.DEFINE_boolean(
 flags.DEFINE_boolean(
     'cast_num_detections_to_float', False,
     'Whether or not cast the number of detections to float type.')
+flags.DEFINE_boolean(
+    'cast_detection_classes_to_float', False,
+    'Whether or not cast the detection classes  to float type.')
 
 
 def export(export_dir,
@@ -83,7 +88,8 @@ def export(export_dir,
            input_name='input',
            output_image_info=True,
            output_normalized_coordinates=False,
-           cast_num_detections_to_float=False):
+           cast_num_detections_to_float=False,
+           cast_detection_classes_to_float=False):
   """Exports the SavedModel."""
   control_flow_util.enable_control_flow_v2()
 
@@ -95,6 +101,12 @@ def export(export_dir,
   # `train.num_shards`.
   params = params_dict.override_params_dict(
       params, params_override, is_strict=False)
+  if not use_tpu:
+    params.override({
+        'architecture': {
+            'use_bfloat16': use_tpu,
+        },
+    }, is_strict=True)
   params.validate()
   params.lock()
 
@@ -107,10 +119,8 @@ def export(export_dir,
 
   if model in ['retinanet', 'mask_rcnn', 'shapemask']:
     model_fn = detection.serving_model_fn_builder(
-        use_tpu,
-        output_image_info,
-        output_normalized_coordinates,
-        cast_num_detections_to_float)
+        use_tpu, output_image_info, output_normalized_coordinates,
+        cast_num_detections_to_float, cast_detection_classes_to_float)
     serving_input_receiver_fn = functools.partial(
         detection.serving_input_fn,
         batch_size=batch_size,
@@ -119,7 +129,7 @@ def export(export_dir,
         input_type=input_type,
         input_name=input_name)
   else:
-    raise ValueError('The model type `{} is not supported.'.format(FLAGS.model))
+    raise ValueError('The model type `{} is not supported.'.format(model))
 
   print(' - Setting up TPUEstimator...')
   estimator = tf.estimator.tpu.TPUEstimator(
@@ -169,17 +179,18 @@ def main(argv):
          FLAGS.config_file,
          FLAGS.params_override,
          FLAGS.use_tpu,
-         FLAGS.batch_size,
+         (None if FLAGS.batch_size == -1 else FLAGS.batch_size),
          [int(x) for x in FLAGS.input_image_size.split(',')],
          FLAGS.input_type,
          FLAGS.input_name,
          FLAGS.output_image_info,
          FLAGS.output_normalized_coordinates,
-         FLAGS.cast_num_detections_to_float)
+         FLAGS.cast_num_detections_to_float,
+         FLAGS.cast_detection_classes_to_float)
 
 
 if __name__ == '__main__':
+  flags.mark_flag_as_required('model')
   flags.mark_flag_as_required('export_dir')
   flags.mark_flag_as_required('checkpoint_path')
-  flags.mark_flag_as_required('model')
   tf.app.run(main)

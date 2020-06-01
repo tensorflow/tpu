@@ -35,8 +35,6 @@ import tensorflow.compat.v1 as tf
 import imagenet_input
 import model_saving_utils
 import resnet_model
-from tensorflow.contrib import cluster_resolver as contrib_cluster_resolver
-from tensorflow.contrib import distribute as contrib_distribute
 
 # Common flags for TPU models.
 flags.DEFINE_string('tpu', None, 'Name of the TPU to use.')
@@ -177,9 +175,10 @@ def main(unused_argv):
   logging.info('Saving tensorboard summaries at %s', model_dir)
 
   logging.info('Use TPU at %s', FLAGS.tpu if FLAGS.tpu is not None else 'local')
-  resolver = contrib_cluster_resolver.TPUClusterResolver(tpu=FLAGS.tpu)
-  contrib_distribute.initialize_tpu_system(resolver)
-  strategy = contrib_distribute.TPUStrategy(resolver)
+  resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu=FLAGS.tpu)
+  tf.config.experimental_connect_to_cluster(resolver)
+  tf.tpu.experimental.initialize_tpu_system(resolver)
+  strategy = tf.distribute.experimental.TPUStrategy(resolver)
 
   logging.info('Use bfloat16: %s.', USE_BFLOAT16)
   logging.info('Use global batch size: %s.', batch_size)

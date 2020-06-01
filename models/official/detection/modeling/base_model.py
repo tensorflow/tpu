@@ -135,10 +135,12 @@ class BaseModel(six.with_metaclass(abc.ABCMeta, object)):
 
   def __init__(self, params):
     self._transpose_input = params.train.transpose_input
+    self._space_to_depth_block_size = (
+        params.architecture.space_to_depth_block_size)
 
     self._use_bfloat16 = params.architecture.use_bfloat16
 
-    self._l2_weight_decay = params.train.l2_weight_decay
+    self._l2_weight_decay = float(params.train.l2_weight_decay)
 
     # Optimization.
     self._optimizer_fn = OptimizerFactory(params.train.optimizer)
@@ -256,17 +258,24 @@ class BaseModel(six.with_metaclass(abc.ABCMeta, object)):
     Returns:
       a TPUEstimatorSpec object used for training.
     """
-    # If the input image is transposed (from NHWC to HWCN), we need to revert it
-    # back to the original shape before it's used in the computation.
+    # If the input image is transposed, we need to revert it back to the
+    # original shape before it's used in the computation.
     if self._transpose_input:
-      images = tf.transpose(images, [3, 0, 1, 2])
+      if self._space_to_depth_block_size > 1:
+        # HWNC -> NHWC
+        images = tf.transpose(images, [2, 0, 1, 3])
+      else:
+        # HWCN -> NHWC
+        images = tf.transpose(images, [3, 0, 1, 2])
 
     outputs = self.build_outputs(images, labels, mode=mode_keys.TRAIN)
     # Log model statistics.
     batch_size = images.get_shape().as_list()[0]
-    _, _ = benchmark_utils.compute_model_statistics(
-        batch_size=batch_size,
-        json_file_path=os.path.join(self._model_dir, 'train_model_stats.json'))
+    if batch_size:
+      _, _ = benchmark_utils.compute_model_statistics(
+          batch_size=batch_size,
+          json_file_path=os.path.join(
+              self._model_dir, 'train_model_stats.json'))
 
     model_loss = self.build_losses(outputs, labels)
 
@@ -313,12 +322,17 @@ class BaseModel(six.with_metaclass(abc.ABCMeta, object)):
     else:
       host_call_fn = None
 
-    return tf.estimator.tpu.TPUEstimatorSpec(
+    tpu_estimator_spec = tf.estimator.tpu.TPUEstimatorSpec(
         mode=tf.estimator.ModeKeys.TRAIN,
         loss=total_loss,
         train_op=train_op,
         host_call=host_call_fn,
         scaffold_fn=scaffold_fn)
+
+    if self._use_tpu:
+      return tpu_estimator_spec
+    else:
+      return tpu_estimator_spec.as_estimator_spec()
 
   def evaluate(self, images, labels):
     """Returns a TPUEstimatorSpec for evaluation.
@@ -334,18 +348,25 @@ class BaseModel(six.with_metaclass(abc.ABCMeta, object)):
     outputs = self.build_outputs(images, labels, mode=mode_keys.EVAL)
     # Log model statistics.
     batch_size = images.get_shape().as_list()[0]
-    _, _ = benchmark_utils.compute_model_statistics(
-        batch_size=batch_size,
-        json_file_path=os.path.join(self._model_dir, 'eval_model_stats.json'))
+    if batch_size:
+      _, _ = benchmark_utils.compute_model_statistics(
+          batch_size=batch_size,
+          json_file_path=os.path.join(
+              self._model_dir, 'eval_model_stats.json'))
 
     model_loss = self.build_losses(outputs, labels)
 
     eval_metrics = self.build_metrics(outputs, labels)
 
-    return tf.estimator.tpu.TPUEstimatorSpec(
+    tpu_estimator_spec = tf.estimator.tpu.TPUEstimatorSpec(
         mode=tf.estimator.ModeKeys.EVAL,
         loss=model_loss,
         eval_metrics=eval_metrics)
+
+    if self._use_tpu:
+      return tpu_estimator_spec
+    else:
+      return tpu_estimator_spec.as_estimator_spec()
 
   def predict(self, features):
     """Returns a TPUEstimatorSpec for prediction.
@@ -363,16 +384,22 @@ class BaseModel(six.with_metaclass(abc.ABCMeta, object)):
     outputs = self.build_outputs(images, labels, mode=mode_keys.PREDICT)
     # Log model statistics.
     batch_size = images.get_shape().as_list()[0]
-    _, _ = benchmark_utils.compute_model_statistics(
-        batch_size=batch_size,
-        json_file_path=os.path.join(self._model_dir,
-                                    'predict_model_stats.json'))
+    if batch_size:
+      _, _ = benchmark_utils.compute_model_statistics(
+          batch_size=batch_size,
+          json_file_path=os.path.join(
+              self._model_dir, 'predict_model_stats.json'))
 
     predictions = self.build_predictions(outputs, labels)
 
-    return tf.estimator.tpu.TPUEstimatorSpec(
+    tpu_estimator_spec = tf.estimator.tpu.TPUEstimatorSpec(
         mode=tf.estimator.ModeKeys.PREDICT,
         predictions=predictions)
+
+    if self._use_tpu:
+      return tpu_estimator_spec
+    else:
+      return tpu_estimator_spec.as_estimator_spec()
 
   def restore_from_checkpoint(self):
     """Returns scaffold function to restore parameters from checkpoint."""

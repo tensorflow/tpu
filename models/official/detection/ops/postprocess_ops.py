@@ -25,6 +25,7 @@ import tensorflow.compat.v1 as tf
 
 from ops import nms
 from utils import box_utils
+from utils import shape_utils
 
 
 def generate_detections_factory(params):
@@ -37,7 +38,7 @@ def generate_detections_factory(params):
         score_threshold=params.score_threshold)
   else:
     func = functools.partial(
-        _generate_detections_v1,
+        _generate_detections_v2,
         max_total_size=params.max_total_size,
         nms_iou_threshold=params.nms_iou_threshold,
         score_threshold=params.score_threshold,
@@ -205,20 +206,20 @@ def _select_top_k_scores(scores_in, pre_nms_num_detections):
     scores and indices: Tensors with shape [batch_size, pre_nms_num_detections,
       num_classes].
   """
-  batch_size, num_anchors, num_class = scores_in.get_shape().as_list()
+  batch_size, num_anchors, num_classes = shape_utils.get_shape(scores_in)
   scores_trans = tf.transpose(scores_in, perm=[0, 2, 1])
   scores_trans = tf.reshape(scores_trans, [-1, num_anchors])
 
   top_k_scores, top_k_indices = tf.nn.top_k(
       scores_trans, k=pre_nms_num_detections, sorted=True)
 
-  top_k_scores = tf.reshape(top_k_scores,
-                            [batch_size, num_class, pre_nms_num_detections])
-  top_k_indices = tf.reshape(top_k_indices,
-                             [batch_size, num_class, pre_nms_num_detections])
+  top_k_scores = tf.reshape(
+      top_k_scores, [batch_size, num_classes, pre_nms_num_detections])
+  top_k_indices = tf.reshape(
+      top_k_indices, [batch_size, num_classes, pre_nms_num_detections])
 
-  return tf.transpose(top_k_scores,
-                      [0, 2, 1]), tf.transpose(top_k_indices, [0, 2, 1])
+  return (tf.transpose(top_k_scores, [0, 2, 1]),
+          tf.transpose(top_k_indices, [0, 2, 1]))
 
 
 def _generate_detections_v2(boxes,
@@ -265,13 +266,14 @@ def _generate_detections_v2(boxes,
     nmsed_classes = []
     nmsed_scores = []
     valid_detections = []
-    batch_size, _, num_classes_for_box, _ = boxes.get_shape().as_list()
-    _, total_anchors, num_classes = scores.get_shape().as_list()
+    batch_size, total_num_anchors, num_classes_for_box = (
+        shape_utils.get_shape(boxes)[0:3])
+    num_classes = shape_utils.get_shape(scores)[-1]
     # Selects top pre_nms_num scores and indices before NMS.
     scores, indices = _select_top_k_scores(
-        scores, min(total_anchors, pre_nms_num_boxes))
+        scores, tf.minimum(total_num_anchors, pre_nms_num_boxes))
     for i in range(num_classes):
-      boxes_i = boxes[:, :, min(num_classes_for_box - 1, i), :]
+      boxes_i = boxes[:, :, tf.minimum(num_classes_for_box - 1, i), :]
       scores_i = scores[:, :, i]
       # Obtains pre_nms_num_boxes before running NMS.
       boxes_i = tf.gather(boxes_i, indices[:, :, i], batch_dims=1, axis=1)
@@ -371,10 +373,11 @@ class MultilevelDetectionGenerator(object):
     boxes = []
     scores = []
     for i in range(self._min_level, self._max_level + 1):
-      box_outputs_i_shape = tf.shape(box_outputs[i])
+      box_outputs_i_shape = shape_utils.get_shape(box_outputs[i])
       batch_size = box_outputs_i_shape[0]
       num_anchors_per_locations = box_outputs_i_shape[-1] // 4
-      num_classes = tf.shape(class_outputs[i])[-1] // num_anchors_per_locations
+      num_classes = (shape_utils.get_shape(class_outputs[i])[-1]
+                     // num_anchors_per_locations)
 
       # Applies score transformation and remove the implicit background class.
       scores_i = tf.sigmoid(
@@ -452,10 +455,8 @@ class GenericDetectionGenerator(object):
     class_outputs = tf.nn.softmax(class_outputs, axis=-1)
 
     # Removes the background class.
-    class_outputs_shape = tf.shape(class_outputs)
-    batch_size = class_outputs_shape[0]
-    num_locations = class_outputs_shape[1]
-    num_classes = class_outputs_shape[-1]
+    batch_size, num_locations, num_classes = (
+        shape_utils.get_shape(class_outputs))
     num_detections = num_locations * (num_classes - 1)
 
     class_outputs = tf.slice(class_outputs, [0, 0, 1], [-1, -1, -1])

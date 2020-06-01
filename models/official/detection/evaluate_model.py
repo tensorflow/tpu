@@ -85,7 +85,8 @@ def parse_single_example(serialized_example, params):
       image,
       params.retinanet_parser.output_size,
       padded_size=input_utils.compute_padded_size(
-          params.retinanet_parser.output_size, 2 ** params.anchor.max_level),
+          params.retinanet_parser.output_size,
+          2 ** params.architecture.max_level),
       aug_scale_min=1.0,
       aug_scale_max=1.0)
 

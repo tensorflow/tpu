@@ -20,8 +20,8 @@ spinenet:
   model_id: '190'
   init_drop_connect_rate: 0.2
 retinanet_head:
-  retinanet_head_num_filters: 512
-  retinanet_head_num_convs: 7
+  num_filters: 512
+  num_convs: 7
 retinanet_parser:
   output_size: [1280, 1280]
   aug_scale_min: 0.1

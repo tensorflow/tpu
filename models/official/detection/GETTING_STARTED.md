@@ -193,7 +193,21 @@ python ~/tpu/models/official/detection/export_tflite_model.py \
   --output_dir="${OUTPUT_DIR?}" \
 ```
 
+### Export to TensorRT
+
+Given the exported SavedModel, one can further convert it to the [TensoRT](https://developer.nvidia.com/tensorrt) format that can be deployed on GPU platform.
+
+```bash
+SAVED_MODEL_DIR="<path to the SavedModel directory>"
+OUTPUT_DIR="<path to the output TensorRT SavedModel directory>"
+python ~/tpu/models/official/detection/export_tensorrt_model.py \
+  --saved_model_dir="${SAVED_MODEL_DIR?}" \
+  --output_dir="${OUTPUT_DIR?}" \
+```
+
 ## Model Inference
+
+### Use checkpoint
 
 Given the checkpoint, one can easily run the model inference using the following command.
 
@@ -212,4 +226,25 @@ python ~/tpu/models/official/detection/inference.py \
   --label_map_file="${LABEL_MAP_FILE?}" \
   --image_file_pattern="${IMAGE_FILE_PATTERN?}" \
   --output_html="${OUTPUT_HTML?}" \
+  --max_boxes_to_draw=10 \
+  --min_score_threshold=0.05
+```
+
+### Use SavedModel
+
+One can also use the exported SavedModel, which a bundle of model weights and
+graph computation, to run inference.
+
+```bash
+SAVED_MODEL_DIR="<path to the SavedModel>"
+LABEL_MAP_FILE="~/tpu/models/official/detection/datasets/coco_label_map.csv"
+IMAGE_FILE_PATTERN="<path to the JPEG image that you want to run inference on>"
+OUTPUT_HTML="./test.html"
+python ~/tpu/models/detection/inference_saved_model \
+  --saved_model_dir="${SAVED_MODEL_DIR?}" \
+  --label_map_file="${LABEL_MAP_FILE?}" \
+  --image_file_pattern="${IMAGE_FILE_PATTERN?}" \
+  --output_html="${OUTPUT_HTML?}" \
+  --max_boxes_to_draw=10 \
+  --min_score_threshold=0.05
 ```
