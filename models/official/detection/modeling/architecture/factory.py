@@ -19,6 +19,8 @@ from __future__ import division
 from __future__ import print_function
 
 import json
+
+from absl import logging
 from modeling.architecture import fpn
 from modeling.architecture import heads
 from modeling.architecture import identity
@@ -123,11 +125,17 @@ def multilevel_features_generator(params):
 def retinanet_head_generator(params):
   """Generator function for RetinaNet head architecture."""
   head_params = params.retinanet_head
+  if head_params.anchors_per_location:
+    logging.info('[Deprecation]: `retinanet_head.anchors_per_location` '
+                 'is no longer used.')
+  anchor_aspect_ratios = len(params.anchor.aspect_ratios)
+  anchor_num_scales = params.anchor.num_scales
+  anchors_per_location = anchor_aspect_ratios * anchor_num_scales
   return heads.RetinanetHead(
       params.architecture.min_level,
       params.architecture.max_level,
       params.architecture.num_classes,
-      head_params.anchors_per_location,
+      anchors_per_location,
       head_params.num_convs,
       head_params.num_filters,
       head_params.use_separable_conv,
@@ -140,10 +148,16 @@ def retinanet_head_generator(params):
 def rpn_head_generator(params):
   """Generator function for RPN head architecture."""
   head_params = params.rpn_head
+  if head_params.anchors_per_location:
+    logging.info('[Deprecation]: `rpn_head.anchors_per_location` '
+                 'is no longer used.')
+  anchor_aspect_ratios = len(params.anchor.aspect_ratios)
+  anchor_num_scales = params.anchor.num_scales
+  anchors_per_location = anchor_aspect_ratios * anchor_num_scales
   return heads.RpnHead(
       params.architecture.min_level,
       params.architecture.max_level,
-      head_params.anchors_per_location,
+      anchors_per_location,
       head_params.num_convs,
       head_params.num_filters,
       head_params.use_separable_conv,

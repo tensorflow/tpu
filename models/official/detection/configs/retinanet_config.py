@@ -39,7 +39,7 @@ RETINANET_CFG.override({
         'regenerate_source_id': False,
     },
     'retinanet_head': {
-        'anchors_per_location': 9,
+        'anchors_per_location': None,  # Param no longer used.
         'num_convs': 4,
         'num_filters': 256,
         'use_separable_conv': False,
