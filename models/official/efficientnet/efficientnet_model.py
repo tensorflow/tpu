@@ -204,7 +204,7 @@ class MBConvBlock(tf.keras.layers.Layer):
 
     self.endpoints = None
 
-    self.conv_cls = tf.layers.Conv2D
+    self.conv_cls = utils.Conv2D
     self.depthwise_conv_cls = utils.DepthwiseConv2D
     if self._block_args.condconv:
       self.conv_cls = functools.partial(
@@ -290,7 +290,7 @@ class MBConvBlock(tf.keras.layers.Layer):
               self._block_args.input_filters * (self._block_args.se_ratio * (
                   self._se_coefficient if self._se_coefficient else 1))))
       # Squeeze and Excitation layer.
-      self._se_reduce = tf.layers.Conv2D(
+      self._se_reduce = utils.Conv2D(
           num_reduced_filters,
           kernel_size=[1, 1],
           strides=[1, 1],
@@ -298,7 +298,7 @@ class MBConvBlock(tf.keras.layers.Layer):
           padding='same',
           data_format=self._data_format,
           use_bias=True)
-      self._se_expand = tf.layers.Conv2D(
+      self._se_expand = utils.Conv2D(
           filters,
           kernel_size=[1, 1],
           strides=[1, 1],
@@ -339,7 +339,8 @@ class MBConvBlock(tf.keras.layers.Layer):
           input_tensor,
           ksize=kernel_size,
           strides=[1, 1, 1, 1],
-          padding='VALID')
+          padding='VALID',
+          data_format=self._data_format)
     else:
       se_tensor = tf.reduce_mean(
           input_tensor, self._spatial_dims, keepdims=True)
@@ -548,7 +549,7 @@ class Model(tf.keras.Model):
       self._spatial_dims = [1, 2]
 
     # Stem part.
-    self._conv_stem = tf.layers.Conv2D(
+    self._conv_stem = utils.Conv2D(
         filters=round_filters(32, self._global_params, self._fix_head_stem),
         kernel_size=[3, 3],
         strides=[2, 2],
@@ -616,7 +617,7 @@ class Model(tf.keras.Model):
         self._blocks.append(conv_block(block_args, self._global_params))
 
     # Head part.
-    self._conv_head = tf.layers.Conv2D(
+    self._conv_head = utils.Conv2D(
         filters=round_filters(1280, self._global_params, self._fix_head_stem),
         kernel_size=[1, 1],
         strides=[1, 1],

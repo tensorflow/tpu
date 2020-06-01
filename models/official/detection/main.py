@@ -75,6 +75,10 @@ def main(argv):
 
   params = params_dict.override_params_dict(
       params, FLAGS.params_override, is_strict=True)
+  params.override({
+      'use_tpu': FLAGS.use_tpu,
+      'model_dir': FLAGS.model_dir,
+  }, is_strict=True)
   if not FLAGS.use_tpu:
     params.override({
         'architecture': {
@@ -84,6 +88,11 @@ def main(argv):
             'use_sync_bn': False,
         },
     }, is_strict=True)
+  # Only run spatial partitioning in training mode.
+  if FLAGS.mode != 'train':
+    params.train.input_partition_dims = None
+    params.train.num_cores_per_replica = None
+  params_to_save = params_dict.ParamsDict(params)
   params.override({
       'platform': {
           'eval_master': FLAGS.eval_master,
@@ -92,16 +101,10 @@ def main(argv):
           'gcp_project': FLAGS.gcp_project,
       },
       'tpu_job_name': FLAGS.tpu_job_name,
-      'use_tpu': FLAGS.use_tpu,
-      'model_dir': FLAGS.model_dir,
       'train': {
           'num_shards': FLAGS.num_cores,
       },
   }, is_strict=False)
-  # Only run spatial partitioning in training mode.
-  if FLAGS.mode != 'train':
-    params.train.input_partition_dims = None
-    params.train.num_cores_per_replica = None
 
   params.validate()
   params.lock()
@@ -133,7 +136,7 @@ def main(argv):
 
   # Runs the model.
   if FLAGS.mode == 'train':
-    config_utils.save_config(params, params.model_dir)
+    config_utils.save_config(params_to_save, params.model_dir)
     executor.train(train_input_fn, params.train.total_steps)
     if FLAGS.eval_after_training:
       executor.evaluate(eval_input_fn, eval_times)
@@ -160,16 +163,11 @@ def main(argv):
           logging.info('Evaluation finished after training step %d',
                        current_step)
           break
-      except tf.errors.NotFoundError:
-        # Since the coordinator is on a different job than the TPU worker,
-        # sometimes the TPU worker does not finish initializing until long after
-        # the CPU job tells it to start evaluating. In this case, the checkpoint
-        # file could have been deleted already.
-        logging.info('Checkpoint %s no longer exists, skipping checkpoint',
-                     ckpt)
+      except tf.errors.NotFoundError as e:
+        logging.info('Erorr occurred during evaluation: NotFoundError: %s', e)
 
   elif FLAGS.mode == 'train_and_eval':
-    config_utils.save_config(params, params.model_dir)
+    config_utils.save_config(params_to_save, params.model_dir)
     num_cycles = int(params.train.total_steps / params.eval.num_steps_per_eval)
     for cycle in range(num_cycles):
       logging.info('Start training cycle %d.', cycle)

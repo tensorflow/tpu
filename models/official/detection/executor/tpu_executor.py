@@ -95,37 +95,50 @@ class TpuExecutor(object):
             None if x == 'None' else _maybe_transpose(x)
             for x in input_partition_dims
         ]
+
+      # Sets up config for TPUEstimator.
+      tpu_config = tf.estimator.tpu.TPUConfig(
+          params.train.iterations_per_loop,
+          num_cores_per_replica=num_cores_per_replica,
+          input_partition_dims=input_partition_dims,
+          tpu_job_name=self._tpu_job_name,
+          per_host_input_for_training=tf.estimator.tpu.InputPipelineConfig
+          .PER_HOST_V2  # pylint: disable=line-too-long
+      )
+
+      run_config = tf.estimator.tpu.RunConfig(
+          session_config=tf.ConfigProto(
+              isolate_session_state=params.isolate_session_state),
+          cluster=self._tpu_cluster_resolver,
+          evaluation_master=params.platform.eval_master,
+          model_dir=params.model_dir,
+          log_step_count_steps=params.train.iterations_per_loop,
+          tpu_config=tpu_config,
+          keep_checkpoint_max=self._keep_checkpoint_max,
+      )
+      self._estimator = tf.estimator.tpu.TPUEstimator(
+          model_fn=model_fn,
+          use_tpu=params.use_tpu,
+          train_batch_size=params.train.train_batch_size,
+          eval_batch_size=params.eval.eval_batch_size,
+          predict_batch_size=params.predict.predict_batch_size,
+          config=run_config,
+          params=params.as_dict())
     else:
-      self._tpu_cluster_resolver = None
+      model_params = params.as_dict()
 
-    # Sets up config for TPUEstimator.
-    tpu_config = tf.estimator.tpu.TPUConfig(
-        params.train.iterations_per_loop,
-        num_cores_per_replica=num_cores_per_replica,
-        input_partition_dims=input_partition_dims,
-        tpu_job_name=self._tpu_job_name,
-        per_host_input_for_training=tf.estimator.tpu.InputPipelineConfig
-        .PER_HOST_V2  # pylint: disable=line-too-long
-    )
+      # Uses `train_batch_size` as the `batch_size` for GPU train.
+      model_params.update({'batch_size': params.train.train_batch_size})
 
-    run_config = tf.estimator.tpu.RunConfig(
-        session_config=tf.ConfigProto(
-            isolate_session_state=params.isolate_session_state),
-        cluster=self._tpu_cluster_resolver,
-        evaluation_master=params.platform.eval_master,
-        model_dir=params.model_dir,
-        log_step_count_steps=params.train.iterations_per_loop,
-        tpu_config=tpu_config,
-        keep_checkpoint_max=self._keep_checkpoint_max,
-    )
-    self._estimator = tf.estimator.tpu.TPUEstimator(
-        model_fn=model_fn,
-        use_tpu=params.use_tpu,
-        train_batch_size=params.train.train_batch_size,
-        eval_batch_size=params.eval.eval_batch_size,
-        predict_batch_size=params.predict.predict_batch_size,
-        config=run_config,
-        params=params.as_dict())
+      gpu_devices = tf.config.experimental.list_physical_devices('GPU')
+      tf.logging.info('gpu devices: %s', gpu_devices)
+      devices = ['device:GPU:{}'.format(i) for i in range(len(gpu_devices))]
+      strategy = tf.distribute.MirroredStrategy(devices=devices)
+      tf.logging.info('Number of devices: %s', strategy.num_replicas_in_sync)
+      run_config = tf.estimator.RunConfig(
+          train_distribute=strategy, model_dir=params.model_dir)
+      self._estimator = tf.estimator.Estimator(
+          model_fn=model_fn, config=run_config, params=model_params)
 
   def train(self, input_fn, steps):
     """Training the model with training data and labels in input_fn."""

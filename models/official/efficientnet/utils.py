@@ -222,6 +222,42 @@ class DepthwiseConv2D(tf.keras.layers.DepthwiseConv2D, tf.layers.Layer):
   pass
 
 
+class Conv2D(tf.layers.Conv2D):
+  """Wrapper for Conv2D with specialization for fast inference."""
+
+  def _bias_activation(self, outputs):
+    if self.use_bias:
+      outputs = tf.nn.bias_add(outputs, self.bias, data_format='NCHW')
+    if self.activation is not None:
+      return self.activation(outputs)
+    return outputs
+
+  def _can_run_fast_1x1(self, inputs):
+    batch_size = inputs.shape.as_list()[0]
+    return (self.data_format == 'channels_first' and
+            batch_size == 1 and
+            self.kernel_size == (1, 1))
+
+  def _call_fast_1x1(self, inputs):
+    # Compute the 1x1 convolution as a matmul.
+    inputs_shape = tf.shape(inputs)
+    flat_inputs = tf.reshape(inputs, [inputs_shape[1], -1])
+    flat_outputs = tf.matmul(
+        tf.squeeze(self.kernel),
+        flat_inputs,
+        transpose_a=True)
+    outputs_shape = tf.concat([[1, self.filters], inputs_shape[2:]], axis=0)
+    outputs = tf.reshape(flat_outputs, outputs_shape)
+
+    # Handle the bias and activation function.
+    return self._bias_activation(outputs)
+
+  def call(self, inputs):
+    if self._can_run_fast_1x1(inputs):
+      return self._call_fast_1x1(inputs)
+    return super(Conv2D, self).call(inputs)
+
+
 class EvalCkptDriver(object):
   """A driver for running eval inference.
 

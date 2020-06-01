@@ -36,7 +36,7 @@ class RpnHead(object):
                min_level,
                max_level,
                anchors_per_location,
-               num_convs=2,
+               num_convs=1,
                num_filters=256,
                use_separable_conv=False,
                activation='relu',
@@ -94,14 +94,15 @@ class RpnHead(object):
 
       def shared_rpn_heads(features, anchors_per_location, level):
         """Shared RPN heads."""
-        features = self._conv2d_op(
-            features,
-            self._num_filters,
-            kernel_size=(3, 3),
-            strides=(1, 1),
-            activation=(None if self._use_batch_norm else self._activation),
-            padding='same',
-            name='rpn')
+        for i in range(self._num_convs):
+          features = self._conv2d_op(
+              features,
+              self._num_filters,
+              kernel_size=(3, 3),
+              strides=(1, 1),
+              activation=(None if self._use_batch_norm else self._activation),
+              padding='same',
+              name='rpn' if self._num_convs == 1 else 'rpn_{}'.format(i))
 
         if self._use_batch_norm:
           # The batch normalization layers are not shared between levels.
@@ -380,6 +381,8 @@ class MaskrcnnHead(object):
         # TODO(pengchong): Figure out the way not to use the static inferred
         # batch size.
         batch_size, num_masks = class_indices.get_shape().as_list()
+        if batch_size is None:
+          batch_size = tf.shape(class_indices)[0]
         mask_outputs = tf.transpose(mask_outputs, [0, 1, 4, 2, 3])
         # Contructs indices for gather.
         batch_indices = tf.tile(
@@ -594,6 +597,8 @@ class ShapemaskPriorHead(object):
     """
     with tf.variable_scope('prior_mask', reuse=tf.AUTO_REUSE):
       batch_size, num_instances, _ = boxes.get_shape().as_list()
+      if batch_size is None:
+        batch_size = tf.shape(boxes)[0]
       instance_features = spatial_transform_ops.multilevel_crop_and_resize(
           fpn_features, outer_boxes, output_size=self._mask_crop_size)
       instance_features = tf.layers.dense(instance_features,
@@ -656,8 +661,9 @@ class ShapemaskPriorHead(object):
         [batch_size, num_instances, num_clusters] representing the classifier
         output probability over all possible shapes.
     """
-
     batch_size, num_instances, _, _, _ = features.get_shape().as_list()
+    if batch_size is None:
+      batch_size = tf.shape(features)[0]
     features *= tf.expand_dims(uniform_priors, axis=-1)
     # Reduce spatial dimension of features. The features have shape
     # [batch_size, num_instances, num_channels].
@@ -761,10 +767,12 @@ class ShapemaskCoarsemaskHead(object):
       images: A feature tensor of size [batch, output_size, output_size,
         num_channels]
     """
-    (batch_size, num_instances, height, width,
-     num_channels) = features.get_shape().as_list()
-    features = tf.reshape(features, [batch_size*num_instances, height, width,
-                                     num_channels])
+    batch_size, num_instances, height, width, num_channels = (
+        features.get_shape().as_list())
+    if batch_size is None:
+      batch_size = tf.shape(features)[0]
+    features = tf.reshape(
+        features, [batch_size * num_instances, height, width, num_channels])
     for i in range(self._num_convs):
       features = tf.layers.conv2d(
           features,
@@ -892,10 +900,12 @@ class ShapemaskFinemaskHead(object):
         num_channels], where output size is self._gt_upsample_scale times
         that of input.
     """
-    (batch_size, num_instances, height, width,
-     num_channels) = features.get_shape().as_list()
-    features = tf.reshape(features, [batch_size*num_instances, height, width,
-                                     num_channels])
+    batch_size, num_instances, height, width, num_channels = (
+        features.get_shape().as_list())
+    if batch_size is None:
+      batch_size = tf.shape(features)[0]
+    features = tf.reshape(
+        features, [batch_size * num_instances, height, width, num_channels])
     for i in range(self._num_convs):
       features = tf.layers.conv2d(
           features,
