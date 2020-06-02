@@ -208,7 +208,7 @@ class Resnet(object):
     """
     def model(inputs, is_training=False):
       """Creation of the model graph."""
-      if space_to_depth_block_size > 1:
+      if space_to_depth_block_size > 1 and is_training:
         # conv0 uses space-to-depth transform for TPU performance.
         inputs = nn_ops.conv0_space_to_depth(
             inputs=inputs,
