@@ -85,8 +85,6 @@ def build_predictions(features,
   """
   images = features['images']
   batch_size, height, width, _ = images.get_shape().as_list()
-  if batch_size is None:
-    batch_size = tf.shape(images)[0]
 
   input_anchor = anchor.Anchor(params.architecture.min_level,
                                params.architecture.max_level,

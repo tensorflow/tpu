@@ -84,10 +84,8 @@ class RetinanetModel(base_model.BaseModel):
     }
 
     tf.logging.info('Computing number of FLOPs before NMS...')
-    static_batch_size = images.get_shape().as_list()[0]
-    if static_batch_size:
-      _, _ = benchmark_utils.compute_model_statistics(
-          static_batch_size)
+    _, _ = benchmark_utils.compute_model_statistics(
+        images.get_shape().as_list()[0])
 
     if mode != mode_keys.TRAIN:
       detection_results = self._generate_detections_fn(

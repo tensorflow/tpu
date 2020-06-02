@@ -271,11 +271,9 @@ class BaseModel(six.with_metaclass(abc.ABCMeta, object)):
     outputs = self.build_outputs(images, labels, mode=mode_keys.TRAIN)
     # Log model statistics.
     batch_size = images.get_shape().as_list()[0]
-    if batch_size:
-      _, _ = benchmark_utils.compute_model_statistics(
-          batch_size=batch_size,
-          json_file_path=os.path.join(
-              self._model_dir, 'train_model_stats.json'))
+    _, _ = benchmark_utils.compute_model_statistics(
+        batch_size=batch_size,
+        json_file_path=os.path.join(self._model_dir, 'train_model_stats.json'))
 
     model_loss = self.build_losses(outputs, labels)
 
@@ -348,11 +346,9 @@ class BaseModel(six.with_metaclass(abc.ABCMeta, object)):
     outputs = self.build_outputs(images, labels, mode=mode_keys.EVAL)
     # Log model statistics.
     batch_size = images.get_shape().as_list()[0]
-    if batch_size:
-      _, _ = benchmark_utils.compute_model_statistics(
-          batch_size=batch_size,
-          json_file_path=os.path.join(
-              self._model_dir, 'eval_model_stats.json'))
+    _, _ = benchmark_utils.compute_model_statistics(
+        batch_size=batch_size,
+        json_file_path=os.path.join(self._model_dir, 'eval_model_stats.json'))
 
     model_loss = self.build_losses(outputs, labels)
 
@@ -384,11 +380,10 @@ class BaseModel(six.with_metaclass(abc.ABCMeta, object)):
     outputs = self.build_outputs(images, labels, mode=mode_keys.PREDICT)
     # Log model statistics.
     batch_size = images.get_shape().as_list()[0]
-    if batch_size:
-      _, _ = benchmark_utils.compute_model_statistics(
-          batch_size=batch_size,
-          json_file_path=os.path.join(
-              self._model_dir, 'predict_model_stats.json'))
+    _, _ = benchmark_utils.compute_model_statistics(
+        batch_size=batch_size,
+        json_file_path=os.path.join(self._model_dir,
+                                    'predict_model_stats.json'))
 
     predictions = self.build_predictions(outputs, labels)
 

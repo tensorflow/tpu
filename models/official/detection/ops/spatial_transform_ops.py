@@ -91,10 +91,8 @@ def feature_bilinear_interpolation(features, kernel_y, kernel_x):
     [batch_size, num_boxes, output_size, output_size, num_filters].
 
   """
-  batch_size, num_boxes, output_size, _, num_filters = (
-      features.get_shape().as_list())
-  if batch_size is None:
-    batch_size = tf.shape(features)[0]
+  (batch_size, num_boxes, output_size, _,
+   num_filters) = features.get_shape().as_list()
   output_size = output_size // 2
   kernel_y = tf.reshape(kernel_y, [batch_size, num_boxes, output_size * 2, 1])
   kernel_x = tf.reshape(kernel_x, [batch_size, num_boxes, 1, output_size * 2])
@@ -139,8 +137,6 @@ def compute_grid_positions(boxes, boundaries, output_size, sample_offset):
     box_grid_x0x1: Tensor of size [batch_size, boxes, output_size, 2]
   """
   batch_size, num_boxes, _ = boxes.get_shape().as_list()
-  if batch_size is None:
-    batch_size = tf.shape(boxes)[0]
   box_grid_x = []
   box_grid_y = []
   for i in range(output_size):
@@ -186,9 +182,6 @@ def compute_grid_positions(boxes, boundaries, output_size, sample_offset):
 def get_grid_one_hot(box_gridy0y1, box_gridx0x1, feature_height, feature_width):
   """Get grid_one_hot from indices and feature_size."""
   (batch_size, num_boxes, output_size, _) = box_gridx0x1.get_shape().as_list()
-  if batch_size is None:
-    batch_size = tf.shape(box_gridx0x1)[0]
-
   y_indices = tf.cast(
       tf.reshape(box_gridy0y1, [batch_size, num_boxes, output_size, 2]),
       dtype=tf.int32)
@@ -270,8 +263,6 @@ def selective_crop_and_resize(features,
   """
   (batch_size, num_levels, max_feature_height, max_feature_width,
    num_filters) = features.get_shape().as_list()
-  if batch_size is None:
-    batch_size = tf.shape(features)[0]
   _, num_boxes, _ = boxes.get_shape().as_list()
 
   kernel_y, kernel_x, box_gridy0y1, box_gridx0x1 = compute_grid_positions(
@@ -374,8 +365,6 @@ def multilevel_crop_and_resize(features, boxes, output_size=7):
     max_level = max(levels)
     batch_size, max_feature_height, max_feature_width, num_filters = (
         features[min_level].get_shape().as_list())
-    if batch_size is None:
-      batch_size = tf.shape(features[min_level])[0]
     _, num_boxes, _ = boxes.get_shape().as_list()
 
     # Stack feature pyramid into a features_all of shape
@@ -507,8 +496,6 @@ def single_level_feature_crop(features, level_boxes, detection_prior_levels,
   """
   (batch_size, num_levels, max_feature_size,
    _, num_downsample_channels) = features.get_shape().as_list()
-  if batch_size is None:
-    batch_size = tf.shape(features)[0]
   _, num_of_instances, _ = level_boxes.get_shape().as_list()
   level_boxes = tf.cast(level_boxes, tf.int32)
   assert num_of_instances == detection_prior_levels.get_shape().as_list()[1]
@@ -590,9 +577,7 @@ def crop_mask_in_target_box(masks,
   """
   with tf.name_scope('crop_mask_in_target_box'):
     batch_size, num_masks, height, width = masks.get_shape().as_list()
-    if batch_size is None:
-      batch_size = tf.shape(masks)[0]
-    masks = tf.reshape(masks, [batch_size * num_masks, height, width, 1])
+    masks = tf.reshape(masks, [batch_size*num_masks, height, width, 1])
     # Pad zeros on the boundary of masks.
     masks = tf.image.pad_to_bounding_box(masks, 2, 2, height + 4, width + 4)
     masks = tf.reshape(masks, [batch_size, num_masks, height+4, width+4, 1])
@@ -662,8 +647,6 @@ def fused_transpose_and_space_to_depth(images,
 
   """
   batch_size, h, w, c = images.get_shape().as_list()
-  if batch_size is None:
-    batch_size = tf.shape(images)[0]
   images = tf.reshape(
       images,
       [batch_size, h // block_size, block_size, w // block_size, block_size, c])
