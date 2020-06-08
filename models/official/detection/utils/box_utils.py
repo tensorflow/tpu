@@ -191,15 +191,15 @@ def clip_boxes(boxes, image_shape):
   with tf.name_scope('clip_boxes'):
     if isinstance(image_shape, list) or isinstance(image_shape, tuple):
       height, width = image_shape
-      x_y_max_list = [height - 1.0, height - 1.0, width - 1.0, width - 1.0]
+      y_x_max_list = [height - 1.0, width - 1.0, height - 1.0, width - 1.0]
     else:
       image_shape = tf.cast(image_shape, dtype=boxes.dtype)
       height = image_shape[..., 0:1]
       width = image_shape[..., 1:2]
-      x_y_max_list = tf.concat(
-          [height - 1.0, height - 1.0, width - 1.0, width - 1.0], -1)
+      y_x_max_list = tf.concat(
+          [height - 1.0, width - 1.0, height - 1.0, width - 1.0], -1)
 
-    return tf.maximum(tf.minimum(boxes, x_y_max_list), 0.0)
+    return tf.maximum(tf.minimum(boxes, y_x_max_list), 0.0)
 
 
 def compute_outer_boxes(boxes, image_shape, scale=1.0):
