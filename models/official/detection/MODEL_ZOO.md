@@ -60,12 +60,12 @@ Coming soon.
 | ------------ |:-------------:| ---------:|-----------:|--------:|--------:|-----------:|-----------:|
 | SpineNet-49  | 640x640       |    350    | 215.7 | 40.8 | 42.8 | 37.8 | [ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/maskrcnn/spinenet-49.tar.gz?organizationId=433637338589) \| [config](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/spinenet/spinenet49_mrcnn.yaml) |
 | SpineNet-96  | 1024x1024     |    350    | 314.6 | 55.2 | 46.8 | 41.2 | [ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/maskrcnn/spinenet-96.tar.gz?organizationId=433637338589) \| [config](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/spinenet/spinenet96_mrcnn.yaml) |
-| SpineNet-143 | 1280x1280     |    350    | 498.4 | 79.2 | 48.7 | 42.6 | [ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/maskrcnn/spinenet143-mrcnn-pb.tar.gz) \| [config](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/spinenet/spinenet143_mrcnn.yaml) |
+| SpineNet-143 | 1280x1280     |    350    | 498.4 | 79.2 | 48.7 | 42.6 | [ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/maskrcnn/spinenet-143.tar.gz) \| [config](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/spinenet/spinenet143_mrcnn.yaml) |
 
 SpineNet-190 trained with stochastic depth and swish activation for a longer shedule:
 | model        | resolution    | epochs  | FLOPs (B)  | params (M)  |  box AP |  mask AP  |   download |
 | ------------ |:-------------:| ---------:|-----------:|--------:|--------:|-----------:|-----------:|
-| SpineNet-190  | 1536x1536      |    400    | 1685.7 | 168.2 | 52.0 | 45.9 | [ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/maskrcnn/spinenet190-mrcnn-pc.tar.gz) \| [config](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/spinenet/spinenet190_mrcnn.yaml) |
+| SpineNet-190  | 1536x1536      |    400    | 1685.7 | 168.2 | 52.0 | 45.9 | [ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/maskrcnn/spinenet-190.tar.gz) \| [config](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/spinenet/spinenet190_mrcnn.yaml) |
 
 ## Image Classification
 ### Common Settings and Notes
