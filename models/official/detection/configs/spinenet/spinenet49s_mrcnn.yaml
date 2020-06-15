@@ -1,4 +1,4 @@
-# SpineNet-49 + Mask R-CNN with l2 weight regularization. 42.8 mAP.
+# SpineNet-49S + Mask R-CNN: box mAP: 39.31, mask mAP: 34.83
 architecture:
   backbone: 'spinenet'
   min_level: 3
