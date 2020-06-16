@@ -477,7 +477,7 @@ def resnet_model_fn(features, labels, mode, params):
       This function is executed on the CPU and should not directly reference
       any Tensors in the rest of the `model_fn`. To pass Tensors from the model
       to the `metric_fn`, provide as part of the `eval_metrics`. See
-      https://www.tensorflow.org/api_docs/python/tf/estimator/tpu/TPUEstimatorSpec
+      https://www.tensorflow.org/api_docs/python/tf/compat/v1/estimator/tpu/TPUEstimatorSpec
       for more information.
 
       Arguments should match the list of `Tensor` objects passed as the second
