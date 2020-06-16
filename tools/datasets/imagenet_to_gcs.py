@@ -251,6 +251,9 @@ class ImageCoder(object):
     self._decode_jpeg_data = tf.placeholder(dtype=tf.string)
     self._decode_jpeg = tf.image.decode_jpeg(self._decode_jpeg_data, channels=3)
 
+  def __del__(self):
+    self._sess.close()
+
   def png_to_jpeg(self, image_data):
     return self._sess.run(self._png_to_jpeg,
                           feed_dict={self._png_data: image_data})
