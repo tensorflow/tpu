@@ -380,7 +380,7 @@ def multilevel_crop_and_resize(features, boxes, output_size=7):
       # levels.
       features_all.append(
           tf.reshape(features[level], [batch_size, -1, num_filters]))
-      features_r2 = tf.reshape(tf.concat(features_all, 1), [-1, num_filters])
+    features_r2 = tf.reshape(tf.concat(features_all, 1), [-1, num_filters])
 
     # Calculate height_l * width_l for each level.
     level_dim_sizes = [
