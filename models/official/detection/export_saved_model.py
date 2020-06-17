@@ -126,6 +126,14 @@ def export(export_dir,
         stride=(2 ** params.architecture.max_level),
         input_type=input_type,
         input_name=input_name)
+  elif model == 'segmentation':
+    model_fn = segmentation.serving_model_fn_builder(
+        use_tpu, output_image_info)
+    serving_input_receiver_fn = functools.partial(
+        segmentation.serving_input_fn,
+        batch_size=batch_size,
+        desired_image_size=image_size,
+        stride=(2 ** params.architecture.max_level))
   else:
     raise ValueError('The model type `{} is not supported.'.format(model))
 

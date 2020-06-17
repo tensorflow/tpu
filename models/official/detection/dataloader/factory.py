@@ -21,6 +21,7 @@ from __future__ import print_function
 from dataloader import classification_parser
 from dataloader import maskrcnn_parser
 from dataloader import retinanet_parser
+from dataloader import segmentation_parser
 from dataloader import shapemask_parser
 
 
@@ -104,6 +105,17 @@ def parser_generator(params, mode):
         max_num_instances=parser_params.max_num_instances,
         use_bfloat16=params.architecture.use_bfloat16,
         mask_train_class=parser_params.mask_train_class,
+        mode=mode)
+  elif params.architecture.parser == 'segmentation_parser':
+    parser_params = params.segmentation_parser
+    parser_fn = segmentation_parser.Parser(
+        output_size=parser_params.output_size,
+        resize_eval=parser_params.resize_eval,
+        ignore_label=parser_params.ignore_label,
+        aug_rand_hflip=parser_params.aug_rand_hflip,
+        aug_scale_min=parser_params.aug_scale_min,
+        aug_scale_max=parser_params.aug_scale_max,
+        use_bfloat16=params.architecture.use_bfloat16,
         mode=mode)
   else:
     raise ValueError('Parser %s is not supported.' % params.architecture.parser)
