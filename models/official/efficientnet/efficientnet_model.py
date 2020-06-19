@@ -421,7 +421,8 @@ class MBConvBlock(tf.keras.layers.Layer):
     if self._block_args.id_skip:
       if all(
           s == 1 for s in self._block_args.strides
-      ) and inputs.get_shape().as_list()[-1] == x.get_shape().as_list()[-1]:
+      ) and (inputs.get_shape().as_list()[self._channel_axis] == 
+                  x.get_shape().as_list()[self._channel_axis]):
         # Apply only if skip connection presents.
         if survival_prob:
           x = utils.drop_connect(x, training, survival_prob)
