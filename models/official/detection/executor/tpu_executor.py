@@ -147,6 +147,11 @@ class TpuExecutor(object):
   def prepare_evaluation(self):
     """Preapre for evaluation."""
     eval_params = params_dict.ParamsDict(self._params.eval)
+    if self._params.eval.type == 'box_and_mask':
+      if (not self._params.eval.use_json_file or
+          not self._params.eval.val_json_file):
+        raise ValueError('If `eval.type` == `box_and_mask`, '
+                         '`eval.val_json_file` is required.')
     if self._params.eval.use_json_file:
       val_json_file = os.path.join(self._params.model_dir,
                                    'eval_annotation_file.json')
