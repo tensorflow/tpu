@@ -17,6 +17,7 @@
 from modeling import classification_model
 from modeling import maskrcnn_model
 from modeling import retinanet_model
+from modeling import segmentation_model
 from modeling import shapemask_model
 
 
@@ -30,6 +31,8 @@ def model_generator(params):
     model_fn = maskrcnn_model.MaskrcnnModel(params)
   elif params.type == 'shapemask':
     model_fn = shapemask_model.ShapeMaskModel(params)
+  elif params.type == 'segmentation':
+    model_fn = segmentation_model.SegmentationModel(params)
   else:
     raise ValueError('Model %s is not supported.'% params.type)
 

@@ -1,4 +1,4 @@
-# SpineNet-96 + Mask R-CNN: box mAP: 47.18, mask mAP: 41.53
+# SpineNet-49S + Mask R-CNN: box mAP: 39.31, mask mAP: 34.83
 architecture:
   backbone: 'spinenet'
   min_level: 3
@@ -21,16 +21,20 @@ batch_norm_activation:
   batch_norm_momentum: 0.99
   use_sync_bn: true
 spinenet:
-  model_id: '96'
+  model_id: '49S'
 maskrcnn_parser:
-  output_size: [1024, 1024]
+  output_size: [640, 640]
   aug_scale_min: 0.5
   aug_scale_max: 2.0
 rpn_head:
+  num_filters: 128
   use_batch_norm: true
 frcnn_head:
   num_convs: 4
+  num_filters: 128
   num_fcs: 1
+  fc_dims: 512
   use_batch_norm: true
 mrcnn_head:
+  num_filters: 128
   use_batch_norm: true

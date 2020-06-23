@@ -21,6 +21,7 @@ from __future__ import print_function
 import json
 
 from absl import logging
+from modeling.architecture import efficientnet
 from modeling.architecture import fpn
 from modeling.architecture import heads
 from modeling.architecture import identity
@@ -81,6 +82,8 @@ def backbone_generator(params):
         batch_norm_activation=batch_norm_activation_generator(
             params.batch_norm_activation),
         init_drop_connect_rate=spinenet_mbconv_params.init_drop_connect_rate)
+  elif 'efficientnet' in params.architecture.backbone:
+    backbone_fn = efficientnet.Efficientnet(params.architecture.backbone)
   else:
     raise ValueError(
         'Backbone model %s is not supported.' % params.architecture.backbone)

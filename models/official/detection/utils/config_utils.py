@@ -25,6 +25,7 @@ _PARSERS = [
     'classification_parser',
     'retinanet_parser',
     'maskrcnn_parser',
+    'segmentation_parser',
     'shapemask_parser',
 ]
 
