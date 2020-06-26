@@ -52,7 +52,9 @@ flags.DEFINE_string(
     'params_override', '',
     'The JSON/YAML file or string which specifies the parameter to be overriden'
     ' on top of `config_file` template.')
-flags.DEFINE_integer('batch_size', 1, 'The batch size.')
+flags.DEFINE_integer(
+    'batch_size', 1,
+    'The batch size. Can be -1, which means batch size is not determined.')
 flags.DEFINE_string(
     'input_type', 'image_bytes',
     'One of `raw_image_tensor`, `image_tensor`, `image_bytes`, `tf_example`.')
@@ -105,6 +107,12 @@ def export(export_dir,
             'use_bfloat16': use_tpu,
         },
     }, is_strict=True)
+  if batch_size is None:
+    params.override({
+        'postprocess': {
+            'use_batched_nms': True,
+        }
+    })
   params.validate()
   params.lock()
 
@@ -185,7 +193,7 @@ def main(argv):
          FLAGS.config_file,
          FLAGS.params_override,
          FLAGS.use_tpu,
-         FLAGS.batch_size,
+         (None if FLAGS.batch_size == -1 else FLAGS.batch_size),
          [int(x) for x in FLAGS.input_image_size.split(',')],
          FLAGS.input_type,
          FLAGS.input_name,

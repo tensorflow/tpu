@@ -76,9 +76,10 @@ def raw_image_tensor_input(batch_size,
   if batch_size == 1:
     images_info = tf.constant([image_info_per_image], dtype=tf.float32)
   else:
-    images_info = tf.constant(
-        [image_info_per_image for _ in range(batch_size)],
-        dtype=tf.float32)
+    images_info = tf.constant([image_info_per_image], dtype=tf.float32)
+    if batch_size is None:
+      batch_size = tf.shape(placeholder)[0]
+    images_info = tf.tile(images_info, [batch_size, 1, 1])
 
   images = placeholder
   return placeholder, {'images': images, 'image_info': images_info}
