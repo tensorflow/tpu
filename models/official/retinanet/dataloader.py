@@ -124,6 +124,24 @@ class InputProcessor(object):
         scaled_image, 0, 0, self._output_size, self._output_size)
     return output_image
 
+  @property
+  def image_scale(self):
+    # Return image scale from original image to scaled image.
+    return self._image_scale
+
+  @property
+  def image_scale_to_original(self):
+    # Return image scale from scaled image to original image.
+    return 1.0 / self._image_scale
+
+  @property
+  def offset_x(self):
+    return self._crop_offset_x
+
+  @property
+  def offset_y(self):
+    return self._crop_offset_y
+
 
 class DetectionInputProcessor(InputProcessor):
   """Input processor for object detection."""
@@ -161,24 +179,6 @@ class DetectionInputProcessor(InputProcessor):
     boxes = tf.gather_nd(boxes, indices)
     classes = tf.gather_nd(self._classes, indices)
     return boxes, classes
-
-  @property
-  def image_scale(self):
-    # Return image scale from original image to scaled image.
-    return self._image_scale
-
-  @property
-  def image_scale_to_original(self):
-    # Return image scale from scaled image to original image.
-    return 1.0 / self._image_scale
-
-  @property
-  def offset_x(self):
-    return self._crop_offset_x
-
-  @property
-  def offset_y(self):
-    return self._crop_offset_y
 
 
 class SegmentationInputProcessor(InputProcessor):
