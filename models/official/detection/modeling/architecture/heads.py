@@ -154,7 +154,7 @@ class FastrcnnHead(object):
     """Initialize params to build Fast R-CNN box head.
 
     Args:
-      num_classes: a integer for the number of classes.
+      num_classes: an integer for the number of classes.
       num_convs: `int` number that represents the number of the intermediate
         conv layers before the FC layers.
       num_filters: `int` number that represents the number of filters of the
@@ -276,8 +276,8 @@ class MaskrcnnHead(object):
     """Initialize params to build Fast R-CNN head.
 
     Args:
-      num_classes: a integer for the number of classes.
-      mask_target_size: a integer that is the resolution of masks.
+      num_classes: an integer for the number of classes.
+      mask_target_size: an integer that is the resolution of masks.
       num_convs: `int` number that represents the number of the intermediate
         conv layers before the prediction.
       num_filters: `int` number that represents the number of filters of the

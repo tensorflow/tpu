@@ -114,7 +114,7 @@ def proposal_label_op(boxes,
       are in the pixel coordinates of the scaled image.
     gt_labels: a tensor with a shape of [batch_size, MAX_NUM_INSTANCES]. This
       tensor might have paddings with a value of -1.
-    batch_size_per_im: a integer represents RoI minibatch size per image.
+    batch_size_per_im: an integer represents RoI minibatch size per image.
     fg_fraction: a float represents the target fraction of RoI minibatch that
       is labeled foreground (i.e., class > 0).
     fg_thresh: a float represents the overlap threshold for an RoI to be
@@ -127,7 +127,7 @@ def proposal_label_op(boxes,
     box_targets: a tensor with a shape of [batch_size, K, 4]. The tensor
       contains the ground truth pixel coordinates of the scaled images for each
       roi. K is the number of sample RoIs (e.g., batch_size_per_im).
-    class_targets: a integer tensor with a shape of [batch_size, K]. The tensor
+    class_targets: an integer tensor with a shape of [batch_size, K]. The tensor
       contains the ground truth class for each roi.
     rois: a tensor with a shape of [batch_size, K, 4], representing the
       coordinates of the selected RoI.
@@ -224,7 +224,7 @@ def select_fg_for_masks(class_targets, box_targets, boxes,
       This tensor keeps the mapping between proposal to labels.
       proposal_to_label_map[i] means the index of the ground truth instance for
       the i-th proposal.
-    max_num_fg: a integer represents the number of masks per image.
+    max_num_fg: an integer represents the number of masks per image.
   Returns:
     class_targets, boxes, proposal_to_label_map, box_targets that have
     foreground objects.

@@ -45,13 +45,13 @@ def _propose_rois_tpu(scores,
     height: a tensor of shape [batch_size, 1, 1] representing the image height.
     width: a tensor of shape [batch_size, 1, 1] representing the image width.
     scale: a tensor of shape [batch_size, 1, 1] representing the image scale.
-    rpn_pre_nms_topn: a integer number of top scoring RPN proposals to keep
+    rpn_pre_nms_topn: an integer number of top scoring RPN proposals to keep
       before applying NMS. This is *per FPN level* (not total).
-    rpn_post_nms_topn: a integer number of top scoring RPN proposals to keep
+    rpn_post_nms_topn: an integer number of top scoring RPN proposals to keep
       after applying NMS. This is the total number of RPN proposals produced.
     rpn_nms_threshold: a float number between 0 and 1 as the NMS threshold
       used on RPN proposals.
-    rpn_min_size: a integer number as the minimum proposal height and width as
+    rpn_min_size: an integer number as the minimum proposal height and width as
       both need to be greater than this number. Note that this number is at
       origingal image scale; not scale used during training or inference).
     bbox_reg_weights: None or a list of four integer specifying the weights used
@@ -129,13 +129,13 @@ def _propose_rois_gpu(scores,
     height: a tensor of shape [batch_size, 1, 1] representing the image height.
     width: a tensor of shape [batch_size, 1, 1] representing the image width.
     scale: a tensor of shape [batch_size, 1, 1] representing the image scale.
-    rpn_pre_nms_topn: a integer number of top scoring RPN proposals to keep
+    rpn_pre_nms_topn: an integer number of top scoring RPN proposals to keep
       before applying NMS. This is *per FPN level* (not total).
-    rpn_post_nms_topn: a integer number of top scoring RPN proposals to keep
+    rpn_post_nms_topn: an integer number of top scoring RPN proposals to keep
       after applying NMS. This is the total number of RPN proposals produced.
     rpn_nms_threshold: a float number between 0 and 1 as the NMS threshold
       used on RPN proposals.
-    rpn_min_size: a integer number as the minimum proposal height and width as
+    rpn_min_size: an integer number as the minimum proposal height and width as
       both need to be greater than this number. Note that this number is at
       origingal image scale; not scale used during training or inference).
     bbox_reg_weights: None or a list of four integer specifying the weights used
@@ -219,13 +219,13 @@ def multilevel_propose_rois(scores_outputs,
       See dataloader.DetectionInputProcessor for details. The last two are
       original height and width. See dataloader.DetectionInputProcessor for
       details.
-    rpn_pre_nms_topn: a integer number of top scoring RPN proposals to keep
+    rpn_pre_nms_topn: an integer number of top scoring RPN proposals to keep
       before applying NMS. This is *per FPN level* (not total).
-    rpn_post_nms_topn: a integer number of top scoring RPN proposals to keep
+    rpn_post_nms_topn: an integer number of top scoring RPN proposals to keep
       after applying NMS. This is the total number of RPN proposals produced.
     rpn_nms_threshold: a float number between 0 and 1 as the NMS threshold
       used on RPN proposals.
-    rpn_min_size: a integer number as the minimum proposal height and width as
+    rpn_min_size: an integer number as the minimum proposal height and width as
       both need to be greater than this number. Note that this number is at
       origingal image scale; not scale used during training or inference).
     bbox_reg_weights: None or a list of four integer specifying the weights used
