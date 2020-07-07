@@ -75,10 +75,10 @@ def box_head(roi_features, num_classes=91, mlp_head_dim=1024):
   """Box and class branches for the Mask-RCNN model.
 
   Args:
-    roi_features: A ROI feature tensor of shape
+    roi_features: a ROI feature tensor of shape
       [batch_size, num_rois, height_l, width_l, num_filters].
-    num_classes: a integer for the number of classes.
-    mlp_head_dim: a integer that is the hidden dimension in the fully-connected
+    num_classes: an integer for the number of classes.
+    mlp_head_dim: an integer that is the hidden dimension in the fully-connected
       layers.
   Returns:
     class_outputs: a tensor with a shape of

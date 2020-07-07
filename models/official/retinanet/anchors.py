@@ -208,7 +208,7 @@ def _generate_detections(cls_outputs, box_outputs, anchor_boxes, indices,
     image_scale: a float tensor representing the scale between original image
       and input image for the detector. It is used to rescale detections for
       evaluating with the original groundtruth annotations.
-    num_classes: a integer that indicates the number of classes.
+    num_classes: an integer that indicates the number of classes.
   Returns:
     detections: detection results in a tensor with each row representing
       [image_id, x, y, width, height, score, class]
@@ -357,9 +357,9 @@ class AnchorLabeler(object):
     """Labels anchors with ground truth inputs.
 
     Args:
-      gt_boxes: A float tensor with shape [N, 4] representing groundtruth boxes.
+      gt_boxes: a float tensor with shape [N, 4] representing groundtruth boxes.
         For each row, it stores [y0, x0, y1, x1] for four corners of a box.
-      gt_labels: A integer tensor with shape [N, 1] representing groundtruth
+      gt_labels: an integer tensor with shape [N, 1] representing groundtruth
         classes.
     Returns:
       cls_targets_dict: ordered dictionary with keys

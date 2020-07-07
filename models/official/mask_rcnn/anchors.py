@@ -184,7 +184,7 @@ class AnchorLabeler(object):
       unmatched_threshold: a float number between 0 and 1 representing the
         upper-bound threshold to assign negative labels for anchors. An anchor
         with a score below the threshold is labeled negative.
-      rpn_batch_size_per_im: a integer number that represents the number of
+      rpn_batch_size_per_im: an integer number that represents the number of
         sampled anchors per image in the first stage (region proposal network).
       rpn_fg_fraction: a float number between 0 and 1 representing the fraction
         of positive anchors (foreground) in the first stage.
@@ -212,13 +212,13 @@ class AnchorLabeler(object):
     This function performs subsampling for foreground (fg) and background (bg)
     anchors.
     Args:
-      match_results: A integer tensor with shape [N] representing the
+      match_results: an integer tensor with shape [N] representing the
         matching results of anchors. (1) match_results[i]>=0,
         meaning that column i is matched with row match_results[i].
         (2) match_results[i]=-1, meaning that column i is not matched.
         (3) match_results[i]=-2, meaning that column i is ignored.
     Returns:
-      score_targets: a integer tensor with the a shape of [N].
+      score_targets: an integer tensor with the a shape of [N].
         (1) score_targets[i]=1, the anchor is a positive sample.
         (2) score_targets[i]=0, negative. (3) score_targets[i]=-1, the anchor is
         don't care (ignore).
@@ -253,9 +253,9 @@ class AnchorLabeler(object):
     """Labels anchors with ground truth inputs.
 
     Args:
-      gt_boxes: A float tensor with shape [N, 4] representing groundtruth boxes.
+      gt_boxes: a float tensor with shape [N, 4] representing groundtruth boxes.
         For each row, it stores [y0, x0, y1, x1] for four corners of a box.
-      gt_labels: A integer tensor with shape [N, 1] representing groundtruth
+      gt_labels: an integer tensor with shape [N, 1] representing groundtruth
         classes.
     Returns:
       score_targets_dict: ordered dictionary with keys

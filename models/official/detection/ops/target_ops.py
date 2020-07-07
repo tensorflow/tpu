@@ -134,7 +134,7 @@ def assign_and_sample_proposals(proposed_boxes,
     gt_classes: a tensor with a shape of [batch_size, MAX_NUM_INSTANCES]. This
       tensor might have paddings with values of -1 indicating the invalid
       classes.
-    num_samples_per_image: a integer represents RoI minibatch size per image.
+    num_samples_per_image: an integer represents RoI minibatch size per image.
     mix_gt_boxes: a bool indicating whether to mix the groundtruth boxes before
       sampling proposals.
     fg_fraction: a float represents the target fraction of RoI minibatch that

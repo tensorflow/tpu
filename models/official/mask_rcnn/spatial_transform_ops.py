@@ -91,10 +91,10 @@ def fused_transpose_and_space_to_depth(
                                c * (block_size ** 2)])
 
   Args:
-    images: A tensor with a shape of [batch_size, h, w, c] as the images. The
+    images: a tensor with a shape of [batch_size, h, w, c] as the images. The
       h and w can be dynamic sizes.
-    block_size: A integer for space-to-depth block size.
-    transpose_input: A boolean to indicate if the images tensor should be
+    block_size: an integer for space-to-depth block size.
+    transpose_input: a boolean to indicate if the images tensor should be
       transposed.
 
   Returns:
