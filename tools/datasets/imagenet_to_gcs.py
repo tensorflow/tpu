@@ -13,7 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
-r"""Script to download the Imagenet dataset and upload to gcs.
+r"""Script to process the Imagenet dataset and upload to gcs.
 
 To run the script setup a virtualenv with the following libraries installed.
 - `gcloud`: Follow the instructions on
@@ -23,26 +23,22 @@ To run the script setup a virtualenv with the following libraries installed.
 - `tensorflow`: Install with `pip install tensorflow`
 
 Once you have all the above libraries setup, you should register on the
-[Imagenet website](http://image-net.org/download-images) to get your
-username and access_key.
+[Imagenet website](http://image-net.org/download-images) and download the
+ImageNet .tar files. It should be extracted and provided in the format:
+- Training images: train/n03062245/n03062245_4620.JPEG
+- Validation Images: validation/ILSVRC2012_val_00000001.JPEG
+- Validation Labels: synset_labels.txt
 
-Make sure you have around 300GB of disc space available on the machine where
-you're running this script. You can run the script using the following command.
+To run the script to preprocess the raw dataset as TFRecords and upload to gcs,
+run the following command:
+
 ```
 python imagenet_to_gcs.py \
   --project="TEST_PROJECT" \
   --gcs_output_path="gs://TEST_BUCKET/IMAGENET_DIR" \
-  --local_scratch_dir="./imagenet" \
-  --imagenet_username=FILL_ME_IN \
-  --imagenet_access_key=FILL_ME_IN \
+  --raw_data_dir="path/to/imagenet"
 ```
 
-Optionally if the raw data has already been downloaded you can provide a direct
-`raw_data_directory` path. If raw data directory is provided it should be in
-the format:
-- Training images: train/n03062245/n03062245_4620.JPEG
-- Validation Images: validation/ILSVRC2012_val_00000001.JPEG
-- Validation Labels: synset_labels.txt
 """
 
 import math
@@ -53,6 +49,8 @@ import urllib
 
 from absl import app
 from absl import flags
+from absl import logging
+
 import tensorflow.compat.v1 as tf
 
 from google.cloud import storage
@@ -66,10 +64,6 @@ flags.DEFINE_string(
 flags.DEFINE_string(
     'raw_data_dir', None, 'Directory path for raw Imagenet dataset. '
     'Should have train and validation subdirectories inside it.')
-flags.DEFINE_string(
-    'imagenet_username', None, 'Username for Imagenet.org account')
-flags.DEFINE_string(
-    'imagenet_access_key', None, 'Access Key for Imagenet.org account')
 flags.DEFINE_boolean(
     'gcs_upload', True, 'Set to false to not upload to gcs.')
 
@@ -122,7 +116,7 @@ def download_dataset(raw_data_dir):
   _check_or_create_dir(raw_data_dir)
 
   # Download the training data
-  tf.logging.info('Downloading the training set. This may take a few hours.')
+  logging.info('Downloading the training set. This may take a few hours.')
   directory = os.path.join(raw_data_dir, TRAINING_DIRECTORY)
   filename = os.path.join(raw_data_dir, TRAINING_FILE)
   _download(BASE_URL + TRAINING_FILE, filename)
@@ -138,11 +132,11 @@ def download_dataset(raw_data_dir):
     os.remove(sub_tarfile)
 
   # Download synset_labels for validation set
-  tf.logging.info('Downloading the validation labels.')
+  logging.info('Downloading the validation labels.')
   _download(LABELS_URL, os.path.join(raw_data_dir, LABELS_FILE))
 
   # Download the validation data
-  tf.logging.info('Downloading the validation set. This may take a few hours.')
+  logging.info('Downloading the validation set. This may take a few hours.')
   directory = os.path.join(raw_data_dir, VALIDATION_DIRECTORY)
   filename = os.path.join(raw_data_dir, VALIDATION_FILE)
   _download(BASE_URL + VALIDATION_FILE, filename)
@@ -285,11 +279,11 @@ def _process_image(filename, coder):
   # Clean the dirty data.
   if _is_png(filename):
     # 1 image is a PNG.
-    tf.logging.info('Converting PNG to JPEG for %s' % filename)
+    logging.info('Converting PNG to JPEG for %s', filename)
     image_data = coder.png_to_jpeg(image_data)
   elif _is_cmyk(filename):
     # 22 JPEG images are in CMYK colorspace.
-    tf.logging.info('Converting CMYK to RGB for %s' % filename)
+    logging.info('Converting CMYK to RGB for %s', filename)
     image_data = coder.cmyk_to_rgb(image_data)
 
   # Decode the RGB JPEG.
@@ -351,10 +345,10 @@ def _process_dataset(filenames, synsets, labels, output_directory, prefix,
     chunk_files = filenames[shard * chunksize : (shard + 1) * chunksize]
     chunk_synsets = synsets[shard * chunksize : (shard + 1) * chunksize]
     output_file = os.path.join(
-        output_directory, '%s-%.5d-of-%.5d' % (prefix, shard, num_shards))
+        output_directory, '%s-%.5d-of-%.5d', (prefix, shard, num_shards))
     _process_image_files_batch(coder, output_file, chunk_files,
                                chunk_synsets, labels)
-    tf.logging.info('Finished writing file: %s' % output_file)
+    logging.info('Finished writing file: %s', output_file)
     files.append(output_file)
   return files
 
@@ -395,14 +389,14 @@ def convert_to_tf_records(raw_data_dir):
       sorted(set(validation_synsets + training_synsets)))}
 
   # Create training data
-  tf.logging.info('Processing the training data.')
+  logging.info('Processing the training data.')
   training_records = _process_dataset(
       training_files, training_synsets, labels,
       os.path.join(FLAGS.local_scratch_dir, TRAINING_DIRECTORY),
       TRAINING_DIRECTORY, TRAINING_SHARDS)
 
   # Create validation data
-  tf.logging.info('Processing the validation data.')
+  logging.info('Processing the validation data.')
   validation_records = _process_dataset(
       validation_files, validation_synsets, labels,
       os.path.join(FLAGS.local_scratch_dir, VALIDATION_DIRECTORY),
@@ -433,19 +427,19 @@ def upload_to_gcs(training_records, validation_records):
       blob = bucket.blob(key_prefix + os.path.basename(filename))
       blob.upload_from_filename(filename)
       if not i % 20:
-        tf.logging.info('Finished uploading file: %s' % filename)
+        logging.info('Finished uploading file: %s', filename)
 
   # Upload training dataset
-  tf.logging.info('Uploading the training data.')
+  logging.info('Uploading the training data.')
   _upload_files(training_records)
 
   # Upload validation dataset
-  tf.logging.info('Uploading the validation data.')
+  logging.info('Uploading the validation data.')
   _upload_files(validation_records)
 
 
 def main(argv):  # pylint: disable=unused-argument
-  tf.logging.set_verbosity(tf.logging.INFO)
+  logging.set_verbosity(logging.INFO)
 
   if FLAGS.gcs_upload and FLAGS.project is None:
     raise ValueError('GCS Project must be provided.')
@@ -461,9 +455,9 @@ def main(argv):  # pylint: disable=unused-argument
   # Download the dataset if it is not present locally
   raw_data_dir = FLAGS.raw_data_dir
   if raw_data_dir is None:
-    raw_data_dir = os.path.join(FLAGS.local_scratch_dir, 'raw_data')
-    tf.logging.info('Downloading data to raw_data_dir: %s' % raw_data_dir)
-    download_dataset(raw_data_dir)
+    raise AssertionError(
+        'The ImageNet download path is no longer supported. Please download '
+        'the .tar files manually and provide the `raw_data_dir`.')
 
   # Convert the raw data into tf-records
   training_records, validation_records = convert_to_tf_records(raw_data_dir)
