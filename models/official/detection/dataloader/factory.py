@@ -115,6 +115,7 @@ def parser_generator(params, mode):
         aug_rand_hflip=parser_params.aug_rand_hflip,
         aug_scale_min=parser_params.aug_scale_min,
         aug_scale_max=parser_params.aug_scale_max,
+        aug_policy=parser_params.aug_policy,
         use_bfloat16=params.architecture.use_bfloat16,
         mode=mode)
   else:
