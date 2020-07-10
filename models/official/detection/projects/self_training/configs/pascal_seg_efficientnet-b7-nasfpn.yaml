@@ -1,0 +1,52 @@
+# Template to train NAS-FPN with efficientnet-b7 backbone model on Pascal.
+architecture:
+  parser: 'segmentation_parser'
+  backbone: 'efficientnet-b7'
+  multilevel_features: 'nasfpn'
+  use_bfloat16: true
+  use_aspp: false
+  use_pyramid_fusion: true
+  num_classes: 21
+train:
+  train_batch_size: 256
+  total_steps: 20000
+  learning_rate:
+    type: 'cosine'
+    warmup_learning_rate: 0.001
+    warmup_steps: 500
+    init_learning_rate: 0.08
+  gradient_clip_norm: 10
+  frozen_variable_prefix: null
+  l2_weight_decay: 1.0e-05
+batch_norm_activation:
+  batch_norm_momentum: 0.997
+  batch_norm_epsilon: 0.001
+  batch_norm_trainable: true
+  use_sync_bn: true
+  activation: 'relu'
+eval:
+  eval_samples: 1449
+  eval_batch_size: 8
+segmentation_parser:
+  aug_rand_hflip: true
+  aug_scale_max: 1.5
+  aug_scale_min: 0.2
+  ignore_label: 255
+  output_size: [512, 512]
+  resize_eval: True
+batch_norm_activation:
+  batch_norm_epsilon: 0.001
+  batch_norm_momentum: 0.997
+  batch_norm_trainable: true
+  use_sync_bn: true
+segmentation_head:
+  level: 2
+  num_convs: 3
+segmentation_loss:
+  ignore_label: 255
+  use_groundtruth_dimension: false
+  label_smoothing: 0.0
+enable_summary: true
+nasfpn:
+  use_separable_conv: true
+  num_repeats: 7
