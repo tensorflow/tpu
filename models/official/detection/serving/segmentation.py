@@ -90,16 +90,26 @@ def serving_model_fn_builder(export_tpu_model, output_image_info):
     logits = tf.image.resize_bilinear(
         outputs['logits'], tf.shape(images)[1:3], align_corners=False)
 
+    # NOTE: The above image size is scaled and padded. We will first crop
+    # out the scaled image to remove padding and then re-scale back to the
+    # original image size.
     original_image_size = tf.squeeze(features['image_info'][:, 0:1, :])
-    height = original_image_size[0]
-    width = original_image_size[1]
+    original_height = original_image_size[0]
+    original_width = original_image_size[1]
+    scaling = tf.squeeze(features['image_info'][:, 2:3, :])
+    scaled_height = original_height * scaling[0]
+    scaled_width = original_width * scaling[1]
     offset_height = tf.zeros_like(height, dtype=tf.int32)
     offset_width = tf.zeros_like(width, dtype=tf.int32)
+    logits = tf.image.crop_to_bounding_box(
+        logits, offset_height, offset_width,
+        tf.cast(scaled_height, dtype=tf.int32),
+        tf.cast(scaled_width, dtype=tf.int32))
+    logits = tf.image.resize_bilinear(
+        logits,
+        tf.cast(original_image_size, dtype=tf.int32),
+        align_corners=False)
 
-    # Clip the predictions to original image size.
-    logits = tf.image.crop_to_bounding_box(logits, offset_height, offset_width,
-                                           tf.cast(height, dtype=tf.int32),
-                                           tf.cast(width, dtype=tf.int32))
     probabilities = tf.nn.softmax(logits)
 
     score_threshold_placeholder = features['score_thresholds']
