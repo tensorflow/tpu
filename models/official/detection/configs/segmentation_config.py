@@ -58,6 +58,7 @@ SEGMENTATION_CFG.override(
             'aug_rand_hflip': True,
             'aug_scale_min': 0.75,
             'aug_scale_max': 1.5,
+            'aug_policy': '',
             'ignore_label': 255,
         },
         'batch_norm_activation': {

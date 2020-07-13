@@ -46,6 +46,7 @@ class Parser(object):
                aug_rand_hflip=False,
                aug_scale_min=1.0,
                aug_scale_max=1.0,
+               aug_policy='',
                use_bfloat16=True,
                mode=None):
     """Initializes parameters for parsing annotations in the dataset.
@@ -63,6 +64,10 @@ class Parser(object):
         data augmentation during training.
       aug_scale_max: `float`, the maximum scale applied to `output_size` for
         data augmentation during training.
+      aug_policy: `str`, the augmentation policy to use.
+        An empty string indicates no augmentation policy.
+        The augment policy is independent from `aug_rand_hflip`,
+        `aug_scale_min`, and `aug_scale_max`.
       use_bfloat16: `bool`, if True, cast output image to tf.bfloat16.
       mode: a ModeKeys. Specifies if this is training, evaluation, prediction or
         prediction with groundtruths in the outputs.
@@ -78,6 +83,7 @@ class Parser(object):
     self._aug_rand_hflip = aug_rand_hflip
     self._aug_scale_min = aug_scale_min
     self._aug_scale_max = aug_scale_max
+    self._aug_policy = aug_policy
 
     # Device.
     self._use_bfloat16 = use_bfloat16
