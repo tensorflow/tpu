@@ -88,10 +88,12 @@ class TfExampleDecoder(object):
     xmax = parsed_tensors['image/object/bbox/xmax']
     ymin = parsed_tensors['image/object/bbox/ymin']
     ymax = parsed_tensors['image/object/bbox/ymax']
+    height = tf.cast(parsed_tensors['image/height'], dtype=tf.float32)
+    width = tf.cast(parsed_tensors['image/width'], dtype=tf.float32)
     return tf.cond(
         tf.greater(tf.shape(parsed_tensors['image/object/area'])[0], 0),
         lambda: parsed_tensors['image/object/area'],
-        lambda: (xmax - xmin) * (ymax - ymin))
+        lambda: (xmax - xmin) * (ymax - ymin) * height * width)
 
   def decode(self, serialized_example):
     """Decode the serialized example.
