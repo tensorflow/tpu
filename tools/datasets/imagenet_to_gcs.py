@@ -175,12 +175,12 @@ def _convert_to_example(filename, image_buffer, label, synset, height, width):
   example = tf.train.Example(features=tf.train.Features(feature={
       'image/height': _int64_feature(height),
       'image/width': _int64_feature(width),
-      'image/colorspace': _bytes_feature(colorspace),
+      'image/colorspace': _bytes_feature(colorspace.encode()),
       'image/channels': _int64_feature(channels),
       'image/class/label': _int64_feature(label),
-      'image/class/synset': _bytes_feature(synset),
-      'image/format': _bytes_feature(image_format),
-      'image/filename': _bytes_feature(os.path.basename(filename)),
+      'image/class/synset': _bytes_feature(synset.encode()),
+      'image/format': _bytes_feature(image_format.encode()),
+      'image/filename': _bytes_feature(os.path.basename(filename).encode()),
       'image/encoded': _bytes_feature(image_buffer)}))
   return example
 
@@ -273,8 +273,7 @@ def _process_image(filename, coder):
     width: integer, image width in pixels.
   """
   # Read the image file.
-  with tf.gfile.FastGFile(filename, 'r') as f:
-    image_data = f.read()
+  image_data = tf.gfile.FastGFile(filename, 'rb').read()
 
   # Clean the dirty data.
   if _is_png(filename):
@@ -361,7 +360,7 @@ def convert_to_tf_records(raw_data_dir):
   random.seed(0)
   def make_shuffle_idx(n):
     order = range(n)
-    random.shuffle(order)
+    random.shuffle(list(order))
     return order
 
   # Glob all the training files
