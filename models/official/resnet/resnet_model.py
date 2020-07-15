@@ -28,8 +28,8 @@ from __future__ import print_function
 import functools
 import tensorflow.compat.v1 as tf
 
-BATCH_NORM_DECAY = 0.9
-BATCH_NORM_EPSILON = 1e-5
+MOVING_AVERAGE_DECAY = 0.9
+EPSILON = 1e-5
 
 LAYER_BN_RELU = 'bn_relu'
 LAYER_EVONORM_B0 = 'evonorm_b0'
@@ -85,8 +85,8 @@ def batch_norm_relu(inputs, is_training, relu=True, init_zero=False,
   inputs = tf.layers.batch_normalization(
       inputs=inputs,
       axis=axis,
-      momentum=BATCH_NORM_DECAY,
-      epsilon=BATCH_NORM_EPSILON,
+      momentum=MOVING_AVERAGE_DECAY,
+      epsilon=EPSILON,
       center=True,
       scale=True,
       training=is_training,
@@ -98,15 +98,19 @@ def batch_norm_relu(inputs, is_training, relu=True, init_zero=False,
   return inputs
 
 
-def _instance_std(inputs, data_format='channels_first'):
+def _instance_std(inputs,
+                  epsilon=EPSILON,
+                  data_format='channels_first'):
   """Instance standard deviation."""
   axes = [1, 2] if data_format == 'channels_last' else [2, 3]
   _, variance = tf.nn.moments(inputs, axes=axes, keepdims=True)
-  return tf.sqrt(variance + BATCH_NORM_EPSILON)
+  return tf.sqrt(variance + epsilon)
 
 
 def _batch_std(inputs,
                training,
+               decay=MOVING_AVERAGE_DECAY,
+               epsilon=EPSILON,
                data_format='channels_first',
                name='moving_variance'):
   """Batch standard deviation."""
@@ -129,15 +133,18 @@ def _batch_std(inputs,
     variance = tf.cast(variance, tf.float32)
     update_op = tf.assign_sub(
         moving_variance,
-        (moving_variance - variance) * (1 - BATCH_NORM_DECAY))
+        (moving_variance - variance) * (1 - decay))
     tf.add_to_collection(tf.GraphKeys.UPDATE_OPS, update_op)
   else:
     variance = moving_variance
-  std = tf.sqrt(variance + BATCH_NORM_EPSILON)
+  std = tf.sqrt(variance + epsilon)
   return tf.cast(std, inputs.dtype)
 
 
-def _group_std(inputs, data_format='channels_first', num_groups=32):
+def _group_std(inputs,
+               epsilon=EPSILON,
+               data_format='channels_first',
+               num_groups=32):
   """Grouped standard deviation along the channel dimension."""
   axis = 3 if data_format == 'channels_last' else 1
   while num_groups > 1:
@@ -145,20 +152,26 @@ def _group_std(inputs, data_format='channels_first', num_groups=32):
       break
     num_groups -= 1
   if data_format == 'channels_last':
-    n, h, w, c = inputs.shape
-    x = tf.reshape(inputs, [n, h, w, num_groups, c // num_groups])
+    _, h, w, c = inputs.shape.as_list()
+    x = tf.reshape(inputs, [-1, h, w, num_groups, c // num_groups])
     _, variance = tf.nn.moments(x, [1, 2, 4], keep_dims=True)
   else:
-    n, c, h, w = inputs.shape
-    x = tf.reshape(inputs, [n, num_groups, c // num_groups, h, w])
+    _, c, h, w = inputs.shape.as_list()
+    x = tf.reshape(inputs, [-1, num_groups, c // num_groups, h, w])
     _, variance = tf.nn.moments(x, [2, 3, 4], keep_dims=True)
-  std = tf.sqrt(variance + BATCH_NORM_EPSILON)
-  std = tf.broadcast_to(std, x.shape)
-  return tf.reshape(std, inputs.shape)
+  std = tf.sqrt(variance + epsilon)
+  std = tf.broadcast_to(std, x.shape.as_list())
+  return tf.reshape(std, inputs.shape.as_list())
 
 
-def evonorm(inputs, is_training, layer=LAYER_EVONORM_B0, nonlinearity=True,
-            init_zero=False, data_format='channels_first'):
+def evonorm(inputs,
+            is_training,
+            layer=LAYER_EVONORM_B0,
+            nonlinearity=True,
+            init_zero=False,
+            decay=MOVING_AVERAGE_DECAY,
+            epsilon=EPSILON,
+            data_format='channels_first'):
   """Apply an EvoNorm transformation (an alternative to BN-ReLU).
 
      Hanxiao Liu, Andrew Brock, Karen Simonyan, Quoc V. Le.
@@ -174,6 +187,8 @@ def evonorm(inputs, is_training, layer=LAYER_EVONORM_B0, nonlinearity=True,
     nonlinearity: `bool` if False, apply an affine transform only.
     init_zero: `bool` if True, initializes scale parameter of batch
         normalization with 0 instead of 1 (default).
+    decay: `float` a scalar decay used in the moving average.
+    epsilon: `float` a small float added to variance to avoid dividing by zero.
     data_format: `str` either "channels_first" for `[batch, channels, height,
         width]` or "channels_last for `[batch, height, width, channels]`.
 
@@ -207,11 +222,17 @@ def evonorm(inputs, is_training, layer=LAYER_EVONORM_B0, nonlinearity=True,
           dtype=inputs.dtype,
           initializer=tf.ones_initializer())
       if layer == LAYER_EVONORM_S0:
-        den = _group_std(inputs, data_format=data_format)
+        den = _group_std(inputs, epsilon=epsilon, data_format=data_format)
         inputs = inputs * tf.nn.sigmoid(v * inputs) / den
       elif layer == LAYER_EVONORM_B0:
-        left = _batch_std(inputs, data_format=data_format, training=is_training)
-        right = v * inputs + _instance_std(inputs, data_format=data_format)
+        left = _batch_std(
+            inputs,
+            decay=decay,
+            epsilon=epsilon,
+            data_format=data_format,
+            training=is_training)
+        right = v * inputs + _instance_std(
+            inputs, epsilon=epsilon, data_format=data_format)
         inputs = inputs / tf.maximum(left, right)
       else:
         raise ValueError('Unknown EvoNorm layer: {}'.format(layer))
@@ -680,4 +701,3 @@ resnet_v1 = functools.partial(resnet, pre_activation=False)
 resnet_v2 = functools.partial(resnet, pre_activation=True)
 resnet_v1_generator = functools.partial(resnet_generator, pre_activation=False)
 resnet_v2_generator = functools.partial(resnet_generator, pre_activation=True)
-
