@@ -107,7 +107,7 @@ class TfExampleDecoder(object):
         - source_id: a string scalar tensor.
         - height: an integer scalar tensor.
         - width: an integer scalar tensor.
-        - groundtruth_classes: a int64 tensor of shape [None].
+        - groundtruth_classes: an int64 tensor of shape [None].
         - groundtruth_is_crowd: a bool tensor of shape [None].
         - groundtruth_area: a float32 tensor of shape [None].
         - groundtruth_boxes: a float32 tensor of shape [None, 4].

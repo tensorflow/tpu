@@ -33,7 +33,7 @@ from utils import box_utils
 
 
 class MaskrcnnModel(base_model.BaseModel):
-  """RetinaNet model function."""
+  """Mask R-CNN model function."""
 
   def __init__(self, params):
     super(MaskrcnnModel, self).__init__(params)
