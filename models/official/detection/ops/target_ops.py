@@ -329,6 +329,9 @@ class ROISampler(object):
         box coordinates of the matched groundtruth boxes of the samples RoIs.
       sampled_gt_classes: a tensor of shape of [batch_size, K], storing the
         classes of the matched groundtruth boxes of the sampled RoIs.
+      sampled_gt_indices: a tensor of shape of [batch_size, K], storing the
+        indices of the sampled groudntruth boxes in the original `gt_boxes`,
+        i.e. gt_boxes[sampled_gt_indices[:, i]] = sampled_gt_boxes[:, i].
     """
     sampled_rois, sampled_gt_boxes, sampled_gt_classes, sampled_gt_indices = (
         assign_and_sample_proposals(

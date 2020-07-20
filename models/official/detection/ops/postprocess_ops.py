@@ -73,13 +73,13 @@ def _generate_detections_v1(boxes,
       before NMS.
 
   Returns:
-    nms_boxes: `float` Tensor of shape [batch_size, max_total_size, 4]
+    nmsed_boxes: `float` Tensor of shape [batch_size, max_total_size, 4]
       representing top detected boxes in [y1, x1, y2, x2].
-    nms_scores: `float` Tensor of shape [batch_size, max_total_size]
+    nmsed_scores: `float` Tensor of shape [batch_size, max_total_size]
       representing sorted confidence scores for detected boxes. The values are
       between [0, 1].
-    nms_classes: `int` Tensor of shape [batch_size, max_total_size] representing
-      classes for detected boxes.
+    nmsed_classes: `int` Tensor of shape [batch_size, max_total_size]
+      representing classes for detected boxes.
     valid_detections: `int` Tensor of shape [batch_size] only the top
       `valid_detections` boxes are valid detections.
   """
@@ -135,12 +135,12 @@ def _generate_detections_per_image(boxes,
       before NMS.
 
   Returns:
-    nms_boxes: `float` Tensor of shape [max_total_size, 4] representing top
+    nmsed_boxes: `float` Tensor of shape [max_total_size, 4] representing top
       detected boxes in [y1, x1, y2, x2].
-    nms_scores: `float` Tensor of shape [max_total_size] representing sorted
+    nmsed_scores: `float` Tensor of shape [max_total_size] representing sorted
       confidence scores for detected boxes. The values are between [0, 1].
-    nms_classes: `int` Tensor of shape [max_total_size] representing classes for
-      detected boxes.
+    nmsed_classes: `int` Tensor of shape [max_total_size] representing classes
+      for detected boxes.
     valid_detections: `int` Tensor of shape [1] only the top `valid_detections`
       boxes are valid detections.
   """
@@ -250,13 +250,13 @@ def _generate_detections_v2(boxes,
       before NMS.
 
   Returns:
-    nms_boxes: `float` Tensor of shape [batch_size, max_total_size, 4]
+    nmsed_boxes: `float` Tensor of shape [batch_size, max_total_size, 4]
       representing top detected boxes in [y1, x1, y2, x2].
-    nms_scores: `float` Tensor of shape [batch_size, max_total_size]
+    nmsed_scores: `float` Tensor of shape [batch_size, max_total_size]
       representing sorted confidence scores for detected boxes. The values are
       between [0, 1].
-    nms_classes: `int` Tensor of shape [batch_size, max_total_size] representing
-      classes for detected boxes.
+    nmsed_classes: `int` Tensor of shape [batch_size, max_total_size]
+      representing classes for detected boxes.
     valid_detections: `int` Tensor of shape [batch_size] only the top
       `valid_detections` boxes are valid detections.
   """
@@ -327,13 +327,13 @@ def _generate_detections_batched(boxes,
     score_threshold: a float representing the threshold for deciding when to
       remove boxes based on score.
   Returns:
-    nms_boxes: `float` Tensor of shape [batch_size, max_total_size, 4]
+    nmsed_boxes: `float` Tensor of shape [batch_size, max_total_size, 4]
       representing top detected boxes in [y1, x1, y2, x2].
-    nms_scores: `float` Tensor of shape [batch_size, max_total_size]
+    nmsed_scores: `float` Tensor of shape [batch_size, max_total_size]
       representing sorted confidence scores for detected boxes. The values are
       between [0, 1].
-    nms_classes: `int` Tensor of shape [batch_size, max_total_size] representing
-      classes for detected boxes.
+    nmsed_classes: `int` Tensor of shape [batch_size, max_total_size]
+      representing classes for detected boxes.
     valid_detections: `int` Tensor of shape [batch_size] only the top
       `valid_detections` boxes are valid detections.
   """
@@ -439,12 +439,12 @@ class GenericDetectionGenerator(object):
         `box_outputs` and `anchor_boxes`.
 
     Returns:
-      nms_boxes: `float` Tensor of shape [batch_size, max_total_size, 4]
+      nmsed_boxes: `float` Tensor of shape [batch_size, max_total_size, 4]
         representing top detected boxes in [y1, x1, y2, x2].
-      nms_scores: `float` Tensor of shape [batch_size, max_total_size]
+      nmsed_scores: `float` Tensor of shape [batch_size, max_total_size]
         representing sorted confidence scores for detected boxes. The values are
         between [0, 1].
-      nms_classes: `int` Tensor of shape [batch_size, max_total_size]
+      nmsed_classes: `int` Tensor of shape [batch_size, max_total_size]
         representing classes for detected boxes.
       valid_detections: `int` Tensor of shape [batch_size] only the top
         `valid_detections` boxes are valid detections.
