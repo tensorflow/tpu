@@ -303,7 +303,8 @@ class ImageNetInput(ImageNetTFExampleInput):
                mixup_alpha=0.0,
                randaug_num_layers=None,
                randaug_magnitude=None,
-               resize_method=None):
+               resize_method=None,
+               holdout_shards=None):
     """Create an input from TFRecord files.
 
     Args:
@@ -331,6 +332,7 @@ class ImageNetInput(ImageNetTFExampleInput):
       randaug_magnitude: 'int', if RandAug is used, what should the magnitude
         be. See autoaugment.py for detailed description.
       resize_method: If None, use bicubic in default.
+      holdout_shards: number of holdout training shards for validation.
     """
     super(ImageNetInput, self).__init__(
         is_training=is_training,
@@ -348,6 +350,7 @@ class ImageNetInput(ImageNetTFExampleInput):
       self.data_dir = None
     self.num_parallel_calls = num_parallel_calls
     self.cache = cache
+    self.holdout_shards = holdout_shards
 
   def _get_null_input(self, data):
     """Returns a null image (all black pixels).
@@ -375,14 +378,29 @@ class ImageNetInput(ImageNetTFExampleInput):
       logging.info('Undefined data_dir implies null input')
       return tf.data.Dataset.range(1).repeat().map(self._get_null_input)
 
-    # Shuffle the filenames to ensure better randomization.
-    file_pattern = os.path.join(
-        self.data_dir, 'train-*' if self.is_training else 'validation-*')
+    if self.holdout_shards:
+      if self.is_training:
+        filenames = [
+            os.path.join(self.data_dir, 'train-%05d-of-01024' % i)
+            for i in range(self.holdout_shards, 1024)
+        ]
+      else:
+        filenames = [
+            os.path.join(self.data_dir, 'train-%05d-of-01024' % i)
+            for i in range(0, self.holdout_shards)
+        ]
+      for f in filenames[:10]:
+        logging.info('datafiles: %s', f)
+      dataset = tf.data.Dataset.from_tensor_slices(filenames)
+    else:
+      file_pattern = os.path.join(
+          self.data_dir, 'train-*' if self.is_training else 'validation-*')
+      logging.info('datafiles: %s', file_pattern)
+      dataset = tf.data.Dataset.list_files(file_pattern, shuffle=False)
 
     # For multi-host training, we want each hosts to always process the same
     # subset of files.  Each host only sees a subset of the entire dataset,
     # allowing us to cache larger datasets in memory.
-    dataset = tf.data.Dataset.list_files(file_pattern, shuffle=False)
     dataset = dataset.shard(num_hosts, index)
 
     if self.is_training and not self.cache:
