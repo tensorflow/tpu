@@ -1,0 +1,25 @@
+# SpineNet-96 + Attribute-Mask R-CNN
+# 6x schedule (~189 Fashionpedia epochs)
+# Box AP (IoU / IoU+F1): 46.4 / 34.0
+# Mask AP (IoU / IoU+F1): 41.2 / 31.8
+architecture:
+  backbone: 'spinenet'
+  multilevel_features: 'identity'
+train:
+  total_steps: 33750
+  train_batch_size: 256
+  learning_rate:
+    type: 'step'
+    init_learning_rate: 0.28
+    learning_rate_levels: [0.028, 0.0028]
+    learning_rate_steps: [31875, 33125]
+batch_norm_activation:
+  use_sync_bn: true
+  activation: 'swish'
+spinenet:
+  model_id: '96'
+  init_drop_connect_rate: 0.2
+attribute_maskrcnn_parser:
+  output_size: [1024, 1024]
+  aug_scale_min: 0.5
+  aug_scale_max: 2.0

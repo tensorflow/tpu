@@ -1,0 +1,23 @@
+# ResNet-101 FPN + Attribute-Mask R-CNN
+# 3x schedule (~95 Fashionpedia epochs)
+# Box AP (IoU / IoU+F1): 44.9 / 32.8
+# Mask AP (IoU / IoU+F1): 40.7 / 31.4
+architecture:
+  backbone: 'resnet'
+  multilevel_features: 'fpn'
+train:
+  total_steps: 16875
+  train_batch_size: 256
+  learning_rate:
+    type: 'step'
+    init_learning_rate: 0.32
+    learning_rate_levels: [0.032, 0.0032]
+    learning_rate_steps: [15000, 16250]
+batch_norm_activation:
+  use_sync_bn: true
+resnet:
+  resnet_depth: 101
+attribute_maskrcnn_parser:
+  output_size: [1024, 1024]
+  aug_scale_min: 0.5
+  aug_scale_max: 2.0
