@@ -387,8 +387,7 @@ def create_model_fn(feature_columns):
       cross_entropy, metric_fn, in_top_k, ndcg, metric_weights = (
           neumf_model.compute_eval_loss_and_metrics_helper(
               logits, softmax_logits, duplicate_mask, params["num_neg"],
-              params["match_mlperf"],
-              use_tpu_spec=params["use_tpu"]))
+              params["match_mlperf"]))
 
       return tf.estimator.tpu.TPUEstimatorSpec(
           mode=mode,
