@@ -210,7 +210,7 @@ class MaskrcnnModel(base_model.BaseModel):
     return model_loss
 
   def build_metrics(self, outputs, labels):
-    raise NotImplementedError('The `build_metrics` is not implemented.')
+    raise NotImplementedError('The build_metrics is not implemented.')
 
   def build_predictions(self, outputs, labels):
     predictions = {
