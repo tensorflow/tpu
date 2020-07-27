@@ -66,6 +66,7 @@ BASE_CFG = {
         'num_steps_per_eval': 1000,
         'eval_file_pattern': '',
         'eval_dataset_type': 'tfrecord',
+        'skip_eval_loss': False,
     },
     'predict': {
         'predict_batch_size': 8,

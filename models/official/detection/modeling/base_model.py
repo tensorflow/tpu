@@ -168,6 +168,8 @@ class BaseModel(six.with_metaclass(abc.ABCMeta, object)):
     # Platform device.
     self._use_tpu = params.use_tpu
 
+    self._skip_eval_loss = params.eval.skip_eval_loss
+
   @abc.abstractmethod
   def _build_outputs(self, images, labels, mode):
     """Implements `build_outputs`. See `build_outputs` for more details."""
@@ -354,7 +356,10 @@ class BaseModel(six.with_metaclass(abc.ABCMeta, object)):
           json_file_path=os.path.join(
               self._model_dir, 'eval_model_stats.json'))
 
-    model_loss = self.build_losses(outputs, labels)
+    if self._skip_eval_loss:
+      model_loss = tf.constant(0, dtype=tf.float32)
+    else:
+      model_loss = self.build_losses(outputs, labels)
 
     eval_metrics = self.build_metrics(outputs, labels)
 
