@@ -171,6 +171,7 @@ def evonorm(inputs,
             init_zero=False,
             decay=MOVING_AVERAGE_DECAY,
             epsilon=EPSILON,
+            num_groups=32,
             data_format='channels_first'):
   """Apply an EvoNorm transformation (an alternative to BN-ReLU).
 
@@ -189,6 +190,8 @@ def evonorm(inputs,
         normalization with 0 instead of 1 (default).
     decay: `float` a scalar decay used in the moving average.
     epsilon: `float` a small float added to variance to avoid dividing by zero.
+    num_groups: `int` the number of groups per layer, used only when `layer` ==
+        LAYER_EVONORM_S0.
     data_format: `str` either "channels_first" for `[batch, channels, height,
         width]` or "channels_last for `[batch, height, width, channels]`.
 
@@ -222,7 +225,11 @@ def evonorm(inputs,
           dtype=inputs.dtype,
           initializer=tf.ones_initializer())
       if layer == LAYER_EVONORM_S0:
-        den = _group_std(inputs, epsilon=epsilon, data_format=data_format)
+        den = _group_std(
+            inputs,
+            epsilon=epsilon,
+            data_format=data_format,
+            num_groups=num_groups)
         inputs = inputs * tf.nn.sigmoid(v * inputs) / den
       elif layer == LAYER_EVONORM_B0:
         left = _batch_std(

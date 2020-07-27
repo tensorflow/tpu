@@ -67,6 +67,16 @@ flags.DEFINE_string(
     help=('The directory where the ImageNet input data is stored. Please see'
           ' the README.md for the expected data format.'))
 
+flags.DEFINE_integer(
+    'holdout_shards',
+    default=None,
+    help=('Number of holdout shards for validation. 0 means no holdout.'))
+
+flags.DEFINE_string('eval_name', default=None, help=('Evaluation name.'))
+
+flags.DEFINE_bool(
+    'archive_ckpt', default=True, help=('If true, archive the best ckpt.'))
+
 flags.DEFINE_string(
     'model_dir', default=None,
     help=('The directory where the model and training/evaluation summaries are'
@@ -115,7 +125,7 @@ flags.DEFINE_integer(
     'train_batch_size', default=2048, help='Batch size for training.')
 
 flags.DEFINE_integer(
-    'eval_batch_size', default=1024, help='Batch size for evaluation.')
+    'eval_batch_size', default=64, help='Batch size for evaluation.')
 
 flags.DEFINE_integer(
     'num_train_images', default=1281167, help='Size of training data set.')
@@ -218,9 +228,7 @@ flags.DEFINE_float(
     default=0.016,
     help=('Base learning rate when train batch size is 256.'))
 
-flags.DEFINE_float(
-    'momentum', default=0.9,
-    help=('Momentum parameter used in the MomentumOptimizer.'))
+flags.DEFINE_float('lr_decay_epoch', default=2.4, help='LR decay epoch.')
 
 flags.DEFINE_float(
     'moving_average_decay', default=0.9999,
@@ -386,8 +394,11 @@ def model_fn(features, labels, mode, params):
 
     scaled_lr = FLAGS.base_learning_rate * (FLAGS.train_batch_size / 256.0)
     logging.info('base_learning_rate = %f', FLAGS.base_learning_rate)
-    learning_rate = utils.build_learning_rate(scaled_lr, global_step,
-                                              params['steps_per_epoch'])
+    learning_rate = utils.build_learning_rate(
+        scaled_lr,
+        global_step,
+        params['steps_per_epoch'],
+        decay_epochs=FLAGS.lr_decay_epoch)
     optimizer = utils.build_optimizer(learning_rate)
     if FLAGS.use_tpu:
       # When using TPU, wrap the optimizer with CrossShardOptimizer which
@@ -605,6 +616,11 @@ def main(unused_argv):
     input_image_size = model_builder_factory.get_model_input_size(
         FLAGS.model_name)
 
+  if FLAGS.holdout_shards:
+    holdout_images = int(FLAGS.num_train_images * FLAGS.holdout_shards / 1024.0)
+    FLAGS.num_train_images -= holdout_images
+    FLAGS.num_eval_images = holdout_images
+
   # For imagenet dataset, include background label if number of output classes
   # is 1001
   include_background_label = (FLAGS.num_label_classes == 1001)
@@ -692,7 +708,8 @@ def main(unused_argv):
           mixup_alpha=FLAGS.mixup_alpha,
           randaug_num_layers=FLAGS.randaug_num_layers,
           randaug_magnitude=FLAGS.randaug_magnitude,
-          resize_method=resize_method)
+          resize_method=resize_method,
+          holdout_shards=FLAGS.holdout_shards)
 
   imagenet_train = build_imagenet_input(is_training=True)
   imagenet_eval = build_imagenet_input(is_training=False)
@@ -708,14 +725,21 @@ def main(unused_argv):
         eval_results = est.evaluate(
             input_fn=imagenet_eval.input_fn,
             steps=eval_steps,
-            checkpoint_path=ckpt)
+            checkpoint_path=ckpt,
+            name=FLAGS.eval_name)
         elapsed_time = int(time.time() - start_timestamp)
         logging.info('Eval results: %s. Elapsed seconds: %d',
                      eval_results, elapsed_time)
-        utils.archive_ckpt(eval_results, eval_results['top_1_accuracy'], ckpt)
+        if FLAGS.archive_ckpt:
+          utils.archive_ckpt(eval_results, eval_results['top_1_accuracy'], ckpt)
 
         # Terminate eval job when final checkpoint is reached
-        current_step = int(os.path.basename(ckpt).split('-')[1])
+        try:
+          current_step = int(os.path.basename(ckpt).split('-')[1])
+        except IndexError:
+          logging.info('%s has no global step info: stop!', ckpt)
+          break
+
         if current_step >= FLAGS.train_steps:
           logging.info(
               'Evaluation finished after training step %d', current_step)
@@ -777,11 +801,13 @@ def main(unused_argv):
         logging.info('Starting to evaluate.')
         eval_results = est.evaluate(
             input_fn=imagenet_eval.input_fn,
-            steps=FLAGS.num_eval_images // FLAGS.eval_batch_size)
+            steps=FLAGS.num_eval_images // FLAGS.eval_batch_size,
+            name=FLAGS.eval_name)
         logging.info('Eval results at step %d: %s',
                      next_checkpoint, eval_results)
         ckpt = tf.train.latest_checkpoint(FLAGS.model_dir)
-        utils.archive_ckpt(eval_results, eval_results['top_1_accuracy'], ckpt)
+        if FLAGS.archive_ckpt:
+          utils.archive_ckpt(eval_results, eval_results['top_1_accuracy'], ckpt)
 
       elapsed_time = int(time.time() - start_timestamp)
       logging.info('Finished training up to step %d. Elapsed seconds %d.',
