@@ -203,7 +203,7 @@ def extract_coco_groundtruth(prediction, include_mask=False):
 
   images = []
   annotations = []
-  for b in xrange(prediction['source_id'].shape[0]):
+  for b in range(prediction['source_id'].shape[0]):
     # Constructs image info.
     image = _extract_image_info(prediction, b)
     images.append(image)
@@ -217,7 +217,7 @@ def extract_coco_groundtruth(prediction, include_mask=False):
 
     # Constructs annotations.
     num_labels = prediction['num_groundtruth_labels'][b]
-    for obj_i in xrange(num_labels):
+    for obj_i in range(int(num_labels)):
       annotation = _extract_bbox_annotation(prediction, b, obj_i)
 
       if include_mask:
@@ -233,7 +233,7 @@ def create_coco_format_dataset(images,
                                regenerate_annotation_id=True):
   """Creates COCO format dataset with COCO format images and annotations."""
   if regenerate_annotation_id:
-    for i in xrange(len(annotations)):
+    for i in range(len(annotations)):
       # WARNING: The annotation id must be positive.
       annotations[i]['id'] = i + 1
 
@@ -243,4 +243,5 @@ def create_coco_format_dataset(images,
       'annotations': annotations,
       'categories': categories,
   }
+
   return dataset
