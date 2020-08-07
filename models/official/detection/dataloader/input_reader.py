@@ -22,46 +22,64 @@ from dataloader import input_reader_util
 from dataloader import mode_keys as ModeKeys
 
 
-class InputFn(object):
-  """Input function for tf.Estimator."""
+def _create_pre_batch_dataset_fn(file_pattern, dataset_type, config_params):
+  """Creates a callable dataset function, which returns a pre-batched dataset."""
 
-  def __init__(self, file_pattern, params, mode, dataset_type='tfrecord'):
-    self._file_pattern = file_pattern
-    self._mode = mode
-    self._is_training = (mode == ModeKeys.TRAIN)
+  def dataset_fn(params, mode):
+    """Creates and returns a pre-batched tf.data.Dataset."""
+    del params
+    is_training = (mode == ModeKeys.TRAIN)
     if dataset_type == 'tfrecord':
-      self._dataset_fn = tf.data.TFRecordDataset
-      self._parser_fn = factory.parser_generator(params, mode)
+      dataset_cls = tf.data.TFRecordDataset
+      parser_fn = factory.parser_generator(config_params, mode)
     else:
       raise ValueError('Dataset type %s is not supported.' % dataset_type)
-
-    self._transpose_input = params.train.transpose_input
-    self._space_to_depth_block_size = params.architecture.space_to_depth_block_size
-
-  def __call__(self, params):
-    batch_size = params['batch_size']
-    dataset = tf.data.Dataset.list_files(
-        self._file_pattern, shuffle=self._is_training)
-
-    if self._is_training:
+    dataset = tf.data.Dataset.list_files(file_pattern, shuffle=is_training)
+    if is_training:
       dataset = dataset.repeat()
 
     dataset = dataset.apply(
         tf.data.experimental.parallel_interleave(
-            lambda file_name: self._dataset_fn(file_name).prefetch(1),
+            lambda file_name: dataset_cls(file_name).prefetch(1),
             cycle_length=32,
-            sloppy=self._is_training))
+            sloppy=is_training))
 
-    if self._is_training:
+    if is_training:
       dataset = dataset.shuffle(64)
 
     # Parses the fetched records to input tensors for model function.
-    dataset = dataset.apply(
-        tf.data.experimental.map_and_batch(
-            self._parser_fn,
-            batch_size=batch_size,
-            num_parallel_batches=64,
-            drop_remainder=True))
+    dataset = dataset.map(
+        parser_fn, num_parallel_calls=64)
+
+    return dataset
+
+  return dataset_fn
+
+
+class InputFn(object):
+  """Input function for tf.Estimator."""
+
+  def __init__(self, file_pattern, params, mode, dataset_type='tfrecord'):
+    """Input function classed used for training.
+
+    Args:
+      file_pattern: String pattern path to the data.
+      params: Program config parameter object.
+      mode: Training mode string.
+      dataset_type: String name of the dataset type.
+    """
+    self._mode = mode
+    self._is_training = (mode == ModeKeys.TRAIN)
+    self._transpose_input = params.train.transpose_input
+    self._space_to_depth_block_size = params.architecture.space_to_depth_block_size
+    self._dataset_fn = _create_pre_batch_dataset_fn(file_pattern,
+                                                    dataset_type,
+                                                    params)
+
+  def __call__(self, params):
+    batch_size = params['batch_size']
+    dataset = self._dataset_fn(params, self._mode)
+    dataset = dataset.batch(batch_size, drop_remainder=True)
     dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
 
     def _transform_fn(images, labels):

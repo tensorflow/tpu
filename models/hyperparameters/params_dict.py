@@ -112,7 +112,11 @@ class ParamsDict(object):
     Raises:
       KeyError: if k is not defined in the ParamsDict.
     """
-    if k not in self.__dict__.keys():
+    if k == '__getstate__':
+      return self.as_dict
+    elif k == '__setstate__':
+      return self.__init__
+    elif k not in self.__dict__.keys():
       raise KeyError('The key `{}` does not exist. '.format(k))
     return self.__dict__[k]
 
