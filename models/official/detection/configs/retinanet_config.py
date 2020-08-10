@@ -50,6 +50,7 @@ RETINANET_CFG.override({
         'focal_loss_gamma': 1.5,
         'huber_loss_delta': 0.1,
         'box_loss_weight': 50,
+        'normalizer_momentum': 0.0,
     },
 }, is_strict=False)
 

@@ -48,6 +48,8 @@ class RetinanetModel(base_model.BaseModel):
         params.retinanet_loss, params.architecture.num_classes)
     self._box_loss_fn = losses.RetinanetBoxLoss(params.retinanet_loss)
     self._box_loss_weight = params.retinanet_loss.box_loss_weight
+    self._focal_loss_normalizer_momentum = (
+        params.retinanet_loss.normalizer_momentum)
 
     # Predict function.
     self._generate_detections_fn = postprocess_ops.MultilevelDetectionGenerator(
@@ -98,10 +100,35 @@ class RetinanetModel(base_model.BaseModel):
 
   def build_losses(self, outputs, labels):
     # Adds RetinaNet model losses.
+
+    # Using per-batch num_positives to normalize the focal loss would sometimes
+    # cause numerical instability, e.g. large image size or sparse objects.
+    # Using a moving average to smooth the normalizer improves the training
+    # stability.
+    num_positives_sum = tf.reduce_sum(labels['num_positives'])
+    if self._focal_loss_normalizer_momentum > 0.0:
+      moving_normalizer_var = tf.Variable(
+          0.0,
+          name='moving_normalizer',
+          shape=(),
+          dtype=tf.float32,
+          synchronization=tf.VariableSynchronization.ON_READ,
+          trainable=False,
+          aggregation=tf.VariableAggregation.MEAN)
+      normalizer = tf.keras.backend.moving_average_update(
+          moving_normalizer_var,
+          num_positives_sum,
+          momentum=self._focal_loss_normalizer_momentum)
+      # Only monitor the normalizers when moving average is activated.
+      self.add_scalar_summary('num_positive_sum', num_positives_sum)
+      self.add_scalar_summary('moving_normalizer', normalizer)
+    else:
+      normalizer = num_positives_sum
+
     cls_loss = self._cls_loss_fn(
-        outputs['cls_outputs'], labels['cls_targets'], labels['num_positives'])
+        outputs['cls_outputs'], labels['cls_targets'], normalizer)
     box_loss = self._box_loss_fn(
-        outputs['box_outputs'], labels['box_targets'], labels['num_positives'])
+        outputs['box_outputs'], labels['box_targets'], normalizer)
     model_loss = cls_loss + self._box_loss_weight * box_loss
 
     self.add_scalar_summary('cls_loss', cls_loss)
