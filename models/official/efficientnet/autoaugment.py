@@ -206,9 +206,10 @@ def contrast(image, factor):
   # and create a constant image size of that value.  Use that as the
   # blending degenerate target of the original image.
   hist = tf.histogram_fixed_width(degenerate, [0, 255], nbins=256)
-  mean = tf.reduce_sum(tf.cast(hist, tf.float32)) / 256.0
+  hist = tf.cast(hist, tf.float32)
+  mean = tf.reduce_sum(tf.cast(degenerate, tf.float32)) / tf.reduce_sum(hist)
+  mean = tf.clip_by_value(mean, 0.0, 255.0)
   degenerate = tf.ones_like(degenerate, dtype=tf.float32) * mean
-  degenerate = tf.clip_by_value(degenerate, 0.0, 255.0)
   degenerate = tf.image.grayscale_to_rgb(tf.cast(degenerate, tf.uint8))
   return blend(degenerate, image, factor)
 
