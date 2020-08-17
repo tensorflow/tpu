@@ -134,8 +134,7 @@ class MaskCOCO(COCO):
     for i, image_id in enumerate(detection_results['source_id']):
 
       if include_mask:
-        # box_coorindates_in_image = detection_results['detection_boxes'][i]
-        box_coorindates_in_image = detection_results['selected_box_rois'][i]
+        box_coorindates_in_image = detection_results['detection_boxes'][i]
         segments = generate_segmentation_from_masks(
             detection_results['detection_masks'][i],
             box_coorindates_in_image,

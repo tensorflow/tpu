@@ -24,6 +24,7 @@ import box_utils
 
 
 def generate_detections_per_image_tpu(cls_outputs,
+                                      box_outputs,
                                       anchor_boxes,
                                       image_info,
                                       pre_nms_num_detections=1000,
@@ -69,19 +70,17 @@ def generate_detections_per_image_tpu(cls_outputs,
   top_k_indices = tf.floordiv(top_k_indices_with_classes, num_classes - 1)
 
   anchor_boxes = tf.gather(anchor_boxes, top_k_indices)
-  boxes = anchor_boxes
-  # box_outputs = tf.reshape(
-  #     box_outputs, [num_boxes, num_classes, 4])[:, 1:num_classes, :]
+  box_outputs = tf.reshape(
+      box_outputs, [num_boxes, num_classes, 4])[:, 1:num_classes, :]
   class_indices = classes
-  # box_outputs = tf.gather_nd(box_outputs,
-  #                            tf.stack([top_k_indices, class_indices], axis=1))
+  box_outputs = tf.gather_nd(box_outputs,
+                             tf.stack([top_k_indices, class_indices], axis=1))
 
   # apply bounding box regression to anchors
-  # boxes = box_utils.decode_boxes(
-  #     box_outputs, anchor_boxes, bbox_reg_weights)
+  boxes = box_utils.decode_boxes(
+      box_outputs, anchor_boxes, bbox_reg_weights)
   boxes = box_utils.clip_boxes(
       boxes, image_info[0], image_info[1])
-
 
   list_of_all_boxes = []
   list_of_all_scores = []
@@ -135,6 +134,7 @@ def generate_detections_per_image_tpu(cls_outputs,
 
 
 def generate_detections_tpu(class_outputs,
+                            box_outputs,
                             anchor_boxes,
                             image_info,
                             pre_nms_num_detections=1000,
@@ -175,7 +175,7 @@ def generate_detections_tpu(class_outputs,
     num_valid_boxes, box_coordinates, box_classes, box_scores = ([], [], [], [])
     for i in range(batch_size):
       result = generate_detections_per_image_tpu(
-          softmax_class_outputs[i], anchor_boxes[i],
+          softmax_class_outputs[i], box_outputs[i], anchor_boxes[i],
           image_info[i], pre_nms_num_detections, post_nms_num_detections,
           nms_threshold, bbox_reg_weights)
 
@@ -192,6 +192,7 @@ def generate_detections_tpu(class_outputs,
 
 
 def generate_detections_gpu(class_outputs,
+                            box_outputs,
                             anchor_boxes,
                             image_info,
                             pre_nms_num_detections=1000,
@@ -231,24 +232,22 @@ def generate_detections_gpu(class_outputs,
 
     # Remove background
     scores = tf.slice(softmax_class_outputs, [0, 0, 1], [-1, -1, -1])
-    # boxes = tf.slice(
-    #     tf.reshape(box_outputs, [batch_size, num_boxes, num_classes, 4]),
-    #     [0, 0, 1, 0], [-1, -1, -1, -1])
+    boxes = tf.slice(
+        tf.reshape(box_outputs, [batch_size, num_boxes, num_classes, 4]),
+        [0, 0, 1, 0], [-1, -1, -1, -1])
 
     anchor_boxes = (tf.expand_dims(anchor_boxes, axis=2) *
                     tf.ones([1, 1, num_classes - 1, 1]))
 
     num_detections = num_boxes * (num_classes - 1)
 
-    # boxes = tf.reshape(boxes, [batch_size, num_detections, 4])
+    boxes = tf.reshape(boxes, [batch_size, num_detections, 4])
     scores = tf.reshape(scores, [batch_size, num_detections, 1])
     anchor_boxes = tf.reshape(anchor_boxes, [batch_size, num_detections, 4])
 
     # Decode
-    # boxes = box_utils.decode_boxes(
-    #     boxes, anchor_boxes, bbox_reg_weights)
-
-    boxes = anchor_boxes
+    boxes = box_utils.decode_boxes(
+        boxes, anchor_boxes, bbox_reg_weights)
 
     # Clip boxes
     height = tf.expand_dims(image_info[:, 0:1], axis=-1)
