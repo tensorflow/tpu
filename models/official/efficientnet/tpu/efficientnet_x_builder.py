@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Model Builder for EfficientNet-TPU."""
+"""Model Builder for EfficientNet-X."""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -32,28 +32,28 @@ MEAN_RGB = [0.485 * 255, 0.456 * 255, 0.406 * 255]
 STDDEV_RGB = [0.229 * 255, 0.224 * 255, 0.225 * 255]
 
 
-def efficientnet_tpu_params(model_name):
+def efficientnet_x_params(model_name):
   """Get efficientnet params based on model name."""
   params_dict = {
       # (width_coefficient, depth_coefficient, resolution, dropout_rate,
       #  se_coefficient)
-      'efficientnet-tpu-b0': (1.0, 1.0, 224, 0.2, 4),
-      'efficientnet-tpu-b1': (1.0, 1.1, 240, 0.2, 2),
-      'efficientnet-tpu-b2': (1.1, 1.2, 260, 0.3, 1),
-      'efficientnet-tpu-b3': (1.2, 1.4, 300, 0.3, 1),
-      'efficientnet-tpu-b4': (1.4, 1.8, 380, 0.4, 1),
-      'efficientnet-tpu-b5': (1.6, 2.2, 456, 0.4, 1),
-      'efficientnet-tpu-b6': (1.8, 2.6, 528, 0.5, 1),
-      'efficientnet-tpu-b7': (2.0, 3.1, 600, 0.5, 1),
+      'efficientnet-x-b0': (1.0, 1.0, 224, 0.2, 4),
+      'efficientnet-x-b1': (1.0, 1.1, 240, 0.2, 2),
+      'efficientnet-x-b2': (1.1, 1.2, 260, 0.3, 1),
+      'efficientnet-x-b3': (1.2, 1.4, 300, 0.3, 1),
+      'efficientnet-x-b4': (1.4, 1.8, 380, 0.4, 1),
+      'efficientnet-x-b5': (1.6, 2.2, 456, 0.4, 1),
+      'efficientnet-x-b6': (1.8, 2.6, 528, 0.5, 1),
+      'efficientnet-x-b7': (2.0, 3.1, 600, 0.5, 1),
   }
   return params_dict[model_name]
 
 
-def efficientnet_tpu(width_coefficient=None,
-                     depth_coefficient=None,
-                     se_coefficient=None,
-                     dropout_rate=0.2,
-                     survival_prob=0.8):
+def efficientnet_x(width_coefficient=None,
+                   depth_coefficient=None,
+                   se_coefficient=None,
+                   dropout_rate=0.2,
+                   survival_prob=0.8):
   """Creates a efficientnet model."""
   blocks_args = [
       'r1_k3_s11_e1_i32_o16_se0.25_p1', 'r2_k3_s22_e6_i16_o24_se0.25_f1_p2',
@@ -86,8 +86,8 @@ def get_model_params(model_name, override_params):
   """Get the block args and global params for a given model."""
   if model_name.startswith('efficientnet'):
     width_coefficient, depth_coefficient, _, dropout_rate, se_coefficient = (
-        efficientnet_tpu_params(model_name))
-    blocks_args, global_params = efficientnet_tpu(
+        efficientnet_x_params(model_name))
+    blocks_args, global_params = efficientnet_x(
         width_coefficient, depth_coefficient, se_coefficient, dropout_rate)
   else:
     raise NotImplementedError('model name is not pre-defined: %s' % model_name)

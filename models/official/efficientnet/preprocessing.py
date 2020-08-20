@@ -172,9 +172,6 @@ def preprocess_for_train(image_bytes,
   image = _flip(image)
   image = tf.reshape(image, [image_size, image_size, 3])
 
-  image = tf.image.convert_image_dtype(
-      image, dtype=tf.bfloat16 if use_bfloat16 else tf.float32)
-
   if augment_name:
     try:
       import autoaugment  # pylint: disable=g-import-not-at-top
@@ -197,6 +194,10 @@ def preprocess_for_train(image_bytes,
       raise ValueError('Invalid value for augment_name: %s' % (augment_name))
 
     image = tf.cast(image, dtype=input_image_type)
+
+  image = tf.image.convert_image_dtype(
+      image, dtype=tf.bfloat16 if use_bfloat16 else tf.float32)
+
   return image
 
 

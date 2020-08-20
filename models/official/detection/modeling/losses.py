@@ -75,8 +75,8 @@ def focal_loss(logits, targets, alpha, gamma, normalizer):
     # samples is:
     #      (1 - p_t)^r = exp(-r * z * x - r * log(1 + exp(-x))).
     neg_logits = -1.0 * logits
-    modulator = tf.exp(gamma * targets * neg_logits - gamma * tf.log1p(
-        tf.exp(neg_logits)))
+    modulator = tf.exp(gamma * targets * neg_logits -
+                       gamma * tf.math.softplus(neg_logits))
     loss = modulator * cross_entropy
     weighted_loss = tf.where(positive_label_mask, alpha * loss,
                              (1.0 - alpha) * loss)
