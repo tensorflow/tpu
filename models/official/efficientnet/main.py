@@ -211,7 +211,7 @@ flags.DEFINE_bool(
 
 flags.DEFINE_bool(
     'use_bfloat16',
-    default=False,
+    default=True,
     help=('Whether to use bfloat16 as activation for training.'))
 
 flags.DEFINE_string(
@@ -301,7 +301,14 @@ def model_fn(features, labels, mode, params):
   else:
     stats_shape = [1, 1, 3]
 
+  input_image_size = FLAGS.input_image_size
+  if not input_image_size:
+    input_image_size = model_builder_factory.get_model_input_size(
+        FLAGS.model_name)
+
   if FLAGS.transpose_input and mode != tf.estimator.ModeKeys.PREDICT:
+    features = tf.reshape(features,
+                          [input_image_size, input_image_size, 3, -1])
     features = tf.transpose(features, [3, 0, 1, 2])  # HWCN to NHWC
 
   is_training = (mode == tf.estimator.ModeKeys.TRAIN)

@@ -120,6 +120,8 @@ class ImageNetTFExampleInput(six.with_metaclass(abc.ABCMeta, object)):
           tf.TensorShape([None, None, None, batch_size])))
       labels.set_shape(labels.get_shape().merge_with(
           tf.TensorShape([batch_size, None])))
+      # Convert to R1 tensors for fast transfer to device.
+      images = tf.reshape(images, [-1])
     else:
       images.set_shape(images.get_shape().merge_with(
           tf.TensorShape([batch_size, None, None, None])))
@@ -247,28 +249,31 @@ class ImageNetTFExampleInput(six.with_metaclass(abc.ABCMeta, object)):
     # the same image twice by dropping the final batch if it is less than a full
     # batch size. As long as this validation is done with consistent batch size,
     # exactly the same images will be used.
-    dataset = dataset.apply(
-        tf.data.experimental.map_and_batch(
-            self.dataset_parser, batch_size=batch_size,
-            num_parallel_batches=self.num_cores, drop_remainder=True))
+    dataset = dataset.map(self.dataset_parser, 64).batch(batch_size, True)
 
     # Apply Mixup
     if self.is_training and self.mixup_alpha > 0.0:
       dataset = dataset.map(
           functools.partial(self.mixup, batch_size, self.mixup_alpha),
-          num_parallel_calls=self.num_cores)
+          num_parallel_calls=64)
 
     # Transpose for performance on TPU
     if self.transpose_input:
       dataset = dataset.map(
           lambda images, labels: (tf.transpose(images, [1, 2, 3, 0]), labels),
-          num_parallel_calls=self.num_cores)
+          num_parallel_calls=64)
 
     # Assign static batch size dimension
-    dataset = dataset.map(functools.partial(self.set_shapes, batch_size))
+    dataset = dataset.map(functools.partial(self.set_shapes, batch_size), 64)
 
     # Prefetch overlaps in-feed with training
     dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
+    options = tf.data.Options()
+    options.experimental_deterministic = False
+    options.experimental_threading.max_intra_op_parallelism = 1
+    options.experimental_threading.private_threadpool_size = 48
+    dataset = dataset.with_options(options)
+
     return dataset
 
 
@@ -412,13 +417,12 @@ class ImageNetInput(ImageNetTFExampleInput):
       return dataset
 
     # Read the data from disk in parallel
-    dataset = dataset.apply(
-        tf.data.experimental.parallel_interleave(
-            fetch_dataset, cycle_length=self.num_parallel_calls, sloppy=True))
+    dataset = dataset.interleave(
+        fetch_dataset, cycle_length=self.num_parallel_calls,
+        num_parallel_calls=self.num_parallel_calls, deterministic=False)
 
     if self.cache:
-      dataset = dataset.cache().apply(
-          tf.data.experimental.shuffle_and_repeat(1024 * 16))
+      dataset = dataset.cache().shuffle(1024 * 16).repeat()
     else:
       dataset = dataset.shuffle(1024)
     return dataset
