@@ -26,7 +26,7 @@ same latency level.
 Here are the details of Mnasnet-A1 on ImageNet:
 
 ckpt | Input Size	| Depth Multiplier	| Top-1 Acc | 	Top-5 Acc	| Parameters(M)	| Multi-Adds (M)	| Pixel1 latency (ms)
-------- | ------- |------- | ---------| --------- |---------|----|------------- | ----
+------- |------- | ---------| --------- |---------|------|-------- | -------
 [ckpt](https://storage.googleapis.com/cloud-tpu-checkpoints/mnasnet/mnasnet-a1-140.tgz) | 224 |	1.4	| 77.2	| 93.5 |	6.1	|  591.5	| 135| 	77.2
 [ckpt](https://storage.googleapis.com/cloud-tpu-checkpoints/mnasnet/mnasnet-a1.tgz) |224 |	1	  | 75.2	| 92.5 |	3.9	|  315.2	| 78	| 75.2
 [ckpt](https://storage.googleapis.com/cloud-tpu-checkpoints/mnasnet/mnasnet-a1-075.tgz) |224 |	0.75| 73.3	| 91.3 |	2.9	|  226.7	| 61	| 73.3
