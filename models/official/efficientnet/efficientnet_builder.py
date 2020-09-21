@@ -82,7 +82,7 @@ class BlockDecoder(object):
                  int(options['s'][1])],
         conv_type=int(options['c']) if 'c' in options else 0,
         fused_conv=int(options['f']) if 'f' in options else 0,
-        super_pixel=int(options['p']) if 'p' in options else 0,
+        space2depth=int(options['d']) if 'd' in options else 0,
         condconv=('cc' in block_string))
 
   def _encode_block_string(self, block):
@@ -96,7 +96,7 @@ class BlockDecoder(object):
         'o%d' % block.output_filters,
         'c%d' % block.conv_type,
         'f%d' % block.fused_conv,
-        'p%d' % block.super_pixel,
+        'd%d' % block.space2depth,
     ]
     if block.se_ratio > 0 and block.se_ratio <= 1:
       args.append('se%s' % block.se_ratio)

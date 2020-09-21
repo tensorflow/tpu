@@ -56,7 +56,7 @@ def efficientnet_x(width_coefficient=None,
                    survival_prob=0.8):
   """Creates a efficientnet model."""
   blocks_args = [
-      'r1_k3_s11_e1_i32_o16_se0.25_p1', 'r2_k3_s22_e6_i16_o24_se0.25_f1_p2',
+      'r1_k3_s11_e1_i32_o16_se0.25_d1', 'r2_k3_s22_e6_i16_o24_se0.25_f1_d2',
       'r2_k5_s22_e6_i24_o40_se0.25_f1', 'r3_k3_s22_e6_i40_o80_se0.25',
       'r3_k5_s11_e6_i80_o112_se0.25', 'r4_k5_s22_e6_i112_o192_se0.25',
       'r1_k3_s11_e6_i192_o320_se0.25',

@@ -139,7 +139,7 @@ class ShapeMaskModel(base_model.BaseModel):
           'num_detections': valid_detections,
           'detection_boxes': boxes,
           'detection_outer_boxes': outer_boxes,
-          'detection_masks': fine_mask_logits,
+          'detection_masks': tf.sigmoid(fine_mask_logits),
           'detection_classes': tf.cast(classes, dtype=tf.int32),
           'detection_scores': scores,
       })
@@ -190,7 +190,7 @@ class ShapeMaskModel(base_model.BaseModel):
         'pred_num_detections': outputs['num_detections'],
         'pred_detection_boxes': outputs['detection_boxes'],
         'pred_detection_outer_boxes': outputs['detection_outer_boxes'],
-        'pred_detection_masks': tf.sigmoid(outputs['detection_masks']),
+        'pred_detection_masks': outputs['detection_masks'],
         'pred_detection_classes': outputs['detection_classes'],
         'pred_detection_scores': outputs['detection_scores'],
     }

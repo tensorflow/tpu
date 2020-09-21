@@ -51,7 +51,7 @@ GlobalParams.__new__.__defaults__ = (None,) * len(GlobalParams._fields)
 BlockArgs = collections.namedtuple('BlockArgs', [
     'kernel_size', 'num_repeat', 'input_filters', 'output_filters',
     'expand_ratio', 'id_skip', 'strides', 'se_ratio', 'conv_type', 'fused_conv',
-    'super_pixel', 'condconv'
+    'space2depth', 'condconv'
 ])
 # defaults will be a public argument for namedtuple in Python 3.7
 # https://docs.python.org/3/library/collections.html#collections.namedtuple
@@ -101,41 +101,6 @@ def dense_kernel_initializer(shape, dtype=None, partition_info=None):
   del partition_info
   init_range = 1.0 / np.sqrt(shape[1])
   return tf.random_uniform(shape, -init_range, init_range, dtype=dtype)
-
-
-def superpixel_kernel_initializer(shape, dtype='float32', partition_info=None):
-  """Initializes superpixel kernels.
-
-  This is inspired by space-to-depth transformation that is mathematically
-  equivalent before and after the transformation. But we do the space-to-depth
-  via a convolution. Moreover, we make the layer trainable instead of direct
-  transform, we can initialization it this way so that the model can learn not
-  to do anything but keep it mathematically equivalent, when improving
-  performance.
-
-
-  Args:
-    shape: shape of variable
-    dtype: dtype of variable
-    partition_info: unused
-
-  Returns:
-    an initialization for the variable
-  """
-  del partition_info
-  #  use input depth to make superpixel kernel.
-  depth = shape[-2]
-  filters = np.zeros([2, 2, depth, 4 * depth], dtype=dtype)
-  i = np.arange(2)
-  j = np.arange(2)
-  k = np.arange(depth)
-  mesh = np.array(np.meshgrid(i, j, k)).T.reshape(-1, 3).T
-  filters[
-      mesh[0],
-      mesh[1],
-      mesh[2],
-      4 * mesh[2] + 2 * mesh[0] + mesh[1]] = 1
-  return filters
 
 
 def round_filters(filters, global_params, skip=False):
@@ -221,8 +186,8 @@ class MBConvBlock(tf.keras.layers.Layer):
 
   def _build(self):
     """Builds block according to the arguments."""
-    if self._block_args.super_pixel == 1:
-      self._superpixel = tf.layers.Conv2D(
+    if self._block_args.space2depth == 1:
+      self._space2depth = tf.layers.Conv2D(
           self._block_args.input_filters,
           kernel_size=[2, 2],
           strides=[2, 2],
@@ -285,10 +250,16 @@ class MBConvBlock(tf.keras.layers.Layer):
         epsilon=self._batch_norm_epsilon)
 
     if self._has_se:
-      num_reduced_filters = max(
-          1, int(
-              self._block_args.input_filters * (self._block_args.se_ratio * (
-                  self._se_coefficient if self._se_coefficient else 1))))
+      num_reduced_filters = int(self._block_args.input_filters * (
+          self._block_args.se_ratio * (self._se_coefficient
+                                       if self._se_coefficient else 1)))
+      # account for space2depth transformation in SE filter depth, since
+      # the SE compression ratio is w.r.t. the original filter depth before
+      # space2depth is applied.
+      num_reduced_filters = (num_reduced_filters // 4
+                             if self._block_args.space2depth == 1
+                             else num_reduced_filters)
+      num_reduced_filters = max(1, num_reduced_filters)
       # Squeeze and Excitation layer.
       self._se_reduce = utils.Conv2D(
           num_reduced_filters,
@@ -386,12 +357,12 @@ class MBConvBlock(tf.keras.layers.Layer):
           self._project_conv, routing_weights=routing_weights)
 
     # creates conv 2x2 kernel
-    if self._block_args.super_pixel == 1:
-      with tf.variable_scope('super_pixel'):
+    if self._block_args.space2depth == 1:
+      with tf.variable_scope('space2depth'):
         x = self._relu_fn(
-            self._bnsp(self._superpixel(x), training=training))
+            self._bnsp(self._space2depth(x), training=training))
       logging.info(
-          'Block start with SuperPixel: %s shape: %s', x.name, x.shape)
+          'Block start with space2depth: %s shape: %s', x.name, x.shape)
 
     if self._block_args.fused_conv:
       # If use fused mbconv, skip expansion and use regular conv.
@@ -565,7 +536,7 @@ class Model(tf.keras.Model):
     # Builds blocks.
     for i, block_args in enumerate(self._blocks_args):
       assert block_args.num_repeat > 0
-      assert block_args.super_pixel in [0, 1, 2]
+      assert block_args.space2depth in [0, 1, 2]
       # Update block input and output filters based on depth multiplier.
       input_filters = round_filters(block_args.input_filters,
                                     self._global_params)
@@ -584,28 +555,28 @@ class Model(tf.keras.Model):
 
       # The first block needs to take care of stride and filter size increase.
       conv_block = self._get_conv_block(block_args.conv_type)
-      if not block_args.super_pixel:  #  no super_pixel at all
+      if not block_args.space2depth:  #  no space2depth at all
         self._blocks.append(conv_block(block_args, self._global_params))
       else:
-        # if superpixel, adjust filters, kernels, and strides.
+        # if space2depth, adjust filters, kernels, and strides.
         depth_factor = int(4 / block_args.strides[0] / block_args.strides[1])
         block_args = block_args._replace(
             input_filters=block_args.input_filters * depth_factor,
             output_filters=block_args.output_filters * depth_factor,
             kernel_size=((block_args.kernel_size + 1) // 2 if depth_factor > 1
                          else block_args.kernel_size))
-        # if the first block has stride-2 and super_pixel trandformation
+        # if the first block has stride-2 and space2depth transformation
         if (block_args.strides[0] == 2 and block_args.strides[1] == 2):
           block_args = block_args._replace(strides=[1, 1])
           self._blocks.append(conv_block(block_args, self._global_params))
           block_args = block_args._replace(  # sp stops at stride-2
-              super_pixel=0,
+              space2depth=0,
               input_filters=input_filters,
               output_filters=output_filters,
               kernel_size=kernel_size)
-        elif block_args.super_pixel == 1:
+        elif block_args.space2depth == 1:
           self._blocks.append(conv_block(block_args, self._global_params))
-          block_args = block_args._replace(super_pixel=2)
+          block_args = block_args._replace(space2depth=2)
         else:
           self._blocks.append(conv_block(block_args, self._global_params))
       if block_args.num_repeat > 1:  # rest of blocks with the same block_arg
@@ -675,9 +646,9 @@ class Model(tf.keras.Model):
     # Calls blocks.
     for idx, block in enumerate(self._blocks):
       is_reduction = False  # reduction flag for blocks after the stem layer
-      # If the first block has super-pixel (space-to-depth) layer, then stem is
+      # If the first block has space-to-depth layer, then stem is
       # the first reduction point.
-      if (block.block_args().super_pixel == 1 and idx == 0):
+      if (block.block_args().space2depth == 1 and idx == 0):
         reduction_idx += 1
         self.endpoints['reduction_%s' % reduction_idx] = outputs
 
