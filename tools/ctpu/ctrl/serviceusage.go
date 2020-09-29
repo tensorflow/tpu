@@ -22,55 +22,42 @@ import (
 	"time"
 
 	"github.com/tensorflow/tpu/tools/ctpu/config"
-	"google.golang.org/api/servicemanagement/v1"
+	"google.golang.org/api/serviceusage/v1"
 )
 
-type serviceManagementCP struct {
-	services   *servicemanagement.ServicesService
-	operations *servicemanagement.OperationsService
+type serviceUsageCP struct {
+	services   *serviceusage.ServicesService
+	operations *serviceusage.OperationsService
 	config     *config.Config
 }
 
-func newServiceManagementCP(config *config.Config, client *http.Client, userAgent string) (*serviceManagementCP, error) {
-	apiService, err := servicemanagement.New(client)
+func newServiceUsageCP(config *config.Config, client *http.Client, userAgent string) (*serviceUsageCP, error) {
+	apiService, err := serviceusage.New(client)
 	if err != nil {
 		return nil, err
 	}
 	apiService.UserAgent = userAgent
-	return &serviceManagementCP{
+	return &serviceUsageCP{
 		services:   apiService.Services,
 		operations: apiService.Operations,
 		config:     config,
 	}, nil
 }
 
-func (s *serviceManagementCP) checkIfEnabled(serviceName string) (bool, error) {
-	pageToken := ""
-	for {
-		req := s.services.List().ConsumerId(s.consumerID()).PageSize(150)
-		if pageToken != "" {
-			req.PageToken(pageToken)
-		}
-		response, err := req.Do()
-		if err != nil {
-			return false, err
-		}
-		for _, managedService := range response.Services {
-			if managedService.ServiceName == serviceName {
-				return true, nil
-			}
-		}
-		if response.NextPageToken == "" {
-			break
-		}
-		pageToken = response.NextPageToken
+func (s *serviceUsageCP) checkIfEnabled(serviceName string) (bool, error) {
+	resp, err := s.services.Get(fmt.Sprintf("projects/%s/services/%s", s.config.Project, serviceName)).Do()
+	if err != nil {
+		return false, err
 	}
-	return false, nil
+	return resp.State == "ENABLED", nil
 }
 
-func (s *serviceManagementCP) pollUntilOperationComplete(serviceName string, operation *servicemanagement.Operation) error {
+func (s *serviceUsageCP) pollUntilOperationComplete(serviceName string, operation *serviceusage.Operation) error {
 	if operation.Error != nil {
 		return errors.New(operation.Error.Message)
+	}
+	if operation.Done {
+		return nil
 	}
 	for {
 		time.Sleep(5 * time.Second) // Poll every 5 seconds
@@ -87,16 +74,10 @@ func (s *serviceManagementCP) pollUntilOperationComplete(serviceName string, ope
 	}
 }
 
-func (s *serviceManagementCP) consumerID() string {
-	return fmt.Sprintf("project:%s", s.config.Project)
-}
-
-func (s *serviceManagementCP) enableService(serviceName string) error {
-	req := servicemanagement.EnableServiceRequest{
-		ConsumerId: s.consumerID(),
-	}
-
-	operation, err := s.services.Enable(serviceName, &req).Do()
+func (s *serviceUsageCP) enableService(serviceName string) error {
+	operation, err := s.services.Enable(
+		fmt.Sprintf("projects/%s/services/%s", s.config.Project, serviceName),
+		&serviceusage.EnableServiceRequest{}).Do()
 	if err != nil {
 		return err
 	}

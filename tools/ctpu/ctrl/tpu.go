@@ -73,10 +73,10 @@ type TPUCP struct {
 	locations   *tpu.ProjectsLocationsService
 	compute     *compute.Service
 	config      *config.Config
-	serviceMgmt *serviceManagementCP
+	serviceMgmt *serviceUsageCP
 }
 
-func newTPUCP(config *config.Config, client *http.Client, serviceManagementCP *serviceManagementCP, userAgent string) (*TPUCP, error) {
+func newTPUCP(config *config.Config, client *http.Client, serviceManagementCP *serviceUsageCP, userAgent string) (*TPUCP, error) {
 	tpuService, err := tpu.New(client)
 	if err != nil {
 		return nil, err

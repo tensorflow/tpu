@@ -1,0 +1,11 @@
+config GASKET_FRAMEWORK
+  tristate "Gasket framework"
+  depends on PCI
+  depends on HW_ACCEL
+  help
+  This is a framework for lightweight kernel drivers, providing simplified
+  support for MSI-x interrupts, two-level page tables, sysfs nodes, on
+  character devices over PCI.
+
+  To compile this driver as a module, choose M here.  The module
+  will be called gasket.

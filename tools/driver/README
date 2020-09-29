@@ -1,0 +1,7 @@
+TPU Driver.
+
+This driver as well as the TPU device are in Early Access stage [1],
+the feature is available to a closed group of testers.
+
+[1] https://cloud.google.com/terms/launch-stages
+

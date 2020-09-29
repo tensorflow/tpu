@@ -118,7 +118,7 @@ func New(ctx context.Context, config *config.Config, ctpuVersion string, logRequ
 
 	userAgent := fmt.Sprintf("ctpu/%s env/%s", ctpuVersion, config.Environment)
 
-	serviceMgmt, err := newServiceManagementCP(config, client, userAgent)
+	serviceMgmt, err := newServiceUsageCP(config, client, userAgent)
 	if err != nil {
 		return nil, err
 	}

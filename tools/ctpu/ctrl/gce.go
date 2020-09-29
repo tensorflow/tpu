@@ -68,10 +68,10 @@ func (o *gceLongRunningOperation) LoopUntilComplete() error {
 type GCECP struct {
 	computeService *compute.Service
 	config         *config.Config
-	serviceMgmt    *serviceManagementCP
+	serviceMgmt    *serviceUsageCP
 }
 
-func newGCECP(config *config.Config, client *http.Client, serviceManagementCP *serviceManagementCP, userAgent string) (*GCECP, error) {
+func newGCECP(config *config.Config, client *http.Client, serviceUsageCP *serviceUsageCP, userAgent string) (*GCECP, error) {
 	computeService, err := compute.New(client)
 	if err != nil {
 		return nil, err
@@ -80,7 +80,7 @@ func newGCECP(config *config.Config, client *http.Client, serviceManagementCP *s
 	return &GCECP{
 		computeService: computeService,
 		config:         config,
-		serviceMgmt:    serviceManagementCP,
+		serviceMgmt:    serviceUsageCP,
 	}, nil
 }
 
