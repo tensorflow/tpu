@@ -1,0 +1,44 @@
+menu "Tpu devices"
+
+config TPU_COMMON_COMMON
+ tristate "Tpu Common library"
+ help
+ This common library provides functionality common to tpu_common
+ devices.
+
+ To compile this library as a module, choose M here.  The module
+ will be called tpu_common_common.
+
+config TPU_V1_CORE
+  tristate "tpu_v1 Core Library"
+  depends on GASKET_FRAMEWORK
+  depends on TPU_COMMON_COMMON
+  help
+  This module provides functionality common to tpu_v1 class
+  devices.
+
+  To compile this driver as a module, choose M here.  The module
+  will be called tpu_v1_core.
+
+config TPU_V1_DRIVER
+  tristate "tpu_v1 Driver"
+  depends on TPU_V1_CORE
+  help
+  This driver supports the tpu_v1 device.  Say Y if you want to
+  include this driver in the kernel.
+
+  To compile this driver as a module, choose M here.  The module
+  will be called tpu_v1.
+
+config TPU_V2_DRIVER
+  tristate "tpu_v2 Driver"
+  depends on TPU_V1_CORE
+  help
+  This driver supports the tpu_v2 device.  Say Y if you want to
+  include this driver in the kernel.
+
+  To compile this driver as a module, choose M here.  The module
+  will be called tpu_v2.
+
+  To compile this driver as a module, choose M here.  The module
+endmenu

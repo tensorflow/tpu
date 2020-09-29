@@ -1,0 +1,2 @@
+This directory contains the Gasket thin driver framework. Drivers using it may
+be found in other subdirectories.
