@@ -138,48 +138,51 @@ def compute_grid_positions(boxes, boundaries, output_size, sample_offset):
     box_grid_y0y1: Tensor of size [batch_size, boxes, output_size, 2]
     box_grid_x0x1: Tensor of size [batch_size, boxes, output_size, 2]
   """
-  batch_size, num_boxes, _ = boxes.get_shape().as_list()
-  if batch_size is None:
-    batch_size = tf.shape(boxes)[0]
-  box_grid_x = []
-  box_grid_y = []
-  for i in range(output_size):
-    box_grid_x.append(boxes[:, :, 1] +
-                      (i + sample_offset) * boxes[:, :, 3] / output_size)
-    box_grid_y.append(boxes[:, :, 0] +
-                      (i + sample_offset) * boxes[:, :, 2] / output_size)
-  box_grid_x = tf.stack(box_grid_x, axis=2)
-  box_grid_y = tf.stack(box_grid_y, axis=2)
+  with tf.name_scope('compute_grid_positions'):
+    batch_size, num_boxes, _ = boxes.get_shape().as_list()
+    if batch_size is None:
+      batch_size = tf.shape(boxes)[0]
+    box_grid_x = []
+    box_grid_y = []
+    for i in range(output_size):
+      box_grid_x.append(boxes[:, :, 1] +
+                        (i + sample_offset) * boxes[:, :, 3] / output_size)
+      box_grid_y.append(boxes[:, :, 0] +
+                        (i + sample_offset) * boxes[:, :, 2] / output_size)
+    box_grid_x = tf.stack(box_grid_x, axis=2)
+    box_grid_y = tf.stack(box_grid_y, axis=2)
 
-  box_grid_y0 = tf.floor(box_grid_y)
-  box_grid_x0 = tf.floor(box_grid_x)
-  box_grid_x0 = tf.maximum(0., box_grid_x0)
-  box_grid_y0 = tf.maximum(0., box_grid_y0)
+    box_grid_y0 = tf.floor(box_grid_y)
+    box_grid_x0 = tf.floor(box_grid_x)
+    box_grid_x0 = tf.maximum(0., box_grid_x0)
+    box_grid_y0 = tf.maximum(0., box_grid_y0)
 
-  box_grid_x0 = tf.minimum(box_grid_x0, tf.expand_dims(boundaries[:, :, 1], -1))
-  box_grid_x1 = tf.minimum(box_grid_x0 + 1,
-                           tf.expand_dims(boundaries[:, :, 1], -1))
-  box_grid_y0 = tf.minimum(box_grid_y0, tf.expand_dims(boundaries[:, :, 0], -1))
-  box_grid_y1 = tf.minimum(box_grid_y0 + 1,
-                           tf.expand_dims(boundaries[:, :, 0], -1))
+    box_grid_x0 = tf.minimum(box_grid_x0,
+                             tf.expand_dims(boundaries[:, :, 1], -1))
+    box_grid_x1 = tf.minimum(box_grid_x0 + 1,
+                             tf.expand_dims(boundaries[:, :, 1], -1))
+    box_grid_y0 = tf.minimum(box_grid_y0,
+                             tf.expand_dims(boundaries[:, :, 0], -1))
+    box_grid_y1 = tf.minimum(box_grid_y0 + 1,
+                             tf.expand_dims(boundaries[:, :, 0], -1))
 
-  box_gridx0x1 = tf.stack([box_grid_x0, box_grid_x1], axis=-1)
-  box_gridy0y1 = tf.stack([box_grid_y0, box_grid_y1], axis=-1)
+    box_gridx0x1 = tf.stack([box_grid_x0, box_grid_x1], axis=-1)
+    box_gridy0y1 = tf.stack([box_grid_y0, box_grid_y1], axis=-1)
 
-  # The RoIAlign feature f can be computed by bilinear interpolation of four
-  # neighboring feature points f0, f1, f2, and f3.
-  # f(y, x) = [hy, ly] * [[f00, f01], * [hx, lx]^T
-  #                       [f10, f11]]
-  # f(y, x) = (hy*hx)f00 + (hy*lx)f01 + (ly*hx)f10 + (lx*ly)f11
-  # f(y, x) = w00*f00 + w01*f01 + w10*f10 + w11*f11
-  ly = box_grid_y - box_grid_y0
-  lx = box_grid_x - box_grid_x0
-  hy = 1.0 - ly
-  hx = 1.0 - lx
-  kernel_y = tf.reshape(
-      tf.stack([hy, ly], axis=3), [batch_size, num_boxes, output_size, 2, 1])
-  kernel_x = tf.reshape(
-      tf.stack([hx, lx], axis=3), [batch_size, num_boxes, output_size, 2, 1])
+    # The RoIAlign feature f can be computed by bilinear interpolation of four
+    # neighboring feature points f0, f1, f2, and f3.
+    # f(y, x) = [hy, ly] * [[f00, f01], * [hx, lx]^T
+    #                       [f10, f11]]
+    # f(y, x) = (hy*hx)f00 + (hy*lx)f01 + (ly*hx)f10 + (lx*ly)f11
+    # f(y, x) = w00*f00 + w01*f01 + w10*f10 + w11*f11
+    ly = box_grid_y - box_grid_y0
+    lx = box_grid_x - box_grid_x0
+    hy = 1.0 - ly
+    hx = 1.0 - lx
+    kernel_y = tf.reshape(
+        tf.stack([hy, ly], axis=3), [batch_size, num_boxes, output_size, 2, 1])
+    kernel_x = tf.reshape(
+        tf.stack([hx, lx], axis=3), [batch_size, num_boxes, output_size, 2, 1])
   return kernel_y, kernel_x, box_gridy0y1, box_gridx0x1
 
 
