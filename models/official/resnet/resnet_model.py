@@ -141,6 +141,23 @@ def _batch_std(inputs,
   return tf.cast(std, inputs.dtype)
 
 
+def _get_shape_list(tensor):
+  """Returns tensor's shape as a list which can be unpacked."""
+  static_shape = tensor.shape.as_list()
+  if not any([x is None for x in static_shape]):
+    return static_shape
+
+  dynamic_shape = tf.shape(tensor)
+  ndims = tensor.shape.ndims
+
+  # Return mixture of static and dynamic dims.
+  shapes = [
+      static_shape[i] if static_shape[i] is not None else dynamic_shape[i]
+      for i in range(ndims)
+  ]
+  return shapes
+
+
 def _group_std(inputs,
                epsilon=EPSILON,
                data_format='channels_first',
@@ -160,8 +177,8 @@ def _group_std(inputs,
     x = tf.reshape(inputs, [-1, num_groups, c // num_groups, h, w])
     _, variance = tf.nn.moments(x, [2, 3, 4], keep_dims=True)
   std = tf.sqrt(variance + epsilon)
-  std = tf.broadcast_to(std, x.shape.as_list())
-  return tf.reshape(std, inputs.shape.as_list())
+  std = tf.broadcast_to(std, _get_shape_list(x))
+  return tf.reshape(std, _get_shape_list(inputs))
 
 
 def evonorm(inputs,
