@@ -219,8 +219,14 @@ def convert_groundtruths_to_coco_dataset(groundtruths, label_map=None):
   for i in range(num_batches):
     # NOTE: Batch size may differ between chunks.
     batch_size = groundtruths['source_id'][i].shape[0]
+    max_num_instances = groundtruths['classes'][i].shape[1]
     for j in range(batch_size):
       num_instances = int(groundtruths['num_detections'][i][j])
+      if num_instances > max_num_instances:
+        logging.warning(
+            'num_groundtruths is larger than max_num_instances, %d v.s. %d',
+            num_instances, max_num_instances)
+        num_instances = max_num_instances
       for k in range(num_instances):
         ann = {}
         ann['image_id'] = int(groundtruths['source_id'][i][j])

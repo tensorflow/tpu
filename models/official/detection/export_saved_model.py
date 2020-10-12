@@ -75,6 +75,8 @@ flags.DEFINE_boolean(
     'cast_detection_classes_to_float', False,
     'Whether or not cast the detection classes  to float type.')
 
+_DETECTION_MODELS = ['retinanet', 'mask_rcnn', 'shapemask']
+
 
 def export(export_dir,
            checkpoint_path,
@@ -107,7 +109,7 @@ def export(export_dir,
             'use_bfloat16': use_tpu,
         },
     }, is_strict=True)
-  if batch_size is None:
+  if batch_size is None and model in _DETECTION_MODELS:
     params.override({
         'postprocess': {
             'use_batched_nms': True,
@@ -123,7 +125,7 @@ def export(export_dir,
       transpose_input=False)
   tf.logging.info('model_params is:\n %s', model_params)
 
-  if model in ['retinanet', 'mask_rcnn', 'shapemask']:
+  if model in _DETECTION_MODELS:
     model_fn = detection.serving_model_fn_builder(
         use_tpu, output_image_info, output_normalized_coordinates,
         cast_num_detections_to_float, cast_detection_classes_to_float)
