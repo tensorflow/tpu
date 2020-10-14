@@ -36,6 +36,15 @@ def _split_channels(total_filters, num_groups):
   return split
 
 
+def _get_shape_value(maybe_v2_shape):
+  if maybe_v2_shape is None:
+    return None
+  elif isinstance(maybe_v2_shape, int):
+    return maybe_v2_shape
+  else:
+    return maybe_v2_shape.value
+
+
 class GroupedConv2D(object):
   """Groupped convolution.
 
@@ -69,7 +78,7 @@ class GroupedConv2D(object):
     if len(self._convs) == 1:
       return self._convs[0](inputs)
 
-    filters = inputs.shape[self._channel_axis].value
+    filters = _get_shape_value(inputs.shape[self._channel_axis])
     splits = _split_channels(filters, len(self._convs))
     x_splits = tf.split(inputs, splits, self._channel_axis)
     x_outputs = [c(x) for x, c in zip(x_splits, self._convs)]
@@ -122,7 +131,7 @@ class MixConv(object):
     if len(self._convs) == 1:
       return self._convs[0](inputs)
 
-    filters = inputs.shape[self._channel_axis].value
+    filters = _get_shape_value(inputs.shape[self._channel_axis])
     splits = _split_channels(filters, len(self._convs))
     x_splits = tf.split(inputs, splits, self._channel_axis)
     x_outputs = [c(x) for x, c in zip(x_splits, self._convs)]
