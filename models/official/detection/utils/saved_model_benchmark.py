@@ -49,7 +49,8 @@ def get_feeds_fetches():
   height, width = [int(x) for x in FLAGS.input_size.split(",")]
   img = img.resize((width, height))
 
-  inp = np.array(img.getdata()).reshape(-1, img.size[0], img.size[1], 3)
+  # pylint: disable=too-many-function-args
+  inp = np.array(img.getdata()).reshape(-1, img.size[1], img.size[0], 3)
   inp = (inp / 255.0).astype(dtype=np.float32)
 
   outputs = FLAGS.fetch_tensors.split(",")
