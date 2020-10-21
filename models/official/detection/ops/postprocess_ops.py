@@ -29,12 +29,19 @@ from utils import box_utils
 
 def generate_detections_factory(params):
   """Factory to select function to generate detection."""
-  if params.use_batched_nms:
+  if params.use_batched_nms or params.nms_version == 'batched':
     func = functools.partial(
         _generate_detections_batched,
         max_total_size=params.max_total_size,
         nms_iou_threshold=params.nms_iou_threshold,
         score_threshold=params.score_threshold)
+  elif params.nms_version == 'v2':
+    func = functools.partial(
+        _generate_detections_v2,
+        max_total_size=params.max_total_size,
+        nms_iou_threshold=params.nms_iou_threshold,
+        score_threshold=params.score_threshold,
+        pre_nms_num_boxes=params.pre_nms_num_boxes)
   else:
     func = functools.partial(
         _generate_detections_v1,
@@ -205,7 +212,7 @@ def _select_top_k_scores(scores_in, pre_nms_num_detections):
     scores and indices: Tensors with shape [batch_size, pre_nms_num_detections,
       num_classes].
   """
-  batch_size, num_anchors, num_class = scores_in.get_shape().as_list()
+  _, num_anchors, num_class = scores_in.get_shape().as_list()
   scores_trans = tf.transpose(scores_in, perm=[0, 2, 1])
   scores_trans = tf.reshape(scores_trans, [-1, num_anchors])
 
@@ -213,9 +220,9 @@ def _select_top_k_scores(scores_in, pre_nms_num_detections):
       scores_trans, k=pre_nms_num_detections, sorted=True)
 
   top_k_scores = tf.reshape(top_k_scores,
-                            [batch_size, num_class, pre_nms_num_detections])
+                            [-1, num_class, pre_nms_num_detections])
   top_k_indices = tf.reshape(top_k_indices,
-                             [batch_size, num_class, pre_nms_num_detections])
+                             [-1, num_class, pre_nms_num_detections])
 
   return tf.transpose(top_k_scores,
                       [0, 2, 1]), tf.transpose(top_k_indices, [0, 2, 1])
@@ -261,17 +268,22 @@ def _generate_detections_v2(boxes,
       `valid_detections` boxes are valid detections.
   """
   with tf.name_scope('generate_detections'):
+    # Normalizes maximum box cooridinates to 1.
+    normalizer = tf.reduce_max(boxes)
+    boxes /= normalizer
+
     nmsed_boxes = []
     nmsed_classes = []
     nmsed_scores = []
     valid_detections = []
-    batch_size, _, num_classes_for_box, _ = boxes.get_shape().as_list()
-    _, total_anchors, num_classes = scores.get_shape().as_list()
+    num_classes_for_boxes = tf.shape(boxes)[2]
+    total_anchors = tf.shape(scores)[1]
+    num_classes = scores.get_shape().as_list()[2]
     # Selects top pre_nms_num scores and indices before NMS.
     scores, indices = _select_top_k_scores(
-        scores, min(total_anchors, pre_nms_num_boxes))
+        scores, tf.minimum(total_anchors, pre_nms_num_boxes))
     for i in range(num_classes):
-      boxes_i = boxes[:, :, min(num_classes_for_box - 1, i), :]
+      boxes_i = boxes[:, :, tf.minimum(num_classes_for_boxes - 1, i), :]
       scores_i = scores[:, :, i]
       # Obtains pre_nms_num_boxes before running NMS.
       boxes_i = tf.gather(boxes_i, indices[:, :, i], batch_dims=1, axis=1)
@@ -285,7 +297,7 @@ def _generate_detections_v2(boxes,
           tf.cast(boxes_i, tf.float32),
           max_total_size,
           iou_threshold=nms_iou_threshold)
-      nmsed_classes_i = tf.fill([batch_size, max_total_size], i)
+      nmsed_classes_i = tf.fill(tf.shape(nmsed_scores_i), i)
       nmsed_boxes.append(nmsed_boxes_i)
       nmsed_scores.append(nmsed_scores_i)
       nmsed_classes.append(nmsed_classes_i)
@@ -298,6 +310,8 @@ def _generate_detections_v2(boxes,
   nmsed_classes = tf.gather(nmsed_classes, indices, batch_dims=1)
   valid_detections = tf.reduce_sum(
       input_tensor=tf.cast(tf.greater(nmsed_scores, -1), tf.int32), axis=1)
+  # De-normalizes box cooridinates.
+  nmsed_boxes *= normalizer
   return nmsed_boxes, nmsed_scores, nmsed_classes, valid_detections
 
 
@@ -345,13 +359,14 @@ def _generate_detections_batched(boxes,
     boxes /= normalizer
     (nmsed_boxes, nmsed_scores, nmsed_classes,
      valid_detections) = tf.image.combined_non_max_suppression(
-         boxes,
-         scores,
+         tf.cast(boxes, tf.float32),
+         tf.cast(scores, tf.float32),
          max_output_size_per_class=max_total_size,
          max_total_size=max_total_size,
          iou_threshold=nms_iou_threshold,
          score_threshold=score_threshold,
-         pad_per_class=False,)
+         pad_per_class=False,
+     )
     # De-normalizes box cooridinates.
     nmsed_boxes *= normalizer
   return nmsed_boxes, nmsed_scores, nmsed_classes, valid_detections
@@ -453,25 +468,18 @@ class GenericDetectionGenerator(object):
 
     # Removes the background class.
     class_outputs_shape = tf.shape(class_outputs)
-    batch_size = class_outputs_shape[0]
     num_locations = class_outputs_shape[1]
     num_classes = class_outputs_shape[-1]
     num_detections = num_locations * (num_classes - 1)
 
     class_outputs = tf.slice(class_outputs, [0, 0, 1], [-1, -1, -1])
-    box_outputs = tf.reshape(
-        box_outputs,
-        tf.stack([batch_size, num_locations, num_classes, 4], axis=-1))
+    box_outputs = tf.reshape(box_outputs, [-1, num_locations, num_classes, 4])
     box_outputs = tf.slice(
         box_outputs, [0, 0, 1, 0], [-1, -1, -1, -1])
     anchor_boxes = tf.tile(
         tf.expand_dims(anchor_boxes, axis=2), [1, 1, num_classes - 1, 1])
-    box_outputs = tf.reshape(
-        box_outputs,
-        tf.stack([batch_size, num_detections, 4], axis=-1))
-    anchor_boxes = tf.reshape(
-        anchor_boxes,
-        tf.stack([batch_size, num_detections, 4], axis=-1))
+    box_outputs = tf.reshape(box_outputs, [-1, num_detections, 4])
+    anchor_boxes = tf.reshape(anchor_boxes, [-1, num_detections, 4])
 
     # Box decoding.
     decoded_boxes = box_utils.decode_boxes(
@@ -480,9 +488,8 @@ class GenericDetectionGenerator(object):
     # Box clipping
     decoded_boxes = box_utils.clip_boxes(decoded_boxes, image_shape)
 
-    decoded_boxes = tf.reshape(
-        decoded_boxes,
-        tf.stack([batch_size, num_locations, num_classes - 1, 4], axis=-1))
+    decoded_boxes = tf.reshape(decoded_boxes,
+                               [-1, num_locations, num_classes - 1, 4])
 
     if not self._apply_nms:
       return {

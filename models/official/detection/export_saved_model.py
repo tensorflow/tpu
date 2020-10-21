@@ -110,11 +110,7 @@ def export(export_dir,
         },
     }, is_strict=True)
   if batch_size is None and model in _DETECTION_MODELS:
-    params.override({
-        'postprocess': {
-            'use_batched_nms': True,
-        }
-    })
+    params.override({'postprocess': {'nms_version': 'batched',}})
   params.validate()
   params.lock()
 
