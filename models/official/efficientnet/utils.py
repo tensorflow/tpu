@@ -26,6 +26,7 @@ from absl import logging
 import numpy as np
 import tensorflow.compat.v1 as tf
 
+import lars_optimizer
 from tensorflow.python.tpu import tpu_function  # pylint:disable=g-direct-tensorflow-import
 
 
@@ -49,6 +50,19 @@ def build_learning_rate(initial_lr,
         1 + tf.cos(np.pi * tf.cast(global_step, tf.float32) / total_steps))
   elif lr_decay_type == 'constant':
     lr = initial_lr
+  elif lr_decay_type == 'poly':
+    tf.logging.info('Using poly LR schedule')
+    assert steps_per_epoch is not None
+    assert total_steps is not None
+    warmup_steps = int(steps_per_epoch * warmup_epochs)
+    min_step = tf.constant(1, dtype=tf.int64)
+    decay_steps = tf.maximum(min_step, tf.subtract(global_step, warmup_steps))
+    lr = tf.train.polynomial_decay(
+        initial_lr,
+        decay_steps,
+        total_steps - warmup_steps + 1,
+        end_learning_rate=0.1,
+        power=2.0)
   else:
     assert False, 'Unknown lr_decay_type : %s' % lr_decay_type
 
@@ -67,7 +81,9 @@ def build_optimizer(learning_rate,
                     optimizer_name='rmsprop',
                     decay=0.9,
                     epsilon=0.001,
-                    momentum=0.9):
+                    momentum=0.9,
+                    lars_weight_decay=None,
+                    lars_epsilon=None):
   """Build optimizer."""
   if optimizer_name == 'sgd':
     logging.info('Using SGD optimizer')
@@ -80,6 +96,16 @@ def build_optimizer(learning_rate,
     logging.info('Using RMSProp optimizer')
     optimizer = tf.train.RMSPropOptimizer(learning_rate, decay, momentum,
                                           epsilon)
+  elif optimizer_name == 'lars':
+    logging.info('Using LARS optimizer')
+    assert lars_weight_decay is not None, 'LARS weight decay is None.'
+    assert lars_epsilon is not None, 'LARS epsilon is None.'
+    optimizer = lars_optimizer.LARSOptimizer(
+        learning_rate,
+        momentum=momentum,
+        weight_decay=lars_weight_decay,
+        skip_list=['batch_normalization', 'bias', 'beta', 'gamma'],
+        epsilon=lars_epsilon)
   else:
     logging.fatal('Unknown optimizer: %s', optimizer_name)
 

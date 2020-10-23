@@ -272,6 +272,28 @@ flags.DEFINE_float(
 flags.DEFINE_bool(
     'use_async_checkpointing', default=False, help=('Enable async checkpoint'))
 
+flags.DEFINE_string(
+    'optimizer',
+    default='rmsprop',
+    help='The optimizer to use. Can be either rmsprop, sgd, momentum, or lars.')
+
+flags.DEFINE_string(
+    'lr_schedule', default='exponential', help=('learning rate schedule'))
+
+flags.DEFINE_float(
+    'lr_decay_factor', default=0.97, help=('Learning rate decay factor.'))
+
+flags.DEFINE_float(
+    'lr_warmup_epochs', default=5, help=('warmup epochs for learning rate'))
+
+flags.DEFINE_float(
+    'lars_weight_decay',
+    default=0.00001,
+    help=('Weight decay for LARS optimizer.'))
+
+flags.DEFINE_float(
+    'lars_epsilon', default=0.0, help=('Epsilon for LARS optimizer.'))
+
 
 def model_fn(features, labels, mode, params):
   """The model_fn to be used with TPUEstimator.
@@ -405,8 +427,16 @@ def model_fn(features, labels, mode, params):
         scaled_lr,
         global_step,
         params['steps_per_epoch'],
-        decay_epochs=FLAGS.lr_decay_epoch)
-    optimizer = utils.build_optimizer(learning_rate)
+        decay_epochs=FLAGS.lr_decay_epoch,
+        warmup_epochs=FLAGS.lr_warmup_epochs,
+        decay_factor=FLAGS.lr_decay_factor,
+        lr_decay_type=FLAGS.lr_schedule,
+        total_steps=FLAGS.train_steps)
+    optimizer = utils.build_optimizer(
+        learning_rate,
+        optimizer_name=FLAGS.optimizer,
+        lars_weight_decay=FLAGS.lars_weight_decay,
+        lars_epsilon=FLAGS.lars_epsilon)
     if FLAGS.use_tpu:
       # When using TPU, wrap the optimizer with CrossShardOptimizer which
       # handles synchronization details between different TPU cores. To the
