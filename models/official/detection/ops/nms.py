@@ -243,13 +243,16 @@ def sorted_non_max_suppression_padded(scores,
   boxes = tf.reshape(
       tf.gather(tf.reshape(boxes, [-1, 4]), idx),
       [batch_size, max_output_size, 4])
-  boxes = boxes * tf.cast(
-      tf.reshape(tf.range(max_output_size), [1, -1, 1]) < tf.reshape(
-          output_size, [-1, 1, 1]), boxes.dtype)
+  boxes_mask = tf.less(
+      tf.reshape(tf.range(max_output_size), [1, -1, 1]),
+      tf.reshape(output_size, [-1, 1, 1]))
+  boxes = boxes * tf.cast(boxes_mask, boxes.dtype)
   scores = tf.reshape(
       tf.gather(tf.reshape(scores, [-1, 1]), idx),
       [batch_size, max_output_size])
-  scores = scores * tf.cast(
-      tf.reshape(tf.range(max_output_size), [1, -1]) < tf.reshape(
-          output_size, [-1, 1]), scores.dtype)
+  scores_mask = tf.less(
+      tf.reshape(tf.range(max_output_size), [1, -1]),
+      tf.reshape(output_size, [-1, 1]))
+  scores = tf.where(scores_mask, scores,
+                    tf.ones_like(scores, scores.dtype) * -1)
   return scores, boxes
