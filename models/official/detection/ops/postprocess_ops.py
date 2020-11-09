@@ -212,20 +212,20 @@ def _select_top_k_scores(scores_in, pre_nms_num_detections):
     scores and indices: Tensors with shape [batch_size, pre_nms_num_detections,
       num_classes].
   """
-  _, num_anchors, num_class = scores_in.get_shape().as_list()
+  _, num_anchors, num_classes = scores_in.get_shape().as_list()
   scores_trans = tf.transpose(scores_in, perm=[0, 2, 1])
   scores_trans = tf.reshape(scores_trans, [-1, num_anchors])
 
   top_k_scores, top_k_indices = tf.nn.top_k(
       scores_trans, k=pre_nms_num_detections, sorted=True)
 
-  top_k_scores = tf.reshape(top_k_scores,
-                            [-1, num_class, pre_nms_num_detections])
-  top_k_indices = tf.reshape(top_k_indices,
-                             [-1, num_class, pre_nms_num_detections])
+  top_k_scores = tf.reshape(
+      top_k_scores, [-1, num_classes, pre_nms_num_detections])
+  top_k_indices = tf.reshape(
+      top_k_indices, [-1, num_classes, pre_nms_num_detections])
 
-  return tf.transpose(top_k_scores,
-                      [0, 2, 1]), tf.transpose(top_k_indices, [0, 2, 1])
+  return (tf.transpose(top_k_scores, [0, 2, 1]),
+          tf.transpose(top_k_indices, [0, 2, 1]))
 
 
 def _generate_detections_v2(boxes,
@@ -268,10 +268,6 @@ def _generate_detections_v2(boxes,
       `valid_detections` boxes are valid detections.
   """
   with tf.name_scope('generate_detections'):
-    # Normalizes maximum box cooridinates to 1.
-    normalizer = tf.reduce_max(boxes)
-    boxes /= normalizer
-
     nmsed_boxes = []
     nmsed_classes = []
     nmsed_scores = []
@@ -310,8 +306,6 @@ def _generate_detections_v2(boxes,
   nmsed_classes = tf.gather(nmsed_classes, indices, batch_dims=1)
   valid_detections = tf.reduce_sum(
       input_tensor=tf.cast(tf.greater(nmsed_scores, -1), tf.int32), axis=1)
-  # De-normalizes box cooridinates.
-  nmsed_boxes *= normalizer
   return nmsed_boxes, nmsed_scores, nmsed_classes, valid_detections
 
 
@@ -340,6 +334,7 @@ def _generate_detections_batched(boxes,
       boxes overlap too much with respect to IOU.
     score_threshold: a float representing the threshold for deciding when to
       remove boxes based on score.
+
   Returns:
     nmsed_boxes: `float` Tensor of shape [batch_size, max_total_size, 4]
       representing top detected boxes in [y1, x1, y2, x2].
@@ -386,21 +381,23 @@ class MultilevelDetectionGenerator(object):
     boxes = []
     scores = []
     for i in range(self._min_level, self._max_level + 1):
-      box_outputs_i_shape = tf.shape(box_outputs[i])
-      batch_size = box_outputs_i_shape[0]
-      num_anchors_per_locations = box_outputs_i_shape[-1] // 4
-      num_classes = tf.shape(class_outputs[i])[-1] // num_anchors_per_locations
+      _, feature_h, feature_w, num_predicted_corners = (
+          box_outputs[i].get_shape().as_list())
+      num_anchors_per_locations = num_predicted_corners // 4
+      num_classes = (class_outputs[i].get_shape().as_list()[-1] //
+                     num_anchors_per_locations)
+      num_anchors = feature_h * feature_w  * num_anchors_per_locations
 
       # Applies score transformation and remove the implicit background class.
       scores_i = tf.sigmoid(
-          tf.reshape(class_outputs[i], [batch_size, -1, num_classes]))
+          tf.reshape(class_outputs[i], [-1, num_anchors, num_classes]))
       scores_i = tf.slice(scores_i, [0, 0, 1], [-1, -1, -1])
 
       # Box decoding.
       # The anchor boxes are shared for all data in a batch.
       # One stage detector only supports class agnostic box regression.
-      anchor_boxes_i = tf.reshape(anchor_boxes[i], [batch_size, -1, 4])
-      box_outputs_i = tf.reshape(box_outputs[i], [batch_size, -1, 4])
+      anchor_boxes_i = tf.reshape(anchor_boxes[i], [-1, num_anchors, 4])
+      box_outputs_i = tf.reshape(box_outputs[i], [-1, num_anchors, 4])
       boxes_i = box_utils.decode_boxes(box_outputs_i, anchor_boxes_i)
 
       # Box clipping.
