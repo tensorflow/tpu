@@ -128,6 +128,11 @@ flags.DEFINE_integer(
     'eval_batch_size', default=64, help='Batch size for evaluation.')
 
 flags.DEFINE_integer(
+    'batch_norm_batch_size',
+    default=128,
+    help='Per-group batch size for distributed batch normalization.')
+
+flags.DEFINE_integer(
     'num_train_images', default=1281167, help='Size of training data set.')
 
 flags.DEFINE_integer(
@@ -293,6 +298,9 @@ flags.DEFINE_float(
 
 flags.DEFINE_float(
     'lars_epsilon', default=0.0, help=('Epsilon for LARS optimizer.'))
+
+flags.DEFINE_integer(
+    'num_replicas', default=32, help=('Number of TPU replicas.'))
 
 
 def model_fn(features, labels, mode, params):

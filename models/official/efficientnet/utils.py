@@ -22,12 +22,15 @@ import json
 import os
 import sys
 
+from absl import flags
 from absl import logging
 import numpy as np
 import tensorflow.compat.v1 as tf
 
 import lars_optimizer
 from tensorflow.python.tpu import tpu_function  # pylint:disable=g-direct-tensorflow-import
+
+FLAGS = flags.FLAGS
 
 
 def build_learning_rate(initial_lr,
@@ -167,6 +170,107 @@ class BatchNormalization(tf.layers.BatchNormalization):
 
   def __init__(self, name='tpu_batch_normalization', **kwargs):
     super(BatchNormalization, self).__init__(name=name, **kwargs)
+
+
+def train_batch_norm(**kwargs):
+  if 'optimizer' in FLAGS and FLAGS.optimizer == 'lars':
+    return DistributedBatchNormalization(**kwargs)
+  return TpuBatchNormalization(**kwargs)
+
+
+def eval_batch_norm(**kwargs):
+  if 'optimizer' in FLAGS and FLAGS.optimizer == 'lars':
+    return DistributedBatchNormalization(**kwargs)
+  return BatchNormalization(**kwargs)
+
+
+class DistributedBatchNormalization:
+  """Distributed batch normalization used in https://arxiv.org/abs/2011.00071."""
+
+  def __init__(self, axis, momentum, epsilon):
+    self.axis = axis
+    self.momentum = momentum
+    self.epsilon = epsilon
+
+  def __call__(self, x, training, distname='batch_normalization'):
+    shape = [x.shape[-1]]
+    with tf.variable_scope('batch_normalization'):
+      ones = tf.initializers.ones()
+      zeros = tf.initializers.zeros()
+      gamma = tf.get_variable(
+          'gamma', shape, initializer=ones, trainable=True, use_resource=True)
+      beta = tf.get_variable(
+          'beta', shape, initializer=zeros, trainable=True, use_resource=True)
+      moving_mean = tf.get_variable(
+          'moving_mean',
+          shape,
+          initializer=zeros,
+          trainable=False,
+          use_resource=True)
+      moving_variance = tf.get_variable(
+          'moving_variance',
+          shape,
+          initializer=ones,
+          trainable=False,
+          use_resource=True)
+    num_replicas = FLAGS.num_replicas
+
+    x = tf.cast(x, tf.float32)
+    if training:
+      if num_replicas <= 8:
+        group_assign = None
+        group_shards = tf.cast(num_replicas, tf.float32)
+      else:
+
+        group_shards = max(
+            1,
+            int(FLAGS.batch_norm_batch_size /
+                (FLAGS.train_batch_size / num_replicas)))
+        group_assign = np.arange(num_replicas, dtype=np.int32)
+        group_assign = group_assign.reshape([-1, group_shards])
+        group_assign = group_assign.tolist()
+        group_shards = tf.cast(group_shards, tf.float32)
+
+      mean = tf.reduce_mean(x, [0, 1, 2])
+      mean = tf.tpu.cross_replica_sum(mean, group_assign) / group_shards
+
+      # Var[x] = E[x^2] - E[x]^2
+      mean_sq = tf.reduce_mean(tf.math.square(x), [0, 1, 2])
+      mean_sq = tf.tpu.cross_replica_sum(mean_sq, group_assign) / group_shards
+      variance = mean_sq - tf.math.square(mean)
+
+      decay = tf.cast(1. - self.momentum, tf.float32)
+
+      def u(moving, normal, name):
+        num_replicas_fp = tf.cast(num_replicas, tf.float32)
+        normal = tf.tpu.cross_replica_sum(normal) / num_replicas_fp
+        diff = decay * (moving - normal)
+        return tf.assign_sub(moving, diff, use_locking=True, name=name)
+
+      tf.add_to_collection(tf.GraphKeys.UPDATE_OPS,
+                           u(moving_mean, mean, name='moving_mean'))
+      tf.add_to_collection(tf.GraphKeys.UPDATE_OPS,
+                           u(moving_variance, variance, name='moving_variance'))
+
+      x = tf.nn.batch_normalization(
+          x,
+          mean=mean,
+          variance=variance,
+          offset=beta,
+          scale=gamma,
+          variance_epsilon=self.epsilon)
+    else:
+
+      x, _, _ = tf.nn.fused_batch_norm(
+          x,
+          scale=gamma,
+          offset=beta,
+          mean=moving_mean,
+          variance=moving_variance,
+          epsilon=self.epsilon,
+          is_training=False)
+
+    return x
 
 
 def drop_connect(inputs, is_training, survival_prob):
