@@ -20,6 +20,7 @@ into (image, labels) tuple for RetinaNet.
 T.-Y. Lin, P. Goyal, R. Girshick, K. He,  and P. Dollar
 Focal Loss for Dense Object Detection. arXiv:1708.02002
 """
+
 import tensorflow.compat.v1 as tf
 from dataloader import anchor
 from dataloader import mode_keys as ModeKeys
