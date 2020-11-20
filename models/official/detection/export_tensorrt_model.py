@@ -57,7 +57,6 @@ def export(saved_model_dir,
            is_dynamic_op=False,
            maximum_cached_engines=1):
   """Exports TensorRT model."""
-  config = tf.ConfigProto(gpu_options=tf.GPUOptions(allow_growth=True))
   trt_convert.create_inference_graph(
       None,
       None,
@@ -70,8 +69,7 @@ def export(saved_model_dir,
       input_saved_model_dir=saved_model_dir,
       input_saved_model_tags=None,
       input_saved_model_signature_key=None,
-      output_saved_model_dir=tensorrt_model_dir,
-      session_config=config)
+      output_saved_model_dir=tensorrt_model_dir)
 
 
 def main(argv):
