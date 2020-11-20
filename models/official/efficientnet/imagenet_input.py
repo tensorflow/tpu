@@ -149,7 +149,8 @@ class ImageNetTFExampleInput(six.with_metaclass(abc.ABCMeta, object)):
     """
     mix_weight = tf.distributions.Beta(alpha, alpha).sample([batch_size, 1])
     mix_weight = tf.maximum(mix_weight, 1. - mix_weight)
-    images_mix_weight = tf.reshape(mix_weight, [batch_size, 1, 1, 1])
+    images_mix_weight = tf.cast(
+        tf.reshape(mix_weight, [batch_size, 1, 1, 1]), images.dtype)
     # Mixup on a single batch is implemented by taking a weighted sum with the
     # same batch in reverse.
     images_mix = (
