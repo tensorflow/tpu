@@ -12,17 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Run latency tests for detection models.
-
-Latency is measured from input tensor to raw outputs (image pre-processing and
-NMS are not included.).
-"""
+"""Run latency tests for SavedModel."""
 
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
 import datetime
+import io
 # Standard Imports
 from absl import flags
 import numpy as np
@@ -31,7 +28,12 @@ import tensorflow.compat.v1 as tf
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_string("image_file", "", "The image to process.")
+flags.DEFINE_string(
+    "image_file", "", "The image to process. If an empty "
+    "string is passed, then a random image is used internally.")
+flags.DEFINE_boolean(
+    "use_image_bytes_as_input", False, "True to use "
+    "image-bytes as input. False to use image-tensor as input.")
 flags.DEFINE_string("saved_model_path", "",
                     "Path to the saved Mask RCNN model.")
 flags.DEFINE_string("input_size", "640,640",
@@ -43,15 +45,59 @@ flags.DEFINE_integer("num_runs", 50, "Number of runs on the current image.")
 flags.DEFINE_integer("warm_up", 10, "Number of warm up runs before testing.")
 
 
+def get_image_str_from_pil_image(pil_image):
+  image_mem_file = io.BytesIO()
+  pil_image.save(image_mem_file, "JPEG")
+  image_mem_file.seek(0)
+  img_str = image_mem_file.read()
+  return img_str
+
+
+def get_random_image_input(height, width, use_image_bytes_as_input=False):
+  """Returns a random image as a model input."""
+  image_array = np.random.rand(height, width, 3) * 255
+  if use_image_bytes_as_input:
+    pil_image = Image.fromarray(image_array.astype("uint8"))
+    inp = [get_image_str_from_pil_image(pil_image)]
+  else:
+    inp = image_array.reshape(-1, height, width, 3)
+    inp = (inp / 255.0).astype(dtype=np.float32)
+  return inp
+
+
+def get_user_image_input(image_file,
+                         height,
+                         width,
+                         use_image_bytes_as_input=False):
+  """Prepares the user image as a model input."""
+  with tf.gfile.Open(image_file, "rb") as f:
+    pil_image = Image.open(f)
+  pil_image = pil_image.resize((width, height))
+  if use_image_bytes_as_input:
+    inp = [get_image_str_from_pil_image(pil_image)]
+  else:
+    image_array = np.array(pil_image.getdata())
+    # pylint: disable=too-many-function-args
+    inp = image_array.reshape(-1, pil_image.size[1], pil_image.size[0], 3)
+    # pylint: enable=too-many-function-args
+    inp = (inp / 255.0).astype(dtype=np.float32)
+  return inp
+
+
 def get_feeds_fetches():
   """Read image and saved model."""
-  img = Image.open(FLAGS.image_file)
   height, width = [int(x) for x in FLAGS.input_size.split(",")]
-  img = img.resize((width, height))
-
-  # pylint: disable=too-many-function-args
-  inp = np.array(img.getdata()).reshape(-1, img.size[1], img.size[0], 3)
-  inp = (inp / 255.0).astype(dtype=np.float32)
+  if FLAGS.image_file:
+    inp = get_user_image_input(
+        image_file=FLAGS.image_file,
+        height=height,
+        width=width,
+        use_image_bytes_as_input=FLAGS.use_image_bytes_as_input)
+  else:
+    inp = get_random_image_input(
+        height=height,
+        width=width,
+        use_image_bytes_as_input=FLAGS.use_image_bytes_as_input)
 
   outputs = FLAGS.fetch_tensors.split(",")
   input_saved_model_dir = FLAGS.saved_model_path

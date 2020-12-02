@@ -45,6 +45,8 @@ flags.DEFINE_bool(
           ' --use_tpu=false, will use whatever devices are available to'
           ' TensorFlow by default (e.g. CPU and GPU)'))
 
+flags.DEFINE_string('tpu_job_name', None, help=('Name of worker binary.'))
+
 # Cloud TPU Cluster Resolvers
 flags.DEFINE_string(
     'tpu', default=None,
@@ -70,7 +72,7 @@ flags.DEFINE_string(
 flags.DEFINE_integer(
     'holdout_shards',
     default=None,
-    help=('Number of holdout shards for validation. 0 means no holdout.'))
+    help=('Number of holdout shards for validation. Recommended 20.'))
 
 flags.DEFINE_string('eval_name', default=None, help=('Evaluation name.'))
 
@@ -664,7 +666,10 @@ def main(unused_argv):
   if FLAGS.holdout_shards:
     holdout_images = int(FLAGS.num_train_images * FLAGS.holdout_shards / 1024.0)
     FLAGS.num_train_images -= holdout_images
-    FLAGS.num_eval_images = holdout_images
+    if FLAGS.eval_name and 'test' in FLAGS.eval_name:
+      FLAGS.holdout_shards = None  # do not use holdout if eval test set.
+    else:
+      FLAGS.num_eval_images = holdout_images
 
   # For imagenet dataset, include background label if number of output classes
   # is 1001
@@ -693,6 +698,7 @@ def main(unused_argv):
                   disable_meta_optimizer=True))),
       tpu_config=tf.estimator.tpu.TPUConfig(
           iterations_per_loop=FLAGS.iterations_per_loop,
+          tpu_job_name=FLAGS.tpu_job_name,
           per_host_input_for_training=tf.estimator.tpu.InputPipelineConfig
           .PER_HOST_V2))  # pylint: disable=line-too-long
   # Initializes model parameters.
