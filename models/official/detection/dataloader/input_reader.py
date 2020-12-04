@@ -34,7 +34,11 @@ def _create_pre_batch_dataset_fn(file_pattern, dataset_type, config_params):
       parser_fn = factory.parser_generator(config_params, mode)
     else:
       raise ValueError('Dataset type %s is not supported.' % dataset_type)
-    dataset = tf.data.Dataset.list_files(file_pattern, shuffle=is_training)
+
+    if ',' in file_pattern:
+      dataset = tf.data.Dataset.from_tensor_slices(file_pattern.split(','))
+    else:
+      dataset = tf.data.Dataset.list_files(file_pattern, shuffle=is_training)
     if is_training:
       dataset = dataset.repeat()
 
