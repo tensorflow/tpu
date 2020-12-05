@@ -71,7 +71,7 @@ class DistributedExecuter(object):
   def build_mask_rcnn_estimator(self, params, run_config, mode):
     """Creates TPUEstimator/Estimator instance.
 
-    Arguments:
+    Args:
       params: A dictionary to pass to Estimator `model_fn`.
       run_config: RunConfig instance specifying distribution strategy
         configurations.
