@@ -83,7 +83,9 @@ class BlockDecoder(object):
         conv_type=int(options['c']) if 'c' in options else 0,
         fused_conv=int(options['f']) if 'f' in options else 0,
         space2depth=int(options['d']) if 'd' in options else 0,
-        condconv=('cc' in block_string))
+        condconv=('cc' in block_string),
+        activation_fn=(tf.nn.relu if int(options['a']) == 0
+                       else tf.nn.swish) if 'a' in options else None)
 
   def _encode_block_string(self, block):
     """Encodes a block to a string."""
