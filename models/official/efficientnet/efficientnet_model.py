@@ -51,7 +51,7 @@ GlobalParams.__new__.__defaults__ = (None,) * len(GlobalParams._fields)
 BlockArgs = collections.namedtuple('BlockArgs', [
     'kernel_size', 'num_repeat', 'input_filters', 'output_filters',
     'expand_ratio', 'id_skip', 'strides', 'se_ratio', 'conv_type', 'fused_conv',
-    'space2depth', 'condconv'
+    'space2depth', 'condconv', 'activation_fn'
 ])
 # defaults will be a public argument for namedtuple in Python 3.7
 # https://docs.python.org/3/library/collections.html#collections.namedtuple
@@ -160,7 +160,9 @@ class MBConvBlock(tf.keras.layers.Layer):
       self._channel_axis = -1
       self._spatial_dims = [1, 2]
 
-    self._relu_fn = global_params.relu_fn or tf.nn.swish
+    self._relu_fn = (self._block_args.activation_fn
+                     or global_params.relu_fn or tf.nn.swish)
+    logging.info('Using activation function %s', self._relu_fn.__name__)
     self._has_se = (
         global_params.use_se and self._block_args.se_ratio is not None and
         0 < self._block_args.se_ratio <= 1)
