@@ -1035,7 +1035,7 @@ class ClassificationHead(object):
 
       # Dropout layer.
       if is_training and self._dropout_rate > 0.0:
-        bottleneck = tf.nn.dropout(bottleneck, self._dropout_rate)
+        bottleneck = tf.nn.dropout(bottleneck, rate=self._dropout_rate)
 
       # Prediction layer.
       logits = tf.layers.dense(
