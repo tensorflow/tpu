@@ -414,7 +414,7 @@ class MBConvBlockWithoutDepthwise(MBConvBlock):
       self._expand_conv = tf.layers.Conv2D(
           filters,
           kernel_size=[3, 3],
-          strides=[1, 1],
+          strides=self._block_args.strides,
           kernel_initializer=conv_kernel_initializer,
           padding='same',
           use_bias=False)
@@ -428,7 +428,7 @@ class MBConvBlockWithoutDepthwise(MBConvBlock):
     self._project_conv = tf.layers.Conv2D(
         filters,
         kernel_size=[1, 1],
-        strides=self._block_args.strides,
+        strides=[1, 1],
         kernel_initializer=conv_kernel_initializer,
         padding='same',
         use_bias=False)
