@@ -348,7 +348,7 @@ def convert_to_tf_records(
 
   # Glob all the validation files
   validation_files = sorted(tf.gfile.Glob(
-      os.path.join(raw_data_dir, VALIDATION_DIRECTORY, '*', '.JPEG')))
+      os.path.join(raw_data_dir, VALIDATION_DIRECTORY, '*.JPEG')))
 
   # Get validation file synset labels from labels.txt
   validation_synsets = tf.gfile.FastGFile(
