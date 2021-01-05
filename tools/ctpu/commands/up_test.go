@@ -220,6 +220,12 @@ func TestUpImageFamily(t *testing.T) {
 		tfVersion: "1.6",
 		want:      "tf-1-6",
 	}, {
+		tfVersion: "2.3.0",
+		want:      "tf-2-3",
+	}, {
+		tfVersion: "2.4.0",
+		want:      "tf-2-4-0",
+	}, {
 		tfVersion: "nightly",
 		want:      "tf-nightly",
 	}, {

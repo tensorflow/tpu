@@ -181,7 +181,9 @@ func (c *upCmd) gceImageFamily() (string, error) {
 	if c.dlImage {
 		return fmt.Sprintf("tf-%d-%d-gpu", parsed.Major, parsed.Minor), nil
 	}
-	if parsed.Patch != 0 {
+	// From TF 2.3 to 2.4, image family format uses patch format by default, e.g.:
+	// `tf-2-4-0` and `tf-2-3` are valid.
+	if parsed.Patch != 0 || parsed.Major >= 2 && parsed.Minor >= 4 {
 		return fmt.Sprintf("tf-%d-%d-%d", parsed.Major, parsed.Minor, parsed.Patch), nil
 	}
 	return fmt.Sprintf("tf-%d-%d", parsed.Major, parsed.Minor), nil
