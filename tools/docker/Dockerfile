@@ -32,5 +32,5 @@ RUN pip3 install pyyaml && \
 # Checkout tensorflow/models at the appropriate branch
 RUN git clone -b r2.4.0 --depth 1 https://github.com/tensorflow/models.git /tensorflow_models
 
-# Checkout tensorflow/tpu at the appropriate branch
+# Checkout tensorflow/tpu at the appropriate r2.4 branch
 RUN git clone -b r2.4 --depth 1 https://github.com/tensorflow/tpu.git /tensorflow_tpu_models
