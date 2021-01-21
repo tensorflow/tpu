@@ -30,8 +30,17 @@ def _get_source_id_from_encoded_image(parsed_tensors):
 class TfExampleDecoder(object):
   """Tensorflow Example proto decoder."""
 
-  def __init__(self, include_mask=False, regenerate_source_id=False):
+  def __init__(
+      self,
+      include_mask=False,
+      # copypara:strip_begin
+      include_polygon=False,
+      # copypara:strip_end
+      regenerate_source_id=False):
     self._include_mask = include_mask
+    # copypara:strip_begin
+    self._include_polygon = include_polygon
+    # copypara:strip_end
     self._regenerate_source_id = regenerate_source_id
     self._keys_to_features = {
         'image/encoded': tf.FixedLenFeature((), tf.string),
@@ -47,10 +56,7 @@ class TfExampleDecoder(object):
         'image/object/is_crowd': tf.VarLenFeature(tf.int64),
     }
     if include_mask:
-      self._keys_to_features.update({
-          'image/object/mask':
-              tf.VarLenFeature(tf.string),
-      })
+      self._keys_to_features['image/object/mask'] = tf.VarLenFeature(tf.string)
 
   def _decode_image(self, parsed_tensors):
     """Decodes the image and set its static shape."""

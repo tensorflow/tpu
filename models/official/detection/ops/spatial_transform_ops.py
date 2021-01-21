@@ -67,6 +67,32 @@ def nearest_upsampling(data, scale):
     return tf.reshape(output, [bs, h * scale, w * scale, c])
 
 
+def nearest_upsampling3d(data, scale):
+  """Nearest neighbor upsampling implementation.
+
+  Args:
+    data: A tensor with a shape of [batch, height_in, width_in, channels].
+    scale: An integer multiple to scale resolution of input data.
+
+  Returns:
+    data_up: A tensor with a shape of
+      [batch, height_in*scale, width_in*scale, channels]. Same dtype as input
+      data.
+  """
+  with tf.name_scope('nearest_upsampling'):
+    bs, _, _, _, c = data.get_shape().as_list()
+    dim1 = tf.shape(data)[1]
+    dim2 = tf.shape(data)[2]
+    dim3 = tf.shape(data)[3]
+    bs = -1 if bs is None else bs
+    # Instead of broadcasting with a 6-d tensor, we're using stacking here
+    # for TfLite compatibity.
+    output = tf.stack([data] * scale, axis=4)
+    output = tf.stack([output] * scale, axis=3)
+    output = tf.stack([output] * scale, axis=2)
+    return tf.reshape(output, [bs, dim1 * scale, dim2 * scale, dim3 * scale, c])
+
+
 def feature_bilinear_interpolation(features, kernel_y, kernel_x):
   """Feature bilinear interpolation.
 

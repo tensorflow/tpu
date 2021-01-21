@@ -33,8 +33,6 @@ import tensorflow.compat.v1 as tf
 
 from tensorflow_serving.apis import predict_pb2
 from tensorflow_serving.apis import prediction_service_pb2_grpc
-from tensorflow.contrib import cluster_resolver as contrib_cluster_resolver
-from tensorflow.contrib import util as contrib_util
 
 tf.app.flags.DEFINE_integer('num_requests', 20, 'Total # of requests sent.')
 tf.app.flags.DEFINE_integer('qps', 4, 'Desired client side request QPS')
@@ -205,7 +203,7 @@ def generate_grpc_request():
   image = get_image_payload()
 
   request.inputs[FLAGS.input_name].CopyFrom(
-      contrib_util.make_tensor_proto(
+      tf.make_tensor_proto(
           [image] * FLAGS.batch_size, shape=[FLAGS.batch_size]))
   return request
 
@@ -259,7 +257,7 @@ def run_rest_load_test(num_requests, qps, server_ip, payload):
 
 def generate_rest_payload():
   """Generate REST inference request's payload."""
-  encoded_image = base64.encodestring(get_image_payload())
+  encoded_image = base64.b64encode(get_image_payload()).decode()
   inputs = [{'b64': encoded_image}] * FLAGS.batch_size
   payload = json.dumps({
       'signature_name': 'serving_default',
@@ -273,7 +271,7 @@ def main(argv):
 
   tpu_address = FLAGS.tpu
   if not any(pref in FLAGS.tpu for pref in ['http://', 'grpc://']):
-    tpu_address = contrib_cluster_resolver.TPUClusterResolver(
+    tpu_address = tf.distribute.cluster_resolver.TPUClusterResolver(
         FLAGS.tpu).master()
     tpu_address = '{}:{}'.format(tpu_address[:-len(':1234')],
                                  '8470' if FLAGS.grpc else '8473')
