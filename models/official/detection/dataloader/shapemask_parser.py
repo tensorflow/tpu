@@ -36,31 +36,37 @@ from utils import input_utils
 class Parser(object):
   """Base class to parse an image and its annotations into a dictionary of tensors."""
 
-  def __init__(self,
-               output_size,
-               min_level,
-               max_level,
-               num_scales,
-               aspect_ratios,
-               anchor_size,
-               use_category=True,
-               outer_box_scale=1.0,
-               box_jitter_scale=0.025,
-               num_sampled_masks=8,
-               mask_crop_size=32,
-               mask_min_level=3,
-               mask_max_level=5,
-               upsample_factor=4,
-               match_threshold=0.5,
-               unmatched_threshold=0.5,
-               aug_rand_hflip=False,
-               aug_scale_min=1.0,
-               aug_scale_max=1.0,
-               skip_crowd_during_training=True,
-               max_num_instances=100,
-               use_bfloat16=True,
-               mask_train_class='all',
-               mode=None):
+  def __init__(
+      self,
+      output_size,
+      min_level,
+      max_level,
+      num_scales,
+      aspect_ratios,
+      anchor_size,
+      use_category=True,
+      outer_box_scale=1.0,
+      box_jitter_scale=0.025,
+      num_sampled_masks=8,
+      mask_crop_size=32,
+      mask_min_level=3,
+      mask_max_level=5,
+      upsample_factor=4,
+      match_threshold=0.5,
+      unmatched_threshold=0.5,
+      aug_rand_hflip=False,
+      aug_scale_min=1.0,
+      aug_scale_max=1.0,
+      skip_crowd_during_training=True,
+      max_num_instances=100,
+      use_bfloat16=True,
+      mask_train_class='all',
+      # copypara:strip_begin
+      polygon_format='brain',
+      max_polygons_per_instance=20,
+      max_vertices_per_polygon=50,
+      # copypara:strip_end
+      mode=None):
     """Initializes parameters for parsing annotations in the dataset.
 
     Args:
@@ -109,17 +115,35 @@ class Parser(object):
         image. The groundtruth data will be padded to `max_num_instances`.
       use_bfloat16: `bool`, if True, cast output image to tf.bfloat16.
       mask_train_class: a string of experiment mode: `all`, `voc` or `nonvoc`.
+      # copypara:strip_begin
+      polygon_format: a string represents the polygon format: `brain` or `geo`.
+      max_polygons_per_instance: `int` number of maximum number of polygons for
+        one instance. Every instance will be padded to contain
+        `max_polygons_per_instance` polygons.
+      max_vertices_per_polygon: `int` number of maximum number of vertices for
+        one polygon. Every polygon will be padded to contain
+        `max_vertices_per_polygon` vertices.
+      # copypara:strip_end
       mode: a ModeKeys. Specifies if this is training, evaluation, prediction
         or prediction with groundtruths in the outputs.
     """
     self._mode = mode
     self._mask_train_class = mask_train_class
+    # copypara:strip_begin
+    self._polygon_format = polygon_format
+    self._max_polygons_per_instance = max_polygons_per_instance
+    self._max_vertices_per_polygon = max_vertices_per_polygon
+    # copypara:strip_end
     self._max_num_instances = max_num_instances
     self._skip_crowd_during_training = skip_crowd_during_training
     self._is_training = (mode == ModeKeys.TRAIN)
 
     self._example_decoder = tf_example_decoder.TfExampleDecoder(
-        include_mask=True)
+        include_mask=True,
+        # copypara:strip_begin
+        include_polygon=True,
+        # copypara:strip_end
+        regenerate_source_id=False)
 
     # Anchor.
     self._output_size = output_size
@@ -154,7 +178,7 @@ class Parser(object):
     if mode == ModeKeys.TRAIN:
       self._parse_fn = self.parse_train_data
     elif mode == ModeKeys.EVAL:
-      self._parse_fn = self._parse_eval_data
+      self._parse_fn = self.parse_eval_data
     elif mode == ModeKeys.PREDICT or mode == ModeKeys.PREDICT_WITH_GT:
       self._parse_fn = self.parse_predict_data
     else:
@@ -237,7 +261,7 @@ class Parser(object):
       boxes = tf.gather(boxes, indices)
       masks = tf.gather(masks, indices)
 
-    # If not using category, makes all categories with id = 0.
+    # If not using category, makes all categories with id = 1.
     if not self._use_category:
       classes = tf.cast(tf.greater(classes, 0), dtype=tf.float32)
 
@@ -390,13 +414,16 @@ class Parser(object):
     }
     return image, labels
 
+  def parse_eval_data(self, data):
+    raise NotImplementedError('The `parse_eval_data` is not implemented.')
+
   def parse_predict_data(self, data):
-    """Parse data for ShapeMask training."""
+    """Parse data for ShapeMask prediction."""
     classes = data['groundtruth_classes']
     boxes = data['groundtruth_boxes']
     masks = data['groundtruth_instance_masks']
 
-    # If not using category, makes all categories with id = 0.
+    # If not using category, makes all categories with id = 1.
     if not self._use_category:
       classes = tf.cast(tf.greater(classes, 0), dtype=tf.float32)
 
