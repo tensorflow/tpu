@@ -19,40 +19,42 @@ from hyperparameters import params_dict
 
 # pylint: disable=line-too-long
 RETINANET_CFG = params_dict.ParamsDict(detection_config.DETECTION_CFG)
-RETINANET_CFG.override({
-    'type': 'retinanet',
-    'architecture': {
-        'parser': 'retinanet_parser',
-        'backbone': 'resnet',
-        'multilevel_features': 'fpn',
+RETINANET_CFG.override(
+    {
+        'type': 'retinanet',
+        'architecture': {
+            'parser': 'retinanet_parser',
+            'backbone': 'resnet',
+            'multilevel_features': 'fpn',
+        },
+        'retinanet_parser': {
+            'output_size': [640, 640],
+            'match_threshold': 0.5,
+            'unmatched_threshold': 0.5,
+            'aug_rand_hflip': True,
+            'aug_scale_min': 1.0,
+            'aug_scale_max': 1.0,
+            'aug_policy': '',
+            'skip_crowd_during_training': True,
+            'max_num_instances': 100,
+            'regenerate_source_id': False,
+        },
+        'retinanet_head': {
+            'anchors_per_location': None,  # Param no longer used.
+            'num_convs': 4,
+            'num_filters': 256,
+            'use_separable_conv': False,
+            'use_batch_norm': True,
+        },
+        'retinanet_loss': {
+            'focal_loss_alpha': 0.25,
+            'focal_loss_gamma': 1.5,
+            'huber_loss_delta': 0.1,
+            'box_loss_weight': 50,
+            'normalizer_momentum': 0.0,
+        },
     },
-    'retinanet_parser': {
-        'output_size': [640, 640],
-        'match_threshold': 0.5,
-        'unmatched_threshold': 0.5,
-        'aug_rand_hflip': True,
-        'aug_scale_min': 1.0,
-        'aug_scale_max': 1.0,
-        'aug_policy': '',
-        'skip_crowd_during_training': True,
-        'max_num_instances': 100,
-        'regenerate_source_id': False,
-    },
-    'retinanet_head': {
-        'anchors_per_location': None,  # Param no longer used.
-        'num_convs': 4,
-        'num_filters': 256,
-        'use_separable_conv': False,
-        'use_batch_norm': True,
-    },
-    'retinanet_loss': {
-        'focal_loss_alpha': 0.25,
-        'focal_loss_gamma': 1.5,
-        'huber_loss_delta': 0.1,
-        'box_loss_weight': 50,
-        'normalizer_momentum': 0.0,
-    },
-}, is_strict=False)
+    is_strict=False)
 
 RETINANET_RESTRICTIONS = [
 ]
