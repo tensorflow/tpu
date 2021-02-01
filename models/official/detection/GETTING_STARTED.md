@@ -7,7 +7,7 @@ To get started, make sure you install Tensorflow 1.15+.
 * For GPU training, make sure it has the GPU support. See the [guideline](https://www.tensorflow.org/install/gpu) by Tensorflow.
 
 ```bash
-pip install tensorflow-gpu==1.15  # GPU
+pip3 install tensorflow-gpu==1.15  # GPU
 ```
 
 * For Cloud TPU / TPU Pods training, make sure Tensorflow 1.15+ is pre-installed in your Google Cloud VM.
@@ -17,8 +17,8 @@ Also, there are a few packages that you need to install.
 
 ```bash
 sudo apt-get install -y python-tk && \
-pip install --user Cython matplotlib opencv-python-headless pyyaml Pillow && \
-pip install --user 'git+https://github.com/cocodataset/cocoapi#egg=pycocotools&subdirectory=PythonAPI'
+pip3 install --user Cython matplotlib opencv-python-headless pyyaml Pillow && \
+pip3 install --user 'git+https://github.com/cocodataset/cocoapi#egg=pycocotools&subdirectory=PythonAPI'
 ```
 
 ## Dataset download and convesion
