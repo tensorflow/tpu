@@ -262,3 +262,79 @@ def mbconv_block(inputs,
     inputs = tf.add(inputs, shortcut)
 
   return inputs
+
+
+def fused_mbconv_block(inputs,
+                       in_filters,
+                       out_filters,
+                       expand_ratio,
+                       strides,
+                       kernel_size=3,
+                       se_ratio=None,
+                       batch_norm_activation=nn_ops.BatchNormActivation(),
+                       dropblock=nn_ops.Dropblock(),
+                       drop_connect_rate=None,
+                       data_format='channels_last',
+                       is_training=False):
+  """The fused bottleneck block with BN and DropBlock after convolutions.
+
+  Args:
+    inputs: a `Tensor` of size `[batch, channels, height, width]`.
+    in_filters: a `int` number of filters for the input feature map.
+    out_filters: a `int` number of filters for the output feature map.
+    expand_ratio: a `int` number as the feature dimension expansion ratio.
+    strides: a `int` block stride. If greater than 1, this block will ultimately
+      downsample the input.
+    kernel_size: kernel size for the depthwise convolution.
+    se_ratio: squeeze and excitation ratio.
+    batch_norm_activation: an operation that includes a batch normalization
+      layer followed by an optional activation layer.
+    dropblock: a drop block layer that is added after convluations. Note that
+      the default implementation does not apply any drop block.
+    drop_connect_rate: a 'float' number that specifies the drop connection rate
+      of the block. Note that the default `None` means no drop connection is
+      applied.
+    data_format: a `str` that specifies the data format.
+    is_training: a `bool` if True, the model is in training mode.
+
+  Returns:
+    The output `Tensor` of the block.
+  """
+  tf.logging.info('-----> Building fused mbconv block.')
+  shortcut = inputs
+
+  # First 1x1 conv for channel expansion.
+  inputs = nn_ops.conv2d_fixed_padding(
+      inputs=inputs,
+      filters=in_filters * expand_ratio,
+      kernel_size=kernel_size,
+      strides=strides,
+      data_format=data_format)
+  inputs = batch_norm_activation(inputs, is_training=is_training)
+  inputs = dropblock(inputs, is_training=is_training)
+
+  # Squeeze and excitation.
+  if se_ratio is not None and se_ratio > 0 and se_ratio <= 1:
+    inputs = nn_ops.squeeze_excitation(
+        inputs,
+        in_filters,
+        se_ratio,
+        expand_ratio=expand_ratio,
+        data_format=data_format)
+
+  # Third 1x1 conv for reversed bottleneck.
+  inputs = nn_ops.conv2d_fixed_padding(
+      inputs=inputs,
+      filters=out_filters,
+      kernel_size=1,
+      strides=1,
+      data_format=data_format)
+  inputs = batch_norm_activation(inputs, relu=False, is_training=is_training)
+  inputs = dropblock(inputs, is_training=is_training)
+
+  if in_filters == out_filters and strides == 1:
+    if drop_connect_rate:
+      inputs = nn_ops.drop_connect(inputs, is_training, drop_connect_rate)
+    inputs = tf.add(inputs, shortcut)
+
+  return inputs

@@ -87,6 +87,13 @@ SCALING_MAP = {
         'resample_alpha': 1.0,
         'block_repeats': 3,
     },
+    # SpineNet-143 with 1.3x filter_size_scale.
+    '143l': {
+        'endpoints_num_filters': 256,
+        'filter_size_scale': 1.3,
+        'resample_alpha': 1.0,
+        'block_repeats': 3,
+    },
     '190': {
         'endpoints_num_filters': 512,
         'filter_size_scale': 1.3,
@@ -540,4 +547,3 @@ def spinenet_builder(model_id,
       batch_norm_activation=batch_norm_activation,
       init_drop_connect_rate=init_drop_connect_rate,
       data_format=data_format)
-

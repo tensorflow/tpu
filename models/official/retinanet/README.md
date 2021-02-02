@@ -96,8 +96,8 @@ The RetinaNet trainer requires a few extra packages.  We can install them now:
 
 ```
 sudo apt-get install -y python-tk
-pip install Cython matplotlib
-pip install 'git+https://github.com/cocodataset/cocoapi#egg=pycocotools&subdirectory=PythonAPI'
+pip3 install --user Cython matplotlib opencv-python-headless pyyaml Pillow
+pip3 install --user 'git+https://github.com/cocodataset/cocoapi#egg=pycocotools&subdirectory=PythonAPI'
 ```
 
 ## Running the trainer

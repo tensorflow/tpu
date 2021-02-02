@@ -184,6 +184,11 @@ class ShapeMaskModel(base_model.BaseModel):
   def build_metrics(self, outputs, labels):
     raise NotImplementedError('The `build_metrics` is not implemented.')
 
+  def evaluate(self, images, labels):
+    # Always skip eval loss for evaluation mode.
+    self._skip_eval_loss = True
+    return super().evaluate(images, labels)
+
   def build_predictions(self, outputs, labels):
     predictions = {
         'pred_image_info': labels['image_info'],
