@@ -21,7 +21,13 @@ from __future__ import print_function
 import tensorflow.compat.v1 as tf
 
 
-def focal_loss(logits, targets, alpha, gamma, normalizer):
+def focal_loss(
+    logits,
+    targets,
+    alpha,
+    gamma,
+    normalizer,
+):
   """Compute the focal loss between `logits` and the golden `target` values.
 
   Focal loss = -(1-pt)^gamma * log(pt)
@@ -357,7 +363,12 @@ class RetinanetClassLoss(object):
     self._focal_loss_gamma = params.focal_loss_gamma
     self._num_classes = num_classes
 
-  def __call__(self, cls_outputs, labels, num_positives):
+  def __call__(
+      self,
+      cls_outputs,
+      labels,
+      num_positives,
+  ):
     """Computes total detection loss.
 
     Computes total detection loss including box and class loss from all levels.
@@ -379,22 +390,36 @@ class RetinanetClassLoss(object):
 
     cls_losses = []
     for level in cls_outputs.keys():
-      cls_losses.append(self.class_loss(
-          cls_outputs[level], labels[level], num_positives_sum))
+      cls_losses.append(
+          self.class_loss(
+              cls_outputs[level],
+              labels[level],
+              num_positives_sum,
+          ))
     # Sums per level losses to total loss.
     return tf.add_n(cls_losses)
 
-  def class_loss(self, cls_outputs, cls_targets, num_positives,
-                 ignore_label=-2):
+  def class_loss(
+      self,
+      cls_outputs,
+      cls_targets,
+      num_positives,
+      ignore_label=-2,
+  ):
     """Computes RetinaNet classification loss."""
     # Onehot encoding for classification labels.
     cls_targets_one_hot = tf.one_hot(cls_targets, self._num_classes)
-    bs, height, width, _, _ = cls_targets_one_hot.get_shape().as_list()
+    bs, height, width, anchors_per_location, _ = (
+        cls_targets_one_hot.get_shape().as_list())
     cls_targets_one_hot = tf.reshape(cls_targets_one_hot,
                                      [bs, height, width, -1])
-    loss = focal_loss(cls_outputs, cls_targets_one_hot,
-                      self._focal_loss_alpha, self._focal_loss_gamma,
-                      num_positives)
+    loss = focal_loss(
+        cls_outputs,
+        cls_targets_one_hot,
+        self._focal_loss_alpha,
+        self._focal_loss_gamma,
+        num_positives,
+    )
 
     ignore_loss = tf.where(tf.equal(cls_targets, ignore_label),
                            tf.zeros_like(cls_targets, dtype=tf.float32),
