@@ -1,4 +1,4 @@
-# ResNet-50 on TPU
+# ResNet and ResNet-RS on TPU
 
 ## Prerequisites
 

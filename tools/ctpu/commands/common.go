@@ -156,9 +156,17 @@ func (p parsedVersion) versionString() string {
 	if p.IsNightly {
 		return fmt.Sprintf("nightly%s", p.Modifier)
 	}
-	if p.Major == 0 && p.Minor == 0 {
+	if p.Major == 0 && p.Minor == 0 && p.Patch == 0 {
 		return p.Modifier
 	}
+
+	// From TF 2.4 onwards, image name uses patch format by default. But
+	// before that the image name can be only <major>.<minor>. e.g.:
+	// `2.4.0`, `2.4.1` and `2.3` all are valid versions.
+	if p.Patch != 0 || p.Major >= 2 && p.Minor >= 4 {
+		return fmt.Sprintf("%d.%d.%d%s", p.Major, p.Minor, p.Patch, p.Modifier)
+	}
+
 	return fmt.Sprintf("%d.%d%s", p.Major, p.Minor, p.Modifier)
 }
 

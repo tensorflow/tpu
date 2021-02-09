@@ -126,7 +126,11 @@ class RetinanetModel(base_model.BaseModel):
       normalizer = num_positives_sum
 
     cls_loss = self._cls_loss_fn(
-        outputs['cls_outputs'], labels['cls_targets'], normalizer)
+        outputs['cls_outputs'],
+        labels['cls_targets'],
+        normalizer,
+    )
+
     box_loss = self._box_loss_fn(
         outputs['box_outputs'], labels['box_targets'], normalizer)
     model_loss = cls_loss + self._box_loss_weight * box_loss
