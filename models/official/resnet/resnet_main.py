@@ -224,6 +224,9 @@ flags.DEFINE_string('model_name', 'resnet',
 flags.DEFINE_multi_integer(
     'inference_batch_sizes', [8],
     'Known inference batch sizes used to warm up for each core.')
+flags.DEFINE_bool(
+    'export_moving_average', False,
+    'Whether to export model using moving average variables.')
 
 
 # The input tensor is in the range of [0, 255], we need to scale them to the
@@ -276,6 +279,61 @@ def learning_rate_schedule(params, current_epoch):
   return decay_rate
 
 
+def get_ema_vars():
+  """Get all exponential moving average (ema) variables."""
+  ema_vars = tf.trainable_variables() + tf.get_collection('moving_vars')
+  for v in tf.global_variables():
+    # We maintain mva for batch norm moving mean and variance as well.
+    if 'moving_mean' in v.name or 'moving_variance' in v.name:
+      ema_vars.append(v)
+  return list(set(ema_vars))
+
+
+def get_pretrained_variables_to_restore(checkpoint_path,
+                                        load_moving_average=False):
+  """Gets veriables_to_restore mapping from pretrained checkpoint.
+
+  Args:
+    checkpoint_path: String. Path of checkpoint.
+    load_moving_average: Boolean, whether load moving average variables to
+      replace variables.
+
+  Returns:
+    Mapping of variables to restore.
+  """
+  checkpoint_reader = tf.train.load_checkpoint(checkpoint_path)
+  variable_shape_map = checkpoint_reader.get_variable_to_shape_map()
+
+  variables_to_restore = {}
+  ema_vars = get_ema_vars()
+  for v in tf.global_variables():
+    # Skip variables if they are in excluded scopes.
+    is_excluded = False
+    for scope in ['global_step', 'ExponentialMovingAverage']:
+      if scope in v.op.name:
+        is_excluded = True
+        break
+    if is_excluded:
+      tf.logging.info('Exclude [%s] from loading from checkpoint.', v.op.name)
+      continue
+    variable_name_ckpt = v.op.name
+    if load_moving_average and v in ema_vars:
+      # To load moving average variables into non-moving version for
+      # fine-tuning, maps variables here manually.
+      variable_name_ckpt = v.op.name + '/ExponentialMovingAverage'
+
+    if variable_name_ckpt not in variable_shape_map:
+      tf.logging.info(
+          'Skip init [%s] from [%s] as it is not in the checkpoint',
+          v.op.name, variable_name_ckpt)
+      continue
+
+    variables_to_restore[variable_name_ckpt] = v
+    tf.logging.info('Init variable [%s] from [%s] in ckpt', v.op.name,
+                    variable_name_ckpt)
+  return variables_to_restore
+
+
 def resnet_model_fn(features, labels, mode, params):
   """The model_fn for ResNet to be used with TPUEstimator.
 
@@ -291,6 +349,8 @@ def resnet_model_fn(features, labels, mode, params):
   Returns:
     A `TPUEstimatorSpec` for the model
   """
+  is_training = (mode == tf.estimator.ModeKeys.TRAIN)
+
   if isinstance(features, dict):
     features = features['feature']
 
@@ -333,6 +393,11 @@ def resnet_model_fn(features, labels, mode, params):
       dropblock_keep_probs[block_group - 1] = 1 - (
           (1 - dropblock_keep_prob) / 4.0**(4 - block_group))
 
+  has_moving_average_decay = (params['moving_average_decay'] > 0)
+  if has_moving_average_decay and params['bn_momentum'] > 0:
+    raise ValueError(
+        'Should not use exponential moving average and batch norm momentum')
+
   # This nested function allows us to avoid duplicating the logic which
   # builds the network, for different values of --precision.
   def build_network():
@@ -343,7 +408,14 @@ def resnet_model_fn(features, labels, mode, params):
         dropblock_keep_probs=dropblock_keep_probs,
         pre_activation=params['pre_activation'],
         norm_act_layer=params['norm_act_layer'],
-        data_format=params['data_format'])
+        data_format=params['data_format'],
+        se_ratio=params['se_ratio'],
+        drop_connect_rate=params['drop_connect_rate'],
+        use_resnetd_stem=params['use_resnetd_stem'],
+        resnetd_shortcut=params['resnetd_shortcut'],
+        replace_stem_max_pool=params['replace_stem_max_pool'],
+        dropout_rate=params['dropout_rate'],
+        bn_momentum=params['bn_momentum'])
     return network(
         inputs=features, is_training=(mode == tf.estimator.ModeKeys.TRAIN))
 
@@ -355,6 +427,23 @@ def resnet_model_fn(features, labels, mode, params):
     logits = build_network()
 
   if mode == tf.estimator.ModeKeys.PREDICT:
+    scaffold_fn = None
+    if FLAGS.export_moving_average:
+      # If the model is trained with moving average decay, to match evaluation
+      # metrics, we need to export the model using moving average variables.
+      restore_checkpoint = tf.train.latest_checkpoint(FLAGS.model_dir)
+      variables_to_restore = get_pretrained_variables_to_restore(
+          restore_checkpoint, load_moving_average=True)
+      tf.logging.info('Restoring from the latest checkpoint: %s',
+                      restore_checkpoint)
+      tf.logging.info(str(variables_to_restore))
+
+      def restore_scaffold():
+        saver = tf.train.Saver(variables_to_restore)
+        return tf.train.Scaffold(saver=saver)
+
+      scaffold_fn = restore_scaffold
+
     predictions = {
         'classes': tf.argmax(logits, axis=1),
         'probabilities': tf.nn.softmax(logits, name='softmax_tensor')
@@ -363,8 +452,8 @@ def resnet_model_fn(features, labels, mode, params):
         mode=mode,
         predictions=predictions,
         export_outputs={
-            'classify': tf.estimator.export.PredictOutput(predictions)
-        })
+            'classify': tf.estimator.export.PredictOutput(predictions)},
+        scaffold_fn=scaffold_fn)
 
   # If necessary, in the model_fn, use params['batch_size'] instead the batch
   # size flags (--train_batch_size or --eval_batch_size).
@@ -386,6 +475,12 @@ def resnet_model_fn(features, labels, mode, params):
         for v in tf.trainable_variables()
         if 'batch_normalization' not in v.name and 'evonorm' not in v.name
     ])
+
+  global_step = tf.train.get_global_step()
+  if has_moving_average_decay:
+    ema = tf.train.ExponentialMovingAverage(
+        decay=params['moving_average_decay'], num_updates=global_step)
+    ema_vars = get_ema_vars()
 
   host_call = None
   if mode == tf.estimator.ModeKeys.TRAIN:
@@ -416,6 +511,10 @@ def resnet_model_fn(features, labels, mode, params):
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
     with tf.control_dependencies(update_ops):
       train_op = optimizer.minimize(loss, global_step)
+
+    if has_moving_average_decay:
+      with tf.control_dependencies([train_op]):
+        train_op = ema.apply(ema_vars)
 
     if not params['skip_host_call']:
       def host_call_fn(gs, loss, lr, ce):
@@ -502,12 +601,24 @@ def resnet_model_fn(features, labels, mode, params):
 
     eval_metrics = (metric_fn, [labels, logits])
 
+  # Prepares scaffold_fn if needed.
+  scaffold_fn = None
+  restore_vars_dict = None
+  if not is_training and has_moving_average_decay:
+    # Load moving average variables for eval.
+    restore_vars_dict = ema.variables_to_restore(ema_vars)
+    def eval_scaffold():
+      saver = tf.train.Saver(restore_vars_dict)
+      return tf.train.Scaffold(saver=saver)
+    scaffold_fn = eval_scaffold
+
   return tf.estimator.tpu.TPUEstimatorSpec(
       mode=mode,
       loss=loss,
       train_op=train_op,
       host_call=host_call,
-      eval_metrics=eval_metrics)
+      eval_metrics=eval_metrics,
+      scaffold_fn=scaffold_fn)
 
 
 def _verify_non_empty_string(value, field_name):

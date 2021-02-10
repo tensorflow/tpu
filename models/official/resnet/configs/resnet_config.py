@@ -45,6 +45,17 @@ RESNET_CFG = {
     'pre_activation': False,
     'norm_act_layer': 'bn_relu',
     'data_format': 'channels_last',
+    'augment_name': None,
+    'randaug_magnitude': None,
+    'randaug_num_layers': None,
+    'use_resnetd_stem': False,
+    'resnetd_shortcut': False,
+    'replace_stem_max_pool': False,
+    'se_ratio': None,
+    'drop_connect_rate': None,
+    'dropout_rate': None,
+    'moving_average_decay': 0,
+    'bn_momentum': 0.9,
 }
 
 RESNET_RESTRICTIONS = [

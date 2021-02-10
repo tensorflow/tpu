@@ -28,6 +28,8 @@ from __future__ import print_function
 import functools
 import tensorflow.compat.v1 as tf
 
+import resnet_layers
+
 MOVING_AVERAGE_DECAY = 0.9
 EPSILON = 1e-5
 
@@ -42,12 +44,14 @@ LAYER_EVONORMS = [
 
 def norm_activation(
     inputs, is_training, layer=LAYER_BN_RELU, nonlinearity=True,
-    init_zero=False, data_format='channels_first'):
+    init_zero=False, data_format='channels_first',
+    bn_momentum=MOVING_AVERAGE_DECAY):
   """Normalization-activation layer."""
   if layer == LAYER_BN_RELU:
     return batch_norm_relu(
         inputs, is_training, relu=nonlinearity,
-        init_zero=init_zero, data_format=data_format)
+        init_zero=init_zero, data_format=data_format,
+        bn_momentum=bn_momentum)
   elif layer in LAYER_EVONORMS:
     return evonorm(
         inputs, is_training, layer=layer, nonlinearity=nonlinearity,
@@ -57,7 +61,8 @@ def norm_activation(
 
 
 def batch_norm_relu(inputs, is_training, relu=True, init_zero=False,
-                    data_format='channels_first'):
+                    data_format='channels_first',
+                    bn_momentum=MOVING_AVERAGE_DECAY):
   """Performs a batch normalization followed by a ReLU.
 
   Args:
@@ -68,6 +73,7 @@ def batch_norm_relu(inputs, is_training, relu=True, init_zero=False,
         normalization with 0 instead of 1 (default).
     data_format: `str` either "channels_first" for `[batch, channels, height,
         width]` or "channels_last for `[batch, height, width, channels]`.
+    bn_momentum: `float` momentum for batch norm layer.
 
   Returns:
     A normalized `Tensor` with the same `data_format`.
@@ -85,7 +91,7 @@ def batch_norm_relu(inputs, is_training, relu=True, init_zero=False,
   inputs = tf.layers.batch_normalization(
       inputs=inputs,
       axis=axis,
-      momentum=MOVING_AVERAGE_DECAY,
+      momentum=bn_momentum,
       epsilon=EPSILON,
       center=True,
       scale=True,
@@ -403,7 +409,9 @@ def conv2d_fixed_padding(inputs, filters, kernel_size, strides,
 def residual_block(inputs, filters, is_training, strides,
                    use_projection=False, data_format='channels_first',
                    dropblock_keep_prob=None, dropblock_size=None,
-                   pre_activation=False, norm_act_layer=LAYER_BN_RELU):
+                   pre_activation=False, norm_act_layer=LAYER_BN_RELU,
+                   resnetd_shortcut=False, se_ratio=None,
+                   drop_connect_rate=None, bn_momentum=MOVING_AVERAGE_DECAY):
   """Standard building block for residual networks with BN after convolutions.
 
   Args:
@@ -425,16 +433,25 @@ def residual_block(inputs, filters, is_training, strides,
       blocks
     pre_activation: whether to use pre-activation ResNet (ResNet-v2).
     norm_act_layer: name of the normalization-activation layer.
+    resnetd_shortcut: `bool` if True, apply the resnetd style modification to
+        the shortcut connection.
+    se_ratio: `float` or None. Squeeze-and-Excitation ratio for the SE layer.
+    drop_connect_rate: `float` or None. Drop connect rate for this block.
+    bn_momentum: `float` momentum for batch norm layer.
 
   Returns:
     The output `Tensor` of the block.
   """
   del dropblock_keep_prob
   del dropblock_size
+  del resnetd_shortcut
+  del se_ratio
+  del drop_connect_rate
+
   shortcut = inputs
   if pre_activation:
     inputs = norm_activation(inputs, is_training, data_format=data_format,
-                             layer=norm_act_layer)
+                             layer=norm_act_layer, bn_momentum=bn_momentum)
   if use_projection:
     # Projection shortcut in first layer to match filters and strides
     shortcut = conv2d_fixed_padding(
@@ -443,13 +460,13 @@ def residual_block(inputs, filters, is_training, strides,
     if not pre_activation:
       shortcut = norm_activation(
           shortcut, is_training, nonlinearity=False, data_format=data_format,
-          layer=norm_act_layer)
+          layer=norm_act_layer, bn_momentum=bn_momentum)
 
   inputs = conv2d_fixed_padding(
       inputs=inputs, filters=filters, kernel_size=3, strides=strides,
       data_format=data_format)
   inputs = norm_activation(inputs, is_training, data_format=data_format,
-                           layer=norm_act_layer)
+                           layer=norm_act_layer, bn_momentum=bn_momentum)
 
   inputs = conv2d_fixed_padding(
       inputs=inputs, filters=filters, kernel_size=3, strides=1,
@@ -459,7 +476,7 @@ def residual_block(inputs, filters, is_training, strides,
   else:
     inputs = norm_activation(
         inputs, is_training, nonlinearity=False, init_zero=True,
-        data_format=data_format, layer=norm_act_layer)
+        data_format=data_format, layer=norm_act_layer, bn_momentum=bn_momentum)
 
     return tf.nn.relu(inputs + shortcut)
 
@@ -467,7 +484,9 @@ def residual_block(inputs, filters, is_training, strides,
 def bottleneck_block(inputs, filters, is_training, strides,
                      use_projection=False, data_format='channels_first',
                      dropblock_keep_prob=None, dropblock_size=None,
-                     pre_activation=False, norm_act_layer=LAYER_BN_RELU):
+                     pre_activation=False, norm_act_layer=LAYER_BN_RELU,
+                     resnetd_shortcut=False, se_ratio=None,
+                     drop_connect_rate=None, bn_momentum=MOVING_AVERAGE_DECAY):
   """Bottleneck block variant for residual networks with BN after convolutions.
 
   Args:
@@ -489,6 +508,11 @@ def bottleneck_block(inputs, filters, is_training, strides,
         dropblock_keep_prob is "None".
     pre_activation: whether to use pre-activation ResNet (ResNet-v2).
     norm_act_layer: name of the normalization-activation layer.
+    resnetd_shortcut: `bool` if True, apply the resnetd style modification to
+        the shortcut connection.
+    se_ratio: `float` or None. Squeeze-and-Excitation ratio for the SE layer.
+    drop_connect_rate: `float` or None. Drop connect rate for this block.
+    bn_momentum: `float` momentum for batch norm layer.
 
   Returns:
     The output `Tensor` of the block.
@@ -496,18 +520,28 @@ def bottleneck_block(inputs, filters, is_training, strides,
   shortcut = inputs
   if pre_activation:
     inputs = norm_activation(inputs, is_training, data_format=data_format,
-                             layer=norm_act_layer)
+                             layer=norm_act_layer, bn_momentum=bn_momentum)
   if use_projection:
     # Projection shortcut only in first block within a group. Bottleneck blocks
     # end with 4 times the number of filters.
     filters_out = 4 * filters
-    shortcut = conv2d_fixed_padding(
-        inputs=inputs, filters=filters_out, kernel_size=1, strides=strides,
-        data_format=data_format)
+    if resnetd_shortcut and strides == 2:
+      shortcut = tf.keras.layers.AveragePooling2D(
+          pool_size=(2, 2), strides=(2, 2), padding='same',
+          data_format=data_format)(inputs)
+      shortcut = conv2d_fixed_padding(
+          inputs=shortcut, filters=filters_out, kernel_size=1, strides=1,
+          data_format=data_format)
+    else:
+      shortcut = conv2d_fixed_padding(
+          inputs=inputs, filters=filters_out, kernel_size=1, strides=strides,
+          data_format=data_format)
+
     if not pre_activation:
       shortcut = norm_activation(
           shortcut, is_training, nonlinearity=False,
-          data_format=data_format, layer=norm_act_layer)
+          data_format=data_format, layer=norm_act_layer,
+          bn_momentum=bn_momentum)
   shortcut = dropblock(
       shortcut, is_training=is_training, data_format=data_format,
       keep_prob=dropblock_keep_prob, dropblock_size=dropblock_size)
@@ -516,7 +550,7 @@ def bottleneck_block(inputs, filters, is_training, strides,
       inputs=inputs, filters=filters, kernel_size=1, strides=1,
       data_format=data_format)
   inputs = norm_activation(inputs, is_training, data_format=data_format,
-                           layer=norm_act_layer)
+                           layer=norm_act_layer, bn_momentum=bn_momentum)
   inputs = dropblock(
       inputs, is_training=is_training, data_format=data_format,
       keep_prob=dropblock_keep_prob, dropblock_size=dropblock_size)
@@ -525,7 +559,7 @@ def bottleneck_block(inputs, filters, is_training, strides,
       inputs=inputs, filters=filters, kernel_size=3, strides=strides,
       data_format=data_format)
   inputs = norm_activation(inputs, is_training, data_format=data_format,
-                           layer=norm_act_layer)
+                           layer=norm_act_layer, bn_momentum=bn_momentum)
   inputs = dropblock(
       inputs, is_training=is_training, data_format=data_format,
       keep_prob=dropblock_keep_prob, dropblock_size=dropblock_size)
@@ -539,10 +573,20 @@ def bottleneck_block(inputs, filters, is_training, strides,
   else:
     inputs = norm_activation(inputs, is_training, nonlinearity=False,
                              init_zero=True, data_format=data_format,
-                             layer=norm_act_layer)
+                             layer=norm_act_layer, bn_momentum=bn_momentum)
     inputs = dropblock(
         inputs, is_training=is_training, data_format=data_format,
         keep_prob=dropblock_keep_prob, dropblock_size=dropblock_size)
+
+    if se_ratio is not None and se_ratio > 0 and se_ratio <= 1:
+      inputs = resnet_layers.squeeze_excitation(
+          inputs, in_filters=4 * filters,
+          se_ratio=se_ratio, data_format='channels_last')
+
+    if drop_connect_rate is not None:
+      tf.logging.info('using drop_connect: {}'.format(drop_connect_rate))
+      inputs = resnet_layers.drop_connect(
+          inputs, is_training, drop_connect_rate)
 
     return tf.nn.relu(inputs + shortcut)
 
@@ -550,7 +594,9 @@ def bottleneck_block(inputs, filters, is_training, strides,
 def block_group(inputs, filters, block_fn, blocks, strides, is_training, name,
                 data_format='channels_first', dropblock_keep_prob=None,
                 dropblock_size=None, pre_activation=False,
-                norm_act_layer=LAYER_BN_RELU):
+                norm_act_layer=LAYER_BN_RELU, se_ratio=None,
+                resnetd_shortcut=False, drop_connect_rate=None,
+                bn_momentum=MOVING_AVERAGE_DECAY):
   """Creates one group of blocks for the ResNet model.
 
   Args:
@@ -570,6 +616,11 @@ def block_group(inputs, filters, block_fn, blocks, strides, is_training, name,
         dropblock_keep_prob is "None".
     pre_activation: whether to use pre-activation ResNet (ResNet-v2).
     norm_act_layer: name of the normalization-activation layer.
+    se_ratio: `float` or None. Squeeze-and-Excitation ratio for the SE layer.
+    resnetd_shortcut: `bool` if True, apply the resnetd style modification to
+        the shortcut connection in downsampling blocks.
+    drop_connect_rate: `float` or None. Drop connect rate for this block.
+    bn_momentum: `float` momentum for batch norm layer.
 
   Returns:
     The output `Tensor` of the block layer.
@@ -580,7 +631,11 @@ def block_group(inputs, filters, block_fn, blocks, strides, is_training, name,
                     dropblock_keep_prob=dropblock_keep_prob,
                     dropblock_size=dropblock_size,
                     pre_activation=pre_activation,
-                    norm_act_layer=norm_act_layer)
+                    norm_act_layer=norm_act_layer,
+                    se_ratio=se_ratio,
+                    resnetd_shortcut=resnetd_shortcut,
+                    drop_connect_rate=drop_connect_rate,
+                    bn_momentum=bn_momentum)
 
   for _ in range(1, blocks):
     inputs = block_fn(inputs, filters, is_training, 1,
@@ -588,15 +643,31 @@ def block_group(inputs, filters, block_fn, blocks, strides, is_training, name,
                       dropblock_keep_prob=dropblock_keep_prob,
                       dropblock_size=dropblock_size,
                       pre_activation=pre_activation,
-                      norm_act_layer=norm_act_layer)
+                      norm_act_layer=norm_act_layer,
+                      se_ratio=se_ratio,
+                      resnetd_shortcut=resnetd_shortcut,
+                      drop_connect_rate=drop_connect_rate,
+                      bn_momentum=bn_momentum)
 
   return tf.identity(inputs, name)
 
 
-def resnet_generator(block_fn, layers, num_classes,
-                     data_format='channels_first', dropblock_keep_probs=None,
-                     dropblock_size=None, pre_activation=False,
-                     norm_act_layer=LAYER_BN_RELU):
+def resnet_generator(block_fn,
+                     layers,
+                     num_classes,
+                     data_format='channels_first',
+                     use_resnetd_stem=False,
+                     resnetd_shortcut=False,
+                     replace_stem_max_pool=False,
+                     skip_stem_max_pool=False,
+                     drop_connect_rate=None,
+                     se_ratio=None,
+                     dropout_rate=None,
+                     dropblock_keep_probs=None,
+                     dropblock_size=None,
+                     pre_activation=False,
+                     norm_act_layer=LAYER_BN_RELU,
+                     bn_momentum=MOVING_AVERAGE_DECAY):
   """Generator for ResNet models.
 
   Args:
@@ -608,12 +679,22 @@ def resnet_generator(block_fn, layers, num_classes,
     num_classes: `int` number of possible classes for image classification.
     data_format: `str` either "channels_first" for `[batch, channels, height,
         width]` or "channels_last for `[batch, height, width, channels]`.
+    use_resnetd_stem: `bool` whether to use ResNet-D stem.
+    resnetd_shortcut: `bool` whether to use ResNet-D shortcut in blocks.
+    replace_stem_max_pool: `bool` if True, replace the max pool in stem with
+        a stride-2 conv,
+    skip_stem_max_pool: `bool` if True, skip the max pool in stem and set the
+        stride of the following block to 2,
+    drop_connect_rate: `float` initial rate for drop-connect.
+    se_ratio: `float` Squeeze-and-Excitation ratio for SE layers.
+    dropout_rate: `float` drop rate for the dropout layer.
     dropblock_keep_probs: `list` of 4 elements denoting keep_prob of DropBlock
       for each block group. None indicates no DropBlock for the corresponding
       block group.
     dropblock_size: `int`: size parameter of DropBlock.
     pre_activation: whether to use pre-activation ResNet (ResNet-v2).
     norm_act_layer: name of the normalization-activation layer.
+    bn_momentum: `float` momentum for batch norm layer.
 
   Returns:
     Model `function` that takes in `inputs` and `is_training` and returns the
@@ -630,46 +711,87 @@ def resnet_generator(block_fn, layers, num_classes,
 
   def model(inputs, is_training):
     """Creation of the model graph."""
-    inputs = conv2d_fixed_padding(
-        inputs=inputs, filters=64, kernel_size=7, strides=2,
-        data_format=data_format)
+    if use_resnetd_stem:
+      inputs = conv2d_fixed_padding(
+          inputs=inputs, filters=32, kernel_size=3, strides=2,
+          data_format=data_format)
+      inputs = norm_activation(
+          inputs, is_training, data_format=data_format,
+          layer=norm_act_layer, bn_momentum=bn_momentum)
+      inputs = conv2d_fixed_padding(
+          inputs=inputs, filters=32, kernel_size=3, strides=1,
+          data_format=data_format)
+      inputs = norm_activation(
+          inputs, is_training, data_format=data_format,
+          layer=norm_act_layer, bn_momentum=bn_momentum)
+      inputs = conv2d_fixed_padding(
+          inputs=inputs, filters=64, kernel_size=3, strides=1,
+          data_format=data_format)
+    else:
+      inputs = conv2d_fixed_padding(
+          inputs=inputs, filters=64, kernel_size=7, strides=2,
+          data_format=data_format)
+
     inputs = tf.identity(inputs, 'initial_conv')
     if not pre_activation:
       inputs = norm_activation(inputs, is_training, data_format=data_format,
-                               layer=norm_act_layer)
+                               layer=norm_act_layer, bn_momentum=bn_momentum)
 
-    inputs = tf.layers.max_pooling2d(
-        inputs=inputs, pool_size=3, strides=2, padding='SAME',
-        data_format=data_format)
-    inputs = tf.identity(inputs, 'initial_max_pool')
+    if not skip_stem_max_pool:
+      if replace_stem_max_pool:
+        inputs = conv2d_fixed_padding(
+            inputs=inputs, filters=64,
+            kernel_size=3, strides=2, data_format=data_format)
+        inputs = norm_activation(
+            inputs, is_training, data_format=data_format,
+            bn_momentum=bn_momentum)
+      else:
+        inputs = tf.layers.max_pooling2d(
+            inputs=inputs, pool_size=3, strides=2, padding='SAME',
+            data_format=data_format)
+        inputs = tf.identity(inputs, 'initial_max_pool')
 
     custom_block_group = functools.partial(
         block_group,
         data_format=data_format,
         dropblock_size=dropblock_size,
         pre_activation=pre_activation,
-        norm_act_layer=norm_act_layer)
+        norm_act_layer=norm_act_layer,
+        se_ratio=se_ratio,
+        resnetd_shortcut=resnetd_shortcut,
+        bn_momentum=bn_momentum)
+
+    num_layers = len(layers) + 1
+    stride_c2 = 2 if skip_stem_max_pool else 1
 
     inputs = custom_block_group(
         inputs=inputs, filters=64, block_fn=block_fn, blocks=layers[0],
-        strides=1, is_training=is_training, name='block_group1',
-        dropblock_keep_prob=dropblock_keep_probs[0])
+        strides=stride_c2, is_training=is_training, name='block_group1',
+        dropblock_keep_prob=dropblock_keep_probs[0],
+        drop_connect_rate=resnet_layers.get_drop_connect_rate(
+            drop_connect_rate, 2, num_layers))
     inputs = custom_block_group(
         inputs=inputs, filters=128, block_fn=block_fn, blocks=layers[1],
         strides=2, is_training=is_training, name='block_group2',
-        dropblock_keep_prob=dropblock_keep_probs[1])
+        dropblock_keep_prob=dropblock_keep_probs[1],
+        drop_connect_rate=resnet_layers.get_drop_connect_rate(
+            drop_connect_rate, 3, num_layers))
     inputs = custom_block_group(
         inputs=inputs, filters=256, block_fn=block_fn, blocks=layers[2],
         strides=2, is_training=is_training, name='block_group3',
-        dropblock_keep_prob=dropblock_keep_probs[2])
+        dropblock_keep_prob=dropblock_keep_probs[2],
+        drop_connect_rate=resnet_layers.get_drop_connect_rate(
+            drop_connect_rate, 4, num_layers))
     inputs = custom_block_group(
         inputs=inputs, filters=512, block_fn=block_fn, blocks=layers[3],
         strides=2, is_training=is_training, name='block_group4',
-        dropblock_keep_prob=dropblock_keep_probs[3])
+        dropblock_keep_prob=dropblock_keep_probs[3],
+        drop_connect_rate=resnet_layers.get_drop_connect_rate(
+            drop_connect_rate, 5, num_layers))
 
     if pre_activation:
       inputs = norm_activation(inputs, is_training, data_format=data_format,
-                               layer=norm_act_layer)
+                               layer=norm_act_layer, bn_momentum=bn_momentum)
 
     # The activation is 7x7 so this is a global average pool.
     # TODO(huangyp): reduce_mean will be faster.
@@ -683,6 +805,12 @@ def resnet_generator(block_fn, layers, num_classes,
     inputs = tf.identity(inputs, 'final_avg_pool')
     inputs = tf.reshape(
         inputs, [-1, 2048 if block_fn is bottleneck_block else 512])
+
+    if dropout_rate is not None:
+      tf.logging.info('using dropout')
+      inputs = tf.layers.dropout(
+          inputs, rate=dropout_rate, training=is_training)
+
     inputs = tf.layers.dense(
         inputs=inputs,
         units=num_classes,
@@ -696,7 +824,11 @@ def resnet_generator(block_fn, layers, num_classes,
 
 def resnet(resnet_depth, num_classes, data_format='channels_first',
            dropblock_keep_probs=None, dropblock_size=None,
-           pre_activation=False, norm_act_layer=LAYER_BN_RELU):
+           pre_activation=False, norm_act_layer=LAYER_BN_RELU,
+           se_ratio=None, drop_connect_rate=None, use_resnetd_stem=False,
+           resnetd_shortcut=False, skip_stem_max_pool=False,
+           replace_stem_max_pool=False, dropout_rate=None,
+           bn_momentum=MOVING_AVERAGE_DECAY):
   """Returns the ResNet model for a given size and number of output classes."""
   model_params = {
       18: {'block': residual_block, 'layers': [2, 2, 2, 2]},
@@ -704,7 +836,10 @@ def resnet(resnet_depth, num_classes, data_format='channels_first',
       50: {'block': bottleneck_block, 'layers': [3, 4, 6, 3]},
       101: {'block': bottleneck_block, 'layers': [3, 4, 23, 3]},
       152: {'block': bottleneck_block, 'layers': [3, 8, 36, 3]},
-      200: {'block': bottleneck_block, 'layers': [3, 24, 36, 3]}
+      200: {'block': bottleneck_block, 'layers': [3, 24, 36, 3]},
+      270: {'block': bottleneck_block, 'layers': [4, 29, 53, 4]},
+      350: {'block': bottleneck_block, 'layers': [4, 36, 72, 4]},
+      420: {'block': bottleneck_block, 'layers': [4, 44, 87, 4]}
   }
 
   if resnet_depth not in model_params:
@@ -716,9 +851,19 @@ def resnet(resnet_depth, num_classes, data_format='channels_first',
   params = model_params[resnet_depth]
   return resnet_generator(
       params['block'], params['layers'], num_classes,
-      dropblock_keep_probs=dropblock_keep_probs, dropblock_size=dropblock_size,
-      data_format=data_format, pre_activation=pre_activation,
-      norm_act_layer=norm_act_layer)
+      dropblock_keep_probs=dropblock_keep_probs,
+      dropblock_size=dropblock_size,
+      data_format=data_format,
+      pre_activation=pre_activation,
+      norm_act_layer=norm_act_layer,
+      use_resnetd_stem=use_resnetd_stem,
+      resnetd_shortcut=resnetd_shortcut,
+      se_ratio=se_ratio,
+      drop_connect_rate=drop_connect_rate,
+      dropout_rate=dropout_rate,
+      skip_stem_max_pool=skip_stem_max_pool,
+      replace_stem_max_pool=replace_stem_max_pool,
+      bn_momentum=bn_momentum)
 
 
 resnet_v1 = functools.partial(resnet, pre_activation=False)
