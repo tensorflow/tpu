@@ -20,6 +20,7 @@ from __future__ import print_function
 
 import numpy as np
 import tensorflow.compat.v1 as tf
+
 from official.resnet import resnet_model
 
 
@@ -69,6 +70,25 @@ class ResnetModelTest(tf.test.TestCase):
         num_classes=10,
         norm_act_layer=resnet_model.LAYER_EVONORM_S0,
         data_format='channels_last')
+    input_bhw3 = tf.placeholder(tf.float32, [1, 28, 28, 3])
+    resnet_output = network(inputs=input_bhw3, is_training=True)
+
+    sess = tf.Session()
+    sess.run(tf.global_variables_initializer())
+    _ = sess.run(resnet_output,
+                 feed_dict={input_bhw3: np.random.randn(1, 28, 28, 3)})
+
+  def test_load_resnet_rs(self):
+    network = resnet_model.resnet_v1(
+        resnet_depth=50,
+        num_classes=10,
+        data_format='channels_last',
+        se_ratio=0.25,
+        drop_connect_rate=0.2,
+        use_resnetd_stem=True,
+        resnetd_shortcut=True,
+        dropout_rate=0.2,
+        replace_stem_max_pool=True)
     input_bhw3 = tf.placeholder(tf.float32, [1, 28, 28, 3])
     resnet_output = network(inputs=input_bhw3, is_training=True)
 
