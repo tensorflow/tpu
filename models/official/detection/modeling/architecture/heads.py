@@ -102,14 +102,14 @@ class RpnHead(object):
               strides=(1, 1),
               activation=(None if self._use_batch_norm else self._activation),
               padding='same',
-              name='rpn' if self._num_convs == 1 else 'rpn_{}'.format(i))
+              name='rpn' if i == 0 else 'rpn-{}'.format(i))
 
-        if self._use_batch_norm:
-          # The batch normalization layers are not shared between levels.
-          features = self._batch_norm_activation(
-              features,
-              name=('rpn-l%d-bn' % level),
-              is_training=is_training)
+          if self._use_batch_norm:
+            # The batch normalization layers are not shared between levels.
+            features = self._batch_norm_activation(
+                features,
+                name=('rpn-l%d-bn' % level) + ('' if i == 0 else '-%d' % i),
+                is_training=is_training)
 
         # Proposal classification scores
         scores = self._conv2d_op(
