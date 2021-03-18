@@ -1,9 +1,29 @@
-# Revisiting ResNets: Improved Training Methodologies and Scaling Rules
-<img src="https://storage.googleapis.com/cloud-tpu-checkpoints/resnet-rs/promo_fig.png" height="450" />
+# Revisiting ResNets: Improved Training and Scaling Strategies
+
+[**Revisiting ResNets: Improved Training and Scaling Strategies**](https://arxiv.org/abs/2103.07579)\
+_Irwan Bello, William Fedus, Xianzhi Du, Ekin D. Cubuk, Aravind Srinivas, Tsung-Yi Lin, Jonathon Shlens, Barret Zoph_
+
+<p align="center">
+<img src="https://storage.googleapis.com/cloud-tpu-checkpoints/resnet-rs/promo_fig.png" width="70%" />
+</p>
+
+ResNet-RS is a family of simple ResNet architectures designed with improved training and scaling strategies that are **1.7x - 2.7x** faster than EfficientNets on TPUv3 and **2.1x - 3.3x** on V100 GPU.
+
+#### Improved Scaling Strategies
+The scaling strategies introduced in the paper are:
+
+- **(1)** Scale the depth if overfitting can be an issue. If not, scale the width.
+- **(2)** Scale image resolution slowly compared to prior works such as EfficientNet.
+
+The improved scaling strategies also apply to other image classification architectures (e.g. EfficientNet).
+
+#### Improved Training Strategies
+The training strategy is a combination of multiple regularization and training techniques (see configs and Table 1 in the paper). These techniques are typically transferable to different architectures and to different tasks/datasets.
+
+## ImageNet Checkpoints
 
 We release configs and checkpoints of the ResNet-RS model family trained on ImageNet in Tensorflow 1.
 
-## ImageNet Checkpoint
 
 | Model        | Input Size    | V100 Lat (s) | TPU Lat (ms)    |   Top-1 Accuracy  |   Download |
 | ------------ |:-------------:| -----------:|--------:|-----------:|-----------:|
@@ -19,15 +39,21 @@ We release configs and checkpoints of the ResNet-RS model family trained on Imag
 | ResNet-RS-350 | 320x320 | 8.48 | 1630| 84.2 | [config](https://github.com/tensorflow/tpu/tree/master/models/official/resnet/resnet_rs/configs/resnetrs350_i320.yaml) \| [ckpt](https://storage.googleapis.com/cloud-tpu-checkpoints/resnet-rs/resnet-rs-350-i320.tar.gz) |
 | ResNet-RS-420 | 320x320 | 10.16 | 2090| 84.4 | [config](https://github.com/tensorflow/tpu/tree/master/models/official/resnet/resnet_rs/configs/resnetrs420_i320.yaml) \| [ckpt](https://storage.googleapis.com/cloud-tpu-checkpoints/resnet-rs/resnet-rs-420-i320.tar.gz) |
 
-Benchmarking details:
+#### Benchmarking details:
 
-*  Latencies on Tesla V100 GPUs are measured withfull precision (float32).
-*  Latencies on TPUv3 are measured using bfloat16 precision.
-*  All latencies are measured with an initialtraining batch size of 128 images, which is divided by 2 until it fits onto the accelerator.
+*  Latencies on Tesla V100 GPUs are measured withfull precision (`float32`).
+*  Latencies on TPUv3 are measured using `bfloat16` precision.
+*  All latencies are measured with an initial training batch size of 128 images, which is divided by 2 until it fits onto the accelerator.
 
 Code and checkpoints are avaliable in Tensorflow 2 at the official Tensorflow [Model Garden](https://github.com/tensorflow/models/tree/master/official/vision/beta).
 
 ## Citation
 
 ```make
+@article{bello2021revisiting,
+  title={Revisiting ResNets: Improved Training and Scaling Strategies},
+  author={Irwan Bello and William Fedus and Xianzhi Du and Ekin D. Cubuk and Aravind Srinivas and Tsung-Yi Lin and Jonathon Shlens and Barret Zoph},
+  journal={arXiv preprint arXiv:2103.07579},
+  year={2021}
+}
 ```
