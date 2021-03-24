@@ -162,7 +162,6 @@ class MBConvBlock(tf.keras.layers.Layer):
 
     self._relu_fn = (self._block_args.activation_fn
                      or global_params.relu_fn or tf.nn.swish)
-    logging.info('Using activation function %s', self._relu_fn.__name__)
     self._has_se = (
         global_params.use_se and self._block_args.se_ratio is not None and
         0 < self._block_args.se_ratio <= 1)
@@ -318,8 +317,7 @@ class MBConvBlock(tf.keras.layers.Layer):
       se_tensor = tf.reduce_mean(
           input_tensor, self._spatial_dims, keepdims=True)
     se_tensor = self._se_expand(self._relu_fn(self._se_reduce(se_tensor)))
-    logging.info('Built Squeeze and Excitation with tensor shape: %s',
-                 (se_tensor.shape))
+    logging.info('Built SE %s : %s', self.name, se_tensor.shape)
     return tf.sigmoid(se_tensor) * input_tensor
 
   def call(self, inputs, training=True, survival_prob=None):
@@ -333,11 +331,7 @@ class MBConvBlock(tf.keras.layers.Layer):
     Returns:
       A output tensor.
     """
-    logging.info('Block input: %s shape: %s', inputs.name, inputs.shape)
-    logging.info('Block input depth: %s output depth: %s',
-                 self._block_args.input_filters,
-                 self._block_args.output_filters)
-
+    logging.info('Block %s input shape: %s', self.name, inputs.shape)
     x = inputs
 
     fused_conv_fn = self._fused_conv
@@ -363,21 +357,20 @@ class MBConvBlock(tf.keras.layers.Layer):
       with tf.variable_scope('space2depth'):
         x = self._relu_fn(
             self._bnsp(self._space2depth(x), training=training))
-      logging.info(
-          'Block start with space2depth: %s shape: %s', x.name, x.shape)
+      logging.info('Block start with space2depth shape: %s', x.shape)
 
     if self._block_args.fused_conv:
       # If use fused mbconv, skip expansion and use regular conv.
       x = self._relu_fn(self._bn1(fused_conv_fn(x), training=training))
-      logging.info('Conv2D: %s shape: %s', x.name, x.shape)
+      logging.info('Conv2D shape: %s', x.shape)
     else:
       # Otherwise, first apply expansion and then apply depthwise conv.
       if self._block_args.expand_ratio != 1:
         x = self._relu_fn(self._bn0(expand_conv_fn(x), training=training))
-        logging.info('Expand: %s shape: %s', x.name, x.shape)
+        logging.info('Expand shape: %s', x.shape)
 
       x = self._relu_fn(self._bn1(depthwise_conv_fn(x), training=training))
-      logging.info('DWConv: %s shape: %s', x.name, x.shape)
+      logging.info('DWConv shape: %s', x.shape)
 
     if self._has_se:
       with tf.variable_scope('se'):
@@ -399,7 +392,7 @@ class MBConvBlock(tf.keras.layers.Layer):
         if survival_prob:
           x = utils.drop_connect(x, training, survival_prob)
         x = tf.add(x, inputs)
-    logging.info('Project: %s shape: %s', x.name, x.shape)
+    logging.info('Project shape: %s', x.shape)
     return x
 
 
@@ -448,12 +441,12 @@ class MBConvBlockWithoutDepthwise(MBConvBlock):
     Returns:
       A output tensor.
     """
-    logging.info('Block input: %s shape: %s', inputs.name, inputs.shape)
+    logging.info('Block input shape: %s', inputs.shape)
     if self._block_args.expand_ratio != 1:
       x = self._relu_fn(self._bn0(self._expand_conv(inputs), training=training))
     else:
       x = inputs
-    logging.info('Expand: %s shape: %s', x.name, x.shape)
+    logging.info('Expand shape: %s', x.shape)
 
     self.endpoints = {'expansion_output': x}
 
@@ -472,7 +465,7 @@ class MBConvBlockWithoutDepthwise(MBConvBlock):
         if survival_prob:
           x = utils.drop_connect(x, training, survival_prob)
         x = tf.add(x, inputs)
-    logging.info('Project: %s shape: %s', x.name, x.shape)
+    logging.info('Project shape: %s', x.shape)
     return x
 
 
