@@ -29,8 +29,7 @@ def parse_tf_example(tf_example_string):
   decoded_tensors = tf.parse_single_example(
       serialized=tf_example_string,
       features={
-          'image/encoded':
-              tf.FixedLenFeature((), tf.string, default_value=''),
+          'image/encoded': tf.FixedLenFeature((), tf.string, default_value=''),
       })
   image_bytes = decoded_tensors['image/encoded']
   return image_bytes
@@ -38,7 +37,8 @@ def parse_tf_example(tf_example_string):
 
 def decode_image(image_bytes):
   """Decode the image bytes to the image tensor."""
-  image = tf.image.decode_jpeg(image_bytes)
+  image = tf.image.decode_image(
+      image_bytes, channels=3, expand_animations=False)
   return image
 
 
@@ -56,23 +56,17 @@ def preprocess_image(image, desired_size, stride):
   return image, image_info
 
 
-def raw_image_tensor_input(batch_size,
-                           image_size,
-                           stride):
+def raw_image_tensor_input(batch_size, image_size, stride):
   """Raw float32 image tensor input, no resize is preformed."""
   image_height, image_width = image_size
   if image_height % stride != 0 or image_width % stride != 0:
     raise ValueError('Image size is not compatible with the stride.')
 
   placeholder = tf.placeholder(
-      dtype=tf.float32,
-      shape=(batch_size, image_height, image_width, 3))
+      dtype=tf.float32, shape=(batch_size, image_height, image_width, 3))
 
-  image_info_per_image = [
-      [image_height, image_width],
-      [image_height, image_width],
-      [1.0, 1.0],
-      [0.0, 0.0]]
+  image_info_per_image = [[image_height, image_width],
+                          [image_height, image_width], [1.0, 1.0], [0.0, 0.0]]
   if batch_size == 1:
     images_info = tf.constant([image_info_per_image], dtype=tf.float32)
   else:
@@ -85,9 +79,7 @@ def raw_image_tensor_input(batch_size,
   return placeholder, {'images': images, 'image_info': images_info}
 
 
-def image_tensor_input(batch_size,
-                       desired_image_size,
-                       stride):
+def image_tensor_input(batch_size, desired_image_size, stride):
   """Image tensor input."""
   desired_image_height, desired_image_width = desired_image_size
   placeholder = tf.placeholder(
@@ -95,8 +87,7 @@ def image_tensor_input(batch_size,
       shape=(batch_size, desired_image_height, desired_image_width, 3))
 
   def _prepare(image):
-    return preprocess_image(
-        image, desired_image_size, stride)
+    return preprocess_image(image, desired_image_size, stride)
 
   if batch_size == 1:
     image = tf.squeeze(placeholder, axis=0)
@@ -105,16 +96,11 @@ def image_tensor_input(batch_size,
     images_info = tf.expand_dims(image_info, axis=0)
   else:
     images, images_info = tf.map_fn(
-        _prepare,
-        placeholder,
-        back_prop=False,
-        dtype=(tf.float32, tf.float32))
+        _prepare, placeholder, back_prop=False, dtype=(tf.float32, tf.float32))
   return placeholder, {'images': images, 'image_info': images_info}
 
 
-def image_bytes_input(batch_size,
-                      desired_image_size,
-                      stride):
+def image_bytes_input(batch_size, desired_image_size, stride):
   """Image bytes input."""
   placeholder = tf.placeholder(dtype=tf.string, shape=(batch_size,))
 
@@ -129,23 +115,17 @@ def image_bytes_input(batch_size,
     images_info = tf.expand_dims(image_info, axis=0)
   else:
     images, images_info = tf.map_fn(
-        _prepare,
-        placeholder,
-        back_prop=False,
-        dtype=(tf.float32, tf.float32))
+        _prepare, placeholder, back_prop=False, dtype=(tf.float32, tf.float32))
   return placeholder, {'images': images, 'image_info': images_info}
 
 
-def tf_example_input(batch_size,
-                     desired_image_size,
-                     stride):
+def tf_example_input(batch_size, desired_image_size, stride):
   """tf.Example input."""
   placeholder = tf.placeholder(dtype=tf.string, shape=(batch_size,))
 
   def _prepare(tf_example_string):
     return preprocess_image(
-        decode_image(parse_tf_example(tf_example_string)),
-        desired_image_size,
+        decode_image(parse_tf_example(tf_example_string)), desired_image_size,
         stride)
 
   if batch_size == 1:
@@ -155,10 +135,7 @@ def tf_example_input(batch_size,
     images_info = tf.expand_dims(image_info, axis=0)
   else:
     images, images_info = tf.map_fn(
-        _prepare,
-        placeholder,
-        back_prop=False,
-        dtype=(tf.float32, tf.float32))
+        _prepare, placeholder, back_prop=False, dtype=(tf.float32, tf.float32))
   return placeholder, {'images': images, 'image_info': images_info}
 
 
@@ -180,19 +157,17 @@ def build_serving_input(input_type, batch_size, desired_image_size, stride):
     features: the input feature tensor to be fed into the main network.
   """
   if input_type == 'image_tensor':
-    placeholder, features = image_tensor_input(
-        batch_size, desired_image_size, stride)
+    placeholder, features = image_tensor_input(batch_size, desired_image_size,
+                                               stride)
   elif input_type == 'raw_image_tensor':
-    placeholder, features = raw_image_tensor_input(
-        batch_size, desired_image_size, stride)
+    placeholder, features = raw_image_tensor_input(batch_size,
+                                                   desired_image_size, stride)
   elif input_type == 'image_bytes':
-    placeholder, features = image_bytes_input(
-        batch_size, desired_image_size, stride)
+    placeholder, features = image_bytes_input(batch_size, desired_image_size,
+                                              stride)
   elif input_type == 'tf_example':
-    placeholder, features = tf_example_input(
-        batch_size, desired_image_size, stride)
+    placeholder, features = tf_example_input(batch_size, desired_image_size,
+                                             stride)
   else:
     raise NotImplementedError('Unknown input type!')
   return placeholder, features
-
-
