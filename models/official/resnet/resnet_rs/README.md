@@ -48,7 +48,6 @@ We release configs and checkpoints of the ResNet-RS model family trained on Imag
 Code and checkpoints are avaliable in Tensorflow 2 at the official Tensorflow [Model Garden](https://github.com/tensorflow/models/tree/master/official/vision/beta).
 
 ## Citation
-
 ```make
 @article{bello2021revisiting,
   title={Revisiting ResNets: Improved Training and Scaling Strategies},

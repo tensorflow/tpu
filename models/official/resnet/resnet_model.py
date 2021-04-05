@@ -12,13 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Contains definitions for post- and pre-activation forms of Residual Networks.
+"""Contains definitions for post- and pre-activation forms of ResNet and ResNet-RS models.
 
 Residual networks (ResNets) were proposed in:
 [1] Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun
     Deep Residual Learning for Image Recognition. arXiv:1512.03385
 [2] Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun
     Identity Mappings in Deep Residual Networks. arXiv:1603.05027
+[3] Irwan Bello, William Fedus, Xianzhi Du, Ekin D. Cubuk, Aravind Srinivas,
+Tsung-Yi Lin, Jonathon Shlens, Barret Zoph
+    Revisiting ResNets: Improved Training and Scaling Strategies.
+    arXiv:2103.07579
 """
 
 from __future__ import absolute_import
