@@ -20,14 +20,13 @@ import tensorflow.compat.v1 as tf
 from dataloader import factory
 from dataloader import input_reader_util
 from dataloader import mode_keys as ModeKeys
+from hyperparameters import params_dict
 
 
 def _create_pre_batch_dataset_fn(file_pattern, dataset_type, config_params):
   """Creates a callable dataset function, which returns a pre-batched dataset."""
 
-  def dataset_fn(params, mode):
-    """Creates and returns a pre-batched tf.data.Dataset."""
-    del params
+  def get_dataset(config_params, file_pattern, dataset_type, mode):
     is_training = (mode == ModeKeys.TRAIN)
     if dataset_type == 'tfrecord':
       dataset_cls = tf.data.TFRecordDataset
@@ -50,6 +49,55 @@ def _create_pre_batch_dataset_fn(file_pattern, dataset_type, config_params):
 
     if is_training:
       dataset = dataset.shuffle(64)
+
+    return dataset, parser_fn
+
+  def apply_pre_parser(dataset, mode):
+    """Parses per-parser data and zips the parsed output to the input dataset.
+
+    This method can be used to pre-process some data to pass additional
+    parsed data to the main parser. It is mainly helpful when we want to combine
+    multiple images. The data path and parsing method can be
+    set via config.train.pre_parser_dataset.file_pattern and
+    config.architecture.pre_parser. Fer example, for Copy-Paste augmentation the
+    pre_parser should be set to 'extract_objects_parser' to parse pasting
+    objects and then these data will be passed to the main parser of
+    'maskrcnn_parser_with_copy_paste'.
+    Args:
+      dataset: a tf.data.Dataset dataset.
+      mode: Training mode string.
+    Returns:
+      tf.data.Dataset dataset.
+    """
+
+    config_params_ = params_dict.ParamsDict(config_params)
+    config_params_.architecture.parser = config_params.architecture.pre_parser
+    dataset_p, pre_parser_fn = get_dataset(
+        config_params_,
+        config_params.train.pre_parser_dataset.file_pattern,
+        config_params.train.pre_parser_dataset.dataset_type,
+        mode)
+
+    dataset_p = dataset_p.map(
+        pre_parser_fn,
+        num_parallel_calls=tf.data.experimental.AUTOTUNE,
+        deterministic=False)
+
+    dataset_p = dataset_p.prefetch(tf.data.experimental.AUTOTUNE)
+    dataset_p = dataset_p.filter(
+        lambda data: tf.greater(data['num_groundtrtuhs'], 0))
+    dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
+    dataset = tf.data.Dataset.zip((dataset, dataset_p))
+    return dataset
+
+  def dataset_fn(params, mode):
+    """Creates and returns a pre-batched tf.data.Dataset."""
+    del params
+    dataset, parser_fn = get_dataset(
+        config_params, file_pattern, dataset_type, mode)
+
+    if config_params.architecture.pre_parser and mode == ModeKeys.TRAIN:
+      dataset = apply_pre_parser(dataset, mode)
 
     # Parses the fetched records to input tensors for model function.
     dataset = dataset.map(
