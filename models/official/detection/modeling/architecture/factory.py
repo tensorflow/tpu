@@ -105,6 +105,9 @@ def multilevel_features_generator(params):
             params.batch_norm_activation))
   elif params.architecture.multilevel_features == 'nasfpn':
     nasfpn_params = params.nasfpn
+    batch_norm_activation = params_dict.ParamsDict(params.batch_norm_activation)
+    if nasfpn_params.activation is not None:
+      batch_norm_activation.activation = nasfpn_params.activation
     fpn_fn = nasfpn.Nasfpn(
         min_level=params.architecture.min_level,
         max_level=params.architecture.max_level,
@@ -113,10 +116,11 @@ def multilevel_features_generator(params):
         use_separable_conv=nasfpn_params.use_separable_conv,
         dropblock=dropblock_generator(params.dropblock),
         block_fn=nasfpn_params.block_fn,
-        activation=params.batch_norm_activation.activation,
+        activation=batch_norm_activation.activation,
         batch_norm_activation=batch_norm_activation_generator(
-            params.batch_norm_activation),
-        init_drop_connect_rate=nasfpn_params.init_drop_connect_rate)
+            batch_norm_activation),
+        init_drop_connect_rate=nasfpn_params.init_drop_connect_rate,
+        use_sum_for_combination=nasfpn_params.use_sum_for_combination)
   elif params.architecture.multilevel_features == 'identity':
     fpn_fn = identity.Identity()
   else:

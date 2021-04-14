@@ -61,6 +61,11 @@ DETECTION_CFG.override(
             'use_separable_conv': False,
             'init_drop_connect_rate': None,
             'block_fn': 'conv',
+            # If not None it will be used instead of
+            # batch_norm_activation.activation for building nasfpn.
+            'activation': None,
+            # If True only 'sum' is used for combining two nodes in nasfpn.
+            'use_sum_for_combination': False,
         },
         'postprocess': {
             'apply_nms': True,
