@@ -45,6 +45,22 @@ def efficientnet_x_params(model_name):
       'efficientnet-x-b5': (1.6, 2.2, 456, 0.4, 1),
       'efficientnet-x-b6': (1.8, 2.6, 528, 0.5, 1),
       'efficientnet-x-b7': (2.0, 3.1, 600, 0.5, 1),
+      'efficientnet-x-tpu-b0': (1.0, 1.0, 224, 0.2, 4),
+      'efficientnet-x-tpu-b1': (1.05, 1.09, 229, 0.2, 2),
+      'efficientnet-x-tpu-b2': (1.13, 1.29, 244, 0.3, 1),
+      'efficientnet-x-tpu-b3': (1.27, 1.62, 263, 0.3, 1),
+      'efficientnet-x-tpu-b4': (1.54, 2.38, 299, 0.4, 1),
+      'efficientnet-x-tpu-b5': (1.96, 2.76, 332, 0.4, 1),
+      'efficientnet-x-tpu-b6': (2.75, 3.01, 328, 0.5, 1),
+      'efficientnet-x-tpu-b7': (3.26, 3.44, 350, 0.5, 1),
+      'efficientnet-x-gpu-b0': (1.0, 1.0, 224, 0.2, 4),
+      'efficientnet-x-gpu-b1': (1.05, 1.09, 229, 0.2, 2),
+      'efficientnet-x-gpu-b2': (1.13, 1.24, 237, 0.3, 1),
+      'efficientnet-x-gpu-b3': (1.31, 1.63, 255, 0.3, 1),
+      'efficientnet-x-gpu-b4': (1.63, 2.4, 282, 0.4, 1),
+      'efficientnet-x-gpu-b5': (1.94, 3.29, 306, 0.4, 1),
+      'efficientnet-x-gpu-b6': (2.25, 4.28, 328, 0.5, 1),
+      'efficientnet-x-gpu-b7': (2.58, 5.46, 350, 0.5, 1),
   }
   return params_dict[model_name]
 

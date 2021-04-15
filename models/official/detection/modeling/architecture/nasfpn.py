@@ -179,7 +179,8 @@ class Nasfpn(object):
                batch_norm_activation=nn_ops.BatchNormActivation(
                    activation='relu'),
                init_drop_connect_rate=None,
-               data_format='channels_last'):
+               data_format='channels_last',
+               use_sum_for_combination=False):
     """NAS-FPN initialization function.
 
     Args:
@@ -205,6 +206,8 @@ class Nasfpn(object):
         is applied.
       data_format: An optional string from: "channels_last", "channels_first".
         Defaults to "channels_last".
+      use_sum_for_combination: `bool`, if True only 'sum' is used for combining
+        two nodes.
     """
     self._min_level = min_level
     self._max_level = max_level
@@ -234,6 +237,7 @@ class Nasfpn(object):
         conv2d_op=self._conv2d_op,
         batch_norm_activation=batch_norm_activation,
         data_format=self._data_format)
+    self._use_sum_for_combination = use_sum_for_combination
 
   def __call__(self, multilevel_features, is_training=False):
     """Returns the FPN features for a given multilevel features.
@@ -307,7 +311,7 @@ class Nasfpn(object):
             name='1_{}_{}'.format(input1, len(feats)))
 
         # Combine node0 and node1 to create new feat.
-        if sub_policy.combine_fn == 'sum':
+        if self._use_sum_for_combination or sub_policy.combine_fn == 'sum':
           new_node = node0 + node1
         elif sub_policy.combine_fn == 'attention':
           if node0_level >= node1_level:
