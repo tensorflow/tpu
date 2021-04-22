@@ -89,7 +89,7 @@ def main(_):
       output_arrays=[FLAGS.output_name])
   # Chooses a tf.lite.Optimize mode:
   # https://www.tensorflow.org/api_docs/python/tf/lite/Optimize
-  converter.optimizations = [tf.lite.Optimize.OPTIMIZE_FOR_LATENCY]
+  converter.optimizations = [tf.lite.Optimize.DEFAULT]
   converter.representative_dataset = tf.lite.RepresentativeDataset(
       representative_dataset_gen)
   if FLAGS.require_int8:

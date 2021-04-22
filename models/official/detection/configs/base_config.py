@@ -29,7 +29,7 @@ BASE_CFG = {
         # parser method. For example for Copy-Paste augmentation this method
         # should be set to 'extract_objects_parser' to parse pasting objects
         # which will be passed to the main parser of
-        # ‘maskrcnn_parser_with_copy_paste’.
+        # 'maskrcnn_parser_with_copy_paste'.
         'pre_parser': None,
     },
     'train': {
