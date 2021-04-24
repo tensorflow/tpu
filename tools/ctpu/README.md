@@ -226,7 +226,7 @@ It will be most helpful if you include:
 
 ### Developing ###
 
-The code is layed out in the following packages:
+The code is laid out in the following packages:
 
  - **`config`**: This package contains the tool-wide configuration, such as (1)
    the credentials used to communicate with GCP, (2) desired zone, and (3) the
