@@ -28,6 +28,7 @@ from __future__ import division
 from __future__ import print_function
 import itertools
 import math
+import os
 from absl import app
 from absl import flags
 import absl.logging as _logging  # pylint: disable=unused-import
@@ -393,6 +394,15 @@ def main(_):
             hooks=eval_hooks,
             checkpoint_path=checkpoint)
         tf.logging.info('Evaluation results: %s' % eval_results)
+        
+        # Terminate eval job when final checkpoint is reached
+        current_step = int(os.path.basename(ckpt).split('-')[1])
+        total_steps = int(hparams.num_epochs * train_steps_per_epoch)
+        if current_step >= total_steps:
+          tf.logging.info(
+              'Evaluation finished after training step %d', current_step)
+          break
+            
       except tf.errors.NotFoundError:
         # skip checkpoint if it gets deleted prior to evaluation
         tf.logging.info('Checkpoint %s no longer exists ... skipping')
