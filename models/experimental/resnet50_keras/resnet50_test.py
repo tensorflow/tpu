@@ -28,8 +28,6 @@ import tensorflow.compat.v1 as tf
 import resnet_model
 from tensorflow.contrib import cluster_resolver as contrib_cluster_resolver
 from tensorflow.contrib import distribute as contrib_distribute
-from tensorflow.python.keras import backend as K  # pylint: disable=g-direct-tensorflow-import
-from tensorflow.python.keras.optimizer_v2 import gradient_descent  # pylint: disable=g-direct-tensorflow-import
 
 NUM_REPLICAS = 2
 NUM_CLASSES = 1000
@@ -103,7 +101,7 @@ class LearningRateBatchScheduler(tf.keras.callbacks.Callback):
     if not isinstance(lr, (float, np.float32, np.float64)):
       raise ValueError('The output of the "schedule" function should be float.')
     if lr != self.prev_lr:
-      K.set_value(self.model.optimizer.lr, lr)
+      tf.keras.backend.set_value(self.model.optimizer.lr, lr)
       self.prev_lr = lr
       tf.logging.info(
           'Epoch %05d Batch %05d: LearningRateBatchScheduler change '
@@ -136,7 +134,7 @@ class Resnet50Test(absltest.TestCase):
       model = resnet_model.ResNet50(num_classes=NUM_CLASSES)
 
       model.compile(
-          optimizer=gradient_descent.SGD(
+          optimizer=tf.keras.optimizers.SGD(
               learning_rate=BASE_LEARNING_RATE, momentum=0.9, nesterov=True),
           loss='sparse_categorical_crossentropy')
 
