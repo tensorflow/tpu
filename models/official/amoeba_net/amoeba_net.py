@@ -396,7 +396,7 @@ def main(_):
         tf.logging.info('Evaluation results: %s' % eval_results)
         
         # Terminate eval job when final checkpoint is reached
-        current_step = int(os.path.basename(ckpt).split('-')[1])
+        current_step = int(os.path.basename(checkpoint).split('-')[1])
         total_steps = int(hparams.num_epochs * train_steps_per_epoch)
         if current_step >= total_steps:
           tf.logging.info(
