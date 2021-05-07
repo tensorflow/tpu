@@ -58,6 +58,7 @@ class RetinanetModel(base_model.BaseModel):
         params.postprocess)
 
   def _build_outputs(self, images, labels, mode):
+    batch_size = tf.shape(images)[0]
     if 'anchor_boxes' in labels:
       anchor_boxes = labels['anchor_boxes']
     else:
@@ -69,7 +70,6 @@ class RetinanetModel(base_model.BaseModel):
           self._params.anchor.anchor_size,
           images.get_shape().as_list()[1:3]).multilevel_boxes
 
-      batch_size = tf.shape(images)[0]
       for level in anchor_boxes:
         anchor_boxes[level] = tf.tile(
             tf.expand_dims(anchor_boxes[level], 0), [batch_size, 1, 1])
@@ -78,6 +78,16 @@ class RetinanetModel(base_model.BaseModel):
         images, is_training=(mode == mode_keys.TRAIN))
     fpn_features = self._fpn_fn(
         backbone_features, is_training=(mode == mode_keys.TRAIN))
+
+    if self._params.architecture.output_flat_fpn_features:
+      flat_fpn_features_list = []
+      for level in range(self._params.architecture.min_level,
+                         self._params.architecture.max_level + 1):
+        flat_fpn_features_list.append(
+            tf.reshape(fpn_features[level], [batch_size, -1]))
+      flat_fpn_features = tf.concat(flat_fpn_features_list, axis=1)
+      flat_fpn_features = tf.identity(flat_fpn_features, 'RawFpnFeatures')
+
     cls_outputs, box_outputs = self._head_fn(
         fpn_features, is_training=(mode == mode_keys.TRAIN))
     model_outputs = {
