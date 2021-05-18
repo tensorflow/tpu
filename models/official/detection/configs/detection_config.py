@@ -78,6 +78,7 @@ DETECTION_CFG.override(
             'nms_iou_threshold': 0.5,
             'score_threshold': 0.05,
             'pre_nms_num_boxes': 5000,
+            'apply_sigmoid': True,
         },
     },
     is_strict=False)

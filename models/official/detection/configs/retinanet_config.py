@@ -26,6 +26,7 @@ RETINANET_CFG.override(
             'parser': 'retinanet_parser',
             'backbone': 'resnet',
             'multilevel_features': 'fpn',
+            'output_flat_fpn_features': False,
         },
         'retinanet_parser': {
             'output_size': [640, 640],

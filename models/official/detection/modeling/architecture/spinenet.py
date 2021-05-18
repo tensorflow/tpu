@@ -488,8 +488,8 @@ class SpineNet(object):
                     block_spec.level))
           if (block_spec.level < self._min_level or
               block_spec.level > self._max_level):
-            raise ValueError('Output level is out of range [{}, {}]'.format(
-                self._min_level, self._max_level))
+            logging.info('Skipping output level %d out of range [%d, %d]',
+                         block_spec.level, self._min_level, self._max_level)
           output_feats[block_spec.level] = target_feat
 
     return output_feats

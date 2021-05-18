@@ -60,6 +60,11 @@ def serving_input_fn(batch_size,
       })
 
 
+def _normalize_box_coordinates(boxes, image_info):
+  boxes = boxes / tf.tile(image_info[:, 2:3, :], [1, 1, 2])
+  return box_utils.normalize_boxes(boxes, image_info[:, 0:1, :])
+
+
 def build_predictions(features,
                       params,
                       output_image_info,
@@ -109,10 +114,22 @@ def build_predictions(features,
 
   # Return flattened raw outputs.
   if not params.postprocess.apply_nms:
+    if output_normalized_coordinates:
+      raw_boxes = tf.squeeze(model_outputs['raw_boxes'], axis=2)
+      raw_boxes = _normalize_box_coordinates(raw_boxes, features['image_info'])
+      # Expand dims for backwards compatibility.
+      model_outputs['raw_boxes'] = tf.expand_dims(raw_boxes, axis=2)
     predictions = {
-        'raw_boxes': tf.identity(model_outputs['raw_boxes'], 'RawBoxes'),
-        'raw_scores': tf.identity(model_outputs['raw_scores'], 'RawScores'),
+        'raw_boxes':
+            tf.identity(model_outputs['raw_boxes'], 'RawBoxes'),
+        'raw_encoded_boxes':
+            tf.identity(model_outputs['raw_encoded_boxes'], 'RawEncodedBoxes'),
+        'raw_scores':
+            tf.identity(model_outputs['raw_scores'], 'RawScores'),
     }
+    if output_image_info:
+      predictions['image_info'] = tf.identity(features['image_info'],
+                                              'ImageInfo')
     return predictions, model_outputs
 
   if cast_num_detections_to_float:
@@ -129,11 +146,8 @@ def build_predictions(features,
     })
 
   if output_normalized_coordinates:
-    detection_boxes = (
-        model_outputs['detection_boxes'] /
-        tf.tile(features['image_info'][:, 2:3, :], [1, 1, 2]))
-    model_outputs['detection_boxes'] = box_utils.normalize_boxes(
-        detection_boxes, features['image_info'][:, 0:1, :])
+    model_outputs['detection_boxes'] = _normalize_box_coordinates(
+        model_outputs['detection_boxes'], features['image_info'])
 
   predictions = {
       'num_detections':
