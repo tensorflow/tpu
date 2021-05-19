@@ -14,6 +14,7 @@
 # ==============================================================================
 """Factory to build different models."""
 
+from modeling import cascade_maskrcnn_model
 from modeling import classification_model
 from modeling import maskrcnn_model
 from modeling import retinanet_model
@@ -29,6 +30,8 @@ def model_generator(params):
     model_fn = retinanet_model.RetinanetModel(params)
   elif params.type == 'mask_rcnn':
     model_fn = maskrcnn_model.MaskrcnnModel(params)
+  elif params.type == 'cascade_mask_rcnn':
+    model_fn = cascade_maskrcnn_model.CascadeMaskrcnnModel(params)
   elif params.type == 'shapemask':
     model_fn = shapemask_model.ShapeMaskModel(params)
   elif params.type == 'segmentation':

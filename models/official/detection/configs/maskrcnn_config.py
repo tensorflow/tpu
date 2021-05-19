@@ -67,6 +67,11 @@ MASKRCNN_CFG.override({
         'num_fcs': 2,
         'fc_dims': 1024,
         'use_batch_norm': False,
+        # If True only one box will be predicted instead of num_classes boxes.
+        'class_agnostic_bbox_pred': False,
+        # If True and additional IoUs are passed in 'cascade_iou_thresholds'
+        # then ensemble the class probabilities from all heads.
+        'cascade_class_ensemble': False,
     },
     'mrcnn_head': {
         'num_convs': 4,
@@ -97,6 +102,10 @@ MASKRCNN_CFG.override({
         'use_batched_nms': False,
     },
     'roi_sampling': {
+        # IoU thresholds for additional FRCNN heads in Cascade mode. e.g.
+        # [0.7, 0.8]
+        # 'fg_iou_thresh' is used as the first threshold.
+        'cascade_iou_thresholds': None,
         'num_samples_per_image': 512,
         'fg_fraction': 0.25,
         'fg_iou_thresh': 0.5,

@@ -238,8 +238,9 @@ class FastrcnnClassLoss(object):
 class FastrcnnBoxLoss(object):
   """Fast R-CNN box regression loss function."""
 
-  def __init__(self, params):
+  def __init__(self, params, class_agnostic_bbox_pred=False):
     self._delta = params.huber_loss_delta
+    self._class_agnostic_bbox_pred = class_agnostic_bbox_pred
 
   def __call__(self, box_outputs, class_targets, box_targets):
     """Computes the box loss (Fast-RCNN branch) of Mask-RCNN.
@@ -267,29 +268,29 @@ class FastrcnnBoxLoss(object):
     """
     with tf.name_scope('fast_rcnn_loss'):
       class_targets = tf.to_int32(class_targets)
+      if not self._class_agnostic_bbox_pred:
+        # Selects the box from `box_outputs` based on `class_targets`, with
+        # which the box has the maximum overlap.
+        (batch_size, num_rois,
+         num_class_specific_boxes) = box_outputs.get_shape().as_list()
+        num_classes = num_class_specific_boxes // 4
+        box_outputs = tf.reshape(box_outputs,
+                                 [batch_size, num_rois, num_classes, 4])
 
-      # Selects the box from `box_outputs` based on `class_targets`, with which
-      # the box has the maximum overlap.
-      (batch_size, num_rois,
-       num_class_specific_boxes) = box_outputs.get_shape().as_list()
-      num_classes = num_class_specific_boxes // 4
-      box_outputs = tf.reshape(box_outputs,
-                               [batch_size, num_rois, num_classes, 4])
+        box_indices = tf.reshape(
+            class_targets + tf.tile(
+                tf.expand_dims(
+                    tf.range(batch_size) * num_rois * num_classes, 1),
+                [1, num_rois]) + tf.tile(
+                    tf.expand_dims(tf.range(num_rois) * num_classes, 0),
+                    [batch_size, 1]), [-1])
 
-      box_indices = tf.reshape(
-          class_targets + tf.tile(
-              tf.expand_dims(
-                  tf.range(batch_size) * num_rois * num_classes, 1),
-              [1, num_rois]) + tf.tile(
-                  tf.expand_dims(tf.range(num_rois) * num_classes, 0),
-                  [batch_size, 1]), [-1])
-
-      box_outputs = tf.matmul(
-          tf.one_hot(
-              box_indices,
-              batch_size * num_rois * num_classes,
-              dtype=box_outputs.dtype), tf.reshape(box_outputs, [-1, 4]))
-      box_outputs = tf.reshape(box_outputs, [batch_size, -1, 4])
+        box_outputs = tf.matmul(
+            tf.one_hot(
+                box_indices,
+                batch_size * num_rois * num_classes,
+                dtype=box_outputs.dtype), tf.reshape(box_outputs, [-1, 4]))
+        box_outputs = tf.reshape(box_outputs, [batch_size, -1, 4])
 
       return self._fast_rcnn_box_loss(box_outputs, box_targets, class_targets,
                                       delta=self._delta)

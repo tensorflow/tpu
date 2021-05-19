@@ -150,7 +150,8 @@ class FastrcnnHead(object):
                activation='relu',
                use_batch_norm=True,
                batch_norm_activation=nn_ops.BatchNormActivation(
-                   activation='relu')):
+                   activation='relu'),
+               class_agnostic_bbox_pred=False):
     """Initialize params to build Fast R-CNN box head.
 
     Args:
@@ -169,6 +170,8 @@ class FastrcnnHead(object):
       use_batch_norm: 'bool', indicating whether batchnorm layers are added.
       batch_norm_activation: an operation that includes a batch normalization
         layer followed by an optional activation layer.
+      class_agnostic_bbox_pred: `bool`, indicating whether bboxes should be
+        predicted for every class or not.
     """
     self._num_classes = num_classes
 
@@ -196,6 +199,7 @@ class FastrcnnHead(object):
       raise ValueError('Activation {} not implemented.'.format(activation))
     self._use_batch_norm = use_batch_norm
     self._batch_norm_activation = batch_norm_activation
+    self._class_agnostic_bbox_pred = class_agnostic_bbox_pred
 
   def __call__(self,
                roi_features,
@@ -251,9 +255,11 @@ class FastrcnnHead(object):
           kernel_initializer=tf.random_normal_initializer(stddev=0.01),
           bias_initializer=tf.zeros_initializer(),
           name='class-predict')
+      num_box_outputs = (
+          4 if self._class_agnostic_bbox_pred else 4 * self._num_classes)
       box_outputs = tf.layers.dense(
           net,
-          self._num_classes * 4,
+          num_box_outputs,
           kernel_initializer=tf.random_normal_initializer(stddev=0.001),
           bias_initializer=tf.zeros_initializer(),
           name='box-predict')
