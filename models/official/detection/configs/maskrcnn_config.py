@@ -48,6 +48,7 @@ MASKRCNN_CFG.override({
         'skip_crowd_during_training': True,
         'max_num_instances': 100,
         'mask_crop_size': 112,
+        'copy_paste': False,
     },
     'anchor': {
         'num_scales': 1,

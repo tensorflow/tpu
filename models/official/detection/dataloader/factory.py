@@ -19,7 +19,10 @@ from __future__ import division
 from __future__ import print_function
 
 from dataloader import classification_parser
+from dataloader import extract_objects_parser
 from dataloader import maskrcnn_parser
+from dataloader import maskrcnn_parser_with_copy_paste
+from dataloader import mode_keys as ModeKeys
 from dataloader import retinanet_parser
 from dataloader import segmentation_parser
 from dataloader import shapemask_parser
@@ -78,6 +81,39 @@ def parser_generator(params, mode):
         mask_crop_size=parser_params.mask_crop_size,
         use_bfloat16=params.architecture.use_bfloat16,
         mode=mode)
+    if mode == ModeKeys.TRAIN and parser_params.copy_paste:
+      parser_fn = maskrcnn_parser_with_copy_paste.Parser(
+          output_size=parser_params.output_size,
+          min_level=params.architecture.min_level,
+          max_level=params.architecture.max_level,
+          num_scales=anchor_params.num_scales,
+          aspect_ratios=anchor_params.aspect_ratios,
+          anchor_size=anchor_params.anchor_size,
+          rpn_match_threshold=parser_params.rpn_match_threshold,
+          rpn_unmatched_threshold=parser_params.rpn_unmatched_threshold,
+          rpn_batch_size_per_im=parser_params.rpn_batch_size_per_im,
+          rpn_fg_fraction=parser_params.rpn_fg_fraction,
+          aug_rand_hflip=parser_params.aug_rand_hflip,
+          aug_scale_min=parser_params.aug_scale_min,
+          aug_scale_max=parser_params.aug_scale_max,
+          skip_crowd_during_training=parser_params.skip_crowd_during_training,
+          max_num_instances=parser_params.max_num_instances,
+          include_mask=params.architecture.include_mask,
+          mask_crop_size=parser_params.mask_crop_size,
+          use_bfloat16=params.architecture.use_bfloat16,
+          mode=mode)
+  elif params.architecture.parser == 'extract_objects_parser':
+    parser_params = params.maskrcnn_parser
+    parser_fn = extract_objects_parser.Parser(
+        output_size=parser_params.output_size,
+        min_level=params.architecture.min_level,
+        max_level=params.architecture.max_level,
+        aug_rand_hflip=parser_params.aug_rand_hflip,
+        aug_scale_min=parser_params.aug_scale_min,
+        aug_scale_max=parser_params.aug_scale_max,
+        skip_crowd_during_training=parser_params.skip_crowd_during_training,
+        include_mask=params.architecture.include_mask,
+        mask_crop_size=parser_params.mask_crop_size)
   elif params.architecture.parser == 'shapemask_parser':
     anchor_params = params.anchor
     parser_params = params.shapemask_parser
