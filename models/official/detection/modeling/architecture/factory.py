@@ -187,7 +187,8 @@ def fast_rcnn_head_generator(params):
       params.batch_norm_activation.activation,
       head_params.use_batch_norm,
       batch_norm_activation=batch_norm_activation_generator(
-          params.batch_norm_activation))
+          params.batch_norm_activation),
+      class_agnostic_bbox_pred=head_params.class_agnostic_bbox_pred)
 
 
 def mask_rcnn_head_generator(params):

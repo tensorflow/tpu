@@ -111,7 +111,8 @@ def assign_and_sample_proposals(proposed_boxes,
                                 fg_fraction=0.25,
                                 fg_iou_thresh=0.5,
                                 bg_iou_thresh_hi=0.5,
-                                bg_iou_thresh_lo=0.0):
+                                bg_iou_thresh_lo=0.0,
+                                skip_subsampling=False):
   """Assigns the proposals with groundtruth classes and performs subsmpling.
 
   Given `proposed_boxes`, `gt_boxes`, and `gt_classes`, the function uses the
@@ -145,6 +146,9 @@ def assign_and_sample_proposals(proposed_boxes,
       be considered background (class = 0 if overlap in [LO, HI)).
     bg_iou_thresh_lo: a float represents the IoU overlap threshold for an RoI to
       be considered background (class = 0 if overlap in [LO, HI)).
+    skip_subsampling: a bool that determines if we want to skip the sampling
+      procedure than balances the fg/bg classes. Used for upper frcnn layers
+      in cascade RCNN.
 
   Returns:
     sampled_rois: a tensor of shape of [batch_size, K, 4], representing the
@@ -179,6 +183,9 @@ def assign_and_sample_proposals(proposed_boxes,
         negative_match, tf.zeros_like(matched_gt_classes), matched_gt_classes)
     matched_gt_indices = tf.where(
         negative_match, tf.zeros_like(matched_gt_indices), matched_gt_indices)
+
+    if skip_subsampling:
+      return (boxes, matched_gt_boxes, matched_gt_classes, matched_gt_indices)
 
     sample_candidates = tf.logical_and(
         tf.logical_or(positive_match, negative_match),

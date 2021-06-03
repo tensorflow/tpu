@@ -30,7 +30,7 @@ def config_generator(model):
   elif model == 'retinanet':
     default_config = retinanet_config.RETINANET_CFG
     restrictions = retinanet_config.RETINANET_RESTRICTIONS
-  elif model == 'mask_rcnn':
+  elif model == 'mask_rcnn' or model == 'cascade_mask_rcnn':
     default_config = maskrcnn_config.MASKRCNN_CFG
     restrictions = maskrcnn_config.MASKRCNN_RESTRICTIONS
   elif model == 'segmentation':

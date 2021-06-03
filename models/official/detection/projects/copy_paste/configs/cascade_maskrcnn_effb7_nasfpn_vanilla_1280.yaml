@@ -1,0 +1,67 @@
+# cascade maskrcnn efficientnet-b7 NASFPN, image size 1280
+type: 'cascade_mask_rcnn'
+architecture:
+  parser: 'maskrcnn_parser'
+  pre_parser: ''
+  backbone: 'efficientnet-b7'
+  multilevel_features: 'nasfpn'
+  max_level: 7
+  min_level: 3
+  use_bfloat16: true
+  num_classes: 91
+train:
+  train_batch_size: 256
+  total_steps: 90000
+  learning_rate:
+    type: 'step'
+    warmup_learning_rate: 0.0032
+    warmup_steps: 1000
+    init_learning_rate: 0.32
+    learning_rate_steps: [81000, 85500, 87750]
+    learning_rate_levels: [0.032, 0.0032, 0.00032]
+  gradient_clip_norm: 0
+  frozen_variable_prefix: null
+  l2_weight_decay: 4.0e-05
+batch_norm_activation:
+  batch_norm_epsilon: 0.0001
+  batch_norm_momentum: 0.997
+  batch_norm_trainable: true
+  use_sync_bn: true
+  activation: 'relu'
+maskrcnn_parser:
+  aug_rand_hflip: true
+  aug_scale_max: 2.0
+  aug_scale_min: 0.1
+  output_size: [1280, 1280]
+  copy_paste: False
+anchor:
+  num_scales: 3
+  anchor_size: 4
+frcnn_head:
+  num_convs: 4
+  num_fcs: 2
+  num_filters: 256
+  use_batch_norm: true
+  cascade_class_ensemble: true
+  class_agnostic_bbox_pred: true
+mrcnn_head:
+  num_convs: 4
+  num_filters: 256
+  use_batch_norm: true
+rpn_head:
+  anchors_per_location: 9
+  num_convs: 2
+  num_filters: 256
+  use_batch_norm: true
+roi_sampling:
+  cascade_iou_thresholds: [0.7, 0.8]
+  fg_iou_thresh: 0.6
+nasfpn:
+  activation: 'swish'
+  block_fn: 'bottleneck'
+  fpn_feat_dims: 256
+  init_drop_connect_rate: 0.2
+  num_repeats: 5
+  use_separable_conv: false
+  use_sum_for_combination: true
+enable_summary: true

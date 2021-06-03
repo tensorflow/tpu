@@ -1,0 +1,53 @@
+# maskrcnn resnet-101 FPN, with copy-paste, image size 1280
+type: 'cascade_mask_rcnn'
+architecture:
+  parser: 'maskrcnn_parser'
+  pre_parser: 'extract_objects_parser'
+  backbone: 'resnet'
+  multilevel_features: 'fpn'
+  max_level: 6
+  min_level: 2
+  use_bfloat16: true
+  num_classes: 91
+train:
+  train_batch_size: 256
+  total_steps: 270000
+  learning_rate:
+    type: 'step'
+    warmup_learning_rate: 0.0032
+    warmup_steps: 1000
+    init_learning_rate: 0.32
+    learning_rate_steps: [243000, 256500, 263250]
+    learning_rate_levels: [0.032, 0.0032, 0.00032]
+  gradient_clip_norm: 0
+  frozen_variable_prefix: null
+  l2_weight_decay: 4.0e-05
+batch_norm_activation:
+  batch_norm_epsilon: 0.0001
+  batch_norm_momentum: 0.997
+  batch_norm_trainable: true
+  use_sync_bn: true
+  activation: 'relu'
+maskrcnn_parser:
+  aug_rand_hflip: true
+  aug_scale_max: 2.0
+  aug_scale_min: 0.1
+  output_size: [1280, 1280]
+  copy_paste: True
+frcnn_head:
+  num_convs: 4
+  num_fcs: 2
+  num_filters: 256
+  use_batch_norm: true
+mrcnn_head:
+  num_convs: 4
+  num_filters: 256
+  use_batch_norm: true
+rpn_head:
+  anchors_per_location: 3
+  num_convs: 2
+  num_filters: 256
+  use_batch_norm: true
+resnet:
+  resnet_depth: 101
+enable_summary: true

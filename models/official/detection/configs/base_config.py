@@ -63,6 +63,10 @@ BASE_CFG = {
         'l2_weight_decay': 0.0001,
         'gradient_clip_norm': 0.0,
         'space_to_depth_block_size': 1,
+        'pre_parser_dataset': {
+            'file_pattern': '',
+            'dataset_type': 'tfrecord',
+        },
     },
     'eval': {
         'eval_batch_size': 8,
