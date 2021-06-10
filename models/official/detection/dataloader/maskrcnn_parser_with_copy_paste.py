@@ -14,7 +14,6 @@
 # ==============================================================================
 """Data parser and processing for Mask R-CNN."""
 
-from simclr import data_util as simclr_data_util
 import tensorflow.compat.v1 as tf
 
 from dataloader import anchor
@@ -329,7 +328,9 @@ class Parser(object):
       # Pastes objects and creates a new composed image.
       compose_mask = tf.cast(data2['pasted_objects_mask'],
                              image.dtype) * tf.ones_like(image)
-      compose_mask = simclr_data_util.gaussian_blur(compose_mask, 5, 5)
+      # Note - original paper would apply gaussian blur here, e.g.:
+      # compose_mask = simclr_data_util.gaussian_blur(compose_mask, 5, 5)
+      # This is currently disabled in OSS.
       image = image * (1 - compose_mask) + data2['image'] * compose_mask
 
     if self._include_mask:
