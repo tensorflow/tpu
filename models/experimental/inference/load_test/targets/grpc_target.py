@@ -14,9 +14,11 @@
 # ==============================================================================
 """GRPC targets."""
 
-from typing import Any, Callable, Iterable, Optional
+from typing import Any, Callable, Iterable, Mapping, Optional
 from absl import logging
 
+import grpc
+import numpy as np
 import tensorflow as tf
 
 from load_test.targets import target
@@ -78,23 +80,31 @@ class TfServingGrpcTarget(target.Target):
                request_timeout: float = 300.0,
                model_name: str = '',
                batch_size: int = 1,
+               signature_key: str = 'serving_default',
                input_name: str = 'input'):
     self._grpc_channel = grpc_channel
     self._request_timeout = request_timeout
     self._model_name = model_name
     self._batch_size = batch_size
     self._input_name = input_name
+    self._signature_key = signature_key
+    grpc_channel = grpc.insecure_channel(grpc_channel[len('grpc://'):])
     self._stub = prediction_service_pb2_grpc.PredictionServiceStub(
         grpc_channel)
 
-  def prepare(self, sample: Any) -> predict_pb2.PredictRequest:
+  def prepare(self, sample: Mapping[str, Any]) -> predict_pb2.PredictRequest:
     """Converts a sample into gRPC `PredictRequest`."""
     request = predict_pb2.PredictRequest()
     request.model_spec.name = self._model_name
-    request.model_spec.signature_name = 'serving_default'
-    request.inputs[self._input_name].CopyFrom(
-        tf.make_tensor_proto(
-            [sample] * self._batch_size, shape=[self._batch_size]))
+    request.model_spec.signature_name = self._signature_key
+    for k, v in sample.items():
+      if hasattr(v, 'shape'):
+        tensor_shape = (self._batch_size,) + v.shape
+      else:
+        tensor_shape = (self._batch_size,)
+      request.inputs[k].CopyFrom(
+          tf.make_tensor_proto(
+              np.array([v] * self._batch_size), shape=tensor_shape))
     return request
 
   def send(

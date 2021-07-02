@@ -36,6 +36,13 @@ class RuntimeSettings:
   data_type: str
   total_sample_count: int
   performance_sample_count: int
+  batch_size: int
+  model_name: str
+  target_latency_percentile: float
+  target_latency_ns: int
+  query_count: int
+  duration_ms: int
+  qps: int
 
 
 def define_flags():
@@ -61,6 +68,34 @@ def define_flags():
       "total_sample_count",
       help="Total count, a loadgen kwarg.",
       default=1000)
+  flags.DEFINE_integer(
+      "batch_size",
+      help="The TF serving batch size.",
+      default=1)
+  flags.DEFINE_string(
+      "model_name",
+      help="The name of the model in the model server.",
+      default="")
+  flags.DEFINE_float(
+      "target_latency_percentile",
+      help="The target latency percentile.",
+      default=None)
+  flags.DEFINE_integer(
+      "target_latency_ns",
+      help="The target latency in ns.",
+      default=None)
+  flags.DEFINE_integer(
+      "query_count",
+      help="The minimum query count.",
+      default=None)
+  flags.DEFINE_integer(
+      "duration_ms",
+      help="The minimum duration ms.",
+      default=None)
+  flags.DEFINE_integer(
+      "qps",
+      help="The expected target QPS.",
+      default=None)
 
 
 def validate_flags() -> RuntimeSettings:
@@ -84,15 +119,24 @@ def validate_flags() -> RuntimeSettings:
       target=target,
       scenario=scenario,
       data_type=FLAGS.data_type.lower(),
+      model_name=FLAGS.model_name,
       performance_sample_count=FLAGS.performance_sample_count,
-      total_sample_count=FLAGS.total_sample_count)
+      batch_size=FLAGS.batch_size,
+      total_sample_count=FLAGS.total_sample_count,
+      query_count=FLAGS.query_count,
+      duration_ms=FLAGS.duration_ms,
+      target_latency_percentile=FLAGS.target_latency_percentile,
+      target_latency_ns=FLAGS.target_latency_ns,
+      qps=FLAGS.qps)
 
 
 def main(_) -> None:
   settings = validate_flags()
 
   target_kwargs = dict(
-      grpc_channel=settings.target)
+      grpc_channel=settings.target,
+      model_name=settings.model_name,
+      batch_size=settings.batch_size)
   data_kwargs = dict()
   target = target_factory.get_target(name="grpc", **target_kwargs)
   data_loader = data_loader_factory.get_data_loader(
@@ -103,7 +147,12 @@ def main(_) -> None:
       data_loader=data_loader,
       scenario=settings.scenario,
       performance_sample_count=settings.performance_sample_count,
-      total_sample_count=settings.total_sample_count)
+      total_sample_count=settings.total_sample_count,
+      target_latency_percentile=settings.target_latency_percentile,
+      duration_ms=settings.duration_ms,
+      query_count=settings.query_count,
+      target_latency_ns=settings.target_latency_ns,
+      qps=settings.qps)
   handler = traffic_handler_factory.get_traffic_handler(
       name="loadgen", **handler_kwargs)
   handler.start()

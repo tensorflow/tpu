@@ -46,3 +46,12 @@ class MockPredictionServicePb2Grpc(mock.Mock):
 
     def __init__(self, grpc_channel):
       del grpc_channel
+
+
+class MockGrpc(mock.Mock):
+  """Mock gRPC."""
+
+  @staticmethod
+  def insecure_channel(channel: str):
+    return channel
+

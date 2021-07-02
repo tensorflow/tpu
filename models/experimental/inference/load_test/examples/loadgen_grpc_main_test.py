@@ -70,11 +70,31 @@ class LoadgenGrpcTests(tf.test.TestCase, parameterized.TestCase):
             grpc_target,
             "prediction_service_pb2_grpc",
             new_callable=mock_grpc.MockPredictionServicePb2Grpc))
+    self.mock_grpc = self.enter_context(
+        mock.patch.object(grpc_target,
+                          "grpc",
+                          new_callable=mock_grpc.MockGrpc))
 
-  def test_basic_functionality(self):
+  @parameterized.parameters(
+      ("synthetic_images", "single_stream"),
+      ("synthetic_bert", "single_stream"),
+      ("synthetic_images", "multi_stream"),
+      ("synthetic_bert", "multi_stream"),
+      ("synthetic_images", "server"),
+      ("synthetic_bert", "server"),
+      )
+  def test_basic_functionality(self, data_type: str, scenario: str):
     with flagsaver.flagsaver():
       FLAGS.target = "grpc://10.10.10:5050"
-      FLAGS.scenario = "server"
+      FLAGS.scenario = scenario
+      FLAGS.data_type = data_type
+      FLAGS.batch_size = 1
+      FLAGS.duration_ms = 1000
+      FLAGS.target_latency_percentile = 0.9
+      FLAGS.target_latency_ns = 100000000
+      FLAGS.performance_sample_count = 5
+      FLAGS.query_count = 10
+      FLAGS.total_sample_count = 5
       loadgen_grpc_main.main(None)
 
 
