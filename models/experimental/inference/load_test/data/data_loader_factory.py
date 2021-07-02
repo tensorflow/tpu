@@ -18,6 +18,7 @@ from typing import Any, Mapping
 from absl import logging
 
 from load_test.data import data_loader
+from load_test.data import synthetic_bert
 from load_test.data import synthetic_image
 
 
@@ -26,5 +27,8 @@ def get_data_loader(
   if name == "synthetic_images":
     logging.info("Creating synthetic image data loader.")
     return synthetic_image.SyntheticImageDataLoader(**kwargs)
+  elif name == "synthetic_bert":
+    logging.info("Creating synthetic bert data loader.")
+    return synthetic_bert.SyntheticBertLoader(**kwargs)
   else:
     raise ValueError("Unsupported data loader type.")

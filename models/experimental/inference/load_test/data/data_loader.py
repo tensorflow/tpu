@@ -14,12 +14,13 @@
 # ==============================================================================
 """Abstract data loader."""
 import abc
-from typing import Any
+from typing import Any, Mapping
 
 
 class DataLoader(abc.ABC):
   """Base abstraction for data loaders."""
 
   @abc.abstractmethod
-  def get_sample(self, index: int) -> Any:
+  def get_sample(self, index: int) -> Mapping[str, Any]:
+    """Returns a mapping of input name to example."""
     pass

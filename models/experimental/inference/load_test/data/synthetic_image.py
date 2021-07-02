@@ -14,6 +14,7 @@
 # ==============================================================================
 """Synthetic image data loader."""
 import io
+from typing import Mapping
 import numpy as np
 from PIL import Image
 
@@ -33,11 +34,11 @@ class SyntheticImageDataLoader(data_loader.DataLoader):
     self._image_format = image_format
     self._generated_image = None
 
-  def get_sample(self, index: int) -> io.BytesIO:
+  def get_sample(self, index: int) -> Mapping[str, io.BytesIO]:
     """Generates a synthetic image."""
     del index
     if self._generated_image:
-      return self._generated_image
+      return dict(images=self._generated_image)
 
     image_shape = (self._image_width, self._image_height, 3)
     array = np.uint8(np.random.rand(*image_shape) * 255)
@@ -46,4 +47,4 @@ class SyntheticImageDataLoader(data_loader.DataLoader):
     pil_image.save(image_io, format=self._image_format)
     self._generated_image = image_io.getvalue()
 
-    return self._generated_image
+    return dict(images=self._generated_image)

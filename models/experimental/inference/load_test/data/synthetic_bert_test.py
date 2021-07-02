@@ -12,39 +12,35 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Tests for synthetic_image.py."""
-
-import io
+"""Tests for synthetic_bert.py."""
 from absl import logging
 from absl.testing import parameterized
 
-from PIL import Image
-
 import tensorflow as tf
-from load_test.data import synthetic_image as si
+from load_test.data import synthetic_bert
 
 
-class SyntheticImageDataLoaderTest(tf.test.TestCase, parameterized.TestCase):
+class SyntheticBertLoaderTest(tf.test.TestCase, parameterized.TestCase):
 
   @parameterized.parameters(
-      (224, 224, 'jpeg'),
-      (40, 10, 'png'),
-      (300, 20, 'jpeg'),
-      (1024, 2048, 'png'),
-      )
+      (False),
+      (True))
   def test_basic_configs(
-      self, image_width: int, image_height: int, image_format: str):
-    dl = si.SyntheticImageDataLoader(
-        image_width=image_width,
-        image_height=image_height,
-        image_format=image_format)
-    samples = []
-    for query_sample in range(10):
-      samples.append(dl.get_sample(query_sample))
+      self, use_v2_feature_names):
+    seq_length = 10
+    dl = synthetic_bert.SyntheticBertLoader(
+        seq_length=seq_length,
+        use_v2_feature_names=use_v2_feature_names)
+    sample = dl.get_sample(0)
+    if use_v2_feature_names:
+      keys = ['input_word_ids', 'input_type_ids']
+    else:
+      keys = ['input_ids', 'segment_ids']
+    keys.append('input_mask')
 
-    data = io.BytesIO(samples[0]['images'])
-    image = Image.open(data)
-    self.assertEqual(image.format.lower(), image_format)
+    for k in keys:
+      self.assertIn(k, sample)
+      self.assertEqual(sample[k].shape[0], seq_length)
 
 
 if __name__ == '__main__':

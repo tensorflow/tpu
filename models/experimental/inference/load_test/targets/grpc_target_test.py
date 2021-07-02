@@ -34,6 +34,10 @@ class GrpcTargetTest(tf.test.TestCase):
             grpc_target,
             "prediction_service_pb2_grpc",
             new_callable=mock_grpc.MockPredictionServicePb2Grpc))
+    self.mock_grpc = self.enter_context(
+        mock.patch.object(grpc_target,
+                          "grpc",
+                          new_callable=mock_grpc.MockGrpc))
 
   def test_basic_functionality(self):
     callback_responses = []
@@ -41,7 +45,7 @@ class GrpcTargetTest(tf.test.TestCase):
       callback_responses.append(0)
 
     target = grpc_target.TfServingGrpcTarget(grpc_channel="")
-    request = target.prepare(0)
+    request = target.prepare({"input": 0})
     target.send(request, callback)
     self.assertGreater(len(callback_responses), 0)
 

@@ -44,7 +44,7 @@ def get_dataloader_kwargs(data_loader_name: str):
 
 def get_test_configs():
   targets = ["dummy", "grpc"]
-  data_loaders = ["synthetic_images"]
+  data_loaders = ["synthetic_images", "synthetic_bert"]
   scenarios = ["single_stream", "multi_stream",]
   return itertools.product(targets, data_loaders, scenarios)
 
@@ -76,7 +76,11 @@ class LoadGenHandlerTest(tf.test.TestCase, parameterized.TestCase):
     handler = loadgen_handler.LoadGenHandler(
         target=target,
         data_loader=data_loader,
-        scenario=scenario)
+        scenario=scenario,
+        duration_ms=1000,
+        target_latency_percentile=0.9,
+        target_latency_ns=100000000,
+        query_count=10)
     handler.start()
 
 
