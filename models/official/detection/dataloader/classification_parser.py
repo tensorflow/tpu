@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Data parser and processing for segmentation datasets."""
+"""Data parser and processing for classification datasets."""
 
 import tensorflow.compat.v1 as tf
 
@@ -21,7 +21,7 @@ from utils import input_utils
 
 
 def decode(value):
-  """Decode serialized example into image and segmentation label."""
+  """Decode serialized example into image and classification label."""
   keys_to_features = {
       'image/encoded': tf.FixedLenFeature((), tf.string, default_value=''),
       'image/class/label': tf.FixedLenFeature((), tf.int64, default_value=-1)
