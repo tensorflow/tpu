@@ -43,6 +43,10 @@ FLAGS = flags.FLAGS
 flags.DEFINE_string(
     'model', 'retinanet', 'Support `retinanet`, `mask_rcnn` and `shapemask`.')
 flags.DEFINE_string('export_dir', None, 'The export directory.')
+flags.DEFINE_boolean(
+    'override_export_dir', False,
+    'True to delete existing `export_dir` and write new saved model if it is '
+    'not empty.')
 flags.DEFINE_string('checkpoint_path', None, 'Checkpoint path.')
 flags.DEFINE_boolean('use_tpu', False, 'Whether or not use TPU.')
 flags.DEFINE_string(
@@ -91,9 +95,17 @@ def export(export_dir,
            output_image_info=True,
            output_normalized_coordinates=False,
            cast_num_detections_to_float=False,
-           cast_detection_classes_to_float=False):
+           cast_detection_classes_to_float=False,
+           override_export_dir=False):
   """Exports the SavedModel."""
   control_flow_util.enable_control_flow_v2()
+
+  if tf.gfile.Exists(export_dir) and (not override_export_dir):
+    tf.logging.error(
+        '`export_dir` %s already exists, please use a different path or set'
+        ' `override_export_dir=True` to delete the existing export_dir',
+        export_dir)
+    return
 
   params = factory.config_generator(model)
   if config_file:
@@ -185,20 +197,21 @@ def export(export_dir,
 def main(argv):
   del argv  # Unused.
 
-  export(FLAGS.export_dir,
-         FLAGS.checkpoint_path,
-         FLAGS.model,
-         FLAGS.config_file,
-         FLAGS.params_override,
-         FLAGS.use_tpu,
-         (None if FLAGS.batch_size == -1 else FLAGS.batch_size),
-         [int(x) for x in FLAGS.input_image_size.split(',')],
-         FLAGS.input_type,
-         FLAGS.input_name,
-         FLAGS.output_image_info,
-         FLAGS.output_normalized_coordinates,
-         FLAGS.cast_num_detections_to_float,
-         FLAGS.cast_detection_classes_to_float)
+  export(export_dir=FLAGS.export_dir,
+         checkpoint_path=FLAGS.checkpoint_path,
+         model=FLAGS.model,
+         config_file=FLAGS.config_file,
+         params_override=FLAGS.params_override,
+         use_tpu=FLAGS.use_tpu,
+         batch_size=(None if FLAGS.batch_size == -1 else FLAGS.batch_size),
+         image_size=[int(x) for x in FLAGS.input_image_size.split(',')],
+         input_type=FLAGS.input_type,
+         input_name=FLAGS.input_name,
+         output_image_info=FLAGS.output_image_info,
+         output_normalized_coordinates=FLAGS.output_normalized_coordinates,
+         cast_num_detections_to_float=FLAGS.cast_num_detections_to_float,
+         cast_detection_classes_to_float=FLAGS.cast_detection_classes_to_float,
+         override_export_dir=FLAGS.override_export_dir)
 
 
 if __name__ == '__main__':
