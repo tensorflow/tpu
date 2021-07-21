@@ -17,8 +17,8 @@ r"""A stand-alone binary to run the COCO-style evaluation.
 
 This binary support running the stand-alone COCO-style evaluation without using
 TPUEstimator. It is based on the session run and currently only support model of
-type `retinanet` and `faster_rcnn` (i.e. `mask_rcnn` with include_mask=False).
-It currently only supports running on CPU/GPU.
+type `retinanet`, 'mask_rcnn', and `faster_rcnn`. It currently only supports
+running on CPU/GPU.
 """
 # pylint: enable=line-too-long
 
@@ -47,8 +47,7 @@ FLAGS = flags.FLAGS
 
 flags.DEFINE_string(
     'model', 'retinanet',
-    'Only retinanet and faster_rcnn (i.e. mask_rcnn with include_mask=False) '
-    'are supported.')
+    'Only retinanet, mask_rcnn, and faster_rcnn are supported.')
 flags.DEFINE_string(
     'checkpoint_path', '', 'The path to the checkpoint file.')
 flags.DEFINE_string(
@@ -67,7 +66,12 @@ flags.DEFINE_string(
 
 def parse_single_example(serialized_example, params):
   """Parses a singel serialized TFExample string."""
-  decoder = tf_example_decoder.TfExampleDecoder()
+  if 'retinanet_parser' in dir(params):
+    parser_params = params.retinanet_parser
+    decoder = tf_example_decoder.TfExampleDecoder()
+  else:
+    parser_params = params.maskrcnn_parser
+    decoder = tf_example_decoder.TfExampleDecoder(include_mask=True)
   data = decoder.decode(serialized_example)
   image = data['image']
   source_id = data['source_id']
@@ -79,13 +83,14 @@ def parse_single_example(serialized_example, params):
   classes = data['groundtruth_classes']
   is_crowds = data['groundtruth_is_crowd']
   areas = data['groundtruth_area']
+  masks = data.get('groundtruth_instance_masks_png', None)
 
   image = input_utils.normalize_image(image)
   image, image_info = input_utils.resize_and_crop_image(
       image,
-      params.retinanet_parser.output_size,
+      parser_params.output_size,
       padded_size=input_utils.compute_padded_size(
-          params.retinanet_parser.output_size,
+          parser_params.output_size,
           2 ** params.architecture.max_level),
       aug_scale_min=1.0,
       aug_scale_max=1.0)
@@ -103,6 +108,8 @@ def parse_single_example(serialized_example, params):
       'areas': areas,
       'is_crowds': tf.cast(is_crowds, tf.int32),
   }
+  if masks is not None:
+    groundtruths['masks'] = masks
   return image, labels, groundtruths
 
 
@@ -124,6 +131,10 @@ def main(unused_argv):
   })
   params.validate()
   params.lock()
+  if 'retinanet_parser' in dir(params):
+    parser_params = params.retinanet_parser
+  else:
+    parser_params = params.maskrcnn_parser
 
   model = model_factory.model_generator(params)
   evaluator = evaluator_factory.evaluator_generator(params.eval)
@@ -144,8 +155,8 @@ def main(unused_argv):
     images, labels, groundtruths = dataset.make_one_shot_iterator().get_next()
     images.set_shape([
         1,
-        params.retinanet_parser.output_size[0],
-        params.retinanet_parser.output_size[1],
+        parser_params.output_size[0],
+        parser_params.output_size[1],
         3])
 
     # model inference
