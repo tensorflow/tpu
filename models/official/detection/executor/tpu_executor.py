@@ -147,12 +147,11 @@ class TpuExecutor(object):
   def prepare_evaluation(self):
     """Preapre for evaluation."""
     eval_params = params_dict.ParamsDict(self._params.eval)
-    if self._params.eval.type == 'box_and_mask':
-      if (not self._params.eval.use_json_file or
-          not self._params.eval.val_json_file):
-        raise ValueError('If `eval.type` == `box_and_mask`, '
-                         '`eval.val_json_file` is required.')
-    if self._params.eval.use_json_file:
+    include_mask = False
+    if self._params.eval.type == 'box_and_mask' and not (
+        self._params.eval.val_json_file or self._params.eval.use_json_file):
+      include_mask = True
+    if self._params.eval.use_json_file or self._params.eval.type == 'box_and_mask':
       val_json_file = os.path.join(self._params.model_dir,
                                    'eval_annotation_file.json')
       if self._params.eval.val_json_file:
@@ -162,7 +161,7 @@ class TpuExecutor(object):
         coco_utils.scan_and_generator_annotation_file(
             self._params.eval.eval_file_pattern,
             self._params.eval.eval_samples,
-            include_mask=False,
+            include_mask=include_mask,
             annotation_file=val_json_file,
             dataset_type=self._params.eval.eval_dataset_type)
       eval_params.override({'val_json_file': val_json_file})
