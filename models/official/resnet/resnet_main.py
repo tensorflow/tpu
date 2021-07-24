@@ -19,6 +19,7 @@ from __future__ import division
 from __future__ import print_function
 
 import os
+import pprint
 import time
 
 from absl import app
@@ -686,6 +687,7 @@ def main(unused_argv):
 
   params.validate()
   params.lock()
+  tf.logging.info('Params:\n%s', pprint.pformat(params.as_dict()))
 
   tpu_cluster_resolver = tf.distribute.cluster_resolver.TPUClusterResolver(
       FLAGS.tpu if (FLAGS.tpu or params.use_tpu) else '',
@@ -838,6 +840,10 @@ def main(unused_argv):
           input_fn=imagenet_train.input_fn,
           max_steps=params.train_steps,
           hooks=hooks)
+
+      elapsed_time = int(time.time() - start_timestamp)
+      tf.logging.info('Finished training up to step %d. Elapsed seconds %d.',
+                      params.train_steps, elapsed_time)
 
     else:
       assert FLAGS.mode == 'train_and_eval'
