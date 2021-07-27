@@ -455,10 +455,10 @@ def resnet_model_fn(features, labels, mode, params):
         export_outputs={
             'classify': tf.estimator.export.PredictOutput(predictions)},
         scaffold_fn=scaffold_fn)
-
+  #print(params)
   # If necessary, in the model_fn, use params['batch_size'] instead the batch
   # size flags (--train_batch_size or --eval_batch_size).
-  batch_size = params['batch_size']   # pylint: disable=unused-variable
+  #batch_size = params['batch_size']   # pylint: disable=unused-variable
 
   # Calculate loss, which includes softmax cross entropy and L2 regularization.
   one_hot_labels = tf.one_hot(labels, params['num_label_classes'])
@@ -689,20 +689,19 @@ def main(unused_argv):
   params.lock()
   tf.logging.info('Params:\n%s', pprint.pformat(params.as_dict()))
 
-  tpu_cluster_resolver = tf.distribute.cluster_resolver.TPUClusterResolver(
-      FLAGS.tpu if (FLAGS.tpu or params.use_tpu) else '',
-      zone=FLAGS.tpu_zone,
-      project=FLAGS.gcp_project)
-
+  tpu_cluster_resolver = None
+  devices = tf.config.list_physical_devices('GPU')
   if params.use_async_checkpointing:
     save_checkpoints_steps = None
   else:
     save_checkpoints_steps = max(5000, params.iterations_per_loop)
   config = tf.estimator.tpu.RunConfig(
-      cluster=tpu_cluster_resolver,
+      cluster=None, #tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
       save_checkpoints_steps=save_checkpoints_steps,
       log_step_count_steps=FLAGS.log_step_count_steps,
+      train_distribute=tf.distribute.MirroredStrategy(),
+      eval_distribute=tf.distribute.MirroredStrategy(),
       session_config=tf.ConfigProto(
           graph_options=tf.GraphOptions(
               rewrite_options=rewriter_config_pb2.RewriterConfig(
