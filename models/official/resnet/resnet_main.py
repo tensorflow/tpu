@@ -229,6 +229,14 @@ flags.DEFINE_bool(
     'export_moving_average', False,
     'Whether to export model using moving average variables.')
 
+flags.DEFINE_bool(
+    'amp', False,
+    'Whether to use automated mixed precision.')
+
+flags.DEFINE_bool(
+    'xla', False,
+    'Whether to use accelerated linear algebra.')
+
 
 # The input tensor is in the range of [0, 255], we need to scale them to the
 # range of [0, 1]
@@ -507,6 +515,8 @@ def resnet_model_fn(features, labels, mode, params):
       # user, this should look like regular synchronous training.
       optimizer = tf.tpu.CrossShardOptimizer(optimizer)
 
+    if params['amp']:
+        optimizer = tf.train.experimental.enable_mixed_precision_graph_rewrite(optimizer)
     # Batch normalization requires UPDATE_OPS to be added as a dependency to
     # the train operation.
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
@@ -685,6 +695,22 @@ def main(unused_argv):
 
   params = flags_to_params.override_params_from_input_flags(params, FLAGS)
 
+  # Enable AMP
+  amp = params.amp
+  xla = params.xla
+  # Step 1: Set up Docker https://ngc.nvidia.com/catalog/containers/nvidia:tensorflow
+  # Step 2: add --amp flag
+  import os
+  print(amp, xla)
+  if amp:
+    os.environ["TF_ENABLE_AUTO_MIXED_PRECISION_GRAPH_REWRITE"] = "1"
+    os.environ['TF_ENABLE_AUTO_MIXED_PRECISION'] = "1"
+    os.environ["TF_ENABLE_AUTO_MIXED_PRECISION_LOSS_SCALING"] = "1"
+  if xla:
+      # For XLA
+      # Ru this TF_XLA_FLAGS=--tf_xla_auto_jit=2 python official/resnet/resnet_main.py --use_tpu=False --mode=train --data_dir=/home/ubuntu/data/tf_records --model_dir=/home/ubuntu/model --train_batch_size=100 --train_steps=112590 --iterations_per_loop=1251 2>&1 | tee run.log 
+      os.environ['TF_XLA_FLAGS'] = 'TF_XLA_FLAGS=--tf_xla_auto_jit=2'#'--tf_xla_enable_xla_devices'
+
   params.validate()
   params.lock()
   tf.logging.info('Params:\n%s', pprint.pformat(params.as_dict()))
@@ -695,6 +721,10 @@ def main(unused_argv):
     save_checkpoints_steps = None
   else:
     save_checkpoints_steps = max(5000, params.iterations_per_loop)
+
+  # Enable XLA
+  session_config = tf.GraphOptions(rewrite_options=rewriter_config_pb2.RewriterConfig(disable_meta_optimizer=True))
+
   config = tf.estimator.tpu.RunConfig(
       cluster=None, #tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
@@ -703,9 +733,7 @@ def main(unused_argv):
       train_distribute=tf.distribute.MirroredStrategy(),
       eval_distribute=tf.distribute.MirroredStrategy(),
       session_config=tf.ConfigProto(
-          graph_options=tf.GraphOptions(
-              rewrite_options=rewriter_config_pb2.RewriterConfig(
-                  disable_meta_optimizer=True))),
+          graph_options=session_config),
       tpu_config=tf.estimator.tpu.TPUConfig(
           iterations_per_loop=params.iterations_per_loop,
           num_shards=params.num_cores,
