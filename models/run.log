@@ -1,0 +1,266 @@
+WARNING:tensorflow:From /home/ubuntu/anaconda3/envs/tensorflow2_latest_p37/gpu_cuda11.0/lib/python3.7/site-packages/tensorflow/python/compat/v2_compat.py:96: disable_resource_variables (from tensorflow.python.ops.variable_scope) is deprecated and will be removed in a future version.
+Instructions for updating:
+non-resource variables are not supported in the long term
+W0803 09:39:46.753082 139809987172160 flags_to_params.py:44] Flag tpu is None.
+INFO:tensorflow:Params:
+{'augment_name': None,
+ 'base_learning_rate': 0.1,
+ 'bn_momentum': 0.9,
+ 'data_dir': '/home/ubuntu/data/',
+ 'data_format': 'channels_last',
+ 'drop_connect_rate': None,
+ 'dropblock_groups': '',
+ 'dropblock_keep_prob': None,
+ 'dropblock_size': 7,
+ 'dropout_rate': None,
+ 'enable_lars': False,
+ 'eval_batch_size': 1024,
+ 'image_size': 224,
+ 'iterations_per_loop': 1251,
+ 'label_smoothing': 0.0,
+ 'model_dir': '/home/ubuntu/model',
+ 'momentum': 0.9,
+ 'moving_average_decay': 0,
+ 'norm_act_layer': 'bn_relu',
+ 'num_cores': 8,
+ 'num_eval_images': 50000,
+ 'num_label_classes': 1000,
+ 'num_parallel_calls': 8,
+ 'num_train_images': 1281167,
+ 'poly_rate': 0.0,
+ 'pre_activation': False,
+ 'precision': 'float32',
+ 'randaug_magnitude': None,
+ 'randaug_num_layers': None,
+ 'replace_stem_max_pool': False,
+ 'resnet_depth': 50,
+ 'resnetd_shortcut': False,
+ 'se_ratio': None,
+ 'skip_host_call': False,
+ 'train_batch_size': 128,
+ 'train_steps': 112590,
+ 'transpose_input': True,
+ 'use_async_checkpointing': False,
+ 'use_cache': True,
+ 'use_resnetd_stem': False,
+ 'use_tpu': False,
+ 'weight_decay': 0.0001}
+I0803 09:39:46.753675 139809987172160 resnet_main.py:699] Params:
+{'augment_name': None,
+ 'base_learning_rate': 0.1,
+ 'bn_momentum': 0.9,
+ 'data_dir': '/home/ubuntu/data/',
+ 'data_format': 'channels_last',
+ 'drop_connect_rate': None,
+ 'dropblock_groups': '',
+ 'dropblock_keep_prob': None,
+ 'dropblock_size': 7,
+ 'dropout_rate': None,
+ 'enable_lars': False,
+ 'eval_batch_size': 1024,
+ 'image_size': 224,
+ 'iterations_per_loop': 1251,
+ 'label_smoothing': 0.0,
+ 'model_dir': '/home/ubuntu/model',
+ 'momentum': 0.9,
+ 'moving_average_decay': 0,
+ 'norm_act_layer': 'bn_relu',
+ 'num_cores': 8,
+ 'num_eval_images': 50000,
+ 'num_label_classes': 1000,
+ 'num_parallel_calls': 8,
+ 'num_train_images': 1281167,
+ 'poly_rate': 0.0,
+ 'pre_activation': False,
+ 'precision': 'float32',
+ 'randaug_magnitude': None,
+ 'randaug_num_layers': None,
+ 'replace_stem_max_pool': False,
+ 'resnet_depth': 50,
+ 'resnetd_shortcut': False,
+ 'se_ratio': None,
+ 'skip_host_call': False,
+ 'train_batch_size': 128,
+ 'train_steps': 112590,
+ 'transpose_input': True,
+ 'use_async_checkpointing': False,
+ 'use_cache': True,
+ 'use_resnetd_stem': False,
+ 'use_tpu': False,
+ 'weight_decay': 0.0001}
+WARNING:tensorflow:From official/resnet/resnet_main.py:711: The name tf.estimator.tpu.RunConfig is deprecated. Please use tf.compat.v1.estimator.tpu.RunConfig instead.
+
+W0803 09:39:47.604891 139809987172160 module_wrapper.py:138] From official/resnet/resnet_main.py:711: The name tf.estimator.tpu.RunConfig is deprecated. Please use tf.compat.v1.estimator.tpu.RunConfig instead.
+
+INFO:tensorflow:Using MirroredStrategy with devices ('/replica:0/task:0/device:GPU:0', '/replica:0/task:0/device:GPU:1', '/replica:0/task:0/device:GPU:2', '/replica:0/task:0/device:GPU:3', '/replica:0/task:0/device:GPU:4', '/replica:0/task:0/device:GPU:5', '/replica:0/task:0/device:GPU:6', '/replica:0/task:0/device:GPU:7')
+I0803 09:39:52.503415 139809987172160 mirrored_strategy.py:350] Using MirroredStrategy with devices ('/replica:0/task:0/device:GPU:0', '/replica:0/task:0/device:GPU:1', '/replica:0/task:0/device:GPU:2', '/replica:0/task:0/device:GPU:3', '/replica:0/task:0/device:GPU:4', '/replica:0/task:0/device:GPU:5', '/replica:0/task:0/device:GPU:6', '/replica:0/task:0/device:GPU:7')
+INFO:tensorflow:Using MirroredStrategy with devices ('/replica:0/task:0/device:GPU:0', '/replica:0/task:0/device:GPU:1', '/replica:0/task:0/device:GPU:2', '/replica:0/task:0/device:GPU:3', '/replica:0/task:0/device:GPU:4', '/replica:0/task:0/device:GPU:5', '/replica:0/task:0/device:GPU:6', '/replica:0/task:0/device:GPU:7')
+I0803 09:39:52.578093 139809987172160 mirrored_strategy.py:350] Using MirroredStrategy with devices ('/replica:0/task:0/device:GPU:0', '/replica:0/task:0/device:GPU:1', '/replica:0/task:0/device:GPU:2', '/replica:0/task:0/device:GPU:3', '/replica:0/task:0/device:GPU:4', '/replica:0/task:0/device:GPU:5', '/replica:0/task:0/device:GPU:6', '/replica:0/task:0/device:GPU:7')
+WARNING:tensorflow:From official/resnet/resnet_main.py:720: The name tf.estimator.tpu.TPUConfig is deprecated. Please use tf.compat.v1.estimator.tpu.TPUConfig instead.
+
+W0803 09:39:52.578595 139809987172160 module_wrapper.py:138] From official/resnet/resnet_main.py:720: The name tf.estimator.tpu.TPUConfig is deprecated. Please use tf.compat.v1.estimator.tpu.TPUConfig instead.
+
+WARNING:tensorflow:From official/resnet/resnet_main.py:723: The name tf.estimator.tpu.InputPipelineConfig is deprecated. Please use tf.compat.v1.estimator.tpu.InputPipelineConfig instead.
+
+W0803 09:39:52.578706 139809987172160 module_wrapper.py:138] From official/resnet/resnet_main.py:723: The name tf.estimator.tpu.InputPipelineConfig is deprecated. Please use tf.compat.v1.estimator.tpu.InputPipelineConfig instead.
+
+INFO:tensorflow:Initializing RunConfig with distribution strategies.
+I0803 09:39:52.579045 139809987172160 run_config.py:584] Initializing RunConfig with distribution strategies.
+INFO:tensorflow:Not using Distribute Coordinator.
+I0803 09:39:52.579163 139809987172160 estimator_training.py:167] Not using Distribute Coordinator.
+WARNING:tensorflow:From official/resnet/resnet_main.py:726: The name tf.estimator.tpu.TPUEstimator is deprecated. Please use tf.compat.v1.estimator.tpu.TPUEstimator instead.
+
+W0803 09:39:52.579271 139809987172160 module_wrapper.py:138] From official/resnet/resnet_main.py:726: The name tf.estimator.tpu.TPUEstimator is deprecated. Please use tf.compat.v1.estimator.tpu.TPUEstimator instead.
+
+INFO:tensorflow:Using config: {'_model_dir': '/home/ubuntu/model', '_tf_random_seed': None, '_save_summary_steps': 100, '_save_checkpoints_steps': 5000, '_save_checkpoints_secs': None, '_session_config': graph_options {
+  rewrite_options {
+    disable_meta_optimizer: true
+  }
+}
+, '_keep_checkpoint_max': 5, '_keep_checkpoint_every_n_hours': 10000, '_log_step_count_steps': None, '_train_distribute': <tensorflow.python.distribute.mirrored_strategy.MirroredStrategyV1 object at 0x7f27e5d6a610>, '_device_fn': None, '_protocol': None, '_eval_distribute': <tensorflow.python.distribute.mirrored_strategy.MirroredStrategyV1 object at 0x7f27f7ef2210>, '_experimental_distribute': None, '_experimental_max_worker_delay_secs': None, '_session_creation_timeout_secs': 7200, '_checkpoint_save_graph_def': True, '_service': None, '_cluster_spec': ClusterSpec({}), '_task_type': 'worker', '_task_id': 0, '_global_id_in_cluster': 0, '_master': '', '_evaluation_master': '', '_is_chief': True, '_num_ps_replicas': 0, '_num_worker_replicas': 1, '_distribute_coordinator_mode': None, '_tpu_config': TPUConfig(iterations_per_loop=1251, num_shards=8, num_cores_per_replica=None, per_host_input_for_training=3, tpu_job_name=None, initial_infeed_sleep_secs=None, input_partition_dims=None, eval_training_input_configuration=2, experimental_host_call_every_n_steps=1, experimental_allow_per_host_v2_parallel_get_next=False, experimental_feed_hook=None), '_cluster': None}
+I0803 09:39:52.580219 139809987172160 estimator.py:192] Using config: {'_model_dir': '/home/ubuntu/model', '_tf_random_seed': None, '_save_summary_steps': 100, '_save_checkpoints_steps': 5000, '_save_checkpoints_secs': None, '_session_config': graph_options {
+  rewrite_options {
+    disable_meta_optimizer: true
+  }
+}
+, '_keep_checkpoint_max': 5, '_keep_checkpoint_every_n_hours': 10000, '_log_step_count_steps': None, '_train_distribute': <tensorflow.python.distribute.mirrored_strategy.MirroredStrategyV1 object at 0x7f27e5d6a610>, '_device_fn': None, '_protocol': None, '_eval_distribute': <tensorflow.python.distribute.mirrored_strategy.MirroredStrategyV1 object at 0x7f27f7ef2210>, '_experimental_distribute': None, '_experimental_max_worker_delay_secs': None, '_session_creation_timeout_secs': 7200, '_checkpoint_save_graph_def': True, '_service': None, '_cluster_spec': ClusterSpec({}), '_task_type': 'worker', '_task_id': 0, '_global_id_in_cluster': 0, '_master': '', '_evaluation_master': '', '_is_chief': True, '_num_ps_replicas': 0, '_num_worker_replicas': 1, '_distribute_coordinator_mode': None, '_tpu_config': TPUConfig(iterations_per_loop=1251, num_shards=8, num_cores_per_replica=None, per_host_input_for_training=3, tpu_job_name=None, initial_infeed_sleep_secs=None, input_partition_dims=None, eval_training_input_configuration=2, experimental_host_call_every_n_steps=1, experimental_allow_per_host_v2_parallel_get_next=False, experimental_feed_hook=None), '_cluster': None}
+INFO:tensorflow:_TPUContext: eval_on_tpu True
+I0803 09:39:52.580475 139809987172160 tpu_context.py:271] _TPUContext: eval_on_tpu True
+WARNING:tensorflow:eval_on_tpu ignored because use_tpu is False.
+W0803 09:39:52.580622 139809987172160 tpu_context.py:273] eval_on_tpu ignored because use_tpu is False.
+INFO:tensorflow:Precision: float32
+I0803 09:39:52.580673 139809987172160 resnet_main.py:739] Precision: float32
+INFO:tensorflow:Using dataset: /home/ubuntu/data/
+I0803 09:39:52.580726 139809987172160 resnet_main.py:763] Using dataset: /home/ubuntu/data/
+INFO:tensorflow:Training for 112590 steps (11.25 epochs in total). Current step 0.
+I0803 09:39:52.581054 139809987172160 resnet_main.py:825] Training for 112590 steps (11.25 epochs in total). Current step 0.
+WARNING:tensorflow:From /home/ubuntu/tpu/models/official/resnet/imagenet_input.py:356: parallel_interleave (from tensorflow.python.data.experimental.ops.interleave_ops) is deprecated and will be removed in a future version.
+Instructions for updating:
+Use `tf.data.Dataset.interleave(map_func, cycle_length, block_length, num_parallel_calls=tf.data.AUTOTUNE)` instead. If sloppy execution is desired, use `tf.data.Options.experimental_deterministic`.
+W0803 09:39:52.593989 139809987172160 deprecation.py:339] From /home/ubuntu/tpu/models/official/resnet/imagenet_input.py:356: parallel_interleave (from tensorflow.python.data.experimental.ops.interleave_ops) is deprecated and will be removed in a future version.
+Instructions for updating:
+Use `tf.data.Dataset.interleave(map_func, cycle_length, block_length, num_parallel_calls=tf.data.AUTOTUNE)` instead. If sloppy execution is desired, use `tf.data.Options.experimental_deterministic`.
+WARNING:tensorflow:From /home/ubuntu/tpu/models/official/resnet/imagenet_input.py:360: shuffle_and_repeat (from tensorflow.python.data.experimental.ops.shuffle_ops) is deprecated and will be removed in a future version.
+Instructions for updating:
+Use `tf.data.Dataset.shuffle(buffer_size, seed)` followed by `tf.data.Dataset.repeat(count)`. Static tf.data optimizations will take care of using the fused implementation.
+W0803 09:39:52.640557 139809987172160 deprecation.py:339] From /home/ubuntu/tpu/models/official/resnet/imagenet_input.py:360: shuffle_and_repeat (from tensorflow.python.data.experimental.ops.shuffle_ops) is deprecated and will be removed in a future version.
+Instructions for updating:
+Use `tf.data.Dataset.shuffle(buffer_size, seed)` followed by `tf.data.Dataset.repeat(count)`. Static tf.data optimizations will take care of using the fused implementation.
+WARNING:tensorflow:From /home/ubuntu/tpu/models/official/resnet/imagenet_input.py:206: map_and_batch (from tensorflow.python.data.experimental.ops.batching) is deprecated and will be removed in a future version.
+Instructions for updating:
+Use `tf.data.Dataset.map(map_func, num_parallel_calls)` followed by `tf.data.Dataset.batch(batch_size, drop_remainder)`. Static tf.data optimizations will take care of using the fused implementation.
+W0803 09:39:52.642029 139809987172160 deprecation.py:339] From /home/ubuntu/tpu/models/official/resnet/imagenet_input.py:206: map_and_batch (from tensorflow.python.data.experimental.ops.batching) is deprecated and will be removed in a future version.
+Instructions for updating:
+Use `tf.data.Dataset.map(map_func, num_parallel_calls)` followed by `tf.data.Dataset.batch(batch_size, drop_remainder)`. Static tf.data optimizations will take care of using the fused implementation.
+WARNING:tensorflow:From /home/ubuntu/anaconda3/envs/tensorflow2_latest_p37/gpu_cuda11.0/lib/python3.7/site-packages/tensorflow/python/util/dispatch.py:201: sample_distorted_bounding_box (from tensorflow.python.ops.image_ops_impl) is deprecated and will be removed in a future version.
+Instructions for updating:
+`seed2` arg is deprecated.Use sample_distorted_bounding_box_v2 instead.
+W0803 09:39:53.051217 139809987172160 deprecation.py:339] From /home/ubuntu/anaconda3/envs/tensorflow2_latest_p37/gpu_cuda11.0/lib/python3.7/site-packages/tensorflow/python/util/dispatch.py:201: sample_distorted_bounding_box (from tensorflow.python.ops.image_ops_impl) is deprecated and will be removed in a future version.
+Instructions for updating:
+`seed2` arg is deprecated.Use sample_distorted_bounding_box_v2 instead.
+INFO:tensorflow:Calling model_fn.
+I0803 09:39:53.607462 139781631624960 api.py:479] Calling model_fn.
+INFO:tensorflow:Running train on CPU/GPU
+I0803 09:39:55.182162 139781631624960 api.py:479] Running train on CPU/GPU
+WARNING:tensorflow:From /home/ubuntu/anaconda3/envs/tensorflow2_latest_p37/gpu_cuda11.0/lib/python3.7/site-packages/tensorflow/python/autograph/converters/directives.py:130: The name tf.estimator.tpu.TPUEstimatorSpec is deprecated. Please use tf.compat.v1.estimator.tpu.TPUEstimatorSpec instead.
+
+W0803 09:39:55.797909 139781631624960 module_wrapper.py:138] From /home/ubuntu/anaconda3/envs/tensorflow2_latest_p37/gpu_cuda11.0/lib/python3.7/site-packages/tensorflow/python/autograph/converters/directives.py:130: The name tf.estimator.tpu.TPUEstimatorSpec is deprecated. Please use tf.compat.v1.estimator.tpu.TPUEstimatorSpec instead.
+
+/home/ubuntu/anaconda3/envs/tensorflow2_latest_p37/gpu_cuda11.0/lib/python3.7/site-packages/tensorflow/python/keras/legacy_tf_layers/convolutional.py:414: UserWarning: `tf.layers.conv2d` is deprecated and will be removed in a future version. Please Use `tf.keras.layers.Conv2D` instead.
+  warnings.warn('`tf.layers.conv2d` is deprecated and '
+/home/ubuntu/anaconda3/envs/tensorflow2_latest_p37/gpu_cuda11.0/lib/python3.7/site-packages/tensorflow/python/keras/engine/base_layer_v1.py:1719: UserWarning: `layer.apply` is deprecated and will be removed in a future version. Please use `layer.__call__` method instead.
+  warnings.warn('`layer.apply` is deprecated and '
+/home/ubuntu/anaconda3/envs/tensorflow2_latest_p37/gpu_cuda11.0/lib/python3.7/site-packages/tensorflow/python/keras/legacy_tf_layers/normalization.py:308: UserWarning: `tf.layers.batch_normalization` is deprecated and will be removed in a future version. Please use `tf.keras.layers.BatchNormalization` instead. In particular, `tf.control_dependencies(tf.GraphKeys.UPDATE_OPS)` should not be used (consult the `tf.keras.layers.BatchNormalization` documentation).
+  '`tf.layers.batch_normalization` is deprecated and '
+/home/ubuntu/anaconda3/envs/tensorflow2_latest_p37/gpu_cuda11.0/lib/python3.7/site-packages/tensorflow/python/keras/legacy_tf_layers/pooling.py:310: UserWarning: `tf.layers.max_pooling2d` is deprecated and will be removed in a future version. Please use `tf.keras.layers.MaxPooling2D` instead.
+  warnings.warn('`tf.layers.max_pooling2d` is deprecated and '
+/home/ubuntu/anaconda3/envs/tensorflow2_latest_p37/gpu_cuda11.0/lib/python3.7/site-packages/tensorflow/python/keras/legacy_tf_layers/pooling.py:236: UserWarning: `tf.layers.average_pooling2d` is deprecated and will be removed in a future version. Please use `tf.keras.layers.AveragePooling2D` instead.
+  warnings.warn('`tf.layers.average_pooling2d` is deprecated and '
+/home/ubuntu/anaconda3/envs/tensorflow2_latest_p37/gpu_cuda11.0/lib/python3.7/site-packages/tensorflow/python/keras/legacy_tf_layers/core.py:171: UserWarning: `tf.layers.dense` is deprecated and will be removed in a future version. Please use `tf.keras.layers.Dense` instead.
+  warnings.warn('`tf.layers.dense` is deprecated and '
+INFO:tensorflow:Calling model_fn.
+I0803 09:40:04.542257 139781623232256 api.py:479] Calling model_fn.
+INFO:tensorflow:Running train on CPU/GPU
+I0803 09:40:04.543516 139781623232256 api.py:479] Running train on CPU/GPU
+INFO:tensorflow:Calling model_fn.
+I0803 09:40:06.340046 139781614839552 api.py:479] Calling model_fn.
+INFO:tensorflow:Running train on CPU/GPU
+I0803 09:40:06.341055 139781614839552 api.py:479] Running train on CPU/GPU
+INFO:tensorflow:Calling model_fn.
+I0803 09:40:08.405181 139781606446848 api.py:479] Calling model_fn.
+INFO:tensorflow:Running train on CPU/GPU
+I0803 09:40:08.406299 139781606446848 api.py:479] Running train on CPU/GPU
+INFO:tensorflow:Calling model_fn.
+I0803 09:40:10.533782 139780314625792 api.py:479] Calling model_fn.
+INFO:tensorflow:Running train on CPU/GPU
+I0803 09:40:10.534827 139780314625792 api.py:479] Running train on CPU/GPU
+INFO:tensorflow:Calling model_fn.
+I0803 09:40:12.904958 139780306233088 api.py:479] Calling model_fn.
+INFO:tensorflow:Running train on CPU/GPU
+I0803 09:40:12.906047 139780306233088 api.py:479] Running train on CPU/GPU
+INFO:tensorflow:Calling model_fn.
+I0803 09:40:15.546494 139780297840384 api.py:479] Calling model_fn.
+INFO:tensorflow:Running train on CPU/GPU
+I0803 09:40:15.547550 139780297840384 api.py:479] Running train on CPU/GPU
+INFO:tensorflow:Calling model_fn.
+I0803 09:40:18.545397 139780289447680 api.py:479] Calling model_fn.
+INFO:tensorflow:Running train on CPU/GPU
+I0803 09:40:18.546474 139780289447680 api.py:479] Running train on CPU/GPU
+INFO:tensorflow:batch_all_reduce: 161 all-reduces with algorithm = nccl, num_packs = 1
+I0803 09:40:21.705314 139809987172160 cross_device_ops.py:847] batch_all_reduce: 161 all-reduces with algorithm = nccl, num_packs = 1
+INFO:tensorflow:Done calling model_fn.
+I0803 09:40:41.880970 139781631624960 api.py:479] Done calling model_fn.
+INFO:tensorflow:Done calling model_fn.
+I0803 09:40:41.903018 139781623232256 api.py:479] Done calling model_fn.
+INFO:tensorflow:Done calling model_fn.
+I0803 09:40:41.924298 139781614839552 api.py:479] Done calling model_fn.
+INFO:tensorflow:Done calling model_fn.
+I0803 09:40:41.945406 139781606446848 api.py:479] Done calling model_fn.
+INFO:tensorflow:Done calling model_fn.
+I0803 09:40:41.967176 139780314625792 api.py:479] Done calling model_fn.
+INFO:tensorflow:Done calling model_fn.
+I0803 09:40:41.989030 139780306233088 api.py:479] Done calling model_fn.
+INFO:tensorflow:Done calling model_fn.
+I0803 09:40:42.010580 139780297840384 api.py:479] Done calling model_fn.
+INFO:tensorflow:Done calling model_fn.
+I0803 09:40:42.031991 139780289447680 api.py:479] Done calling model_fn.
+INFO:tensorflow:Reduce to /replica:0/task:0/device:CPU:0 then broadcast to ('/replica:0/task:0/device:CPU:0',).
+I0803 09:40:42.033955 139809987172160 cross_device_ops.py:565] Reduce to /replica:0/task:0/device:CPU:0 then broadcast to ('/replica:0/task:0/device:CPU:0',).
+INFO:tensorflow:Create CheckpointSaverHook.
+I0803 09:40:43.885584 139809987172160 basic_session_run_hooks.py:546] Create CheckpointSaverHook.
+WARNING:tensorflow:From /home/ubuntu/anaconda3/envs/tensorflow2_latest_p37/lib/python3.7/site-packages/tensorflow_estimator/python/estimator/util.py:96: DistributedIteratorV1.initialize (from tensorflow.python.distribute.input_lib) is deprecated and will be removed in a future version.
+Instructions for updating:
+Use the iterator's `initializer` property instead.
+W0803 09:41:01.146029 139809987172160 deprecation.py:339] From /home/ubuntu/anaconda3/envs/tensorflow2_latest_p37/lib/python3.7/site-packages/tensorflow_estimator/python/estimator/util.py:96: DistributedIteratorV1.initialize (from tensorflow.python.distribute.input_lib) is deprecated and will be removed in a future version.
+Instructions for updating:
+Use the iterator's `initializer` property instead.
+INFO:tensorflow:Reduce to /replica:0/task:0/device:CPU:0 then broadcast to ('/replica:0/task:0/device:CPU:0',).
+I0803 09:41:03.536312 139809987172160 cross_device_ops.py:565] Reduce to /replica:0/task:0/device:CPU:0 then broadcast to ('/replica:0/task:0/device:CPU:0',).
+INFO:tensorflow:Reduce to /replica:0/task:0/device:CPU:0 then broadcast to ('/replica:0/task:0/device:CPU:0',).
+I0803 09:41:03.540358 139809987172160 cross_device_ops.py:565] Reduce to /replica:0/task:0/device:CPU:0 then broadcast to ('/replica:0/task:0/device:CPU:0',).
+INFO:tensorflow:Reduce to /replica:0/task:0/device:CPU:0 then broadcast to ('/replica:0/task:0/device:CPU:0',).
+I0803 09:41:03.548108 139809987172160 cross_device_ops.py:565] Reduce to /replica:0/task:0/device:CPU:0 then broadcast to ('/replica:0/task:0/device:CPU:0',).
+INFO:tensorflow:Reduce to /replica:0/task:0/device:CPU:0 then broadcast to ('/replica:0/task:0/device:CPU:0',).
+I0803 09:41:03.551898 139809987172160 cross_device_ops.py:565] Reduce to /replica:0/task:0/device:CPU:0 then broadcast to ('/replica:0/task:0/device:CPU:0',).
+INFO:tensorflow:Reduce to /replica:0/task:0/device:CPU:0 then broadcast to ('/replica:0/task:0/device:CPU:0',).
+I0803 09:41:03.559479 139809987172160 cross_device_ops.py:565] Reduce to /replica:0/task:0/device:CPU:0 then broadcast to ('/replica:0/task:0/device:CPU:0',).
+INFO:tensorflow:Reduce to /replica:0/task:0/device:CPU:0 then broadcast to ('/replica:0/task:0/device:CPU:0',).
+I0803 09:41:03.563181 139809987172160 cross_device_ops.py:565] Reduce to /replica:0/task:0/device:CPU:0 then broadcast to ('/replica:0/task:0/device:CPU:0',).
+INFO:tensorflow:Reduce to /replica:0/task:0/device:CPU:0 then broadcast to ('/replica:0/task:0/device:CPU:0',).
+I0803 09:41:03.570720 139809987172160 cross_device_ops.py:565] Reduce to /replica:0/task:0/device:CPU:0 then broadcast to ('/replica:0/task:0/device:CPU:0',).
+INFO:tensorflow:Reduce to /replica:0/task:0/device:CPU:0 then broadcast to ('/replica:0/task:0/device:CPU:0',).
+I0803 09:41:03.574940 139809987172160 cross_device_ops.py:565] Reduce to /replica:0/task:0/device:CPU:0 then broadcast to ('/replica:0/task:0/device:CPU:0',).
+INFO:tensorflow:Reduce to /replica:0/task:0/device:CPU:0 then broadcast to ('/replica:0/task:0/device:CPU:0',).
+I0803 09:41:03.582626 139809987172160 cross_device_ops.py:565] Reduce to /replica:0/task:0/device:CPU:0 then broadcast to ('/replica:0/task:0/device:CPU:0',).
+INFO:tensorflow:Graph was finalized.
+I0803 09:41:07.170394 139809987172160 monitored_session.py:246] Graph was finalized.
+INFO:tensorflow:Running local_init_op.
+I0803 09:41:36.430108 139809987172160 session_manager.py:505] Running local_init_op.
+INFO:tensorflow:Done running local_init_op.
+I0803 09:41:40.273209 139809987172160 session_manager.py:508] Done running local_init_op.
+INFO:tensorflow:Calling checkpoint listeners before saving checkpoint 0...
+I0803 09:43:18.839676 139809987172160 basic_session_run_hooks.py:614] Calling checkpoint listeners before saving checkpoint 0...
+INFO:tensorflow:Saving checkpoints for 0 into /home/ubuntu/model/model.ckpt.
+I0803 09:43:19.693045 139809987172160 basic_session_run_hooks.py:618] Saving checkpoints for 0 into /home/ubuntu/model/model.ckpt.
+INFO:tensorflow:Calling checkpoint listeners after saving checkpoint 0...
+I0803 09:43:34.784770 139809987172160 basic_session_run_hooks.py:626] Calling checkpoint listeners after saving checkpoint 0...

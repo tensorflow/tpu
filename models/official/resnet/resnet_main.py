@@ -730,8 +730,8 @@ def main(unused_argv):
       model_dir=FLAGS.model_dir,
       save_checkpoints_steps=save_checkpoints_steps,
       log_step_count_steps=FLAGS.log_step_count_steps,
-      train_distribute=tf.distribute.MirroredStrategy(),
-      eval_distribute=tf.distribute.MirroredStrategy(),
+      train_distribute=tf.distribute.MultiWorkerMirroredStrategy(),
+      eval_distribute=tf.distribute.MultiWorkerMirroredStrategy(),
       session_config=tf.ConfigProto(
           graph_options=session_config),
       tpu_config=tf.estimator.tpu.TPUConfig(
