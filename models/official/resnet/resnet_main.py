@@ -519,7 +519,7 @@ def resnet_model_fn(features, labels, mode, params):
       # user, this should look like regular synchronous training.
       optimizer = tf.tpu.CrossShardOptimizer(optimizer)
 
-    if True:
+    if False:
         optimizer = tf.train.experimental.enable_mixed_precision_graph_rewrite(optimizer)
     # Batch normalization requires UPDATE_OPS to be added as a dependency to
     # the train operation.
@@ -700,7 +700,7 @@ def main(unused_argv):
   params = flags_to_params.override_params_from_input_flags(params, FLAGS)
 
   # Enable AMP
-  amp = True
+  amp = False
   xla = False
   # Step 1: Set up Docker https://ngc.nvidia.com/catalog/containers/nvidia:tensorflow
   # Step 2: add --amp flag
