@@ -27,7 +27,7 @@ RESNET_CFG = {
     'use_tpu': False,
     'num_cores': 8,
     'enable_lars': False,
-    'transpose_input': True,
+    'transpose_input': False,
     'precision': 'float32',
     'num_label_classes': 1000,
     'use_cache': True,
