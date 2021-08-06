@@ -724,14 +724,15 @@ def main(unused_argv):
 
   # Enable XLA
   session_config = tf.GraphOptions(rewrite_options=rewriter_config_pb2.RewriterConfig(disable_meta_optimizer=True))
+  strategy = tf.distribute.MirroredStrategy(cross_device_ops=tf.distribute.NcclAllReduce())
 
   config = tf.estimator.tpu.RunConfig(
       cluster=None, #tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
       save_checkpoints_steps=save_checkpoints_steps,
       log_step_count_steps=FLAGS.log_step_count_steps,
-      train_distribute=tf.compat.v1.distribute.experimental.MultiWorkerMirroredStrategy(),
-      eval_distribute=tf.compat.v1.distribute.experimental.MultiWorkerMirroredStrategy(),
+      train_distribute=strategy,
+      eval_distribute=strategy,
       session_config=tf.ConfigProto(
           graph_options=session_config),
       tpu_config=tf.estimator.tpu.TPUConfig(
