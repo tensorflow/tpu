@@ -44,7 +44,7 @@ RESNET_CFG = {
     'dropblock_size': 7,
     'pre_activation': False,
     'norm_act_layer': 'bn_relu',
-    'data_format': 'channels_last',
+    'data_format': 'channels_first',
     'augment_name': None,
     'randaug_magnitude': None,
     'randaug_num_layers': None,
