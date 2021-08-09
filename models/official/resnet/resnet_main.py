@@ -12,7 +12,49 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Train a ResNet-50 model on ImageNet on TPU."""
+"""Train a ResNet-50 model on ImageNet on TPU.
+
+# Train on GPUs.
+python resnet_main.py --use_tpu=False --mode=train \
+  --model_dir=/home/ubuntu/resnet-model \
+  --data_dir=gs://cloud-tpu-test-datasets/fake_imagenet \
+  --train_batch_size=256 --train_steps=112590 --iterations_per_loop=1251 2>&1 | tee run.log
+
+V100 16GB
+
+  Problem: bs=256 has some improvement over bs=128, but only ~1.+x
+
+float32, BS=128:     365 imgs/sec
+AMP float16, BS=128: 730 imgs/sec
+AMP float16, BS=256: 750 imgs/sec    *** Why?
+TODO: enable XLA
+
+  amp noxla
+    - bs=256 OOMs
+    - bs=128 - 360 imgs/sec
+
+   disable_meta_optimizer=False
+    - bs=256 - 750 imgs/sec
+    - bs=128 - 730 imgs/sec
+
+  noamp noxla
+    - bs=256 OOMs
+    - bs=128 - 365 imgs/sec
+
+   disable_meta_optimizer=False
+    - bs=256 OOMs
+    - bs=128 - 370 imgs/sec
+
+  -------
+
+  amp xla
+    - bs=256 OOMs
+    - bs=128 - 360 imgs/sec
+
+    disable_meta_optimizer=False
+
+      (jit={1,2,fusible}) no longer printing thput, altho GPU has util.
+"""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -467,10 +509,9 @@ def resnet_model_fn(features, labels, mode, params):
         export_outputs={
             'classify': tf.estimator.export.PredictOutput(predictions)},
         scaffold_fn=scaffold_fn)
-  #print(params)
   # If necessary, in the model_fn, use params['batch_size'] instead the batch
   # size flags (--train_batch_size or --eval_batch_size).
-  #batch_size = params['batch_size']   # pylint: disable=unused-variable
+  batch_size = params['batch_size']   # pylint: disable=unused-variable
 
   # Calculate loss, which includes softmax cross entropy and L2 regularization.
   one_hot_labels = tf.one_hot(labels, params['num_label_classes'])
@@ -519,7 +560,7 @@ def resnet_model_fn(features, labels, mode, params):
       # user, this should look like regular synchronous training.
       optimizer = tf.tpu.CrossShardOptimizer(optimizer)
 
-    if True:
+    if FLAGS.amp:
         optimizer = tf.train.experimental.enable_mixed_precision_graph_rewrite(optimizer)
     # Batch normalization requires UPDATE_OPS to be added as a dependency to
     # the train operation.
@@ -700,20 +741,29 @@ def main(unused_argv):
   params = flags_to_params.override_params_from_input_flags(params, FLAGS)
 
   # Enable AMP
-  amp = True
-  xla = False
+  amp = FLAGS.amp
+  xla = FLAGS.xla
   # Step 1: Set up Docker https://ngc.nvidia.com/catalog/containers/nvidia:tensorflow
   # Step 2: add --amp flag
-  import os
-  print(amp, xla)
   if amp:
-    os.environ["TF_ENABLE_AUTO_MIXED_PRECISION_GRAPH_REWRITE"] = "1"
-    os.environ['TF_ENABLE_AUTO_MIXED_PRECISION'] = "1"
-    os.environ["TF_ENABLE_AUTO_MIXED_PRECISION_LOSS_SCALING"] = "1"
+    pass
+    # These two lines have no effect.
+    # os.environ['TF_CPP_VMODULE'] = 'auto_mixed_precision=2'
+    # os.environ['TF_AUTO_MIXED_PRECISION_GRAPH_REWRITE_LOG_PATH'] = '/home/ubuntu/amp-log'
+
+    # These three lines are redundant.
+    # os.environ['TF_ENABLE_AUTO_MIXED_PRECISION_GRAPH_REWRITE'] = '1'
+    # os.environ['TF_ENABLE_AUTO_MIXED_PRECISION'] = '1'
+    # os.environ['TF_ENABLE_AUTO_MIXED_PRECISION_LOSS_SCALING'] = '1'
   if xla:
-      # For XLA
-      # Ru this TF_XLA_FLAGS=--tf_xla_auto_jit=2 python official/resnet/resnet_main.py --use_tpu=False --mode=train --data_dir=/home/ubuntu/data/tf_records --model_dir=/home/ubuntu/model --train_batch_size=100 --train_steps=112590 --iterations_per_loop=1251 2>&1 | tee run.log 
-      os.environ['TF_XLA_FLAGS'] = 'TF_XLA_FLAGS=--tf_xla_auto_jit=2'#'--tf_xla_enable_xla_devices'
+      # https://github.com/tensorflow/tensorflow/blob/8d72537c6abf5a44103b57b9c2e22c14f5f49698/tensorflow/compiler/jit/flags.cc#L78-L87
+      # 1: on for things very likely to be improved
+      # 2: on for everything
+      # fusible: only for Tensorflow operations that XLA knows how to fuse
+      #
+      # os.environ['TF_XLA_FLAGS'] = '--tf_xla_auto_jit=1'
+      os.environ['TF_XLA_FLAGS'] = '--tf_xla_auto_jit=2'
+      # os.environ['TF_XLA_FLAGS'] = '--tf_xla_auto_jit=fusible'
 
   params.validate()
   params.lock()
@@ -726,9 +776,13 @@ def main(unused_argv):
   else:
     save_checkpoints_steps = max(5000, params.iterations_per_loop)
 
-  # Enable XLA
-  session_config = tf.GraphOptions(rewrite_options=rewriter_config_pb2.RewriterConfig(disable_meta_optimizer=True))
-  strategy = tf.distribute.MirroredStrategy(cross_device_ops=tf.distribute.NcclAllReduce())
+  session_config = tf.GraphOptions(
+    rewrite_options=rewriter_config_pb2.RewriterConfig(
+      # disable_meta_optimizer=True,  # NOTE: this line would keep AMP disabled.
+      auto_mixed_precision=1 if FLAGS.amp else 2,
+  ))
+  strategy = tf.distribute.MirroredStrategy(
+    cross_device_ops=tf.distribute.NcclAllReduce())
 
   config = tf.estimator.tpu.RunConfig(
       cluster=None, #tpu_cluster_resolver,
