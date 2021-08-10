@@ -513,7 +513,7 @@ def resnet_model_fn(features, labels, mode, params):
         scaffold_fn=scaffold_fn)
   # If necessary, in the model_fn, use params['batch_size'] instead the batch
   # size flags (--train_batch_size or --eval_batch_size).
-  batch_size = params['batch_size']   # pylint: disable=unused-variable
+  # batch_size = params['batch_size']   # pylint: disable=unused-variable
 
   # Calculate loss, which includes softmax cross entropy and L2 regularization.
   one_hot_labels = tf.one_hot(labels, params['num_label_classes'])
@@ -797,8 +797,8 @@ def main(unused_argv):
       # disable_meta_optimizer=True,  # NOTE: this line would keep AMP disabled.
       auto_mixed_precision=1 if FLAGS.amp else 2,
   ))
-  strategy = tf.distribute.MirroredStrategy(
-    cross_device_ops=tf.distribute.NcclAllReduce())
+  # strategy = tf.distribute.MirroredStrategy(cross_device_ops=tf.distribute.NcclAllReduce())
+  strategy = tf.distribute.experimental.MultiWorkerMirroredStrategy(communication=tf.distribute.experimental.CollectiveCommunication.NCCL)
 
   config = tf.estimator.tpu.RunConfig(
       cluster=None, #tpu_cluster_resolver,
@@ -808,12 +808,7 @@ def main(unused_argv):
       train_distribute=strategy,
       eval_distribute=strategy,
       session_config=tf.ConfigProto(
-          graph_options=session_config),
-      tpu_config=tf.estimator.tpu.TPUConfig(
-          iterations_per_loop=params.iterations_per_loop,
-          num_shards=params.num_cores,
-          per_host_input_for_training=tf.estimator.tpu.InputPipelineConfig
-          .PER_HOST_V2))  # pylint: disable=line-too-long
+          graph_options=session_config),)  # pylint: disable=line-too-long
 
   resnet_classifier = tf.estimator.tpu.TPUEstimator(
       use_tpu=params.use_tpu,
