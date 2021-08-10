@@ -30,7 +30,7 @@ RESNET_CFG = {
     'transpose_input': False,
     'precision': 'float32',
     'num_label_classes': 1000,
-    'use_cache': True,
+    'use_cache': False,
     'use_async_checkpointing': False,
     'image_size': 224,
     'momentum': 0.9,

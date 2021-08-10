@@ -1,13 +1,15 @@
 WARNING:tensorflow:From /home/ubuntu/anaconda3/envs/tensorflow2_latest_p37/gpu_cuda11.0/lib/python3.7/site-packages/tensorflow/python/compat/v2_compat.py:96: disable_resource_variables (from tensorflow.python.ops.variable_scope) is deprecated and will be removed in a future version.
 Instructions for updating:
 non-resource variables are not supported in the long term
-W0803 10:06:59.058344 140214897387328 flags_to_params.py:44] Flag tpu is None.
-INFO:tensorflow:Params:
+W0810 11:00:07.484305 139645157615424 flags_to_params.py:44] Flag tpu is None.
+> /home/ubuntu/tpu/models/official/resnet/resnet_main.py(781)main()
+-> os.environ['TF_XLA_FLAGS'] = '--tf_xla_auto_jit=fusible'
+(Pdb) INFO:tensorflow:Params:
 {'augment_name': None,
  'base_learning_rate': 0.1,
  'bn_momentum': 0.9,
- 'data_dir': '/data/tfrecords',
- 'data_format': 'channels_last',
+ 'data_dir': '/home/ubuntu/data/',
+ 'data_format': 'channels_first',
  'drop_connect_rate': None,
  'dropblock_groups': '',
  'dropblock_keep_prob': None,
@@ -18,7 +20,7 @@ INFO:tensorflow:Params:
  'image_size': 224,
  'iterations_per_loop': 1251,
  'label_smoothing': 0.0,
- 'model_dir': './model',
+ 'model_dir': '/home/ubuntu/model',
  'momentum': 0.9,
  'moving_average_decay': 0,
  'norm_act_layer': 'bn_relu',
@@ -37,20 +39,20 @@ INFO:tensorflow:Params:
  'resnetd_shortcut': False,
  'se_ratio': None,
  'skip_host_call': False,
- 'train_batch_size': 128,
- 'train_steps': 4096,
- 'transpose_input': True,
+ 'train_batch_size': 256,
+ 'train_steps': 112590,
+ 'transpose_input': False,
  'use_async_checkpointing': False,
- 'use_cache': True,
+ 'use_cache': False,
  'use_resnetd_stem': False,
  'use_tpu': False,
  'weight_decay': 0.0001}
-I0803 10:06:59.059037 140214897387328 resnet_main.py:716] Params:
+I0810 11:00:10.608073 139645157615424 resnet_main.py:781] Params:
 {'augment_name': None,
  'base_learning_rate': 0.1,
  'bn_momentum': 0.9,
- 'data_dir': '/data/tfrecords',
- 'data_format': 'channels_last',
+ 'data_dir': '/home/ubuntu/data/',
+ 'data_format': 'channels_first',
  'drop_connect_rate': None,
  'dropblock_groups': '',
  'dropblock_keep_prob': None,
@@ -61,7 +63,7 @@ I0803 10:06:59.059037 140214897387328 resnet_main.py:716] Params:
  'image_size': 224,
  'iterations_per_loop': 1251,
  'label_smoothing': 0.0,
- 'model_dir': './model',
+ 'model_dir': '/home/ubuntu/model',
  'momentum': 0.9,
  'moving_average_decay': 0,
  'norm_act_layer': 'bn_relu',
@@ -80,93 +82,1653 @@ I0803 10:06:59.059037 140214897387328 resnet_main.py:716] Params:
  'resnetd_shortcut': False,
  'se_ratio': None,
  'skip_host_call': False,
- 'train_batch_size': 128,
- 'train_steps': 4096,
- 'transpose_input': True,
+ 'train_batch_size': 256,
+ 'train_steps': 112590,
+ 'transpose_input': False,
  'use_async_checkpointing': False,
- 'use_cache': True,
+ 'use_cache': False,
  'use_resnetd_stem': False,
  'use_tpu': False,
  'weight_decay': 0.0001}
-WARNING:tensorflow:From official/resnet/resnet_main.py:728: The name tf.estimator.tpu.RunConfig is deprecated. Please use tf.compat.v1.estimator.tpu.RunConfig instead.
+INFO:tensorflow:Using MirroredStrategy with devices ('/replica:0/task:0/device:GPU:0',)
+I0810 11:00:11.449082 139645157615424 mirrored_strategy.py:350] Using MirroredStrategy with devices ('/replica:0/task:0/device:GPU:0',)
+WARNING:tensorflow:From official/resnet/resnet_main.py:781: The name tf.estimator.tpu.RunConfig is deprecated. Please use tf.compat.v1.estimator.tpu.RunConfig instead.
 
-W0803 10:06:59.918581 140214897387328 module_wrapper.py:138] From official/resnet/resnet_main.py:728: The name tf.estimator.tpu.RunConfig is deprecated. Please use tf.compat.v1.estimator.tpu.RunConfig instead.
+W0810 11:00:11.490467 139645157615424 module_wrapper.py:138] From official/resnet/resnet_main.py:781: The name tf.estimator.tpu.RunConfig is deprecated. Please use tf.compat.v1.estimator.tpu.RunConfig instead.
 
-INFO:tensorflow:Using MirroredStrategy with devices ('/device:GPU:0', '/device:GPU:1', '/device:GPU:2', '/device:GPU:3', '/device:GPU:4', '/device:GPU:5', '/device:GPU:6', '/device:GPU:7')
-I0803 10:07:04.749025 140214897387328 mirrored_strategy.py:350] Using MirroredStrategy with devices ('/device:GPU:0', '/device:GPU:1', '/device:GPU:2', '/device:GPU:3', '/device:GPU:4', '/device:GPU:5', '/device:GPU:6', '/device:GPU:7')
-INFO:tensorflow:Single-worker MultiWorkerMirroredStrategy with local_devices = ('/device:GPU:0', '/device:GPU:1', '/device:GPU:2', '/device:GPU:3', '/device:GPU:4', '/device:GPU:5', '/device:GPU:6', '/device:GPU:7'), communication = CommunicationImplementation.AUTO
-I0803 10:07:04.749967 140214897387328 collective_all_reduce_strategy.py:404] Single-worker MultiWorkerMirroredStrategy with local_devices = ('/device:GPU:0', '/device:GPU:1', '/device:GPU:2', '/device:GPU:3', '/device:GPU:4', '/device:GPU:5', '/device:GPU:6', '/device:GPU:7'), communication = CommunicationImplementation.AUTO
-INFO:tensorflow:Using MirroredStrategy with devices ('/device:GPU:0', '/device:GPU:1', '/device:GPU:2', '/device:GPU:3', '/device:GPU:4', '/device:GPU:5', '/device:GPU:6', '/device:GPU:7')
-I0803 10:07:04.751258 140214897387328 mirrored_strategy.py:350] Using MirroredStrategy with devices ('/device:GPU:0', '/device:GPU:1', '/device:GPU:2', '/device:GPU:3', '/device:GPU:4', '/device:GPU:5', '/device:GPU:6', '/device:GPU:7')
-INFO:tensorflow:Single-worker MultiWorkerMirroredStrategy with local_devices = ('/device:GPU:0', '/device:GPU:1', '/device:GPU:2', '/device:GPU:3', '/device:GPU:4', '/device:GPU:5', '/device:GPU:6', '/device:GPU:7'), communication = CommunicationImplementation.AUTO
-I0803 10:07:04.751380 140214897387328 collective_all_reduce_strategy.py:404] Single-worker MultiWorkerMirroredStrategy with local_devices = ('/device:GPU:0', '/device:GPU:1', '/device:GPU:2', '/device:GPU:3', '/device:GPU:4', '/device:GPU:5', '/device:GPU:6', '/device:GPU:7'), communication = CommunicationImplementation.AUTO
-WARNING:tensorflow:From official/resnet/resnet_main.py:737: The name tf.estimator.tpu.TPUConfig is deprecated. Please use tf.compat.v1.estimator.tpu.TPUConfig instead.
+WARNING:tensorflow:From official/resnet/resnet_main.py:781: The name tf.estimator.tpu.TPUConfig is deprecated. Please use tf.compat.v1.estimator.tpu.TPUConfig instead.
 
-W0803 10:07:04.751748 140214897387328 module_wrapper.py:138] From official/resnet/resnet_main.py:737: The name tf.estimator.tpu.TPUConfig is deprecated. Please use tf.compat.v1.estimator.tpu.TPUConfig instead.
+W0810 11:00:11.490733 139645157615424 module_wrapper.py:138] From official/resnet/resnet_main.py:781: The name tf.estimator.tpu.TPUConfig is deprecated. Please use tf.compat.v1.estimator.tpu.TPUConfig instead.
 
-WARNING:tensorflow:From official/resnet/resnet_main.py:740: The name tf.estimator.tpu.InputPipelineConfig is deprecated. Please use tf.compat.v1.estimator.tpu.InputPipelineConfig instead.
+WARNING:tensorflow:From official/resnet/resnet_main.py:781: The name tf.estimator.tpu.InputPipelineConfig is deprecated. Please use tf.compat.v1.estimator.tpu.InputPipelineConfig instead.
 
-W0803 10:07:04.751852 140214897387328 module_wrapper.py:138] From official/resnet/resnet_main.py:740: The name tf.estimator.tpu.InputPipelineConfig is deprecated. Please use tf.compat.v1.estimator.tpu.InputPipelineConfig instead.
+W0810 11:00:11.490892 139645157615424 module_wrapper.py:138] From official/resnet/resnet_main.py:781: The name tf.estimator.tpu.InputPipelineConfig is deprecated. Please use tf.compat.v1.estimator.tpu.InputPipelineConfig instead.
 
 INFO:tensorflow:Initializing RunConfig with distribution strategies.
-I0803 10:07:04.752192 140214897387328 run_config.py:584] Initializing RunConfig with distribution strategies.
+I0810 11:00:11.491120 139645157615424 run_config.py:584] Initializing RunConfig with distribution strategies.
 INFO:tensorflow:Not using Distribute Coordinator.
-I0803 10:07:04.752317 140214897387328 estimator_training.py:167] Not using Distribute Coordinator.
-WARNING:tensorflow:From official/resnet/resnet_main.py:743: The name tf.estimator.tpu.TPUEstimator is deprecated. Please use tf.compat.v1.estimator.tpu.TPUEstimator instead.
+I0810 11:00:11.491270 139645157615424 estimator_training.py:167] Not using Distribute Coordinator.
+WARNING:tensorflow:From official/resnet/resnet_main.py:781: The name tf.estimator.tpu.TPUEstimator is deprecated. Please use tf.compat.v1.estimator.tpu.TPUEstimator instead.
 
-W0803 10:07:04.752419 140214897387328 module_wrapper.py:138] From official/resnet/resnet_main.py:743: The name tf.estimator.tpu.TPUEstimator is deprecated. Please use tf.compat.v1.estimator.tpu.TPUEstimator instead.
+W0810 11:00:11.491413 139645157615424 module_wrapper.py:138] From official/resnet/resnet_main.py:781: The name tf.estimator.tpu.TPUEstimator is deprecated. Please use tf.compat.v1.estimator.tpu.TPUEstimator instead.
 
-INFO:tensorflow:Using config: {'_model_dir': './model', '_tf_random_seed': None, '_save_summary_steps': 100, '_save_checkpoints_steps': 5000, '_save_checkpoints_secs': None, '_session_config': graph_options {
+INFO:tensorflow:Using config: {'_model_dir': '/home/ubuntu/model', '_tf_random_seed': None, '_save_summary_steps': 100, '_save_checkpoints_steps': 5000, '_save_checkpoints_secs': None, '_session_config': graph_options {
   rewrite_options {
-    disable_meta_optimizer: true
+    auto_mixed_precision: ON
   }
 }
-, '_keep_checkpoint_max': 5, '_keep_checkpoint_every_n_hours': 10000, '_log_step_count_steps': None, '_train_distribute': <tensorflow.python.distribute.collective_all_reduce_strategy.CollectiveAllReduceStrategyV1 object at 0x7f8628c41a90>, '_device_fn': None, '_protocol': None, '_eval_distribute': <tensorflow.python.distribute.collective_all_reduce_strategy.CollectiveAllReduceStrategyV1 object at 0x7f8628c41b10>, '_experimental_distribute': None, '_experimental_max_worker_delay_secs': None, '_session_creation_timeout_secs': 7200, '_checkpoint_save_graph_def': True, '_service': None, '_cluster_spec': ClusterSpec({}), '_task_type': 'worker', '_task_id': 0, '_global_id_in_cluster': 0, '_master': '', '_evaluation_master': '', '_is_chief': True, '_num_ps_replicas': 0, '_num_worker_replicas': 1, '_distribute_coordinator_mode': None, '_tpu_config': TPUConfig(iterations_per_loop=1251, num_shards=8, num_cores_per_replica=None, per_host_input_for_training=3, tpu_job_name=None, initial_infeed_sleep_secs=None, input_partition_dims=None, eval_training_input_configuration=2, experimental_host_call_every_n_steps=1, experimental_allow_per_host_v2_parallel_get_next=False, experimental_feed_hook=None), '_cluster': None}
-I0803 10:07:04.755181 140214897387328 estimator.py:192] Using config: {'_model_dir': './model', '_tf_random_seed': None, '_save_summary_steps': 100, '_save_checkpoints_steps': 5000, '_save_checkpoints_secs': None, '_session_config': graph_options {
+, '_keep_checkpoint_max': 5, '_keep_checkpoint_every_n_hours': 10000, '_log_step_count_steps': None, '_train_distribute': <tensorflow.python.distribute.mirrored_strategy.MirroredStrategyV1 object at 0x7f0154505e90>, '_device_fn': None, '_protocol': None, '_eval_distribute': <tensorflow.python.distribute.mirrored_strategy.MirroredStrategyV1 object at 0x7f0154505e90>, '_experimental_distribute': None, '_experimental_max_worker_delay_secs': None, '_session_creation_timeout_secs': 7200, '_checkpoint_save_graph_def': True, '_service': None, '_cluster_spec': ClusterSpec({}), '_task_type': 'worker', '_task_id': 0, '_global_id_in_cluster': 0, '_master': '', '_evaluation_master': '', '_is_chief': True, '_num_ps_replicas': 0, '_num_worker_replicas': 1, '_distribute_coordinator_mode': None, '_tpu_config': TPUConfig(iterations_per_loop=1251, num_shards=8, num_cores_per_replica=None, per_host_input_for_training=3, tpu_job_name=None, initial_infeed_sleep_secs=None, input_partition_dims=None, eval_training_input_configuration=2, experimental_host_call_every_n_steps=1, experimental_allow_per_host_v2_parallel_get_next=False, experimental_feed_hook=None), '_cluster': None}
+I0810 11:00:11.492113 139645157615424 estimator.py:192] Using config: {'_model_dir': '/home/ubuntu/model', '_tf_random_seed': None, '_save_summary_steps': 100, '_save_checkpoints_steps': 5000, '_save_checkpoints_secs': None, '_session_config': graph_options {
   rewrite_options {
-    disable_meta_optimizer: true
+    auto_mixed_precision: ON
   }
 }
-, '_keep_checkpoint_max': 5, '_keep_checkpoint_every_n_hours': 10000, '_log_step_count_steps': None, '_train_distribute': <tensorflow.python.distribute.collective_all_reduce_strategy.CollectiveAllReduceStrategyV1 object at 0x7f8628c41a90>, '_device_fn': None, '_protocol': None, '_eval_distribute': <tensorflow.python.distribute.collective_all_reduce_strategy.CollectiveAllReduceStrategyV1 object at 0x7f8628c41b10>, '_experimental_distribute': None, '_experimental_max_worker_delay_secs': None, '_session_creation_timeout_secs': 7200, '_checkpoint_save_graph_def': True, '_service': None, '_cluster_spec': ClusterSpec({}), '_task_type': 'worker', '_task_id': 0, '_global_id_in_cluster': 0, '_master': '', '_evaluation_master': '', '_is_chief': True, '_num_ps_replicas': 0, '_num_worker_replicas': 1, '_distribute_coordinator_mode': None, '_tpu_config': TPUConfig(iterations_per_loop=1251, num_shards=8, num_cores_per_replica=None, per_host_input_for_training=3, tpu_job_name=None, initial_infeed_sleep_secs=None, input_partition_dims=None, eval_training_input_configuration=2, experimental_host_call_every_n_steps=1, experimental_allow_per_host_v2_parallel_get_next=False, experimental_feed_hook=None), '_cluster': None}
+, '_keep_checkpoint_max': 5, '_keep_checkpoint_every_n_hours': 10000, '_log_step_count_steps': None, '_train_distribute': <tensorflow.python.distribute.mirrored_strategy.MirroredStrategyV1 object at 0x7f0154505e90>, '_device_fn': None, '_protocol': None, '_eval_distribute': <tensorflow.python.distribute.mirrored_strategy.MirroredStrategyV1 object at 0x7f0154505e90>, '_experimental_distribute': None, '_experimental_max_worker_delay_secs': None, '_session_creation_timeout_secs': 7200, '_checkpoint_save_graph_def': True, '_service': None, '_cluster_spec': ClusterSpec({}), '_task_type': 'worker', '_task_id': 0, '_global_id_in_cluster': 0, '_master': '', '_evaluation_master': '', '_is_chief': True, '_num_ps_replicas': 0, '_num_worker_replicas': 1, '_distribute_coordinator_mode': None, '_tpu_config': TPUConfig(iterations_per_loop=1251, num_shards=8, num_cores_per_replica=None, per_host_input_for_training=3, tpu_job_name=None, initial_infeed_sleep_secs=None, input_partition_dims=None, eval_training_input_configuration=2, experimental_host_call_every_n_steps=1, experimental_allow_per_host_v2_parallel_get_next=False, experimental_feed_hook=None), '_cluster': None}
 INFO:tensorflow:_TPUContext: eval_on_tpu True
-I0803 10:07:04.755454 140214897387328 tpu_context.py:271] _TPUContext: eval_on_tpu True
+I0810 11:00:11.492438 139645157615424 tpu_context.py:271] _TPUContext: eval_on_tpu True
 WARNING:tensorflow:eval_on_tpu ignored because use_tpu is False.
-W0803 10:07:04.755591 140214897387328 tpu_context.py:273] eval_on_tpu ignored because use_tpu is False.
+W0810 11:00:11.492663 139645157615424 tpu_context.py:273] eval_on_tpu ignored because use_tpu is False.
 INFO:tensorflow:Precision: float32
-I0803 10:07:04.755653 140214897387328 resnet_main.py:756] Precision: float32
-INFO:tensorflow:Using dataset: /data/tfrecords
-I0803 10:07:04.755709 140214897387328 resnet_main.py:780] Using dataset: /data/tfrecords
-INFO:tensorflow:Training for 4096 steps (0.41 epochs in total). Current step 0.
-I0803 10:07:04.756135 140214897387328 resnet_main.py:842] Training for 4096 steps (0.41 epochs in total). Current step 0.
+I0810 11:00:11.492757 139645157615424 resnet_main.py:781] Precision: float32
+INFO:tensorflow:Using dataset: /home/ubuntu/data/
+I0810 11:00:11.492849 139645157615424 resnet_main.py:781] Using dataset: /home/ubuntu/data/
+INFO:tensorflow:Training for 112590 steps (22.50 epochs in total). Current step 0.
+I0810 11:00:11.493233 139645157615424 resnet_main.py:781] Training for 112590 steps (22.50 epochs in total). Current step 0.
 WARNING:tensorflow:From /home/ubuntu/tpu/models/official/resnet/imagenet_input.py:356: parallel_interleave (from tensorflow.python.data.experimental.ops.interleave_ops) is deprecated and will be removed in a future version.
 Instructions for updating:
 Use `tf.data.Dataset.interleave(map_func, cycle_length, block_length, num_parallel_calls=tf.data.AUTOTUNE)` instead. If sloppy execution is desired, use `tf.data.Options.experimental_deterministic`.
-W0803 10:07:04.772450 140214897387328 deprecation.py:339] From /home/ubuntu/tpu/models/official/resnet/imagenet_input.py:356: parallel_interleave (from tensorflow.python.data.experimental.ops.interleave_ops) is deprecated and will be removed in a future version.
+W0810 11:00:11.508014 139645157615424 deprecation.py:339] From /home/ubuntu/tpu/models/official/resnet/imagenet_input.py:356: parallel_interleave (from tensorflow.python.data.experimental.ops.interleave_ops) is deprecated and will be removed in a future version.
 Instructions for updating:
 Use `tf.data.Dataset.interleave(map_func, cycle_length, block_length, num_parallel_calls=tf.data.AUTOTUNE)` instead. If sloppy execution is desired, use `tf.data.Options.experimental_deterministic`.
-WARNING:tensorflow:From /home/ubuntu/tpu/models/official/resnet/imagenet_input.py:360: shuffle_and_repeat (from tensorflow.python.data.experimental.ops.shuffle_ops) is deprecated and will be removed in a future version.
-Instructions for updating:
-Use `tf.data.Dataset.shuffle(buffer_size, seed)` followed by `tf.data.Dataset.repeat(count)`. Static tf.data optimizations will take care of using the fused implementation.
-W0803 10:07:04.818538 140214897387328 deprecation.py:339] From /home/ubuntu/tpu/models/official/resnet/imagenet_input.py:360: shuffle_and_repeat (from tensorflow.python.data.experimental.ops.shuffle_ops) is deprecated and will be removed in a future version.
-Instructions for updating:
-Use `tf.data.Dataset.shuffle(buffer_size, seed)` followed by `tf.data.Dataset.repeat(count)`. Static tf.data optimizations will take care of using the fused implementation.
 WARNING:tensorflow:From /home/ubuntu/tpu/models/official/resnet/imagenet_input.py:206: map_and_batch (from tensorflow.python.data.experimental.ops.batching) is deprecated and will be removed in a future version.
 Instructions for updating:
 Use `tf.data.Dataset.map(map_func, num_parallel_calls)` followed by `tf.data.Dataset.batch(batch_size, drop_remainder)`. Static tf.data optimizations will take care of using the fused implementation.
-W0803 10:07:04.820030 140214897387328 deprecation.py:339] From /home/ubuntu/tpu/models/official/resnet/imagenet_input.py:206: map_and_batch (from tensorflow.python.data.experimental.ops.batching) is deprecated and will be removed in a future version.
+W0810 11:00:11.566509 139645157615424 deprecation.py:339] From /home/ubuntu/tpu/models/official/resnet/imagenet_input.py:206: map_and_batch (from tensorflow.python.data.experimental.ops.batching) is deprecated and will be removed in a future version.
 Instructions for updating:
 Use `tf.data.Dataset.map(map_func, num_parallel_calls)` followed by `tf.data.Dataset.batch(batch_size, drop_remainder)`. Static tf.data optimizations will take care of using the fused implementation.
 WARNING:tensorflow:From /home/ubuntu/anaconda3/envs/tensorflow2_latest_p37/gpu_cuda11.0/lib/python3.7/site-packages/tensorflow/python/util/dispatch.py:201: sample_distorted_bounding_box (from tensorflow.python.ops.image_ops_impl) is deprecated and will be removed in a future version.
 Instructions for updating:
 `seed2` arg is deprecated.Use sample_distorted_bounding_box_v2 instead.
-W0803 10:07:05.227103 140214897387328 deprecation.py:339] From /home/ubuntu/anaconda3/envs/tensorflow2_latest_p37/gpu_cuda11.0/lib/python3.7/site-packages/tensorflow/python/util/dispatch.py:201: sample_distorted_bounding_box (from tensorflow.python.ops.image_ops_impl) is deprecated and will be removed in a future version.
+W0810 11:00:12.158080 139645157615424 deprecation.py:339] From /home/ubuntu/anaconda3/envs/tensorflow2_latest_p37/gpu_cuda11.0/lib/python3.7/site-packages/tensorflow/python/util/dispatch.py:201: sample_distorted_bounding_box (from tensorflow.python.ops.image_ops_impl) is deprecated and will be removed in a future version.
 Instructions for updating:
 `seed2` arg is deprecated.Use sample_distorted_bounding_box_v2 instead.
 INFO:tensorflow:Calling model_fn.
-I0803 10:07:05.780834 140181474629376 api.py:479] Calling model_fn.
+I0810 11:00:12.779572 139639704770304 api.py:479] Calling model_fn.
 INFO:tensorflow:Running train on CPU/GPU
-I0803 10:07:07.341922 140181474629376 api.py:479] Running train on CPU/GPU
-WARNING:tensorflow:From /home/ubuntu/anaconda3/envs/tensorflow2_latest_p37/gpu_cuda11.0/lib/python3.7/site-packages/tensorflow/python/autograph/converters/directives.py:130: The name tf.estimator.tpu.TPUEstimatorSpec is deprecated. Please use tf.compat.v1.estimator.tpu.TPUEstimatorSpec instead.
+I0810 11:00:15.165064 139639704770304 api.py:479] Running train on CPU/GPU
+WARNING:tensorflow:AutoGraph could not transform <function resnet_model_fn at 0x7f015455d170> and will run it as-is.
+Please report this to the TensorFlow team. When filing the bug, set the verbosity to 10 (on Linux, `export AUTOGRAPH_VERBOSITY=10`) and attach the full output.
+Cause: could not get source code
+To silence this warning, decorate the function with @tf.autograph.experimental.do_not_convert
+W0810 11:00:15.863449 139639704770304 ag_logging.py:146] AutoGraph could not transform <function resnet_model_fn at 0x7f015455d170> and will run it as-is.
+Please report this to the TensorFlow team. When filing the bug, set the verbosity to 10 (on Linux, `export AUTOGRAPH_VERBOSITY=10`) and attach the full output.
+Cause: could not get source code
+To silence this warning, decorate the function with @tf.autograph.experimental.do_not_convert
+/home/ubuntu/anaconda3/envs/tensorflow2_latest_p37/gpu_cuda11.0/lib/python3.7/site-packages/tensorflow/python/keras/legacy_tf_layers/convolutional.py:414: UserWarning: `tf.layers.conv2d` is deprecated and will be removed in a future version. Please Use `tf.keras.layers.Conv2D` instead.
+  warnings.warn('`tf.layers.conv2d` is deprecated and '
+/home/ubuntu/anaconda3/envs/tensorflow2_latest_p37/gpu_cuda11.0/lib/python3.7/site-packages/tensorflow/python/keras/engine/base_layer_v1.py:1719: UserWarning: `layer.apply` is deprecated and will be removed in a future version. Please use `layer.__call__` method instead.
+  warnings.warn('`layer.apply` is deprecated and '
+/home/ubuntu/anaconda3/envs/tensorflow2_latest_p37/gpu_cuda11.0/lib/python3.7/site-packages/tensorflow/python/keras/legacy_tf_layers/normalization.py:308: UserWarning: `tf.layers.batch_normalization` is deprecated and will be removed in a future version. Please use `tf.keras.layers.BatchNormalization` instead. In particular, `tf.control_dependencies(tf.GraphKeys.UPDATE_OPS)` should not be used (consult the `tf.keras.layers.BatchNormalization` documentation).
+  '`tf.layers.batch_normalization` is deprecated and '
+/home/ubuntu/anaconda3/envs/tensorflow2_latest_p37/gpu_cuda11.0/lib/python3.7/site-packages/tensorflow/python/keras/legacy_tf_layers/pooling.py:310: UserWarning: `tf.layers.max_pooling2d` is deprecated and will be removed in a future version. Please use `tf.keras.layers.MaxPooling2D` instead.
+  warnings.warn('`tf.layers.max_pooling2d` is deprecated and '
+/home/ubuntu/anaconda3/envs/tensorflow2_latest_p37/gpu_cuda11.0/lib/python3.7/site-packages/tensorflow/python/keras/legacy_tf_layers/pooling.py:236: UserWarning: `tf.layers.average_pooling2d` is deprecated and will be removed in a future version. Please use `tf.keras.layers.AveragePooling2D` instead.
+  warnings.warn('`tf.layers.average_pooling2d` is deprecated and '
+/home/ubuntu/anaconda3/envs/tensorflow2_latest_p37/gpu_cuda11.0/lib/python3.7/site-packages/tensorflow/python/keras/legacy_tf_layers/core.py:171: UserWarning: `tf.layers.dense` is deprecated and will be removed in a future version. Please use `tf.keras.layers.Dense` instead.
+  warnings.warn('`tf.layers.dense` is deprecated and '
+WARNING:tensorflow:From /home/ubuntu/anaconda3/envs/tensorflow2_latest_p37/gpu_cuda11.0/lib/python3.7/site-packages/tensorflow/python/training/experimental/loss_scale.py:470: FixedLossScale.__init__ (from tensorflow.python.training.experimental.loss_scale) is deprecated and will be removed in a future version.
+Instructions for updating:
+Use tf.keras.mixed_precision.LossScaleOptimizer instead. LossScaleOptimizer now has all the functionality of FixedLossScale
+W0810 11:00:18.342297 139639704770304 deprecation.py:339] From /home/ubuntu/anaconda3/envs/tensorflow2_latest_p37/gpu_cuda11.0/lib/python3.7/site-packages/tensorflow/python/training/experimental/loss_scale.py:470: FixedLossScale.__init__ (from tensorflow.python.training.experimental.loss_scale) is deprecated and will be removed in a future version.
+Instructions for updating:
+Use tf.keras.mixed_precision.LossScaleOptimizer instead. LossScaleOptimizer now has all the functionality of FixedLossScale
+WARNING:tensorflow:From official/resnet/resnet_main.py:673: The name tf.estimator.tpu.TPUEstimatorSpec is deprecated. Please use tf.compat.v1.estimator.tpu.TPUEstimatorSpec instead.
 
-W0803 10:07:07.944726 140181474629376 module_wrapper.py:138] From /home/ubuntu/anaconda3/envs/tensorflow2_latest_p37/gpu_cuda11.0/lib/python3.7/site-packages/tensorflow/python/autograph/converters/directives.py:130: The name tf.estimator.tpu.TPUEstimatorSpec is deprecated. Please use tf.compat.v1.estimator.tpu.TPUEstimatorSpec instead.
+W0810 11:00:20.390120 139639704770304 module_wrapper.py:138] From official/resnet/resnet_main.py:673: The name tf.estimator.tpu.TPUEstimatorSpec is deprecated. Please use tf.compat.v1.estimator.tpu.TPUEstimatorSpec instead.
 
+INFO:tensorflow:Done calling model_fn.
+I0810 11:00:21.082230 139639704770304 api.py:479] Done calling model_fn.
+INFO:tensorflow:Create CheckpointSaverHook.
+I0810 11:00:21.893251 139645157615424 basic_session_run_hooks.py:546] Create CheckpointSaverHook.
+WARNING:tensorflow:From /home/ubuntu/anaconda3/envs/tensorflow2_latest_p37/lib/python3.7/site-packages/tensorflow_estimator/python/estimator/util.py:96: DistributedIteratorV1.initialize (from tensorflow.python.distribute.input_lib) is deprecated and will be removed in a future version.
+Instructions for updating:
+Use the iterator's `initializer` property instead.
+W0810 11:00:22.565945 139645157615424 deprecation.py:339] From /home/ubuntu/anaconda3/envs/tensorflow2_latest_p37/lib/python3.7/site-packages/tensorflow_estimator/python/estimator/util.py:96: DistributedIteratorV1.initialize (from tensorflow.python.distribute.input_lib) is deprecated and will be removed in a future version.
+Instructions for updating:
+Use the iterator's `initializer` property instead.
+INFO:tensorflow:Reduce to /replica:0/task:0/device:CPU:0 then broadcast to ('/replica:0/task:0/device:CPU:0',).
+I0810 11:00:23.262583 139645157615424 cross_device_ops.py:565] Reduce to /replica:0/task:0/device:CPU:0 then broadcast to ('/replica:0/task:0/device:CPU:0',).
+INFO:tensorflow:Reduce to /replica:0/task:0/device:CPU:0 then broadcast to ('/replica:0/task:0/device:CPU:0',).
+I0810 11:00:23.265484 139645157615424 cross_device_ops.py:565] Reduce to /replica:0/task:0/device:CPU:0 then broadcast to ('/replica:0/task:0/device:CPU:0',).
+INFO:tensorflow:Reduce to /replica:0/task:0/device:CPU:0 then broadcast to ('/replica:0/task:0/device:CPU:0',).
+I0810 11:00:23.273587 139645157615424 cross_device_ops.py:565] Reduce to /replica:0/task:0/device:CPU:0 then broadcast to ('/replica:0/task:0/device:CPU:0',).
+INFO:tensorflow:Reduce to /replica:0/task:0/device:CPU:0 then broadcast to ('/replica:0/task:0/device:CPU:0',).
+I0810 11:00:23.276298 139645157615424 cross_device_ops.py:565] Reduce to /replica:0/task:0/device:CPU:0 then broadcast to ('/replica:0/task:0/device:CPU:0',).
+INFO:tensorflow:Reduce to /replica:0/task:0/device:CPU:0 then broadcast to ('/replica:0/task:0/device:CPU:0',).
+I0810 11:00:23.284469 139645157615424 cross_device_ops.py:565] Reduce to /replica:0/task:0/device:CPU:0 then broadcast to ('/replica:0/task:0/device:CPU:0',).
+INFO:tensorflow:Reduce to /replica:0/task:0/device:CPU:0 then broadcast to ('/replica:0/task:0/device:CPU:0',).
+I0810 11:00:23.287177 139645157615424 cross_device_ops.py:565] Reduce to /replica:0/task:0/device:CPU:0 then broadcast to ('/replica:0/task:0/device:CPU:0',).
+INFO:tensorflow:Reduce to /replica:0/task:0/device:CPU:0 then broadcast to ('/replica:0/task:0/device:CPU:0',).
+I0810 11:00:23.295237 139645157615424 cross_device_ops.py:565] Reduce to /replica:0/task:0/device:CPU:0 then broadcast to ('/replica:0/task:0/device:CPU:0',).
+INFO:tensorflow:Reduce to /replica:0/task:0/device:CPU:0 then broadcast to ('/replica:0/task:0/device:CPU:0',).
+I0810 11:00:23.297972 139645157615424 cross_device_ops.py:565] Reduce to /replica:0/task:0/device:CPU:0 then broadcast to ('/replica:0/task:0/device:CPU:0',).
+INFO:tensorflow:Reduce to /replica:0/task:0/device:CPU:0 then broadcast to ('/replica:0/task:0/device:CPU:0',).
+I0810 11:00:23.306059 139645157615424 cross_device_ops.py:565] Reduce to /replica:0/task:0/device:CPU:0 then broadcast to ('/replica:0/task:0/device:CPU:0',).
+INFO:tensorflow:Reduce to /replica:0/task:0/device:CPU:0 then broadcast to ('/replica:0/task:0/device:CPU:0',).
+I0810 11:00:23.308802 139645157615424 cross_device_ops.py:565] Reduce to /replica:0/task:0/device:CPU:0 then broadcast to ('/replica:0/task:0/device:CPU:0',).
+INFO:tensorflow:Graph was finalized.
+I0810 11:00:24.604404 139645157615424 monitored_session.py:246] Graph was finalized.
+INFO:tensorflow:Running local_init_op.
+I0810 11:00:29.342514 139645157615424 session_manager.py:505] Running local_init_op.
+INFO:tensorflow:Done running local_init_op.
+I0810 11:00:29.460495 139645157615424 session_manager.py:508] Done running local_init_op.
+INFO:tensorflow:Calling checkpoint listeners before saving checkpoint 0...
+I0810 11:00:35.547602 139645157615424 basic_session_run_hooks.py:614] Calling checkpoint listeners before saving checkpoint 0...
+INFO:tensorflow:Saving checkpoints for 0 into /home/ubuntu/model/model.ckpt.
+I0810 11:00:35.554989 139645157615424 basic_session_run_hooks.py:618] Saving checkpoints for 0 into /home/ubuntu/model/model.ckpt.
+INFO:tensorflow:Calling checkpoint listeners after saving checkpoint 0...
+I0810 11:00:36.940120 139645157615424 basic_session_run_hooks.py:626] Calling checkpoint listeners after saving checkpoint 0...
+INFO:tensorflow:global_step/sec: 0.0674846
+I0810 11:01:29.060101 139645157615424 tpu_estimator.py:2391] global_step/sec: 0.0674846
+INFO:tensorflow:examples/sec: 17.2761
+I0810 11:01:29.061076 139645157615424 tpu_estimator.py:2392] examples/sec: 17.2761
+INFO:tensorflow:global_step/sec: 3.64747
+I0810 11:01:29.334193 139645157615424 tpu_estimator.py:2391] global_step/sec: 3.64747
+INFO:tensorflow:examples/sec: 933.753
+I0810 11:01:29.334571 139645157615424 tpu_estimator.py:2392] examples/sec: 933.753
+INFO:tensorflow:global_step/sec: 3.59227
+I0810 11:01:29.612563 139645157615424 tpu_estimator.py:2391] global_step/sec: 3.59227
+INFO:tensorflow:examples/sec: 919.622
+I0810 11:01:29.612961 139645157615424 tpu_estimator.py:2392] examples/sec: 919.622
+INFO:tensorflow:global_step/sec: 3.89064
+I0810 11:01:29.869566 139645157615424 tpu_estimator.py:2391] global_step/sec: 3.89064
+INFO:tensorflow:examples/sec: 996.005
+I0810 11:01:29.869951 139645157615424 tpu_estimator.py:2392] examples/sec: 996.005
+INFO:tensorflow:global_step/sec: 3.8907
+I0810 11:01:30.126591 139645157615424 tpu_estimator.py:2391] global_step/sec: 3.8907
+INFO:tensorflow:examples/sec: 996.02
+I0810 11:01:30.126989 139645157615424 tpu_estimator.py:2392] examples/sec: 996.02
+INFO:tensorflow:global_step/sec: 4.20208
+I0810 11:01:30.364589 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.20208
+INFO:tensorflow:examples/sec: 1075.73
+I0810 11:01:30.364972 139645157615424 tpu_estimator.py:2392] examples/sec: 1075.73
+INFO:tensorflow:global_step/sec: 4.12738
+I0810 11:01:30.606852 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.12738
+INFO:tensorflow:examples/sec: 1056.61
+I0810 11:01:30.607207 139645157615424 tpu_estimator.py:2392] examples/sec: 1056.61
+INFO:tensorflow:global_step/sec: 4.13351
+I0810 11:01:30.848771 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.13351
+INFO:tensorflow:examples/sec: 1058.18
+I0810 11:01:30.849184 139645157615424 tpu_estimator.py:2392] examples/sec: 1058.18
+INFO:tensorflow:global_step/sec: 4.21558
+I0810 11:01:31.085991 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.21558
+INFO:tensorflow:examples/sec: 1079.19
+I0810 11:01:31.086423 139645157615424 tpu_estimator.py:2392] examples/sec: 1079.19
+INFO:tensorflow:global_step/sec: 4.20874
+I0810 11:01:31.323604 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.20874
+INFO:tensorflow:examples/sec: 1077.44
+I0810 11:01:31.323964 139645157615424 tpu_estimator.py:2392] examples/sec: 1077.44
+INFO:tensorflow:global_step/sec: 4.99034
+I0810 11:01:31.524020 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.99034
+INFO:tensorflow:examples/sec: 1277.53
+I0810 11:01:31.524433 139645157615424 tpu_estimator.py:2392] examples/sec: 1277.53
+INFO:tensorflow:global_step/sec: 4.95969
+I0810 11:01:31.725647 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.95969
+INFO:tensorflow:examples/sec: 1269.68
+I0810 11:01:31.726022 139645157615424 tpu_estimator.py:2392] examples/sec: 1269.68
+INFO:tensorflow:global_step/sec: 4.97096
+I0810 11:01:31.926802 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.97096
+INFO:tensorflow:examples/sec: 1272.56
+I0810 11:01:31.927211 139645157615424 tpu_estimator.py:2392] examples/sec: 1272.56
+INFO:tensorflow:global_step/sec: 4.96425
+I0810 11:01:32.128260 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.96425
+INFO:tensorflow:examples/sec: 1270.85
+I0810 11:01:32.128663 139645157615424 tpu_estimator.py:2392] examples/sec: 1270.85
+INFO:tensorflow:global_step/sec: 4.95986
+I0810 11:01:32.329871 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.95986
+INFO:tensorflow:examples/sec: 1269.73
+I0810 11:01:32.330261 139645157615424 tpu_estimator.py:2392] examples/sec: 1269.73
+INFO:tensorflow:global_step/sec: 4.97023
+I0810 11:01:32.531070 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.97023
+INFO:tensorflow:examples/sec: 1272.38
+I0810 11:01:32.531489 139645157615424 tpu_estimator.py:2392] examples/sec: 1272.38
+INFO:tensorflow:global_step/sec: 4.82225
+I0810 11:01:32.738415 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.82225
+INFO:tensorflow:examples/sec: 1234.5
+I0810 11:01:32.738794 139645157615424 tpu_estimator.py:2392] examples/sec: 1234.5
+INFO:tensorflow:global_step/sec: 4.98675
+I0810 11:01:32.938982 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.98675
+INFO:tensorflow:examples/sec: 1276.61
+I0810 11:01:32.939371 139645157615424 tpu_estimator.py:2392] examples/sec: 1276.61
+INFO:tensorflow:global_step/sec: 4.95723
+I0810 11:01:33.140698 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.95723
+INFO:tensorflow:examples/sec: 1269.05
+I0810 11:01:33.141076 139645157615424 tpu_estimator.py:2392] examples/sec: 1269.05
+INFO:tensorflow:global_step/sec: 4.98218
+I0810 11:01:33.341380 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.98218
+INFO:tensorflow:examples/sec: 1275.44
+I0810 11:01:33.341746 139645157615424 tpu_estimator.py:2392] examples/sec: 1275.44
+INFO:tensorflow:global_step/sec: 4.97433
+I0810 11:01:33.542412 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.97433
+INFO:tensorflow:examples/sec: 1273.43
+I0810 11:01:33.542830 139645157615424 tpu_estimator.py:2392] examples/sec: 1273.43
+INFO:tensorflow:global_step/sec: 4.96324
+I0810 11:01:33.743938 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.96324
+INFO:tensorflow:examples/sec: 1270.59
+I0810 11:01:33.744358 139645157615424 tpu_estimator.py:2392] examples/sec: 1270.59
+INFO:tensorflow:global_step/sec: 4.94755
+I0810 11:01:33.946018 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.94755
+INFO:tensorflow:examples/sec: 1266.57
+I0810 11:01:33.946404 139645157615424 tpu_estimator.py:2392] examples/sec: 1266.57
+INFO:tensorflow:global_step/sec: 4.98018
+I0810 11:01:34.146864 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.98018
+INFO:tensorflow:examples/sec: 1274.93
+I0810 11:01:34.147304 139645157615424 tpu_estimator.py:2392] examples/sec: 1274.93
+INFO:tensorflow:global_step/sec: 4.98373
+I0810 11:01:34.347520 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.98373
+INFO:tensorflow:examples/sec: 1275.83
+I0810 11:01:34.347961 139645157615424 tpu_estimator.py:2392] examples/sec: 1275.83
+INFO:tensorflow:global_step/sec: 4.96773
+I0810 11:01:34.548807 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.96773
+INFO:tensorflow:examples/sec: 1271.74
+I0810 11:01:34.549226 139645157615424 tpu_estimator.py:2392] examples/sec: 1271.74
+INFO:tensorflow:global_step/sec: 4.97679
+I0810 11:01:34.749721 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.97679
+INFO:tensorflow:examples/sec: 1274.06
+I0810 11:01:34.750089 139645157615424 tpu_estimator.py:2392] examples/sec: 1274.06
+INFO:tensorflow:global_step/sec: 4.97453
+I0810 11:01:34.950766 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.97453
+INFO:tensorflow:examples/sec: 1273.48
+I0810 11:01:34.951196 139645157615424 tpu_estimator.py:2392] examples/sec: 1273.48
+INFO:tensorflow:global_step/sec: 4.95579
+I0810 11:01:35.152573 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.95579
+INFO:tensorflow:examples/sec: 1268.68
+I0810 11:01:35.152992 139645157615424 tpu_estimator.py:2392] examples/sec: 1268.68
+INFO:tensorflow:global_step/sec: 4.97193
+I0810 11:01:35.353672 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.97193
+INFO:tensorflow:examples/sec: 1272.81
+I0810 11:01:35.354068 139645157615424 tpu_estimator.py:2392] examples/sec: 1272.81
+INFO:tensorflow:global_step/sec: 4.96682
+I0810 11:01:35.554999 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.96682
+INFO:tensorflow:examples/sec: 1271.51
+I0810 11:01:35.555409 139645157615424 tpu_estimator.py:2392] examples/sec: 1271.51
+INFO:tensorflow:global_step/sec: 4.96597
+I0810 11:01:35.756376 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.96597
+INFO:tensorflow:examples/sec: 1271.29
+I0810 11:01:35.756785 139645157615424 tpu_estimator.py:2392] examples/sec: 1271.29
+INFO:tensorflow:global_step/sec: 4.95424
+I0810 11:01:35.958220 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.95424
+INFO:tensorflow:examples/sec: 1268.29
+I0810 11:01:35.958626 139645157615424 tpu_estimator.py:2392] examples/sec: 1268.29
+INFO:tensorflow:global_step/sec: 4.96161
+I0810 11:01:36.159789 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.96161
+INFO:tensorflow:examples/sec: 1270.17
+I0810 11:01:36.160199 139645157615424 tpu_estimator.py:2392] examples/sec: 1270.17
+INFO:tensorflow:global_step/sec: 4.97111
+I0810 11:01:36.360956 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.97111
+INFO:tensorflow:examples/sec: 1272.6
+I0810 11:01:36.361362 139645157615424 tpu_estimator.py:2392] examples/sec: 1272.6
+INFO:tensorflow:global_step/sec: 4.96454
+I0810 11:01:36.562365 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.96454
+INFO:tensorflow:examples/sec: 1270.92
+I0810 11:01:36.562783 139645157615424 tpu_estimator.py:2392] examples/sec: 1270.92
+INFO:tensorflow:global_step/sec: 4.97232
+I0810 11:01:36.763451 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.97232
+INFO:tensorflow:examples/sec: 1272.91
+I0810 11:01:36.763831 139645157615424 tpu_estimator.py:2392] examples/sec: 1272.91
+INFO:tensorflow:global_step/sec: 4.9807
+I0810 11:01:36.964272 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.9807
+INFO:tensorflow:examples/sec: 1275.06
+I0810 11:01:36.964704 139645157615424 tpu_estimator.py:2392] examples/sec: 1275.06
+INFO:tensorflow:global_step/sec: 4.95895
+I0810 11:01:37.165879 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.95895
+INFO:tensorflow:examples/sec: 1269.49
+I0810 11:01:37.166282 139645157615424 tpu_estimator.py:2392] examples/sec: 1269.49
+INFO:tensorflow:global_step/sec: 4.96844
+I0810 11:01:37.367191 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.96844
+INFO:tensorflow:examples/sec: 1271.92
+I0810 11:01:37.367598 139645157615424 tpu_estimator.py:2392] examples/sec: 1271.92
+INFO:tensorflow:global_step/sec: 4.97094
+I0810 11:01:37.568343 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.97094
+INFO:tensorflow:examples/sec: 1272.56
+I0810 11:01:37.568762 139645157615424 tpu_estimator.py:2392] examples/sec: 1272.56
+INFO:tensorflow:global_step/sec: 4.9743
+I0810 11:01:37.769382 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.9743
+INFO:tensorflow:examples/sec: 1273.42
+I0810 11:01:37.769814 139645157615424 tpu_estimator.py:2392] examples/sec: 1273.42
+INFO:tensorflow:global_step/sec: 4.96366
+I0810 11:01:37.970848 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.96366
+INFO:tensorflow:examples/sec: 1270.7
+I0810 11:01:37.971256 139645157615424 tpu_estimator.py:2392] examples/sec: 1270.7
+INFO:tensorflow:global_step/sec: 4.97089
+I0810 11:01:38.172022 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.97089
+INFO:tensorflow:examples/sec: 1272.55
+I0810 11:01:38.172456 139645157615424 tpu_estimator.py:2392] examples/sec: 1272.55
+INFO:tensorflow:global_step/sec: 4.96902
+I0810 11:01:38.373260 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.96902
+INFO:tensorflow:examples/sec: 1272.07
+I0810 11:01:38.373672 139645157615424 tpu_estimator.py:2392] examples/sec: 1272.07
+INFO:tensorflow:global_step/sec: 4.97478
+I0810 11:01:38.574258 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.97478
+INFO:tensorflow:examples/sec: 1273.54
+I0810 11:01:38.574648 139645157615424 tpu_estimator.py:2392] examples/sec: 1273.54
+INFO:tensorflow:global_step/sec: 4.97224
+I0810 11:01:38.775344 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.97224
+INFO:tensorflow:examples/sec: 1272.89
+I0810 11:01:38.775711 139645157615424 tpu_estimator.py:2392] examples/sec: 1272.89
+INFO:tensorflow:global_step/sec: 4.96917
+I0810 11:01:38.976655 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.96917
+INFO:tensorflow:examples/sec: 1272.11
+I0810 11:01:38.977052 139645157615424 tpu_estimator.py:2392] examples/sec: 1272.11
+INFO:tensorflow:global_step/sec: 4.94727
+I0810 11:01:39.178763 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.94727
+INFO:tensorflow:examples/sec: 1266.5
+I0810 11:01:39.179233 139645157615424 tpu_estimator.py:2392] examples/sec: 1266.5
+INFO:tensorflow:global_step/sec: 4.95652
+I0810 11:01:39.380548 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.95652
+INFO:tensorflow:examples/sec: 1268.87
+I0810 11:01:39.380961 139645157615424 tpu_estimator.py:2392] examples/sec: 1268.87
+INFO:tensorflow:global_step/sec: 4.96557
+I0810 11:01:39.581898 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.96557
+INFO:tensorflow:examples/sec: 1271.18
+I0810 11:01:39.582285 139645157615424 tpu_estimator.py:2392] examples/sec: 1271.18
+INFO:tensorflow:global_step/sec: 4.97573
+I0810 11:01:39.782878 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.97573
+INFO:tensorflow:examples/sec: 1273.79
+I0810 11:01:39.783284 139645157615424 tpu_estimator.py:2392] examples/sec: 1273.79
+INFO:tensorflow:global_step/sec: 4.96
+I0810 11:01:39.984525 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.96
+INFO:tensorflow:examples/sec: 1269.76
+I0810 11:01:39.984916 139645157615424 tpu_estimator.py:2392] examples/sec: 1269.76
+INFO:tensorflow:global_step/sec: 4.94733
+I0810 11:01:40.186606 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.94733
+INFO:tensorflow:examples/sec: 1266.52
+I0810 11:01:40.187020 139645157615424 tpu_estimator.py:2392] examples/sec: 1266.52
+INFO:tensorflow:global_step/sec: 4.98155
+I0810 11:01:40.387366 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.98155
+INFO:tensorflow:examples/sec: 1275.28
+I0810 11:01:40.387790 139645157615424 tpu_estimator.py:2392] examples/sec: 1275.28
+INFO:tensorflow:global_step/sec: 4.97176
+I0810 11:01:40.588506 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.97176
+INFO:tensorflow:examples/sec: 1272.77
+I0810 11:01:40.588885 139645157615424 tpu_estimator.py:2392] examples/sec: 1272.77
+INFO:tensorflow:global_step/sec: 4.97501
+I0810 11:01:40.789520 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.97501
+INFO:tensorflow:examples/sec: 1273.6
+I0810 11:01:40.789911 139645157615424 tpu_estimator.py:2392] examples/sec: 1273.6
+INFO:tensorflow:global_step/sec: 4.97537
+I0810 11:01:40.990527 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.97537
+INFO:tensorflow:examples/sec: 1273.69
+I0810 11:01:40.990933 139645157615424 tpu_estimator.py:2392] examples/sec: 1273.69
+INFO:tensorflow:global_step/sec: 4.96302
+I0810 11:01:41.191966 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.96302
+INFO:tensorflow:examples/sec: 1270.53
+I0810 11:01:41.192374 139645157615424 tpu_estimator.py:2392] examples/sec: 1270.53
+INFO:tensorflow:global_step/sec: 4.98531
+I0810 11:01:41.392618 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.98531
+INFO:tensorflow:examples/sec: 1276.24
+I0810 11:01:41.393005 139645157615424 tpu_estimator.py:2392] examples/sec: 1276.24
+INFO:tensorflow:global_step/sec: 4.97586
+I0810 11:01:41.593542 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.97586
+INFO:tensorflow:examples/sec: 1273.82
+I0810 11:01:41.593924 139645157615424 tpu_estimator.py:2392] examples/sec: 1273.82
+INFO:tensorflow:global_step/sec: 4.96851
+I0810 11:01:41.794823 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.96851
+INFO:tensorflow:examples/sec: 1271.94
+I0810 11:01:41.795243 139645157615424 tpu_estimator.py:2392] examples/sec: 1271.94
+INFO:tensorflow:global_step/sec: 4.96087
+I0810 11:01:41.996432 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.96087
+INFO:tensorflow:examples/sec: 1269.98
+I0810 11:01:41.996821 139645157615424 tpu_estimator.py:2392] examples/sec: 1269.98
+INFO:tensorflow:global_step/sec: 4.95255
+I0810 11:01:42.198316 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.95255
+INFO:tensorflow:examples/sec: 1267.85
+I0810 11:01:42.198696 139645157615424 tpu_estimator.py:2392] examples/sec: 1267.85
+INFO:tensorflow:global_step/sec: 4.96902
+I0810 11:01:42.399569 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.96902
+INFO:tensorflow:examples/sec: 1272.07
+I0810 11:01:42.399960 139645157615424 tpu_estimator.py:2392] examples/sec: 1272.07
+INFO:tensorflow:global_step/sec: 4.95834
+I0810 11:01:42.601240 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.95834
+INFO:tensorflow:examples/sec: 1269.33
+I0810 11:01:42.601627 139645157615424 tpu_estimator.py:2392] examples/sec: 1269.33
+INFO:tensorflow:global_step/sec: 4.97093
+I0810 11:01:42.802424 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.97093
+INFO:tensorflow:examples/sec: 1272.56
+I0810 11:01:42.802814 139645157615424 tpu_estimator.py:2392] examples/sec: 1272.56
+INFO:tensorflow:global_step/sec: 4.79424
+I0810 11:01:43.011011 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.79424
+INFO:tensorflow:examples/sec: 1227.33
+I0810 11:01:43.011445 139645157615424 tpu_estimator.py:2392] examples/sec: 1227.33
+INFO:tensorflow:global_step/sec: 4.87867
+I0810 11:01:43.215956 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.87867
+INFO:tensorflow:examples/sec: 1248.94
+I0810 11:01:43.216372 139645157615424 tpu_estimator.py:2392] examples/sec: 1248.94
+INFO:tensorflow:global_step/sec: 4.87397
+I0810 11:01:43.421104 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.87397
+INFO:tensorflow:examples/sec: 1247.74
+I0810 11:01:43.421479 139645157615424 tpu_estimator.py:2392] examples/sec: 1247.74
+INFO:tensorflow:global_step/sec: 4.98704
+I0810 11:01:43.621735 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.98704
+INFO:tensorflow:examples/sec: 1276.68
+I0810 11:01:43.622192 139645157615424 tpu_estimator.py:2392] examples/sec: 1276.68
+INFO:tensorflow:global_step/sec: 4.95478
+I0810 11:01:43.823499 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.95478
+INFO:tensorflow:examples/sec: 1268.42
+I0810 11:01:43.823938 139645157615424 tpu_estimator.py:2392] examples/sec: 1268.42
+INFO:tensorflow:global_step/sec: 4.93506
+I0810 11:01:44.026109 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.93506
+INFO:tensorflow:examples/sec: 1263.37
+I0810 11:01:44.026532 139645157615424 tpu_estimator.py:2392] examples/sec: 1263.37
+INFO:tensorflow:global_step/sec: 4.95022
+I0810 11:01:44.228114 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.95022
+INFO:tensorflow:examples/sec: 1267.26
+I0810 11:01:44.228521 139645157615424 tpu_estimator.py:2392] examples/sec: 1267.26
+INFO:tensorflow:global_step/sec: 4.96801
+I0810 11:01:44.429414 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.96801
+INFO:tensorflow:examples/sec: 1271.81
+I0810 11:01:44.429832 139645157615424 tpu_estimator.py:2392] examples/sec: 1271.81
+INFO:tensorflow:global_step/sec: 4.96311
+I0810 11:01:44.630891 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.96311
+INFO:tensorflow:examples/sec: 1270.56
+I0810 11:01:44.631296 139645157615424 tpu_estimator.py:2392] examples/sec: 1270.56
+INFO:tensorflow:global_step/sec: 4.97183
+I0810 11:01:44.832020 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.97183
+INFO:tensorflow:examples/sec: 1272.79
+I0810 11:01:44.832429 139645157615424 tpu_estimator.py:2392] examples/sec: 1272.79
+INFO:tensorflow:global_step/sec: 4.97436
+I0810 11:01:45.033059 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.97436
+INFO:tensorflow:examples/sec: 1273.44
+I0810 11:01:45.033476 139645157615424 tpu_estimator.py:2392] examples/sec: 1273.44
+INFO:tensorflow:global_step/sec: 4.95467
+I0810 11:01:45.234887 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.95467
+INFO:tensorflow:examples/sec: 1268.4
+I0810 11:01:45.235273 139645157615424 tpu_estimator.py:2392] examples/sec: 1268.4
+INFO:tensorflow:global_step/sec: 4.94236
+I0810 11:01:45.437229 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.94236
+INFO:tensorflow:examples/sec: 1265.24
+I0810 11:01:45.437662 139645157615424 tpu_estimator.py:2392] examples/sec: 1265.24
+INFO:tensorflow:global_step/sec: 4.96548
+I0810 11:01:45.638611 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.96548
+INFO:tensorflow:examples/sec: 1271.16
+I0810 11:01:45.639024 139645157615424 tpu_estimator.py:2392] examples/sec: 1271.16
+INFO:tensorflow:global_step/sec: 4.9505
+I0810 11:01:45.840659 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.9505
+INFO:tensorflow:examples/sec: 1267.33
+I0810 11:01:45.841084 139645157615424 tpu_estimator.py:2392] examples/sec: 1267.33
+INFO:tensorflow:global_step/sec: 4.85311
+I0810 11:01:46.046682 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.85311
+INFO:tensorflow:examples/sec: 1242.4
+I0810 11:01:46.047081 139645157615424 tpu_estimator.py:2392] examples/sec: 1242.4
+INFO:tensorflow:global_step/sec: 4.83553
+I0810 11:01:46.253491 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.83553
+INFO:tensorflow:examples/sec: 1237.9
+I0810 11:01:46.253896 139645157615424 tpu_estimator.py:2392] examples/sec: 1237.9
+INFO:tensorflow:global_step/sec: 4.96275
+I0810 11:01:46.454981 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.96275
+INFO:tensorflow:examples/sec: 1270.46
+I0810 11:01:46.455373 139645157615424 tpu_estimator.py:2392] examples/sec: 1270.46
+INFO:tensorflow:global_step/sec: 4.95601
+I0810 11:01:46.656751 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.95601
+INFO:tensorflow:examples/sec: 1268.74
+I0810 11:01:46.657175 139645157615424 tpu_estimator.py:2392] examples/sec: 1268.74
+INFO:tensorflow:global_step/sec: 4.96478
+I0810 11:01:46.858165 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.96478
+INFO:tensorflow:examples/sec: 1270.98
+I0810 11:01:46.858571 139645157615424 tpu_estimator.py:2392] examples/sec: 1270.98
+INFO:tensorflow:global_step/sec: 4.97572
+I0810 11:01:47.059140 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.97572
+INFO:tensorflow:examples/sec: 1273.78
+I0810 11:01:47.059552 139645157615424 tpu_estimator.py:2392] examples/sec: 1273.78
+INFO:tensorflow:global_step/sec: 4.95765
+I0810 11:01:47.260873 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.95765
+INFO:tensorflow:examples/sec: 1269.16
+I0810 11:01:47.261334 139645157615424 tpu_estimator.py:2392] examples/sec: 1269.16
+INFO:tensorflow:global_step/sec: 4.97387
+I0810 11:01:47.461907 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.97387
+INFO:tensorflow:examples/sec: 1273.31
+I0810 11:01:47.462302 139645157615424 tpu_estimator.py:2392] examples/sec: 1273.31
+INFO:tensorflow:global_step/sec: 4.96927
+I0810 11:01:47.663107 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.96927
+INFO:tensorflow:examples/sec: 1272.13
+I0810 11:01:47.663490 139645157615424 tpu_estimator.py:2392] examples/sec: 1272.13
+INFO:tensorflow:global_step/sec: 4.95949
+I0810 11:01:47.864768 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.95949
+INFO:tensorflow:examples/sec: 1269.63
+I0810 11:01:47.865140 139645157615424 tpu_estimator.py:2392] examples/sec: 1269.63
+INFO:tensorflow:global_step/sec: 4.95969
+I0810 11:01:48.066405 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.95969
+INFO:tensorflow:examples/sec: 1269.68
+I0810 11:01:48.066834 139645157615424 tpu_estimator.py:2392] examples/sec: 1269.68
+INFO:tensorflow:global_step/sec: 4.93984
+I0810 11:01:48.268794 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.93984
+INFO:tensorflow:examples/sec: 1264.6
+I0810 11:01:48.269229 139645157615424 tpu_estimator.py:2392] examples/sec: 1264.6
+INFO:tensorflow:global_step/sec: 4.97634
+I0810 11:01:48.469790 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.97634
+INFO:tensorflow:examples/sec: 1273.94
+I0810 11:01:48.470209 139645157615424 tpu_estimator.py:2392] examples/sec: 1273.94
+INFO:tensorflow:global_step/sec: 4.96856
+I0810 11:01:48.671072 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.96856
+INFO:tensorflow:examples/sec: 1271.95
+I0810 11:01:48.671487 139645157615424 tpu_estimator.py:2392] examples/sec: 1271.95
+INFO:tensorflow:global_step/sec: 4.96094
+I0810 11:01:48.872642 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.96094
+INFO:tensorflow:examples/sec: 1270
+I0810 11:01:48.873056 139645157615424 tpu_estimator.py:2392] examples/sec: 1270
+INFO:tensorflow:global_step/sec: 4.95055
+I0810 11:01:49.074580 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.95055
+INFO:tensorflow:examples/sec: 1267.34
+I0810 11:01:49.074984 139645157615424 tpu_estimator.py:2392] examples/sec: 1267.34
+INFO:tensorflow:global_step/sec: 4.9581
+I0810 11:01:49.276310 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.9581
+INFO:tensorflow:examples/sec: 1269.27
+I0810 11:01:49.276707 139645157615424 tpu_estimator.py:2392] examples/sec: 1269.27
+INFO:tensorflow:global_step/sec: 4.94456
+I0810 11:01:49.478466 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.94456
+INFO:tensorflow:examples/sec: 1265.81
+I0810 11:01:49.478816 139645157615424 tpu_estimator.py:2392] examples/sec: 1265.81
+INFO:tensorflow:global_step/sec: 4.97708
+I0810 11:01:49.679445 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.97708
+INFO:tensorflow:examples/sec: 1274.13
+I0810 11:01:49.679805 139645157615424 tpu_estimator.py:2392] examples/sec: 1274.13
+INFO:tensorflow:global_step/sec: 4.96381
+I0810 11:01:49.880927 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.96381
+INFO:tensorflow:examples/sec: 1270.73
+I0810 11:01:49.881328 139645157615424 tpu_estimator.py:2392] examples/sec: 1270.73
+INFO:tensorflow:global_step/sec: 4.83218
+I0810 11:01:50.087862 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.83218
+INFO:tensorflow:examples/sec: 1237.04
+I0810 11:01:50.088253 139645157615424 tpu_estimator.py:2392] examples/sec: 1237.04
+INFO:tensorflow:global_step/sec: 4.85504
+I0810 11:01:50.293821 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.85504
+INFO:tensorflow:examples/sec: 1242.89
+I0810 11:01:50.294221 139645157615424 tpu_estimator.py:2392] examples/sec: 1242.89
+INFO:tensorflow:global_step/sec: 4.91333
+I0810 11:01:50.497351 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.91333
+INFO:tensorflow:examples/sec: 1257.81
+I0810 11:01:50.497730 139645157615424 tpu_estimator.py:2392] examples/sec: 1257.81
+INFO:tensorflow:global_step/sec: 4.96557
+I0810 11:01:50.698736 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.96557
+INFO:tensorflow:examples/sec: 1271.19
+I0810 11:01:50.699120 139645157615424 tpu_estimator.py:2392] examples/sec: 1271.19
+INFO:tensorflow:global_step/sec: 4.92704
+I0810 11:01:50.901739 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.92704
+INFO:tensorflow:examples/sec: 1261.32
+I0810 11:01:50.902142 139645157615424 tpu_estimator.py:2392] examples/sec: 1261.32
+INFO:tensorflow:global_step/sec: 4.9264
+I0810 11:01:51.104722 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.9264
+INFO:tensorflow:examples/sec: 1261.16
+I0810 11:01:51.105099 139645157615424 tpu_estimator.py:2392] examples/sec: 1261.16
+INFO:tensorflow:global_step/sec: 4.95383
+I0810 11:01:51.306584 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.95383
+INFO:tensorflow:examples/sec: 1268.18
+I0810 11:01:51.306970 139645157615424 tpu_estimator.py:2392] examples/sec: 1268.18
+INFO:tensorflow:global_step/sec: 4.95643
+I0810 11:01:51.508320 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.95643
+INFO:tensorflow:examples/sec: 1268.85
+I0810 11:01:51.508725 139645157615424 tpu_estimator.py:2392] examples/sec: 1268.85
+INFO:tensorflow:global_step/sec: 4.96151
+I0810 11:01:51.709887 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.96151
+INFO:tensorflow:examples/sec: 1270.15
+I0810 11:01:51.710273 139645157615424 tpu_estimator.py:2392] examples/sec: 1270.15
+INFO:tensorflow:global_step/sec: 4.93411
+I0810 11:01:51.912587 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.93411
+INFO:tensorflow:examples/sec: 1263.13
+I0810 11:01:51.913012 139645157615424 tpu_estimator.py:2392] examples/sec: 1263.13
+INFO:tensorflow:global_step/sec: 4.93975
+I0810 11:01:52.114991 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.93975
+INFO:tensorflow:examples/sec: 1264.58
+I0810 11:01:52.115377 139645157615424 tpu_estimator.py:2392] examples/sec: 1264.58
+INFO:tensorflow:global_step/sec: 4.95015
+I0810 11:01:52.317034 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.95015
+INFO:tensorflow:examples/sec: 1267.24
+I0810 11:01:52.317416 139645157615424 tpu_estimator.py:2392] examples/sec: 1267.24
+INFO:tensorflow:global_step/sec: 4.91129
+I0810 11:01:52.520672 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.91129
+INFO:tensorflow:examples/sec: 1257.29
+I0810 11:01:52.521068 139645157615424 tpu_estimator.py:2392] examples/sec: 1257.29
+INFO:tensorflow:global_step/sec: 4.95317
+I0810 11:01:52.722525 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.95317
+INFO:tensorflow:examples/sec: 1268.01
+I0810 11:01:52.722929 139645157615424 tpu_estimator.py:2392] examples/sec: 1268.01
+INFO:tensorflow:global_step/sec: 4.91686
+I0810 11:01:52.925902 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.91686
+INFO:tensorflow:examples/sec: 1258.72
+I0810 11:01:52.926309 139645157615424 tpu_estimator.py:2392] examples/sec: 1258.72
+INFO:tensorflow:global_step/sec: 4.83334
+I0810 11:01:53.132791 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.83334
+INFO:tensorflow:examples/sec: 1237.33
+I0810 11:01:53.133192 139645157615424 tpu_estimator.py:2392] examples/sec: 1237.33
+INFO:tensorflow:global_step/sec: 4.44136
+I0810 11:01:53.357956 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.44136
+INFO:tensorflow:examples/sec: 1136.99
+I0810 11:01:53.358365 139645157615424 tpu_estimator.py:2392] examples/sec: 1136.99
+INFO:tensorflow:global_step/sec: 4.53397
+I0810 11:01:53.578540 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.53397
+INFO:tensorflow:examples/sec: 1160.7
+I0810 11:01:53.578927 139645157615424 tpu_estimator.py:2392] examples/sec: 1160.7
+INFO:tensorflow:global_step/sec: 4.95436
+I0810 11:01:53.780331 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.95436
+INFO:tensorflow:examples/sec: 1268.32
+I0810 11:01:53.780732 139645157615424 tpu_estimator.py:2392] examples/sec: 1268.32
+INFO:tensorflow:global_step/sec: 4.96644
+I0810 11:01:53.981708 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.96644
+INFO:tensorflow:examples/sec: 1271.41
+I0810 11:01:53.982125 139645157615424 tpu_estimator.py:2392] examples/sec: 1271.41
+INFO:tensorflow:global_step/sec: 4.95071
+I0810 11:01:54.183697 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.95071
+INFO:tensorflow:examples/sec: 1267.38
+I0810 11:01:54.184076 139645157615424 tpu_estimator.py:2392] examples/sec: 1267.38
+INFO:tensorflow:global_step/sec: 4.95019
+I0810 11:01:54.385701 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.95019
+INFO:tensorflow:examples/sec: 1267.25
+I0810 11:01:54.386079 139645157615424 tpu_estimator.py:2392] examples/sec: 1267.25
+INFO:tensorflow:global_step/sec: 4.95192
+I0810 11:01:54.587644 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.95192
+INFO:tensorflow:examples/sec: 1267.69
+I0810 11:01:54.588022 139645157615424 tpu_estimator.py:2392] examples/sec: 1267.69
+INFO:tensorflow:global_step/sec: 4.9287
+I0810 11:01:54.790548 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.9287
+INFO:tensorflow:examples/sec: 1261.75
+I0810 11:01:54.790931 139645157615424 tpu_estimator.py:2392] examples/sec: 1261.75
+INFO:tensorflow:global_step/sec: 4.89849
+I0810 11:01:54.994710 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.89849
+INFO:tensorflow:examples/sec: 1254.01
+I0810 11:01:54.995107 139645157615424 tpu_estimator.py:2392] examples/sec: 1254.01
+INFO:tensorflow:global_step/sec: 4.95364
+I0810 11:01:55.196599 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.95364
+INFO:tensorflow:examples/sec: 1268.13
+I0810 11:01:55.197014 139645157615424 tpu_estimator.py:2392] examples/sec: 1268.13
+INFO:tensorflow:global_step/sec: 4.93646
+I0810 11:01:55.399145 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.93646
+INFO:tensorflow:examples/sec: 1263.73
+I0810 11:01:55.399548 139645157615424 tpu_estimator.py:2392] examples/sec: 1263.73
+INFO:tensorflow:global_step/sec: 4.94504
+I0810 11:01:55.601314 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.94504
+INFO:tensorflow:examples/sec: 1265.93
+I0810 11:01:55.601724 139645157615424 tpu_estimator.py:2392] examples/sec: 1265.93
+INFO:tensorflow:global_step/sec: 4.84861
+I0810 11:01:55.807611 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.84861
+INFO:tensorflow:examples/sec: 1241.24
+I0810 11:01:55.808020 139645157615424 tpu_estimator.py:2392] examples/sec: 1241.24
+INFO:tensorflow:global_step/sec: 4.94423
+I0810 11:01:56.009850 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.94423
+INFO:tensorflow:examples/sec: 1265.72
+I0810 11:01:56.010229 139645157615424 tpu_estimator.py:2392] examples/sec: 1265.72
+INFO:tensorflow:global_step/sec: 4.93348
+I0810 11:01:56.212582 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.93348
+INFO:tensorflow:examples/sec: 1262.97
+I0810 11:01:56.212958 139645157615424 tpu_estimator.py:2392] examples/sec: 1262.97
+INFO:tensorflow:global_step/sec: 4.94928
+I0810 11:01:56.414566 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.94928
+INFO:tensorflow:examples/sec: 1267.01
+I0810 11:01:56.414968 139645157615424 tpu_estimator.py:2392] examples/sec: 1267.01
+INFO:tensorflow:global_step/sec: 4.9506
+I0810 11:01:56.616641 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.9506
+INFO:tensorflow:examples/sec: 1267.35
+I0810 11:01:56.617047 139645157615424 tpu_estimator.py:2392] examples/sec: 1267.35
+INFO:tensorflow:global_step/sec: 4.92048
+I0810 11:01:56.819824 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.92048
+INFO:tensorflow:examples/sec: 1259.64
+I0810 11:01:56.820229 139645157615424 tpu_estimator.py:2392] examples/sec: 1259.64
+INFO:tensorflow:global_step/sec: 4.81952
+I0810 11:01:57.027323 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.81952
+INFO:tensorflow:examples/sec: 1233.8
+I0810 11:01:57.027718 139645157615424 tpu_estimator.py:2392] examples/sec: 1233.8
+INFO:tensorflow:global_step/sec: 4.96435
+I0810 11:01:57.228754 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.96435
+INFO:tensorflow:examples/sec: 1270.87
+I0810 11:01:57.229133 139645157615424 tpu_estimator.py:2392] examples/sec: 1270.87
+INFO:tensorflow:global_step/sec: 4.93935
+I0810 11:01:57.431210 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.93935
+INFO:tensorflow:examples/sec: 1264.47
+I0810 11:01:57.431597 139645157615424 tpu_estimator.py:2392] examples/sec: 1264.47
+INFO:tensorflow:global_step/sec: 4.95907
+I0810 11:01:57.632860 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.95907
+INFO:tensorflow:examples/sec: 1269.52
+I0810 11:01:57.633235 139645157615424 tpu_estimator.py:2392] examples/sec: 1269.52
+INFO:tensorflow:global_step/sec: 4.76396
+I0810 11:01:57.842778 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.76396
+INFO:tensorflow:examples/sec: 1219.57
+I0810 11:01:57.843151 139645157615424 tpu_estimator.py:2392] examples/sec: 1219.57
+INFO:tensorflow:global_step/sec: 4.95946
+I0810 11:01:58.044426 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.95946
+INFO:tensorflow:examples/sec: 1269.62
+I0810 11:01:58.044800 139645157615424 tpu_estimator.py:2392] examples/sec: 1269.62
+INFO:tensorflow:global_step/sec: 4.93943
+I0810 11:01:58.246859 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.93943
+INFO:tensorflow:examples/sec: 1264.49
+I0810 11:01:58.247231 139645157615424 tpu_estimator.py:2392] examples/sec: 1264.49
+INFO:tensorflow:global_step/sec: 4.87518
+I0810 11:01:58.451963 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.87518
+INFO:tensorflow:examples/sec: 1248.05
+I0810 11:01:58.452327 139645157615424 tpu_estimator.py:2392] examples/sec: 1248.05
+INFO:tensorflow:global_step/sec: 4.92159
+I0810 11:01:58.655166 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.92159
+INFO:tensorflow:examples/sec: 1259.93
+I0810 11:01:58.655540 139645157615424 tpu_estimator.py:2392] examples/sec: 1259.93
+INFO:tensorflow:global_step/sec: 4.93225
+I0810 11:01:58.857912 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.93225
+INFO:tensorflow:examples/sec: 1262.66
+I0810 11:01:58.858324 139645157615424 tpu_estimator.py:2392] examples/sec: 1262.66
+INFO:tensorflow:global_step/sec: 4.94154
+I0810 11:01:59.060287 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.94154
+INFO:tensorflow:examples/sec: 1265.04
+I0810 11:01:59.060737 139645157615424 tpu_estimator.py:2392] examples/sec: 1265.04
+INFO:tensorflow:global_step/sec: 4.9628
+I0810 11:01:59.261775 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.9628
+INFO:tensorflow:examples/sec: 1270.48
+I0810 11:01:59.262054 139645157615424 tpu_estimator.py:2392] examples/sec: 1270.48
+INFO:tensorflow:global_step/sec: 4.95396
+I0810 11:01:59.463654 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.95396
+INFO:tensorflow:examples/sec: 1268.21
+I0810 11:01:59.464040 139645157615424 tpu_estimator.py:2392] examples/sec: 1268.21
+INFO:tensorflow:global_step/sec: 4.9497
+I0810 11:01:59.665679 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.9497
+INFO:tensorflow:examples/sec: 1267.12
+I0810 11:01:59.665960 139645157615424 tpu_estimator.py:2392] examples/sec: 1267.12
+INFO:tensorflow:global_step/sec: 4.93937
+I0810 11:01:59.868164 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.93937
+INFO:tensorflow:examples/sec: 1264.48
+I0810 11:01:59.868581 139645157615424 tpu_estimator.py:2392] examples/sec: 1264.48
+INFO:tensorflow:global_step/sec: 4.96282
+I0810 11:02:00.069640 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.96282
+INFO:tensorflow:examples/sec: 1270.48
+I0810 11:02:00.070067 139645157615424 tpu_estimator.py:2392] examples/sec: 1270.48
+INFO:tensorflow:global_step/sec: 4.96192
+I0810 11:02:00.271184 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.96192
+INFO:tensorflow:examples/sec: 1270.25
+I0810 11:02:00.271579 139645157615424 tpu_estimator.py:2392] examples/sec: 1270.25
+INFO:tensorflow:global_step/sec: 4.93619
+I0810 11:02:00.473750 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.93619
+INFO:tensorflow:examples/sec: 1263.66
+I0810 11:02:00.474141 139645157615424 tpu_estimator.py:2392] examples/sec: 1263.66
+INFO:tensorflow:global_step/sec: 4.84745
+I0810 11:02:00.680048 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.84745
+INFO:tensorflow:examples/sec: 1240.95
+I0810 11:02:00.680494 139645157615424 tpu_estimator.py:2392] examples/sec: 1240.95
+INFO:tensorflow:global_step/sec: 4.93024
+I0810 11:02:00.882862 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.93024
+INFO:tensorflow:examples/sec: 1262.14
+I0810 11:02:00.883270 139645157615424 tpu_estimator.py:2392] examples/sec: 1262.14
+INFO:tensorflow:global_step/sec: 4.95115
+I0810 11:02:01.084851 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.95115
+INFO:tensorflow:examples/sec: 1267.49
+I0810 11:02:01.085297 139645157615424 tpu_estimator.py:2392] examples/sec: 1267.49
+INFO:tensorflow:global_step/sec: 4.90048
+I0810 11:02:01.288908 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.90048
+INFO:tensorflow:examples/sec: 1254.52
+I0810 11:02:01.289352 139645157615424 tpu_estimator.py:2392] examples/sec: 1254.52
+INFO:tensorflow:global_step/sec: 4.93478
+I0810 11:02:01.491556 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.93478
+INFO:tensorflow:examples/sec: 1263.3
+I0810 11:02:01.491970 139645157615424 tpu_estimator.py:2392] examples/sec: 1263.3
+INFO:tensorflow:global_step/sec: 4.91218
+I0810 11:02:01.695128 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.91218
+INFO:tensorflow:examples/sec: 1257.52
+I0810 11:02:01.695536 139645157615424 tpu_estimator.py:2392] examples/sec: 1257.52
+INFO:tensorflow:global_step/sec: 4.95129
+I0810 11:02:01.897087 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.95129
+INFO:tensorflow:examples/sec: 1267.53
+I0810 11:02:01.897490 139645157615424 tpu_estimator.py:2392] examples/sec: 1267.53
+INFO:tensorflow:global_step/sec: 4.9435
+I0810 11:02:02.099390 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.9435
+INFO:tensorflow:examples/sec: 1265.54
+I0810 11:02:02.099780 139645157615424 tpu_estimator.py:2392] examples/sec: 1265.54
+INFO:tensorflow:global_step/sec: 4.94923
+I0810 11:02:02.301445 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.94923
+INFO:tensorflow:examples/sec: 1267
+I0810 11:02:02.301843 139645157615424 tpu_estimator.py:2392] examples/sec: 1267
+INFO:tensorflow:global_step/sec: 4.9298
+I0810 11:02:02.504294 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.9298
+INFO:tensorflow:examples/sec: 1262.03
+I0810 11:02:02.504704 139645157615424 tpu_estimator.py:2392] examples/sec: 1262.03
+INFO:tensorflow:global_step/sec: 4.84798
+I0810 11:02:02.710532 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.84798
+INFO:tensorflow:examples/sec: 1241.08
+I0810 11:02:02.710959 139645157615424 tpu_estimator.py:2392] examples/sec: 1241.08
+INFO:tensorflow:global_step/sec: 4.91959
+I0810 11:02:02.913811 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.91959
+INFO:tensorflow:examples/sec: 1259.41
+I0810 11:02:02.914248 139645157615424 tpu_estimator.py:2392] examples/sec: 1259.41
+INFO:tensorflow:global_step/sec: 4.95659
+I0810 11:02:03.115566 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.95659
+INFO:tensorflow:examples/sec: 1268.89
+I0810 11:02:03.116000 139645157615424 tpu_estimator.py:2392] examples/sec: 1268.89
+INFO:tensorflow:global_step/sec: 4.9631
+I0810 11:02:03.317038 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.9631
+INFO:tensorflow:examples/sec: 1270.55
+I0810 11:02:03.317417 139645157615424 tpu_estimator.py:2392] examples/sec: 1270.55
+INFO:tensorflow:global_step/sec: 4.50303
+I0810 11:02:03.539103 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.50303
+INFO:tensorflow:examples/sec: 1152.78
+I0810 11:02:03.539475 139645157615424 tpu_estimator.py:2392] examples/sec: 1152.78
+INFO:tensorflow:global_step/sec: 4.93856
+I0810 11:02:03.741594 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.93856
+INFO:tensorflow:examples/sec: 1264.27
+I0810 11:02:03.741969 139645157615424 tpu_estimator.py:2392] examples/sec: 1264.27
+INFO:tensorflow:global_step/sec: 4.94226
+I0810 11:02:03.943959 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.94226
+INFO:tensorflow:examples/sec: 1265.22
+I0810 11:02:03.944332 139645157615424 tpu_estimator.py:2392] examples/sec: 1265.22
+INFO:tensorflow:global_step/sec: 4.95594
+I0810 11:02:04.145692 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.95594
+INFO:tensorflow:examples/sec: 1268.72
+I0810 11:02:04.146058 139645157615424 tpu_estimator.py:2392] examples/sec: 1268.72
+INFO:tensorflow:global_step/sec: 4.94012
+I0810 11:02:04.348155 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.94012
+INFO:tensorflow:examples/sec: 1264.67
+I0810 11:02:04.348569 139645157615424 tpu_estimator.py:2392] examples/sec: 1264.67
+INFO:tensorflow:global_step/sec: 4.92082
+I0810 11:02:04.551359 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.92082
+INFO:tensorflow:examples/sec: 1259.73
+I0810 11:02:04.551741 139645157615424 tpu_estimator.py:2392] examples/sec: 1259.73
+INFO:tensorflow:global_step/sec: 4.95309
+I0810 11:02:04.753269 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.95309
+INFO:tensorflow:examples/sec: 1267.99
+I0810 11:02:04.753689 139645157615424 tpu_estimator.py:2392] examples/sec: 1267.99
+INFO:tensorflow:global_step/sec: 4.95765
+I0810 11:02:04.954986 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.95765
+INFO:tensorflow:examples/sec: 1269.16
+I0810 11:02:04.955383 139645157615424 tpu_estimator.py:2392] examples/sec: 1269.16
+INFO:tensorflow:global_step/sec: 4.94133
+I0810 11:02:05.157324 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.94133
+INFO:tensorflow:examples/sec: 1264.98
+I0810 11:02:05.157725 139645157615424 tpu_estimator.py:2392] examples/sec: 1264.98
+INFO:tensorflow:global_step/sec: 4.9654
+I0810 11:02:05.358729 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.9654
+INFO:tensorflow:examples/sec: 1271.14
+I0810 11:02:05.359138 139645157615424 tpu_estimator.py:2392] examples/sec: 1271.14
+INFO:tensorflow:global_step/sec: 4.93777
+I0810 11:02:05.561292 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.93777
+INFO:tensorflow:examples/sec: 1264.07
+I0810 11:02:05.561700 139645157615424 tpu_estimator.py:2392] examples/sec: 1264.07
+INFO:tensorflow:global_step/sec: 4.94968
+I0810 11:02:05.763267 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.94968
+INFO:tensorflow:examples/sec: 1267.12
+I0810 11:02:05.763652 139645157615424 tpu_estimator.py:2392] examples/sec: 1267.12
+INFO:tensorflow:global_step/sec: 4.95998
+I0810 11:02:05.964909 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.95998
+INFO:tensorflow:examples/sec: 1269.76
+I0810 11:02:05.965287 139645157615424 tpu_estimator.py:2392] examples/sec: 1269.76
+INFO:tensorflow:global_step/sec: 4.96215
+I0810 11:02:06.166400 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.96215
+INFO:tensorflow:examples/sec: 1270.31
+I0810 11:02:06.166791 139645157615424 tpu_estimator.py:2392] examples/sec: 1270.31
+INFO:tensorflow:global_step/sec: 4.94057
+I0810 11:02:06.368836 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.94057
+INFO:tensorflow:examples/sec: 1264.79
+I0810 11:02:06.369242 139645157615424 tpu_estimator.py:2392] examples/sec: 1264.79
+INFO:tensorflow:global_step/sec: 4.92466
+I0810 11:02:06.571870 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.92466
+INFO:tensorflow:examples/sec: 1260.71
+I0810 11:02:06.572238 139645157615424 tpu_estimator.py:2392] examples/sec: 1260.71
+INFO:tensorflow:global_step/sec: 4.86735
+I0810 11:02:06.777366 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.86735
+INFO:tensorflow:examples/sec: 1246.04
+I0810 11:02:06.777754 139645157615424 tpu_estimator.py:2392] examples/sec: 1246.04
+INFO:tensorflow:global_step/sec: 4.90076
+I0810 11:02:06.981422 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.90076
+INFO:tensorflow:examples/sec: 1254.6
+I0810 11:02:06.981826 139645157615424 tpu_estimator.py:2392] examples/sec: 1254.6
+INFO:tensorflow:global_step/sec: 4.39238
+I0810 11:02:07.209057 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.39238
+INFO:tensorflow:examples/sec: 1124.45
+I0810 11:02:07.209452 139645157615424 tpu_estimator.py:2392] examples/sec: 1124.45
+INFO:tensorflow:global_step/sec: 4.67359
+I0810 11:02:07.423012 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.67359
+INFO:tensorflow:examples/sec: 1196.44
+I0810 11:02:07.423414 139645157615424 tpu_estimator.py:2392] examples/sec: 1196.44
+INFO:tensorflow:global_step/sec: 4.93738
+I0810 11:02:07.625576 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.93738
+INFO:tensorflow:examples/sec: 1263.97
+I0810 11:02:07.626018 139645157615424 tpu_estimator.py:2392] examples/sec: 1263.97
+INFO:tensorflow:global_step/sec: 4.93721
+I0810 11:02:07.828158 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.93721
+INFO:tensorflow:examples/sec: 1263.93
+I0810 11:02:07.828596 139645157615424 tpu_estimator.py:2392] examples/sec: 1263.93
+INFO:tensorflow:global_step/sec: 4.91522
+I0810 11:02:08.031566 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.91522
+INFO:tensorflow:examples/sec: 1258.3
+I0810 11:02:08.032002 139645157615424 tpu_estimator.py:2392] examples/sec: 1258.3
+INFO:tensorflow:global_step/sec: 4.92463
+I0810 11:02:08.234616 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.92463
+INFO:tensorflow:examples/sec: 1260.7
+I0810 11:02:08.235008 139645157615424 tpu_estimator.py:2392] examples/sec: 1260.7
+INFO:tensorflow:global_step/sec: 4.93805
+I0810 11:02:08.437148 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.93805
+INFO:tensorflow:examples/sec: 1264.14
+I0810 11:02:08.437578 139645157615424 tpu_estimator.py:2392] examples/sec: 1264.14
+INFO:tensorflow:global_step/sec: 4.92116
+I0810 11:02:08.640331 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.92116
+INFO:tensorflow:examples/sec: 1259.82
+I0810 11:02:08.640768 139645157615424 tpu_estimator.py:2392] examples/sec: 1259.82
+INFO:tensorflow:global_step/sec: 4.70706
+I0810 11:02:08.852786 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.70706
+INFO:tensorflow:examples/sec: 1205.01
+I0810 11:02:08.853202 139645157615424 tpu_estimator.py:2392] examples/sec: 1205.01
+INFO:tensorflow:global_step/sec: 4.87613
+I0810 11:02:09.057880 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.87613
+INFO:tensorflow:examples/sec: 1248.29
+I0810 11:02:09.058283 139645157615424 tpu_estimator.py:2392] examples/sec: 1248.29
+INFO:tensorflow:global_step/sec: 4.92091
+I0810 11:02:09.261105 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.92091
+INFO:tensorflow:examples/sec: 1259.75
+I0810 11:02:09.261523 139645157615424 tpu_estimator.py:2392] examples/sec: 1259.75
+INFO:tensorflow:global_step/sec: 4.61997
+I0810 11:02:09.477519 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.61997
+INFO:tensorflow:examples/sec: 1182.71
+I0810 11:02:09.477942 139645157615424 tpu_estimator.py:2392] examples/sec: 1182.71
+INFO:tensorflow:global_step/sec: 4.93542
+I0810 11:02:09.680148 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.93542
+INFO:tensorflow:examples/sec: 1263.47
+I0810 11:02:09.680552 139645157615424 tpu_estimator.py:2392] examples/sec: 1263.47
+INFO:tensorflow:global_step/sec: 4.92143
+I0810 11:02:09.883239 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.92143
+INFO:tensorflow:examples/sec: 1259.89
+I0810 11:02:09.883549 139645157615424 tpu_estimator.py:2392] examples/sec: 1259.89
+INFO:tensorflow:global_step/sec: 4.9308
+I0810 11:02:10.086134 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.9308
+INFO:tensorflow:examples/sec: 1262.29
+I0810 11:02:10.086547 139645157615424 tpu_estimator.py:2392] examples/sec: 1262.29
+INFO:tensorflow:global_step/sec: 4.93006
+I0810 11:02:10.288993 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.93006
+INFO:tensorflow:examples/sec: 1262.1
+I0810 11:02:10.289405 139645157615424 tpu_estimator.py:2392] examples/sec: 1262.1
+INFO:tensorflow:global_step/sec: 4.94424
+I0810 11:02:10.491237 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.94424
+INFO:tensorflow:examples/sec: 1265.73
+I0810 11:02:10.491668 139645157615424 tpu_estimator.py:2392] examples/sec: 1265.73
+INFO:tensorflow:global_step/sec: 4.94305
+I0810 11:02:10.693552 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.94305
+INFO:tensorflow:examples/sec: 1265.42
+I0810 11:02:10.693973 139645157615424 tpu_estimator.py:2392] examples/sec: 1265.42
+INFO:tensorflow:global_step/sec: 4.94083
+I0810 11:02:10.895939 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.94083
+INFO:tensorflow:examples/sec: 1264.85
+I0810 11:02:10.896340 139645157615424 tpu_estimator.py:2392] examples/sec: 1264.85
+INFO:tensorflow:global_step/sec: 4.92851
+I0810 11:02:11.098862 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.92851
+INFO:tensorflow:examples/sec: 1261.7
+I0810 11:02:11.099300 139645157615424 tpu_estimator.py:2392] examples/sec: 1261.7
+INFO:tensorflow:global_step/sec: 4.82189
+I0810 11:02:11.306250 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.82189
+INFO:tensorflow:examples/sec: 1234.4
+I0810 11:02:11.306634 139645157615424 tpu_estimator.py:2392] examples/sec: 1234.4
+INFO:tensorflow:global_step/sec: 4.94879
+I0810 11:02:11.508285 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.94879
+INFO:tensorflow:examples/sec: 1266.89
+I0810 11:02:11.508695 139645157615424 tpu_estimator.py:2392] examples/sec: 1266.89
+INFO:tensorflow:global_step/sec: 4.92103
+I0810 11:02:11.711503 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.92103
+INFO:tensorflow:examples/sec: 1259.78
+I0810 11:02:11.711903 139645157615424 tpu_estimator.py:2392] examples/sec: 1259.78
+INFO:tensorflow:global_step/sec: 4.91427
+I0810 11:02:11.914985 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.91427
+INFO:tensorflow:examples/sec: 1258.05
+I0810 11:02:11.915405 139645157615424 tpu_estimator.py:2392] examples/sec: 1258.05
+INFO:tensorflow:global_step/sec: 4.91569
+I0810 11:02:12.118424 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.91569
+INFO:tensorflow:examples/sec: 1258.42
+I0810 11:02:12.118817 139645157615424 tpu_estimator.py:2392] examples/sec: 1258.42
+INFO:tensorflow:global_step/sec: 4.95788
+I0810 11:02:12.320145 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.95788
+INFO:tensorflow:examples/sec: 1269.22
+I0810 11:02:12.320562 139645157615424 tpu_estimator.py:2392] examples/sec: 1269.22
+INFO:tensorflow:global_step/sec: 4.93046
+I0810 11:02:12.522963 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.93046
+INFO:tensorflow:examples/sec: 1262.2
+I0810 11:02:12.523348 139645157615424 tpu_estimator.py:2392] examples/sec: 1262.2
+INFO:tensorflow:global_step/sec: 4.78516
+I0810 11:02:12.731938 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.78516
+INFO:tensorflow:examples/sec: 1225
+I0810 11:02:12.732332 139645157615424 tpu_estimator.py:2392] examples/sec: 1225
+INFO:tensorflow:global_step/sec: 4.91872
+I0810 11:02:12.935240 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.91872
+INFO:tensorflow:examples/sec: 1259.19
+I0810 11:02:12.935617 139645157615424 tpu_estimator.py:2392] examples/sec: 1259.19
+INFO:tensorflow:global_step/sec: 4.94226
+I0810 11:02:13.137576 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.94226
+INFO:tensorflow:examples/sec: 1265.22
+I0810 11:02:13.137965 139645157615424 tpu_estimator.py:2392] examples/sec: 1265.22
+INFO:tensorflow:global_step/sec: 4.94699
+I0810 11:02:13.339714 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.94699
+INFO:tensorflow:examples/sec: 1266.43
+I0810 11:02:13.340102 139645157615424 tpu_estimator.py:2392] examples/sec: 1266.43
+INFO:tensorflow:global_step/sec: 4.93794
+I0810 11:02:13.542212 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.93794
+INFO:tensorflow:examples/sec: 1264.11
+I0810 11:02:13.542627 139645157615424 tpu_estimator.py:2392] examples/sec: 1264.11
+INFO:tensorflow:global_step/sec: 4.93225
+I0810 11:02:13.744976 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.93225
+INFO:tensorflow:examples/sec: 1262.66
+I0810 11:02:13.745388 139645157615424 tpu_estimator.py:2392] examples/sec: 1262.66
+INFO:tensorflow:global_step/sec: 4.90581
+I0810 11:02:13.948839 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.90581
+INFO:tensorflow:examples/sec: 1255.89
+I0810 11:02:13.949281 139645157615424 tpu_estimator.py:2392] examples/sec: 1255.89
+INFO:tensorflow:global_step/sec: 4.94297
+I0810 11:02:14.151120 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.94297
+INFO:tensorflow:examples/sec: 1265.4
+I0810 11:02:14.151529 139645157615424 tpu_estimator.py:2392] examples/sec: 1265.4
+INFO:tensorflow:global_step/sec: 4.93757
+I0810 11:02:14.353644 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.93757
+INFO:tensorflow:examples/sec: 1264.02
+I0810 11:02:14.354093 139645157615424 tpu_estimator.py:2392] examples/sec: 1264.02
+INFO:tensorflow:global_step/sec: 4.95845
+I0810 11:02:14.555320 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.95845
+INFO:tensorflow:examples/sec: 1269.36
+I0810 11:02:14.555718 139645157615424 tpu_estimator.py:2392] examples/sec: 1269.36
+INFO:tensorflow:global_step/sec: 4.93506
+I0810 11:02:14.757976 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.93506
+INFO:tensorflow:examples/sec: 1263.37
+I0810 11:02:14.758391 139645157615424 tpu_estimator.py:2392] examples/sec: 1263.37
+INFO:tensorflow:global_step/sec: 4.8806
+I0810 11:02:14.962867 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.8806
+INFO:tensorflow:examples/sec: 1249.43
+I0810 11:02:14.963284 139645157615424 tpu_estimator.py:2392] examples/sec: 1249.43
+INFO:tensorflow:global_step/sec: 4.86785
+I0810 11:02:15.168289 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.86785
+INFO:tensorflow:examples/sec: 1246.17
+I0810 11:02:15.168709 139645157615424 tpu_estimator.py:2392] examples/sec: 1246.17
+INFO:tensorflow:global_step/sec: 4.95164
+I0810 11:02:15.370229 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.95164
+INFO:tensorflow:examples/sec: 1267.62
+I0810 11:02:15.370640 139645157615424 tpu_estimator.py:2392] examples/sec: 1267.62
+INFO:tensorflow:global_step/sec: 4.92546
+I0810 11:02:15.573221 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.92546
+INFO:tensorflow:examples/sec: 1260.92
+I0810 11:02:15.573601 139645157615424 tpu_estimator.py:2392] examples/sec: 1260.92
+INFO:tensorflow:global_step/sec: 4.90972
+I0810 11:02:15.776951 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.90972
+INFO:tensorflow:examples/sec: 1256.89
+I0810 11:02:15.777341 139645157615424 tpu_estimator.py:2392] examples/sec: 1256.89
+INFO:tensorflow:global_step/sec: 4.91033
+I0810 11:02:15.980629 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.91033
+INFO:tensorflow:examples/sec: 1257.05
+I0810 11:02:15.981019 139645157615424 tpu_estimator.py:2392] examples/sec: 1257.05
+INFO:tensorflow:global_step/sec: 4.93381
+I0810 11:02:16.183268 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.93381
+INFO:tensorflow:examples/sec: 1263.06
+I0810 11:02:16.183647 139645157615424 tpu_estimator.py:2392] examples/sec: 1263.06
+INFO:tensorflow:global_step/sec: 4.77214
+I0810 11:02:16.392875 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.77214
+INFO:tensorflow:examples/sec: 1221.67
+I0810 11:02:16.393326 139645157615424 tpu_estimator.py:2392] examples/sec: 1221.67
+INFO:tensorflow:global_step/sec: 4.93234
+I0810 11:02:16.595578 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.93234
+INFO:tensorflow:examples/sec: 1262.68
+I0810 11:02:16.595998 139645157615424 tpu_estimator.py:2392] examples/sec: 1262.68
+INFO:tensorflow:global_step/sec: 4.7901
+I0810 11:02:16.804325 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.7901
+INFO:tensorflow:examples/sec: 1226.27
+I0810 11:02:16.804748 139645157615424 tpu_estimator.py:2392] examples/sec: 1226.27
+INFO:tensorflow:global_step/sec: 4.91423
+I0810 11:02:17.007821 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.91423
+INFO:tensorflow:examples/sec: 1258.04
+I0810 11:02:17.008215 139645157615424 tpu_estimator.py:2392] examples/sec: 1258.04
+INFO:tensorflow:global_step/sec: 4.83416
+I0810 11:02:17.214663 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.83416
+INFO:tensorflow:examples/sec: 1237.55
+I0810 11:02:17.214936 139645157615424 tpu_estimator.py:2392] examples/sec: 1237.55
+INFO:tensorflow:global_step/sec: 4.89499
+I0810 11:02:17.418992 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.89499
+INFO:tensorflow:examples/sec: 1253.12
+I0810 11:02:17.419385 139645157615424 tpu_estimator.py:2392] examples/sec: 1253.12
+INFO:tensorflow:global_step/sec: 4.90437
+I0810 11:02:17.622859 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.90437
+INFO:tensorflow:examples/sec: 1255.52
+I0810 11:02:17.623233 139645157615424 tpu_estimator.py:2392] examples/sec: 1255.52
+INFO:tensorflow:global_step/sec: 4.92413
+I0810 11:02:17.825955 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.92413
+INFO:tensorflow:examples/sec: 1260.58
+I0810 11:02:17.826268 139645157615424 tpu_estimator.py:2392] examples/sec: 1260.58
+INFO:tensorflow:global_step/sec: 4.90796
+I0810 11:02:18.029716 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.90796
+INFO:tensorflow:examples/sec: 1256.44
+I0810 11:02:18.030114 139645157615424 tpu_estimator.py:2392] examples/sec: 1256.44
+INFO:tensorflow:global_step/sec: 4.93093
+I0810 11:02:18.232529 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.93093
+INFO:tensorflow:examples/sec: 1262.32
+I0810 11:02:18.232918 139645157615424 tpu_estimator.py:2392] examples/sec: 1262.32
+INFO:tensorflow:global_step/sec: 4.9301
+I0810 11:02:18.435334 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.9301
+INFO:tensorflow:examples/sec: 1262.1
+I0810 11:02:18.435710 139645157615424 tpu_estimator.py:2392] examples/sec: 1262.1
+INFO:tensorflow:global_step/sec: 4.86003
+I0810 11:02:18.641114 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.86003
+INFO:tensorflow:examples/sec: 1244.17
+I0810 11:02:18.641501 139645157615424 tpu_estimator.py:2392] examples/sec: 1244.17
+INFO:tensorflow:global_step/sec: 4.91856
+I0810 11:02:18.844426 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.91856
+INFO:tensorflow:examples/sec: 1259.15
+I0810 11:02:18.844869 139645157615424 tpu_estimator.py:2392] examples/sec: 1259.15
+INFO:tensorflow:global_step/sec: 4.93348
+I0810 11:02:19.047154 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.93348
+INFO:tensorflow:examples/sec: 1262.97
+I0810 11:02:19.047634 139645157615424 tpu_estimator.py:2392] examples/sec: 1262.97
+INFO:tensorflow:global_step/sec: 4.95012
+I0810 11:02:19.249124 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.95012
+INFO:tensorflow:examples/sec: 1267.23
+I0810 11:02:19.249505 139645157615424 tpu_estimator.py:2392] examples/sec: 1267.23
+INFO:tensorflow:global_step/sec: 4.92338
+I0810 11:02:19.452247 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.92338
+INFO:tensorflow:examples/sec: 1260.39
+I0810 11:02:19.452641 139645157615424 tpu_estimator.py:2392] examples/sec: 1260.39
+INFO:tensorflow:global_step/sec: 4.90145
+I0810 11:02:19.656253 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.90145
+INFO:tensorflow:examples/sec: 1254.77
+I0810 11:02:19.656683 139645157615424 tpu_estimator.py:2392] examples/sec: 1254.77
+INFO:tensorflow:global_step/sec: 4.94213
+I0810 11:02:19.858588 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.94213
+INFO:tensorflow:examples/sec: 1265.19
+I0810 11:02:19.858981 139645157615424 tpu_estimator.py:2392] examples/sec: 1265.19
+INFO:tensorflow:global_step/sec: 4.94466
+I0810 11:02:20.060859 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.94466
+INFO:tensorflow:examples/sec: 1265.83
+I0810 11:02:20.061273 139645157615424 tpu_estimator.py:2392] examples/sec: 1265.83
+INFO:tensorflow:global_step/sec: 4.9106
+I0810 11:02:20.264499 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.9106
+INFO:tensorflow:examples/sec: 1257.11
+I0810 11:02:20.264896 139645157615424 tpu_estimator.py:2392] examples/sec: 1257.11
+INFO:tensorflow:global_step/sec: 4.92093
+I0810 11:02:20.467706 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.92093
+INFO:tensorflow:examples/sec: 1259.76
+I0810 11:02:20.468101 139645157615424 tpu_estimator.py:2392] examples/sec: 1259.76
+INFO:tensorflow:global_step/sec: 4.8917
+I0810 11:02:20.672256 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.8917
+INFO:tensorflow:examples/sec: 1252.28
+I0810 11:02:20.672679 139645157615424 tpu_estimator.py:2392] examples/sec: 1252.28
+INFO:tensorflow:global_step/sec: 4.9336
+I0810 11:02:20.874817 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.9336
+INFO:tensorflow:examples/sec: 1263
+I0810 11:02:20.875210 139645157615424 tpu_estimator.py:2392] examples/sec: 1263
+INFO:tensorflow:global_step/sec: 4.93736
+I0810 11:02:21.077332 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.93736
+INFO:tensorflow:examples/sec: 1263.96
+I0810 11:02:21.077747 139645157615424 tpu_estimator.py:2392] examples/sec: 1263.96
+INFO:tensorflow:global_step/sec: 4.93252
+I0810 11:02:21.280085 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.93252
+INFO:tensorflow:examples/sec: 1262.73
+I0810 11:02:21.280518 139645157615424 tpu_estimator.py:2392] examples/sec: 1262.73
+INFO:tensorflow:global_step/sec: 4.90592
+I0810 11:02:21.483925 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.90592
+INFO:tensorflow:examples/sec: 1255.91
+I0810 11:02:21.484331 139645157615424 tpu_estimator.py:2392] examples/sec: 1255.91
+INFO:tensorflow:global_step/sec: 4.91582
+I0810 11:02:21.687344 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.91582
+INFO:tensorflow:examples/sec: 1258.45
+I0810 11:02:21.687762 139645157615424 tpu_estimator.py:2392] examples/sec: 1258.45
+INFO:tensorflow:global_step/sec: 4.80228
+I0810 11:02:21.895584 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.80228
+INFO:tensorflow:examples/sec: 1229.38
+I0810 11:02:21.896011 139645157615424 tpu_estimator.py:2392] examples/sec: 1229.38
+INFO:tensorflow:global_step/sec: 4.90758
+I0810 11:02:22.099344 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.90758
+INFO:tensorflow:examples/sec: 1256.34
+I0810 11:02:22.099749 139645157615424 tpu_estimator.py:2392] examples/sec: 1256.34
+INFO:tensorflow:global_step/sec: 4.9286
+I0810 11:02:22.302246 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.9286
+INFO:tensorflow:examples/sec: 1261.72
+I0810 11:02:22.302679 139645157615424 tpu_estimator.py:2392] examples/sec: 1261.72
+INFO:tensorflow:global_step/sec: 4.90163
+I0810 11:02:22.506261 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.90163
+INFO:tensorflow:examples/sec: 1254.82
+I0810 11:02:22.506651 139645157615424 tpu_estimator.py:2392] examples/sec: 1254.82
+INFO:tensorflow:global_step/sec: 4.94014
+I0810 11:02:22.708701 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.94014
+INFO:tensorflow:examples/sec: 1264.68
+I0810 11:02:22.709111 139645157615424 tpu_estimator.py:2392] examples/sec: 1264.68
+INFO:tensorflow:global_step/sec: 4.92095
+I0810 11:02:22.911892 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.92095
+INFO:tensorflow:examples/sec: 1259.76
+I0810 11:02:22.912304 139645157615424 tpu_estimator.py:2392] examples/sec: 1259.76
+INFO:tensorflow:global_step/sec: 4.92514
+I0810 11:02:23.114932 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.92514
+INFO:tensorflow:examples/sec: 1260.84
+I0810 11:02:23.115342 139645157615424 tpu_estimator.py:2392] examples/sec: 1260.84
+INFO:tensorflow:global_step/sec: 4.90853
+I0810 11:02:23.318679 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.90853
+INFO:tensorflow:examples/sec: 1256.58
+I0810 11:02:23.319070 139645157615424 tpu_estimator.py:2392] examples/sec: 1256.58
+INFO:tensorflow:global_step/sec: 4.90445
+I0810 11:02:23.522557 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.90445
+INFO:tensorflow:examples/sec: 1255.54
+I0810 11:02:23.522947 139645157615424 tpu_estimator.py:2392] examples/sec: 1255.54
+INFO:tensorflow:global_step/sec: 4.83445
+I0810 11:02:23.729415 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.83445
+INFO:tensorflow:examples/sec: 1237.62
+I0810 11:02:23.729841 139645157615424 tpu_estimator.py:2392] examples/sec: 1237.62
+INFO:tensorflow:global_step/sec: 4.91954
+I0810 11:02:23.932673 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.91954
+INFO:tensorflow:examples/sec: 1259.4
+I0810 11:02:23.933046 139645157615424 tpu_estimator.py:2392] examples/sec: 1259.4
+INFO:tensorflow:global_step/sec: 4.93605
+I0810 11:02:24.135270 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.93605
+INFO:tensorflow:examples/sec: 1263.63
+I0810 11:02:24.135651 139645157615424 tpu_estimator.py:2392] examples/sec: 1263.63
+INFO:tensorflow:global_step/sec: 4.92204
+I0810 11:02:24.338446 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.92204
+INFO:tensorflow:examples/sec: 1260.04
+I0810 11:02:24.338826 139645157615424 tpu_estimator.py:2392] examples/sec: 1260.04
+INFO:tensorflow:global_step/sec: 4.91128
+I0810 11:02:24.542047 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.91128
+INFO:tensorflow:examples/sec: 1257.29
+I0810 11:02:24.542491 139645157615424 tpu_estimator.py:2392] examples/sec: 1257.29
+INFO:tensorflow:global_step/sec: 4.93003
+I0810 11:02:24.744923 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.93003
+INFO:tensorflow:examples/sec: 1262.09
+I0810 11:02:24.745315 139645157615424 tpu_estimator.py:2392] examples/sec: 1262.09
+INFO:tensorflow:global_step/sec: 4.78506
+I0810 11:02:24.953893 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.78506
+INFO:tensorflow:examples/sec: 1224.98
+I0810 11:02:24.954283 139645157615424 tpu_estimator.py:2392] examples/sec: 1224.98
+INFO:tensorflow:global_step/sec: 4.92837
+I0810 11:02:25.156777 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.92837
+INFO:tensorflow:examples/sec: 1261.66
+I0810 11:02:25.157190 139645157615424 tpu_estimator.py:2392] examples/sec: 1261.66
+INFO:tensorflow:global_step/sec: 4.89235
+I0810 11:02:25.361163 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.89235
+INFO:tensorflow:examples/sec: 1252.44
+I0810 11:02:25.361555 139645157615424 tpu_estimator.py:2392] examples/sec: 1252.44
+INFO:tensorflow:global_step/sec: 4.93486
+I0810 11:02:25.563834 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.93486
+INFO:tensorflow:examples/sec: 1263.32
+I0810 11:02:25.564252 139645157615424 tpu_estimator.py:2392] examples/sec: 1263.32
+INFO:tensorflow:global_step/sec: 4.94247
+I0810 11:02:25.766154 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.94247
+INFO:tensorflow:examples/sec: 1265.27
+I0810 11:02:25.766549 139645157615424 tpu_estimator.py:2392] examples/sec: 1265.27
+INFO:tensorflow:global_step/sec: 4.93325
+I0810 11:02:25.968858 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.93325
+INFO:tensorflow:examples/sec: 1262.91
+I0810 11:02:25.969232 139645157615424 tpu_estimator.py:2392] examples/sec: 1262.91
+INFO:tensorflow:global_step/sec: 4.79745
+I0810 11:02:26.177294 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.79745
+INFO:tensorflow:examples/sec: 1228.15
+I0810 11:02:26.177688 139645157615424 tpu_estimator.py:2392] examples/sec: 1228.15
+INFO:tensorflow:global_step/sec: 4.87257
+I0810 11:02:26.382518 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.87257
+INFO:tensorflow:examples/sec: 1247.38
+I0810 11:02:26.382921 139645157615424 tpu_estimator.py:2392] examples/sec: 1247.38
+INFO:tensorflow:global_step/sec: 4.92796
+I0810 11:02:26.585455 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.92796
+INFO:tensorflow:examples/sec: 1261.56
+I0810 11:02:26.585878 139645157615424 tpu_estimator.py:2392] examples/sec: 1261.56
+INFO:tensorflow:global_step/sec: 4.91782
+I0810 11:02:26.788796 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.91782
+INFO:tensorflow:examples/sec: 1258.96
+I0810 11:02:26.789190 139645157615424 tpu_estimator.py:2392] examples/sec: 1258.96
+INFO:tensorflow:global_step/sec: 4.9349
+I0810 11:02:26.991419 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.9349
+INFO:tensorflow:examples/sec: 1263.34
+I0810 11:02:26.991835 139645157615424 tpu_estimator.py:2392] examples/sec: 1263.34
+INFO:tensorflow:global_step/sec: 4.91211
+I0810 11:02:27.195010 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.91211
+INFO:tensorflow:examples/sec: 1257.5
+I0810 11:02:27.195413 139645157615424 tpu_estimator.py:2392] examples/sec: 1257.5
+INFO:tensorflow:global_step/sec: 4.91028
+I0810 11:02:27.398668 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.91028
+INFO:tensorflow:examples/sec: 1257.03
+I0810 11:02:27.399066 139645157615424 tpu_estimator.py:2392] examples/sec: 1257.03
+INFO:tensorflow:global_step/sec: 4.93503
+I0810 11:02:27.601297 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.93503
+INFO:tensorflow:examples/sec: 1263.37
+I0810 11:02:27.601734 139645157615424 tpu_estimator.py:2392] examples/sec: 1263.37
+INFO:tensorflow:global_step/sec: 4.91529
+I0810 11:02:27.804733 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.91529
+INFO:tensorflow:examples/sec: 1258.31
+I0810 11:02:27.805157 139645157615424 tpu_estimator.py:2392] examples/sec: 1258.31
+INFO:tensorflow:global_step/sec: 4.9109
+I0810 11:02:28.008373 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.9109
+INFO:tensorflow:examples/sec: 1257.19
+I0810 11:02:28.008825 139645157615424 tpu_estimator.py:2392] examples/sec: 1257.19
+INFO:tensorflow:global_step/sec: 4.79378
+I0810 11:02:28.216973 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.79378
+INFO:tensorflow:examples/sec: 1227.21
+I0810 11:02:28.217417 139645157615424 tpu_estimator.py:2392] examples/sec: 1227.21
+INFO:tensorflow:global_step/sec: 4.9236
+I0810 11:02:28.420066 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.9236
+INFO:tensorflow:examples/sec: 1260.44
+I0810 11:02:28.420474 139645157615424 tpu_estimator.py:2392] examples/sec: 1260.44
+INFO:tensorflow:global_step/sec: 4.94215
+I0810 11:02:28.622422 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.94215
+INFO:tensorflow:examples/sec: 1265.19
+I0810 11:02:28.622806 139645157615424 tpu_estimator.py:2392] examples/sec: 1265.19
+INFO:tensorflow:global_step/sec: 4.91194
+I0810 11:02:28.826000 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.91194
+INFO:tensorflow:examples/sec: 1257.46
+I0810 11:02:28.826400 139645157615424 tpu_estimator.py:2392] examples/sec: 1257.46
+INFO:tensorflow:global_step/sec: 4.8726
+I0810 11:02:29.031236 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.8726
+INFO:tensorflow:examples/sec: 1247.39
+I0810 11:02:29.031647 139645157615424 tpu_estimator.py:2392] examples/sec: 1247.39
+INFO:tensorflow:global_step/sec: 4.9118
+I0810 11:02:29.234844 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.9118
+INFO:tensorflow:examples/sec: 1257.42
+I0810 11:02:29.235260 139645157615424 tpu_estimator.py:2392] examples/sec: 1257.42
+INFO:tensorflow:global_step/sec: 4.89456
+I0810 11:02:29.439153 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.89456
+INFO:tensorflow:examples/sec: 1253.01
+I0810 11:02:29.439561 139645157615424 tpu_estimator.py:2392] examples/sec: 1253.01
+INFO:tensorflow:global_step/sec: 4.928
+I0810 11:02:29.642141 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.928
+INFO:tensorflow:examples/sec: 1261.57
+I0810 11:02:29.642601 139645157615424 tpu_estimator.py:2392] examples/sec: 1261.57
+INFO:tensorflow:global_step/sec: 4.90453
+I0810 11:02:29.845963 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.90453
+INFO:tensorflow:examples/sec: 1255.56
+I0810 11:02:29.846388 139645157615424 tpu_estimator.py:2392] examples/sec: 1255.56
+INFO:tensorflow:global_step/sec: 4.91301
+I0810 11:02:30.049490 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.91301
+INFO:tensorflow:examples/sec: 1257.73
+I0810 11:02:30.049905 139645157615424 tpu_estimator.py:2392] examples/sec: 1257.73
+INFO:tensorflow:global_step/sec: 4.88199
+I0810 11:02:30.254251 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.88199
+INFO:tensorflow:examples/sec: 1249.79
+I0810 11:02:30.254668 139645157615424 tpu_estimator.py:2392] examples/sec: 1249.79
+INFO:tensorflow:global_step/sec: 4.93862
+I0810 11:02:30.456816 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.93862
+INFO:tensorflow:examples/sec: 1264.29
+I0810 11:02:30.457231 139645157615424 tpu_estimator.py:2392] examples/sec: 1264.29
+INFO:tensorflow:global_step/sec: 4.91052
+I0810 11:02:30.660480 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.91052
+INFO:tensorflow:examples/sec: 1257.09
+I0810 11:02:30.660855 139645157615424 tpu_estimator.py:2392] examples/sec: 1257.09
+INFO:tensorflow:global_step/sec: 4.91181
+I0810 11:02:30.864053 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.91181
+INFO:tensorflow:examples/sec: 1257.42
+I0810 11:02:30.864469 139645157615424 tpu_estimator.py:2392] examples/sec: 1257.42
+INFO:tensorflow:global_step/sec: 4.88396
+I0810 11:02:31.068810 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.88396
+INFO:tensorflow:examples/sec: 1250.29
+I0810 11:02:31.069250 139645157615424 tpu_estimator.py:2392] examples/sec: 1250.29
+INFO:tensorflow:global_step/sec: 4.753
+I0810 11:02:31.279211 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.753
+INFO:tensorflow:examples/sec: 1216.77
+I0810 11:02:31.279609 139645157615424 tpu_estimator.py:2392] examples/sec: 1216.77
+INFO:tensorflow:global_step/sec: 4.91228
+I0810 11:02:31.482762 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.91228
+INFO:tensorflow:examples/sec: 1257.54
+I0810 11:02:31.483153 139645157615424 tpu_estimator.py:2392] examples/sec: 1257.54
+INFO:tensorflow:global_step/sec: 4.91499
+I0810 11:02:31.686240 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.91499
+INFO:tensorflow:examples/sec: 1258.24
+I0810 11:02:31.686644 139645157615424 tpu_estimator.py:2392] examples/sec: 1258.24
+INFO:tensorflow:global_step/sec: 4.90557
+I0810 11:02:31.890045 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.90557
+INFO:tensorflow:examples/sec: 1255.83
+I0810 11:02:31.890449 139645157615424 tpu_estimator.py:2392] examples/sec: 1255.83
+INFO:tensorflow:global_step/sec: 4.8967
+I0810 11:02:32.094312 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.8967
+INFO:tensorflow:examples/sec: 1253.56
+I0810 11:02:32.094729 139645157615424 tpu_estimator.py:2392] examples/sec: 1253.56
+INFO:tensorflow:global_step/sec: 4.92673
+I0810 11:02:32.297278 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.92673
+INFO:tensorflow:examples/sec: 1261.24
+I0810 11:02:32.297670 139645157615424 tpu_estimator.py:2392] examples/sec: 1261.24
+INFO:tensorflow:global_step/sec: 4.81108
+I0810 11:02:32.505108 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.81108
+INFO:tensorflow:examples/sec: 1231.64
+I0810 11:02:32.505526 139645157615424 tpu_estimator.py:2392] examples/sec: 1231.64
+INFO:tensorflow:global_step/sec: 4.93208
+I0810 11:02:32.707852 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.93208
+INFO:tensorflow:examples/sec: 1262.61
+I0810 11:02:32.708238 139645157615424 tpu_estimator.py:2392] examples/sec: 1262.61
+INFO:tensorflow:global_step/sec: 4.91713
+I0810 11:02:32.911252 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.91713
+INFO:tensorflow:examples/sec: 1258.78
+I0810 11:02:32.911669 139645157615424 tpu_estimator.py:2392] examples/sec: 1258.78
+INFO:tensorflow:global_step/sec: 4.92246
+I0810 11:02:33.114396 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.92246
+INFO:tensorflow:examples/sec: 1260.15
+I0810 11:02:33.114808 139645157615424 tpu_estimator.py:2392] examples/sec: 1260.15
+INFO:tensorflow:global_step/sec: 4.34672
+I0810 11:02:33.344454 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.34672
+INFO:tensorflow:examples/sec: 1112.76
+I0810 11:02:33.344863 139645157615424 tpu_estimator.py:2392] examples/sec: 1112.76
+INFO:tensorflow:global_step/sec: 4.8905
+I0810 11:02:33.548930 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.8905
+INFO:tensorflow:examples/sec: 1251.97
+I0810 11:02:33.549325 139645157615424 tpu_estimator.py:2392] examples/sec: 1251.97
+INFO:tensorflow:global_step/sec: 4.88845
+I0810 11:02:33.753490 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.88845
+INFO:tensorflow:examples/sec: 1251.44
+I0810 11:02:33.753918 139645157615424 tpu_estimator.py:2392] examples/sec: 1251.44
+INFO:tensorflow:global_step/sec: 4.9194
+I0810 11:02:33.956771 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.9194
+INFO:tensorflow:examples/sec: 1259.37
+I0810 11:02:33.957151 139645157615424 tpu_estimator.py:2392] examples/sec: 1259.37
+INFO:tensorflow:global_step/sec: 4.93737
+I0810 11:02:34.159307 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.93737
+INFO:tensorflow:examples/sec: 1263.97
+I0810 11:02:34.159700 139645157615424 tpu_estimator.py:2392] examples/sec: 1263.97
+INFO:tensorflow:global_step/sec: 4.92437
+I0810 11:02:34.362383 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.92437
+INFO:tensorflow:examples/sec: 1260.64
+I0810 11:02:34.362812 139645157615424 tpu_estimator.py:2392] examples/sec: 1260.64
+INFO:tensorflow:global_step/sec: 4.90203
+I0810 11:02:34.566381 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.90203
+INFO:tensorflow:examples/sec: 1254.92
+I0810 11:02:34.566782 139645157615424 tpu_estimator.py:2392] examples/sec: 1254.92
+INFO:tensorflow:global_step/sec: 4.8968
+I0810 11:02:34.770598 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.8968
+INFO:tensorflow:examples/sec: 1253.58
+I0810 11:02:34.770977 139645157615424 tpu_estimator.py:2392] examples/sec: 1253.58
+INFO:tensorflow:global_step/sec: 4.91786
+I0810 11:02:34.973956 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.91786
+INFO:tensorflow:examples/sec: 1258.97
+I0810 11:02:34.974355 139645157615424 tpu_estimator.py:2392] examples/sec: 1258.97
+INFO:tensorflow:global_step/sec: 4.87716
+I0810 11:02:35.178965 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.87716
+INFO:tensorflow:examples/sec: 1248.55
+I0810 11:02:35.179376 139645157615424 tpu_estimator.py:2392] examples/sec: 1248.55
+INFO:tensorflow:global_step/sec: 4.90072
+I0810 11:02:35.383027 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.90072
+INFO:tensorflow:examples/sec: 1254.59
+I0810 11:02:35.383424 139645157615424 tpu_estimator.py:2392] examples/sec: 1254.59
+INFO:tensorflow:global_step/sec: 4.89221
+I0810 11:02:35.587401 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.89221
+INFO:tensorflow:examples/sec: 1252.41
+I0810 11:02:35.587846 139645157615424 tpu_estimator.py:2392] examples/sec: 1252.41
+INFO:tensorflow:global_step/sec: 4.89842
+I0810 11:02:35.791576 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.89842
+INFO:tensorflow:examples/sec: 1253.99
+I0810 11:02:35.792017 139645157615424 tpu_estimator.py:2392] examples/sec: 1253.99
+INFO:tensorflow:global_step/sec: 4.92481
+I0810 11:02:35.994614 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.92481
+INFO:tensorflow:examples/sec: 1260.75
+I0810 11:02:35.995001 139645157615424 tpu_estimator.py:2392] examples/sec: 1260.75
+INFO:tensorflow:global_step/sec: 4.78471
+I0810 11:02:36.203691 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.78471
+INFO:tensorflow:examples/sec: 1224.89
+I0810 11:02:36.204138 139645157615424 tpu_estimator.py:2392] examples/sec: 1224.89
+INFO:tensorflow:global_step/sec: 4.91044
+I0810 11:02:36.407262 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.91044
+INFO:tensorflow:examples/sec: 1257.07
+I0810 11:02:36.407662 139645157615424 tpu_estimator.py:2392] examples/sec: 1257.07
+INFO:tensorflow:global_step/sec: 4.9025
+I0810 11:02:36.611253 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.9025
+INFO:tensorflow:examples/sec: 1255.04
+I0810 11:02:36.611679 139645157615424 tpu_estimator.py:2392] examples/sec: 1255.04
+INFO:tensorflow:global_step/sec: 4.92924
+I0810 11:02:36.814129 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.92924
+INFO:tensorflow:examples/sec: 1261.89
+I0810 11:02:36.814509 139645157615424 tpu_estimator.py:2392] examples/sec: 1261.89
+INFO:tensorflow:global_step/sec: 4.91715
+I0810 11:02:37.017522 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.91715
+INFO:tensorflow:examples/sec: 1258.79
+I0810 11:02:37.017917 139645157615424 tpu_estimator.py:2392] examples/sec: 1258.79
+INFO:tensorflow:global_step/sec: 4.80824
+I0810 11:02:37.225463 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.80824
+INFO:tensorflow:examples/sec: 1230.91
+I0810 11:02:37.226024 139645157615424 tpu_estimator.py:2392] examples/sec: 1230.91
+INFO:tensorflow:global_step/sec: 4.90101
+I0810 11:02:37.429538 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.90101
+INFO:tensorflow:examples/sec: 1254.66
+I0810 11:02:37.429926 139645157615424 tpu_estimator.py:2392] examples/sec: 1254.66
+INFO:tensorflow:global_step/sec: 4.89307
+I0810 11:02:37.633868 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.89307
+INFO:tensorflow:examples/sec: 1252.63
+I0810 11:02:37.634256 139645157615424 tpu_estimator.py:2392] examples/sec: 1252.63
+INFO:tensorflow:global_step/sec: 4.92118
+I0810 11:02:37.837055 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.92118
+INFO:tensorflow:examples/sec: 1259.82
+I0810 11:02:37.837451 139645157615424 tpu_estimator.py:2392] examples/sec: 1259.82
+INFO:tensorflow:global_step/sec: 4.92398
+I0810 11:02:38.040184 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.92398
+INFO:tensorflow:examples/sec: 1260.54
+I0810 11:02:38.040593 139645157615424 tpu_estimator.py:2392] examples/sec: 1260.54
+INFO:tensorflow:global_step/sec: 4.81998
+I0810 11:02:38.247657 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.81998
+INFO:tensorflow:examples/sec: 1233.91
+I0810 11:02:38.248071 139645157615424 tpu_estimator.py:2392] examples/sec: 1233.91
+INFO:tensorflow:global_step/sec: 4.88489
+I0810 11:02:38.452356 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.88489
+INFO:tensorflow:examples/sec: 1250.53
+I0810 11:02:38.452787 139645157615424 tpu_estimator.py:2392] examples/sec: 1250.53
+INFO:tensorflow:global_step/sec: 4.9282
+I0810 11:02:38.655253 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.9282
+INFO:tensorflow:examples/sec: 1261.62
+I0810 11:02:38.655672 139645157615424 tpu_estimator.py:2392] examples/sec: 1261.62
+INFO:tensorflow:global_step/sec: 4.9261
+I0810 11:02:38.858268 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.9261
+INFO:tensorflow:examples/sec: 1261.08
+I0810 11:02:38.858678 139645157615424 tpu_estimator.py:2392] examples/sec: 1261.08
+INFO:tensorflow:global_step/sec: 4.9084
+I0810 11:02:39.061981 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.9084
+INFO:tensorflow:examples/sec: 1256.55
+I0810 11:02:39.062381 139645157615424 tpu_estimator.py:2392] examples/sec: 1256.55
+INFO:tensorflow:global_step/sec: 4.86275
+I0810 11:02:39.267638 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.86275
+INFO:tensorflow:examples/sec: 1244.86
+I0810 11:02:39.268047 139645157615424 tpu_estimator.py:2392] examples/sec: 1244.86
+INFO:tensorflow:global_step/sec: 4.73944
+I0810 11:02:39.478708 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.73944
+INFO:tensorflow:examples/sec: 1213.3
+I0810 11:02:39.479140 139645157615424 tpu_estimator.py:2392] examples/sec: 1213.3
+INFO:tensorflow:global_step/sec: 4.9266
+I0810 11:02:39.681635 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.9266
+INFO:tensorflow:examples/sec: 1261.21
+I0810 11:02:39.682019 139645157615424 tpu_estimator.py:2392] examples/sec: 1261.21
+INFO:tensorflow:global_step/sec: 4.87784
+I0810 11:02:39.886625 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.87784
+INFO:tensorflow:examples/sec: 1248.73
+I0810 11:02:39.887019 139645157615424 tpu_estimator.py:2392] examples/sec: 1248.73
+INFO:tensorflow:global_step/sec: 4.88593
+I0810 11:02:40.091312 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.88593
+INFO:tensorflow:examples/sec: 1250.8
+I0810 11:02:40.091717 139645157615424 tpu_estimator.py:2392] examples/sec: 1250.8
+INFO:tensorflow:global_step/sec: 4.87934
+I0810 11:02:40.296235 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.87934
+INFO:tensorflow:examples/sec: 1249.11
+I0810 11:02:40.296614 139645157615424 tpu_estimator.py:2392] examples/sec: 1249.11
+INFO:tensorflow:global_step/sec: 4.88538
+I0810 11:02:40.500937 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.88538
+INFO:tensorflow:examples/sec: 1250.66
+I0810 11:02:40.501333 139645157615424 tpu_estimator.py:2392] examples/sec: 1250.66
+INFO:tensorflow:global_step/sec: 4.92922
+I0810 11:02:40.703807 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.92922
+INFO:tensorflow:examples/sec: 1261.88
+I0810 11:02:40.704217 139645157615424 tpu_estimator.py:2392] examples/sec: 1261.88
+INFO:tensorflow:global_step/sec: 4.60298
+I0810 11:02:40.921050 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.60298
+INFO:tensorflow:examples/sec: 1178.36
+I0810 11:02:40.921436 139645157615424 tpu_estimator.py:2392] examples/sec: 1178.36
+INFO:tensorflow:global_step/sec: 4.91417
+I0810 11:02:41.124581 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.91417
+INFO:tensorflow:examples/sec: 1258.03
+I0810 11:02:41.124996 139645157615424 tpu_estimator.py:2392] examples/sec: 1258.03
+INFO:tensorflow:global_step/sec: 4.91364
+I0810 11:02:41.328070 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.91364
+INFO:tensorflow:examples/sec: 1257.89
+I0810 11:02:41.328471 139645157615424 tpu_estimator.py:2392] examples/sec: 1257.89
+INFO:tensorflow:global_step/sec: 4.9247
+I0810 11:02:41.531122 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.9247
+INFO:tensorflow:examples/sec: 1260.72
+I0810 11:02:41.531516 139645157615424 tpu_estimator.py:2392] examples/sec: 1260.72
+INFO:tensorflow:global_step/sec: 4.91352
+I0810 11:02:41.734672 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.91352
+INFO:tensorflow:examples/sec: 1257.86
+I0810 11:02:41.735064 139645157615424 tpu_estimator.py:2392] examples/sec: 1257.86
+INFO:tensorflow:global_step/sec: 4.90033
+I0810 11:02:41.938709 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.90033
+INFO:tensorflow:examples/sec: 1254.49
+I0810 11:02:41.939075 139645157615424 tpu_estimator.py:2392] examples/sec: 1254.49
+INFO:tensorflow:global_step/sec: 4.75835
+I0810 11:02:42.148879 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.75835
+INFO:tensorflow:examples/sec: 1218.14
+I0810 11:02:42.149270 139645157615424 tpu_estimator.py:2392] examples/sec: 1218.14
+INFO:tensorflow:global_step/sec: 4.92168
+I0810 11:02:42.352036 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.92168
+INFO:tensorflow:examples/sec: 1259.95
+I0810 11:02:42.352443 139645157615424 tpu_estimator.py:2392] examples/sec: 1259.95
+INFO:tensorflow:global_step/sec: 4.92811
+I0810 11:02:42.554961 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.92811
+INFO:tensorflow:examples/sec: 1261.6
+I0810 11:02:42.555339 139645157615424 tpu_estimator.py:2392] examples/sec: 1261.6
+INFO:tensorflow:global_step/sec: 4.91305
+I0810 11:02:42.758515 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.91305
+INFO:tensorflow:examples/sec: 1257.74
+I0810 11:02:42.758900 139645157615424 tpu_estimator.py:2392] examples/sec: 1257.74
+INFO:tensorflow:global_step/sec: 4.87305
+I0810 11:02:42.963713 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.87305
+INFO:tensorflow:examples/sec: 1247.5
+I0810 11:02:42.964107 139645157615424 tpu_estimator.py:2392] examples/sec: 1247.5
+INFO:tensorflow:global_step/sec: 4.89468
+I0810 11:02:43.168039 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.89468
+INFO:tensorflow:examples/sec: 1253.04
+I0810 11:02:43.168496 139645157615424 tpu_estimator.py:2392] examples/sec: 1253.04
+INFO:tensorflow:global_step/sec: 4.90985
+I0810 11:02:43.371694 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.90985
+INFO:tensorflow:examples/sec: 1256.92
+I0810 11:02:43.372104 139645157615424 tpu_estimator.py:2392] examples/sec: 1256.92
+INFO:tensorflow:global_step/sec: 4.90585
+I0810 11:02:43.575558 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.90585
+INFO:tensorflow:examples/sec: 1255.9
+I0810 11:02:43.575969 139645157615424 tpu_estimator.py:2392] examples/sec: 1255.9
+INFO:tensorflow:global_step/sec: 4.90041
+I0810 11:02:43.779612 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.90041
+INFO:tensorflow:examples/sec: 1254.51
+I0810 11:02:43.780002 139645157615424 tpu_estimator.py:2392] examples/sec: 1254.51
+INFO:tensorflow:global_step/sec: 4.9026
+I0810 11:02:43.983586 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.9026
+INFO:tensorflow:examples/sec: 1255.07
+I0810 11:02:43.983985 139645157615424 tpu_estimator.py:2392] examples/sec: 1255.07
+INFO:tensorflow:global_step/sec: 4.91214
+I0810 11:02:44.187146 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.91214
+INFO:tensorflow:examples/sec: 1257.51
+I0810 11:02:44.187532 139645157615424 tpu_estimator.py:2392] examples/sec: 1257.51
+INFO:tensorflow:global_step/sec: 4.91609
+I0810 11:02:44.390544 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.91609
+INFO:tensorflow:examples/sec: 1258.52
+I0810 11:02:44.390954 139645157615424 tpu_estimator.py:2392] examples/sec: 1258.52
+INFO:tensorflow:global_step/sec: 4.89599
+I0810 11:02:44.594816 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.89599
+INFO:tensorflow:examples/sec: 1253.37
+I0810 11:02:44.595207 139645157615424 tpu_estimator.py:2392] examples/sec: 1253.37
+INFO:tensorflow:global_step/sec: 4.8329
+I0810 11:02:44.801736 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.8329
+INFO:tensorflow:examples/sec: 1237.22
+I0810 11:02:44.802129 139645157615424 tpu_estimator.py:2392] examples/sec: 1237.22
+INFO:tensorflow:global_step/sec: 4.86949
+I0810 11:02:45.007092 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.86949
+INFO:tensorflow:examples/sec: 1246.59
+I0810 11:02:45.007491 139645157615424 tpu_estimator.py:2392] examples/sec: 1246.59
+INFO:tensorflow:global_step/sec: 4.92383
+I0810 11:02:45.210191 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.92383
+INFO:tensorflow:examples/sec: 1260.5
+I0810 11:02:45.210618 139645157615424 tpu_estimator.py:2392] examples/sec: 1260.5
+INFO:tensorflow:global_step/sec: 4.92238
+I0810 11:02:45.413343 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.92238
+INFO:tensorflow:examples/sec: 1260.13
+I0810 11:02:45.413766 139645157615424 tpu_estimator.py:2392] examples/sec: 1260.13
+INFO:tensorflow:global_step/sec: 4.89193
+I0810 11:02:45.617760 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.89193
+INFO:tensorflow:examples/sec: 1252.33
+I0810 11:02:45.618169 139645157615424 tpu_estimator.py:2392] examples/sec: 1252.33
+INFO:tensorflow:global_step/sec: 4.75845
+I0810 11:02:45.827893 139645157615424 tpu_estimator.py:2391] global_step/sec: 4.75845
+INFO:tensorflow:examples/sec: 1218.16
+I0810 11:02:45.828269 139645157615424 tpu_estimator.py:2392] examples/sec: 1218.16

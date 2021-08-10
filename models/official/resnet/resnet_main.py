@@ -279,6 +279,8 @@ flags.DEFINE_bool(
     'xla', False,
     'Whether to use accelerated linear algebra.')
 
+flags.DEFINE_integer('loss_scale', -1, 'Loss Scale for AMP.')
+
 
 # The input tensor is in the range of [0, 255], we need to scale them to the
 # range of [0, 1]
@@ -561,7 +563,7 @@ def resnet_model_fn(features, labels, mode, params):
       optimizer = tf.tpu.CrossShardOptimizer(optimizer)
 
     if FLAGS.amp:
-        optimizer = tf.train.experimental.enable_mixed_precision_graph_rewrite(optimizer)
+        optimizer = tf.train.experimental.enable_mixed_precision_graph_rewrite(optimizer, loss_scale='dynamic' if FLAGS.loss_scale==-1 else FLAGS.loss_scale)
     # Batch normalization requires UPDATE_OPS to be added as a dependency to
     # the train operation.
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
@@ -740,12 +742,24 @@ def main(unused_argv):
 
   params = flags_to_params.override_params_from_input_flags(params, FLAGS)
 
+  # From Nvidia Repo, explained here: https://github.com/NVIDIA/DeepLearningExamples/issues/57
+  os.environ['CUDA_CACHE_DISABLE'] = '0'
+  os.environ['TF_GPU_THREAD_MODE'] = 'gpu_private'
+  os.environ['TF_GPU_THREAD_COUNT'] = '2'
+  os.environ['TF_USE_CUDNN_BATCHNORM_SPATIAL_PERSISTENT'] = '1'
+  os.environ['TF_ADJUST_HUE_FUSED'] = '1'
+  os.environ['TF_ADJUST_SATURATION_FUSED'] = '1'
+  os.environ['TF_ENABLE_WINOGRAD_NONFUSED'] = '1'
+  os.environ['TF_SYNC_ON_FINISH'] = '0'
+  os.environ['TF_AUTOTUNE_THRESHOLD'] = '2'
+  os.environ['TF_DISABLE_NVTX_RANGES'] = '1'
   # Enable AMP
   amp = FLAGS.amp
   xla = FLAGS.xla
   # Step 1: Set up Docker https://ngc.nvidia.com/catalog/containers/nvidia:tensorflow
   # Step 2: add --amp flag
   if amp:
+    os.environ["TF_ENABLE_AUTO_MIXED_PRECISION_GRAPH_REWRITE"] = "1"
     pass
     # These two lines have no effect.
     # os.environ['TF_CPP_VMODULE'] = 'auto_mixed_precision=2'
@@ -762,8 +776,10 @@ def main(unused_argv):
       # fusible: only for Tensorflow operations that XLA knows how to fuse
       #
       # os.environ['TF_XLA_FLAGS'] = '--tf_xla_auto_jit=1'
-      os.environ['TF_XLA_FLAGS'] = '--tf_xla_auto_jit=2'
-      # os.environ['TF_XLA_FLAGS'] = '--tf_xla_auto_jit=fusible'
+      # os.environ['TF_XLA_FLAGS'] = '--tf_xla_auto_jit=2'
+      # Best Performing XLA Option
+      os.environ['TF_XLA_FLAGS'] = '--tf_xla_auto_jit=fusible'
+      os.environ["TF_XLA_FLAGS"] = (os.environ.get("TF_XLA_FLAGS", "") + " --tf_xla_enable_lazy_compilation=false")
 
   params.validate()
   params.lock()
