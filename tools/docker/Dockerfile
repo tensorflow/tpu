@@ -30,7 +30,7 @@ RUN pip3 install pyyaml && \
     pip3 install oauth2client
 
 # Checkout tensorflow/models at the appropriate branch
-RUN git clone -b r2.2.0 --depth 1 https://github.com/tensorflow/models.git /tensorflow_models
+RUN git clone -b r2.6.0 --depth 1 https://github.com/tensorflow/models.git /tensorflow_models
 
 # Checkout tensorflow/tpu at the appropriate branch
-RUN git clone -b r2.2.0 --depth 1 https://github.com/tensorflow/tpu.git /tensorflow_tpu_models
+RUN git clone -b r2.6 --depth 1 https://github.com/tensorflow/tpu.git /tensorflow_tpu_models
