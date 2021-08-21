@@ -32,17 +32,19 @@ from ops import spatial_transform_ops
 class RpnHead(object):
   """Region Proposal Network head."""
 
-  def __init__(self,
-               min_level,
-               max_level,
-               anchors_per_location,
-               num_convs=1,
-               num_filters=256,
-               use_separable_conv=False,
-               activation='relu',
-               use_batch_norm=True,
-               batch_norm_activation=nn_ops.BatchNormActivation(
-                   activation='relu')):
+  def __init__(
+      self,
+      min_level,
+      max_level,
+      anchors_per_location,
+      num_convs=1,
+      num_filters=256,
+      use_separable_conv=False,
+      activation='relu',
+      use_batch_norm=True,
+      batch_norm_activation=nn_ops.BatchNormActivation(activation='relu'),
+      cast_to_float32=False,
+  ):
     """Initialize params to build Region Proposal Network head.
 
     Args:
@@ -60,6 +62,8 @@ class RpnHead(object):
       use_batch_norm: 'bool', indicating whether batchnorm layers are added.
       batch_norm_activation: an operation that includes a batch normalization
         layer followed by an optional activation layer.
+      cast_to_float32: `bool`, indicating whether the features should be casted
+        to float32 before getting score and box predictions.
     """
     self._min_level = min_level
     self._max_level = max_level
@@ -86,6 +90,7 @@ class RpnHead(object):
     else:
       raise ValueError('Activation {} not implemented.'.format(activation))
     self._batch_norm_activation = batch_norm_activation
+    self._cast_to_float32 = cast_to_float32
 
   def __call__(self, features, is_training=False):
     scores_outputs = {}
@@ -110,6 +115,9 @@ class RpnHead(object):
                 features,
                 name=('rpn-l%d-bn' % level) + ('' if i == 0 else '-%d' % i),
                 is_training=is_training)
+
+        if self._cast_to_float32:
+          features = tf.cast(features, tf.float32)
 
         # Proposal classification scores
         scores = self._conv2d_op(
@@ -269,16 +277,17 @@ class FastrcnnHead(object):
 class MaskrcnnHead(object):
   """Mask R-CNN head."""
 
-  def __init__(self,
-               num_classes,
-               mask_target_size,
-               num_convs=4,
-               num_filters=256,
-               use_separable_conv=False,
-               activation='relu',
-               use_batch_norm=True,
-               batch_norm_activation=nn_ops.BatchNormActivation(
-                   activation='relu')):
+  def __init__(
+      self,
+      num_classes,
+      mask_target_size,
+      num_convs=4,
+      num_filters=256,
+      use_separable_conv=False,
+      activation='relu',
+      use_batch_norm=True,
+      batch_norm_activation=nn_ops.BatchNormActivation(activation='relu'),
+      class_agnostic_mask_pred=False):
     """Initialize params to build Fast R-CNN head.
 
     Args:
@@ -294,6 +303,8 @@ class MaskrcnnHead(object):
       use_batch_norm: 'bool', indicating whether batchnorm layers are added.
       batch_norm_activation: an operation that includes a batch normalization
         layer followed by an optional activation layer.
+      class_agnostic_mask_pred: `bool`, indicating whether masks should be
+        predicted for every class or not.
     """
     self._num_classes = num_classes
     self._mask_target_size = mask_target_size
@@ -319,6 +330,7 @@ class MaskrcnnHead(object):
       raise ValueError('Activation {} not implemented.'.format(activation))
     self._use_batch_norm = use_batch_norm
     self._batch_norm_activation = batch_norm_activation
+    self._class_agnostic_mask_pred = class_agnostic_mask_pred
 
   def __call__(self, roi_features, class_indices, is_training=False):
     """Mask branch for the Mask-RCNN model.
@@ -371,33 +383,37 @@ class MaskrcnnHead(object):
       if self._use_batch_norm:
         net = self._batch_norm_activation(net, is_training=is_training)
 
+      num_mask_outputs = 1 if self._class_agnostic_mask_pred else self._num_classes
       mask_outputs = self._conv2d_op(
           net,
-          self._num_classes,
+          num_mask_outputs,
           kernel_size=(1, 1),
           strides=(1, 1),
           padding='valid',
           name='mask_fcn_logits')
-      mask_outputs = tf.reshape(
-          mask_outputs,
-          [-1, num_rois, self._mask_target_size, self._mask_target_size,
-           self._num_classes])
+      mask_outputs = tf.reshape(mask_outputs, [
+          -1, num_rois, self._mask_target_size, self._mask_target_size,
+          num_mask_outputs
+      ])
 
       with tf.name_scope('masks_post_processing'):
-        # TODO(pengchong): Figure out the way not to use the static inferred
-        # batch size.
-        batch_size, num_masks = class_indices.get_shape().as_list()
-        if batch_size is None:
-          batch_size = tf.shape(class_indices)[0]
-        mask_outputs = tf.transpose(mask_outputs, [0, 1, 4, 2, 3])
-        # Contructs indices for gather.
-        batch_indices = tf.tile(
-            tf.expand_dims(tf.range(batch_size), axis=1), [1, num_masks])
-        mask_indices = tf.tile(
-            tf.expand_dims(tf.range(num_masks), axis=0), [batch_size, 1])
-        gather_indices = tf.stack(
-            [batch_indices, mask_indices, class_indices], axis=2)
-        mask_outputs = tf.gather_nd(mask_outputs, gather_indices)
+        if self._class_agnostic_mask_pred:
+          mask_outputs = tf.squeeze(mask_outputs, axis=-1)
+        else:
+          # TODO(pengchong): Figure out the way not to use the static inferred
+          # batch size.
+          batch_size, num_masks = class_indices.get_shape().as_list()
+          if batch_size is None:
+            batch_size = tf.shape(class_indices)[0]
+          mask_outputs = tf.transpose(mask_outputs, [0, 1, 4, 2, 3])
+          # Constructs indices for gather.
+          batch_indices = tf.tile(
+              tf.expand_dims(tf.range(batch_size), axis=1), [1, num_masks])
+          mask_indices = tf.tile(
+              tf.expand_dims(tf.range(num_masks), axis=0), [batch_size, 1])
+          gather_indices = tf.stack(
+              [batch_indices, mask_indices, class_indices], axis=2)
+          mask_outputs = tf.gather_nd(mask_outputs, gather_indices)
     return mask_outputs
 
 

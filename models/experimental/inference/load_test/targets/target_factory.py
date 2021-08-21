@@ -19,6 +19,7 @@ from absl import logging
 
 from load_test.targets import dummy_target
 from load_test.targets import grpc_target
+from load_test.targets import rest_target
 from load_test.targets import target
 
 
@@ -31,5 +32,8 @@ def get_target(
   elif name == "grpc":
     logging.info("Creating gRPC target.")
     return grpc_target.TfServingGrpcTarget(**kwargs)
+  elif name == "rest":
+    logging.info("Creating REST target.")
+    return rest_target.ServingRestTarget(**kwargs)
   else:
     raise ValueError("Unsupported target type.")

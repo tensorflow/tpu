@@ -77,6 +77,8 @@ BASE_CFG = {
         'eval_file_pattern': '',
         'eval_dataset_type': 'tfrecord',
         'skip_eval_loss': False,
+        # suffix appends after `eval` to distinguish different eval runs
+        'suffix': ''
     },
     'predict': {
         'predict_batch_size': 8,

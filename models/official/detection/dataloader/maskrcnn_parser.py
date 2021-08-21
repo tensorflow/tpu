@@ -46,6 +46,7 @@ class Parser(object):
                include_mask=False,
                mask_crop_size=112,
                use_bfloat16=True,
+               regenerate_source_id=False,
                mode=None):
     """Initializes parameters for parsing annotations in the dataset.
 
@@ -80,6 +81,8 @@ class Parser(object):
       include_mask: a bool to indicate whether parse mask groundtruth.
       mask_crop_size: the size which groundtruth mask is cropped to.
       use_bfloat16: `bool`, if True, cast output image to tf.bfloat16.
+      regenerate_source_id: `bool`, if True TFExampleParser will use hashed
+        value of `image/encoded` for `image/source_id`.
       mode: a ModeKeys. Specifies if this is training, evaluation, prediction
         or prediction with groundtruths in the outputs.
     """
@@ -89,7 +92,7 @@ class Parser(object):
     self._is_training = (mode == ModeKeys.TRAIN)
 
     self._example_decoder = tf_example_decoder.TfExampleDecoder(
-        include_mask=include_mask)
+        include_mask=include_mask, regenerate_source_id=regenerate_source_id)
 
     # Anchor.
     self._output_size = output_size
