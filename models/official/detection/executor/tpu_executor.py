@@ -216,6 +216,8 @@ class TpuExecutor(object):
               groundtruths=(None if self._params.eval.use_json_file
                             else groundtruths))
           counter = counter + 1
+          tf.logging.info(
+              f'Finish eval step {counter} out of total {eval_times} steps.')
       except (tf.errors.OutOfRangeError, StopIteration):
         logging.info(
             'Evaluation reaches the end after running %d times.', counter)
@@ -226,7 +228,8 @@ class TpuExecutor(object):
       metrics = self._evaluator.evaluate()
 
       # Summary writer writes out eval metrics.
-      output_dir = os.path.join(self._model_dir, 'eval')
+      output_dir = os.path.join(self._model_dir,
+                                'eval' + self._params.eval.suffix)
       tf.gfile.MakeDirs(output_dir)
       summary_writer = tf.summary.FileWriter(output_dir)
       write_summary(metrics, summary_writer, current_step)

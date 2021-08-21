@@ -48,6 +48,7 @@ MASKRCNN_CFG.override({
         'skip_crowd_during_training': True,
         'max_num_instances': 100,
         'mask_crop_size': 112,
+        'regenerate_source_id': False,
         'copy_paste': False,
     },
     'anchor': {
@@ -60,6 +61,9 @@ MASKRCNN_CFG.override({
         'num_filters': 256,
         'use_separable_conv': False,
         'use_batch_norm': False,
+        # Cast the features before final output in RpnHead to float32,
+        # to increase the precision in the following sigmoid function.
+        'cast_to_float32': False,
     },
     'frcnn_head': {
         'num_convs': 0,
@@ -79,6 +83,7 @@ MASKRCNN_CFG.override({
         'num_filters': 256,
         'use_separable_conv': False,
         'use_batch_norm': False,
+        'class_agnostic_mask_pred': False,
     },
     'rpn_score_loss': {
         'rpn_batch_size_per_im': 256,

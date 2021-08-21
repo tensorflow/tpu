@@ -80,6 +80,7 @@ def parser_generator(params, mode):
         include_mask=params.architecture.include_mask,
         mask_crop_size=parser_params.mask_crop_size,
         use_bfloat16=params.architecture.use_bfloat16,
+        regenerate_source_id=parser_params.regenerate_source_id,
         mode=mode)
     if mode == ModeKeys.TRAIN and parser_params.copy_paste:
       parser_fn = maskrcnn_parser_with_copy_paste.Parser(

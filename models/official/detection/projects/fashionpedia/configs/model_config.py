@@ -72,6 +72,7 @@ CFG = {
         'num_filters': 256,
         'use_separable_conv': False,
         'use_batch_norm': True,
+        'cast_to_float32': False,
     },
     'frcnn_head': {
         'num_convs': 4,
@@ -86,6 +87,7 @@ CFG = {
         'num_filters': 256,
         'use_separable_conv': False,
         'use_batch_norm': True,
+        'class_agnostic_mask_pred': False,
     },
     'rpn_score_loss': {
         'rpn_batch_size_per_im': 256,

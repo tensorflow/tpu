@@ -21,6 +21,7 @@ from __future__ import print_function
 import json
 
 from absl import logging
+# pylint: disable=g-bad-import-order
 from modeling.architecture import efficientnet
 from modeling.architecture import fpn
 from modeling.architecture import heads
@@ -171,7 +172,8 @@ def rpn_head_generator(params):
       params.batch_norm_activation.activation,
       head_params.use_batch_norm,
       batch_norm_activation=batch_norm_activation_generator(
-          params.batch_norm_activation))
+          params.batch_norm_activation),
+      cast_to_float32=head_params.cast_to_float32)
 
 
 def fast_rcnn_head_generator(params):
@@ -203,7 +205,8 @@ def mask_rcnn_head_generator(params):
       params.batch_norm_activation.activation,
       head_params.use_batch_norm,
       batch_norm_activation=batch_norm_activation_generator(
-          params.batch_norm_activation))
+          params.batch_norm_activation),
+      class_agnostic_mask_pred=head_params.class_agnostic_mask_pred)
 
 
 def shapeprior_head_generator(params):
