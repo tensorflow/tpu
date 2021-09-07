@@ -63,7 +63,7 @@ from __future__ import print_function
 import os
 import pprint
 import time
-
+import sys
 from absl import app
 from absl import flags
 from absl import logging
@@ -647,6 +647,7 @@ def resnet_model_fn(features, labels, mode, params):
       Returns:
         A dict of the metrics to return from evaluation.
       """
+      #logits = tf.Print(logits, [tf.shape(logits)])
       predictions = tf.argmax(logits, axis=1)
       top_1_accuracy = tf.metrics.accuracy(labels, predictions)
       in_top_5 = tf.cast(tf.nn.in_top_k(logits, labels, 5), tf.float32)
@@ -669,7 +670,6 @@ def resnet_model_fn(features, labels, mode, params):
       saver = tf.train.Saver(restore_vars_dict)
       return tf.train.Scaffold(saver=saver)
     scaffold_fn = eval_scaffold
-
   return tf.estimator.tpu.TPUEstimatorSpec(
       mode=mode,
       loss=loss,
@@ -808,7 +808,8 @@ def main(unused_argv):
       train_distribute=strategy,
       eval_distribute=strategy,
       session_config=tf.ConfigProto(
-          graph_options=session_config),)  # pylint: disable=line-too-long
+          graph_options=session_config,
+          allow_soft_placement=True),)  # pylint: disable=line-too-long
 
   resnet_classifier = tf.estimator.tpu.TPUEstimator(
       use_tpu=params.use_tpu,
@@ -866,9 +867,11 @@ def main(unused_argv):
 
   steps_per_epoch = params.num_train_images // params.train_batch_size
   eval_steps = params.num_eval_images // params.eval_batch_size
+  
+  if FLAGS.mode == 'infer':
+    inf_steps = 10000
 
   if FLAGS.mode == 'eval':
-
     # Run evaluation when there's a new checkpoint
     for ckpt in tf.train.checkpoints_iterator(
         FLAGS.model_dir, timeout=FLAGS.eval_timeout):
@@ -889,7 +892,6 @@ def main(unused_argv):
           tf.logging.info(
               'Evaluation finished after training step %d', current_step)
           break
-
       except tf.errors.NotFoundError:
         # Since the coordinator is on a different job than the TPU worker,
         # sometimes the TPU worker does not finish initializing until long after
@@ -897,8 +899,20 @@ def main(unused_argv):
         # file could have been deleted already.
         tf.logging.info(
             'Checkpoint %s no longer exists, skipping checkpoint', ckpt)
-
-  else:   # FLAGS.mode == 'train' or FLAGS.mode == 'train_and_eval'
+  elif FLAGS.mode == 'infer':
+    # Run evaluation when there's a new checkpoint
+    for ckpt in tf.train.checkpoints_iterator(
+        FLAGS.model_dir, timeout=FLAGS.eval_timeout):
+      tf.logging.info('Model Serving (over Imagenet Training).')
+      start_timestamp = time.time()  # This time will include compilation time
+      inf_results = resnet_classifier.evaluate(
+          input_fn=imagenet_train.input_fn,
+          steps=inf_steps,
+          checkpoint_path=ckpt)
+      elapsed_time = int(time.time() - start_timestamp)
+      tf.logging.info('Inference results: %s. Elapsed seconds: %d',
+                      inf_results, elapsed_time)
+  else:
     try:
       current_step = tf.train.load_variable(FLAGS.model_dir,
                                             tf.GraphKeys.GLOBAL_STEP)
