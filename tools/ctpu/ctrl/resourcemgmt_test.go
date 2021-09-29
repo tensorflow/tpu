@@ -134,7 +134,7 @@ func TestPartialBinding(t *testing.T) {
 			&cloudresourcemanager.Binding{
 				Role: "roles/owner",
 				Members: []string{
-					"user:saeta@google.com",
+					"user:noreply@google.com",
 				},
 			},
 			&cloudresourcemanager.Binding{
@@ -158,7 +158,7 @@ func TestBindingPresentServiceRoleOnly(t *testing.T) {
 		Version: sampleVersion,
 		Bindings: []*cloudresourcemanager.Binding{{
 			Role:    "roles/owner",
-			Members: []string{"user:saeta@google.com"},
+			Members: []string{"user:noreply@google.com"},
 		}, {
 			Role:    "roles/tpu.serviceAgent",
 			Members: []string{"serviceAccount:" + sampleTPUServiceAccount},

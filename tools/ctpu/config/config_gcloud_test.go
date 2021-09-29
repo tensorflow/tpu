@@ -36,7 +36,7 @@ func TestGcloudClean(t *testing.T) {
 	if cfg.ActiveConfiguration != "ctpu9" {
 		t.Error("Active configuration: " + cfg.ActiveConfiguration)
 	}
-	if cfg.account != "saeta@google.com" {
+	if cfg.account != "noreply@google.com" {
 		t.Error("Account: " + cfg.account)
 	}
 	if cfg.Project != "ctpu9-test-project" {
@@ -69,7 +69,7 @@ func TestGcloudEnvConfigOverride(t *testing.T) {
 	if cfg.ActiveConfiguration != "ctpu9" {
 		t.Error("Active configuration: " + cfg.ActiveConfiguration)
 	}
-	if cfg.account != "saeta@google.com" {
+	if cfg.account != "noreply@google.com" {
 		t.Error("Account: " + cfg.account)
 	}
 	if cfg.Project != "ctpu9-test-project" {
@@ -121,7 +121,7 @@ func TestGcloudIncomplete(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if cfg.account != "saeta@google.com" {
+	if cfg.account != "noreply@google.com" {
 		t.Error("Account error: " + cfg.account)
 	}
 

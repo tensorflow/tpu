@@ -368,6 +368,6 @@ static void __exit accel_exit(void)
 module_init(accel_init)
 module_exit(accel_exit)
 MODULE_DESCRIPTION("Google Accelerator Class driver");
-MODULE_AUTHOR("Rajat Jain <rajatja@google.com>");
-MODULE_AUTHOR("Havard Skinnemoen <hskinnemoen@google.com>");
+MODULE_AUTHOR("ASIC-SW <noreply@google.com>");
+MODULE_AUTHOR("ASIC-SW <noreply@google.com>");
 MODULE_LICENSE("GPL");

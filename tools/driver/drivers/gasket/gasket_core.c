@@ -142,7 +142,7 @@ static const struct gasket_sysfs_attribute gasket_sysfs_generic_attrs[] = {
 MODULE_DESCRIPTION("Gasket driver framework");
 MODULE_VERSION(GASKET_FRAMEWORK_VERSION);
 MODULE_LICENSE("GPL");
-MODULE_AUTHOR("Rob Springer <rspringer@google.com>");
+MODULE_AUTHOR("ASIC-SW <noreply@google.com>");
 module_init(gasket_init);
 module_exit(gasket_exit);
 static inline int check_and_invoke_callback(

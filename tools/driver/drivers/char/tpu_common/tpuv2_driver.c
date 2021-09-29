@@ -138,7 +138,7 @@ static struct gasket_driver_desc tpuv2_desc = {
 MODULE_DESCRIPTION("Google tpu_v2 driver");
 MODULE_VERSION(TPUV2_DRIVER_VERSION);
 MODULE_LICENSE("GPL");
-MODULE_AUTHOR("Joshua Lang <joshualang@google.com>");
+MODULE_AUTHOR("ASIC-SW <noreply@google.com>");
 MODULE_DEVICE_TABLE(pci, tpuv2_pci_ids);
 module_init(tpuv2_init);
 module_exit(tpuv2_exit);
