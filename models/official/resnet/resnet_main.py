@@ -801,7 +801,7 @@ def main(unused_argv):
   strategy = tf.distribute.experimental.MultiWorkerMirroredStrategy(communication=tf.distribute.experimental.CollectiveCommunication.NCCL)
 
   config = tf.estimator.tpu.RunConfig(
-      cluster=None, #tpu_cluster_resolver,
+      #cluster=None, #tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
       save_checkpoints_steps=save_checkpoints_steps,
       log_step_count_steps=FLAGS.log_step_count_steps,
@@ -947,10 +947,8 @@ def main(unused_argv):
                 save_steps=FLAGS.profile_every_n_steps,
                 output_dir=FLAGS.model_dir, tpu=FLAGS.tpu)
             )
-      resnet_classifier.train(
-          input_fn=imagenet_train.input_fn,
-          max_steps=params.train_steps,
-          hooks=hooks)
+      tf.estimator.train_and_evaluate(resnet_classifier, train_spec=tf.estimator.TrainSpec(input_fn=imagenet_train.input_fn, max_steps=params.train_steps, hooks=hooks), eval_spec=tf.estimator.EvalSpec(input_fn=imagenet_eval.input_fn, steps=None, start_delay_secs=1e9))
+      #resnet_classifier.train(input_fn=imagenet_train.input_fn,max_steps=params.train_steps,hooks=hooks)
 
       elapsed_time = int(time.time() - start_timestamp)
       tf.logging.info('Finished training up to step %d. Elapsed seconds %d.',
@@ -963,8 +961,9 @@ def main(unused_argv):
         # At the end of training, a checkpoint will be written to --model_dir.
         next_checkpoint = min(current_step + FLAGS.steps_per_eval,
                               params.train_steps)
-        resnet_classifier.train(
-            input_fn=imagenet_train.input_fn, max_steps=next_checkpoint)
+        tf.estimator.train_and_evaluate(resnet_classifier, train_spec=tf.estimator.TrainSpec(input_fn=imagenet_train.input_fn, max_steps=next_checkpoint), eval_spec=tf.estimator.EvalSpec())
+        #resnet_classifier.train(
+            #input_fn=imagenet_train.input_fn, max_steps=next_checkpoint)
         current_step = next_checkpoint
 
         tf.logging.info('Finished training up to step %d. Elapsed seconds %d.',
