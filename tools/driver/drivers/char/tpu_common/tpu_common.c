@@ -318,4 +318,4 @@ EXPORT_SYMBOL(tpu_common_clear_fw_device_owned);
 MODULE_DESCRIPTION("Google TPU Common Library");
 MODULE_VERSION(TPU_COMMON_COMMON_VERSION);
 MODULE_LICENSE("GPL");
-MODULE_AUTHOR("A Googler <nobody@google.com>");
+MODULE_AUTHOR("A Googler <noreply@google.com>");

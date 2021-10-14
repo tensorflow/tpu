@@ -810,4 +810,4 @@ static inline int reset_complete(struct gasket_dev *gasket_dev,
 MODULE_DESCRIPTION("Google tpu_v1 Driver Core");
 MODULE_VERSION(TPUV1_CORE_VERSION);
 MODULE_LICENSE("GPL");
-MODULE_AUTHOR("Joshua Lang <joshualang@google.com>");
+MODULE_AUTHOR("ASIC-SW <noreply@google.com>");

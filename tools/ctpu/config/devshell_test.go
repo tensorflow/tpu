@@ -30,7 +30,7 @@ func TestDevshellFilesystemConfig(t *testing.T) {
 	want := &Config{
 		Environment:         "devshell",
 		Project:             "ctpu9-test-project",
-		account:             "saeta@google.com",
+		account:             "noreply@google.com",
 		Zone:                "us-central1-c",
 		FlockName:           "",
 		ActiveConfiguration: "ctpu9",

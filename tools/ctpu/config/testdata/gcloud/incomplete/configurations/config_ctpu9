@@ -1,5 +1,5 @@
 [core]
-account = saeta@google.com
+account = noreply@google.com
 
 [compute]
 zone = us-central1-c
