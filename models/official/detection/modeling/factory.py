@@ -20,6 +20,7 @@ from modeling import maskrcnn_model
 from modeling import retinanet_model
 from modeling import segmentation_model
 from modeling import shapemask_model
+from projects.vild.modeling import vild_model
 
 
 def model_generator(params):
@@ -36,6 +37,8 @@ def model_generator(params):
     model_fn = shapemask_model.ShapeMaskModel(params)
   elif params.type == 'segmentation':
     model_fn = segmentation_model.SegmentationModel(params)
+  elif params.type == 'vild':
+    model_fn = vild_model.ViLDModel(params)
   else:
     raise ValueError('Model %s is not supported.'% params.type)
 

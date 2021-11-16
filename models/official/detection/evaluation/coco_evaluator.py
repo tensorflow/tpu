@@ -35,6 +35,7 @@ import atexit
 import json
 import tempfile
 from absl import logging
+import lvis
 import numpy as np
 from pycocotools import cocoeval
 import six
@@ -376,3 +377,118 @@ class ShapeMaskCOCOEvaluator(COCOEvaluator):
     for i, name in enumerate(self._metric_names):
       metrics_dict[name] = metrics[i].astype(np.float32)
     return metrics_dict
+
+
+class LVIS(lvis.LVIS):
+
+  def _load_json(self, path):
+    with tf.gfile.Open(path, 'r') as f:
+      return json.load(f)
+
+
+# pylint: disable=super-init-not-called
+class LVISEvaluator(COCOEvaluator):
+  """LVIS evaluation metric class."""
+
+  def __init__(
+      self,
+      annotation_file,
+      include_mask,
+      need_rescale_bboxes=True,
+      per_category_metrics=False,
+  ):
+    """Constructs LVIS evaluation class.
+
+    The class provides the interface to metrics_fn in TPUEstimator. The
+    _update_op() takes detections from each image and push them to
+    self.detections. The _evaluate() loads a JSON file in LVIS annotation format
+    as the groundtruths and runs LVIS evaluation.
+
+    Args:
+      annotation_file: a JSON file that stores annotations of the eval dataset.
+        If `annotation_file` is None, groundtruth annotations will be loaded
+        from the dataloader.
+      include_mask: a boolean to indicate whether or not to include the mask
+        eval.
+      need_rescale_bboxes: If true bboxes in `predictions` will be rescaled back
+        to absolute values (`image_info` is needed in this case).
+      per_category_metrics: Whether to return per category metrics.
+    """
+    if annotation_file:
+      if annotation_file.startswith('gs://'):
+        _, local_val_json = tempfile.mkstemp(suffix='.json')
+        tf.gfile.Remove(local_val_json)
+
+        tf.gfile.Copy(annotation_file, local_val_json)
+        atexit.register(tf.gfile.Remove, local_val_json)
+      else:
+        local_val_json = annotation_file
+      self._lvis_gt = LVIS(local_val_json)
+    else:
+      raise ValueError('Must have annotation file for LVIS evaluation.')
+    self._annotation_file = annotation_file
+    self._include_mask = include_mask
+    self._per_category_metrics = per_category_metrics
+    if self._per_category_metrics:
+      raise ValueError('Per category metrics not supported for LVIS.')
+    self._metric_names = [
+        'AP', 'AP50', 'AP75', 'APs', 'APm', 'APl', 'APr', 'APc', 'APf',
+        'AR@300', 'ARs@300', 'ARm@300', 'ARl@300'
+    ]
+    self._required_prediction_fields = [
+        'source_id', 'num_detections', 'detection_classes', 'detection_scores',
+        'detection_boxes'
+    ]
+    self._need_rescale_bboxes = need_rescale_bboxes
+    if self._need_rescale_bboxes:
+      self._required_prediction_fields.append('image_info')
+    self._required_groundtruth_fields = [
+        'source_id', 'height', 'width', 'classes', 'boxes'
+    ]
+    if self._include_mask:
+      mask_metric_names = ['mask_' + x for x in self._metric_names]
+      self._metric_names.extend(mask_metric_names)
+      self._required_prediction_fields.extend(['detection_masks'])
+      self._required_groundtruth_fields.extend(['masks'])
+
+    self.reset()
+
+  def evaluate(self):
+    """Evaluates with detections from all images with LVIS API.
+
+    Returns:
+      coco_metric: float numpy array with shape [24] representing the
+        coco-style evaluation metrics (box and mask).
+    """
+    debug = False
+    assert self._annotation_file
+    logging.info('Using annotation file: %s', self._annotation_file)
+    lvis_gt = self._lvis_gt
+
+    lvis_predictions = coco_utils.convert_predictions_to_coco_annotations(
+        self._predictions)
+
+    lvis_dt = lvis.LVISResults(lvis_gt, lvis_predictions)
+
+    lvis_eval = lvis.LVISEval(lvis_gt, lvis_dt, iou_type='bbox')
+    if debug:  # set to True for fast debugging
+      image_ids = [ann['image_id'] for ann in lvis_predictions]
+      lvis_eval.params.img_ids = image_ids
+    lvis_eval.run()
+    lvis_metrics = lvis_eval.results
+
+    if self._include_mask:
+      mlvis_eval = lvis.LVISEval(lvis_gt, lvis_dt, iou_type='segm')
+      if debug:
+        mlvis_eval.params.img_ids = image_ids
+      mlvis_eval.run()
+      mask_lvis_metrics = mlvis_eval.results
+      for key in mask_lvis_metrics:
+        lvis_metrics['mask_' + key] = mask_lvis_metrics[key]
+
+    # Cleans up the internal variables in order for a fresh eval next time.
+    self.reset()
+
+    return lvis_metrics
+
+

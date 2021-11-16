@@ -527,10 +527,10 @@ def resize_and_crop_masks(masks,
     return output_masks
 
 
-def random_horizontal_flip(image, boxes=None, masks=None):
+def random_horizontal_flip(image, boxes=None, masks=None, roi_boxes=None):
   """Randomly flips input image and bounding boxes."""
-  results = preprocessor.random_horizontal_flip(image, boxes, masks)
-  if boxes is None and masks is None:
+  results = preprocessor.random_horizontal_flip(image, boxes, masks, roi_boxes)
+  if boxes is None and masks is None and roi_boxes is None:
     return results[0]
   else:
     return results

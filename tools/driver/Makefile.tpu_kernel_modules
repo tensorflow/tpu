@@ -1,0 +1,36 @@
+KERNELDIR ?= /lib/modules/$(shell uname -r)/build
+PWD = $(shell pwd)
+EXTRA_CFLAGS = -I$(PWD)/include -I$(PWD)/include/uapi -I$(PWD)
+
+export CONFIG_HW_ACCEL = m
+export CONFIG_GASKET_FRAMEWORK = m
+export CONFIG_TPU_COMMON_COMMON = m
+export CONFIG_TPU_V2_CORE = m
+export CONFIG_TPU_V3_DRIVER = m
+export CONFIG_TPU_V2_DRIVER = m
+export CONFIG_ASIC_SW = m
+export CONFIG_TPU_V4_COMMON_COMMON = m
+export CONFIG_TPU_V4_DRIVER = m
+export CONFIG_TPU_V4_LITE_DRIVER = m
+
+all:
+	$(MAKE) -C $(KERNELDIR) M=$(PWD)/drivers/accel \
+		EXTRA_CFLAGS="$(EXTRA_CFLAGS)" modules
+	$(MAKE) -C $(KERNELDIR) M=$(PWD)/drivers/gasket \
+		EXTRA_CFLAGS="$(EXTRA_CFLAGS)" \
+		KBUILD_EXTRA_SYMBOLS="$(PWD)/drivers/accel/Module.symvers" \
+		modules
+	$(MAKE) -C $(KERNELDIR) M=$(PWD)/drivers/asic_sw \
+		EXTRA_CFLAGS="$(EXTRA_CFLAGS)" \
+		KBUILD_EXTRA_SYMBOLS="$(PWD)/drivers/gasket/Module.symvers" \
+		modules
+	$(MAKE) -C $(KERNELDIR) M=$(PWD)/drivers/char/tpu_common \
+		EXTRA_CFLAGS="$(EXTRA_CFLAGS)" \
+		KBUILD_EXTRA_SYMBOLS="$(PWD)/drivers/gasket/Module.symvers $(PWD)/drivers/asic_sw/Module.symvers" \
+		modules
+	find . -name "*.ko" -exec cp -f '{}' . ';'
+
+clean:
+	$(MAKE) -C $(KERNELDIR) M=$(PWD)/drivers/accel clean
+	$(MAKE) -C $(KERNELDIR) M=$(PWD)/drivers/gasket clean
+	$(MAKE) -C $(KERNELDIR) M=$(PWD)/drivers/char/tpu_common clean

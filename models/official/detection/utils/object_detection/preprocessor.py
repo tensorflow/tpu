@@ -175,6 +175,7 @@ def keypoint_prune_outside_window(keypoints, window, scope=None):
 def random_horizontal_flip(image,
                            boxes=None,
                            masks=None,
+                           roi_boxes=None,
                            keypoints=None,
                            keypoint_flip_permutation=None,
                            seed=None):
@@ -192,6 +193,11 @@ def random_horizontal_flip(image,
     masks: (optional) rank 3 float32 tensor with shape
            [num_instances, height, width] containing instance masks. The masks
            are of the same height, width as the input `image`.
+    roi_boxes: (optional) rank 2 float32 tensor with shape [N, 4]
+           containing the bounding boxes.
+           Boxes are in normalized form meaning their coordinates vary
+           between [0, 1].
+           Each row is in the form of [ymin, xmin, ymax, xmax].
     keypoints: (optional) rank 3 float32 tensor with shape
                [num_instances, num_keypoints, 2]. The keypoints are in y-x
                normalized coordinates.
@@ -210,6 +216,9 @@ def random_horizontal_flip(image,
            between [0, 1].
     masks: rank 3 float32 tensor with shape [num_instances, height, width]
            containing instance masks.
+    roi_boxes: rank 2 float32 tensor containing the bounding boxes -> [N, 4].
+           Boxes are in normalized form meaning their coordinates vary
+           between [0, 1].
     keypoints: rank 3 float32 tensor with shape
                [num_instances, num_keypoints, 2]
 
@@ -246,6 +255,13 @@ def random_horizontal_flip(image,
       masks = tf.cond(do_a_flip_random, lambda: _flip_masks_left_right(masks),
                       lambda: masks)
       result.append(masks)
+
+    # flip roi_boxes
+    if roi_boxes is not None:
+      roi_boxes = tf.cond(do_a_flip_random,
+                          lambda: _flip_boxes_left_right(roi_boxes),
+                          lambda: roi_boxes)
+      result.append(roi_boxes)
 
     # flip keypoints
     if keypoints is not None and keypoint_flip_permutation is not None:

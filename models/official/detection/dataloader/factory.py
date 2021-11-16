@@ -18,6 +18,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+# pylint: disable=g-bad-import-order
 from dataloader import classification_parser
 from dataloader import extract_objects_parser
 from dataloader import maskrcnn_parser
@@ -26,6 +27,7 @@ from dataloader import mode_keys as ModeKeys
 from dataloader import retinanet_parser
 from dataloader import segmentation_parser
 from dataloader import shapemask_parser
+from projects.vild.dataloader import vild_parser
 
 
 def parser_generator(params, mode):
@@ -103,6 +105,37 @@ def parser_generator(params, mode):
           mask_crop_size=parser_params.mask_crop_size,
           use_bfloat16=params.architecture.use_bfloat16,
           mode=mode)
+  elif params.architecture.parser == 'vild_parser':
+    arch_params = params.architecture
+    anchor_params = params.anchor
+    parser_params = params.vild_parser
+    parser_fn = vild_parser.Parser(
+        output_size=parser_params.output_size,
+        min_level=params.architecture.min_level,
+        max_level=params.architecture.max_level,
+        num_scales=anchor_params.num_scales,
+        aspect_ratios=anchor_params.aspect_ratios,
+        anchor_size=anchor_params.anchor_size,
+        rpn_match_threshold=parser_params.rpn_match_threshold,
+        rpn_unmatched_threshold=parser_params.rpn_unmatched_threshold,
+        rpn_batch_size_per_im=parser_params.rpn_batch_size_per_im,
+        rpn_fg_fraction=parser_params.rpn_fg_fraction,
+        aug_rand_hflip=parser_params.aug_rand_hflip,
+        aug_scale_min=parser_params.aug_scale_min,
+        aug_scale_max=parser_params.aug_scale_max,
+        skip_crowd_during_training=parser_params.skip_crowd_during_training,
+        max_num_instances=parser_params.max_num_instances,
+        include_mask=params.architecture.include_mask,
+        mask_crop_size=parser_params.mask_crop_size,
+        use_bfloat16=params.architecture.use_bfloat16,
+        mode=mode,
+        # ViLD
+        visual_feature_distill=mode == ModeKeys.TRAIN and
+        arch_params.visual_feature_distill in ['vanilla', 'double_branch'],
+        visual_feature_dim=arch_params.visual_feature_dim,
+        max_num_rois=arch_params.max_num_rois,
+        filter_distill_boxes_size=arch_params.filter_distill_boxes_size,
+    )
   elif params.architecture.parser == 'extract_objects_parser':
     parser_params = params.maskrcnn_parser
     parser_fn = extract_objects_parser.Parser(

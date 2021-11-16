@@ -1,4 +1,5 @@
 config GASKET_FRAMEWORK
+  select DMA_SHARED_BUFFER
   tristate "Gasket framework"
   depends on PCI
   depends on HW_ACCEL

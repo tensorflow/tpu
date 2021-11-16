@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (C) 2020 Google LLC.
+ * Copyright (C) 2021 Google LLC.
  */
 #ifndef _LINUX_GOOGLE_ASIC_FW_DEVICE_OWNER_ACCESSOR_H_
 #define _LINUX_GOOGLE_ASIC_FW_DEVICE_OWNER_ACCESSOR_H_ 

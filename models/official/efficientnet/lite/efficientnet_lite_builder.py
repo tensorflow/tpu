@@ -25,6 +25,7 @@ import tensorflow.compat.v1 as tf
 import efficientnet_builder
 import efficientnet_model
 import utils
+from lite import efficientnet_lite_model_qat
 # Edge models use inception-style MEAN and STDDEV for better post-quantization.
 MEAN_RGB = [127.0, 127.0, 127.0]
 STDDEV_RGB = [128.0, 128.0, 128.0]
@@ -32,6 +33,8 @@ STDDEV_RGB = [128.0, 128.0, 128.0]
 
 def efficientnet_lite_params(model_name):
   """Get efficientnet params based on model name."""
+  if '-qat' in model_name:
+    model_name = model_name[:model_name.find('-qat')]
   params_dict = {
       # (width_coefficient, depth_coefficient, resolution, dropout_rate)
       'efficientnet-lite0': (1.0, 1.0, 224, 0.2),
@@ -75,7 +78,8 @@ def efficientnet_lite(width_coefficient=None,
       clip_projection_output=False,
       fix_head_stem=True,  # Don't scale stem and head.
       local_pooling=True,  # special cases for tflite issues.
-      use_se=False)  # SE is not well supported on many lite devices.
+      use_se=False,  # SE is not well supported on many lite devices.
+      use_bfloat16=False)  # This flag is only read by QAT version of the model.
   return global_params
 
 
@@ -139,6 +143,12 @@ def build_model(images,
   if override_params and override_params.get('drop_connect_rate', None):
     override_params['survival_prob'] = 1 - override_params['drop_connect_rate']
 
+  if '-qat' in model_name:
+    model_name = model_name[:model_name.find('-qat')]
+    with_quantization_aware_training = True
+  else:
+    with_quantization_aware_training = False
+
   if not training or fine_tuning:
     if not override_params:
       override_params = {}
@@ -157,12 +167,18 @@ def build_model(images,
         f.write('blocks_args= %s\n\n' % str(blocks_args))
 
   with tf.variable_scope(model_name):
-    model = efficientnet_model.Model(blocks_args, global_params)
-    outputs = model(
-        images,
-        training=training,
-        features_only=features_only,
-        pooled_features_only=pooled_features_only)
+    if with_quantization_aware_training:
+      model = efficientnet_lite_model_qat.FunctionalModel(
+          model_name, blocks_args, global_params, features_only,
+          pooled_features_only)
+      outputs = model(images, training=training)
+    else:
+      model = efficientnet_model.Model(blocks_args, global_params)
+      outputs = model(
+          images,
+          training=training,
+          features_only=features_only,
+          pooled_features_only=pooled_features_only)
   if features_only:
     outputs = tf.identity(outputs, 'features')
   elif pooled_features_only:

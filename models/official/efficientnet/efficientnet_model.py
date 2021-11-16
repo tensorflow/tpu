@@ -41,7 +41,7 @@ GlobalParams = collections.namedtuple('GlobalParams', [
     'num_classes', 'width_coefficient', 'depth_coefficient', 'depth_divisor',
     'min_depth', 'survival_prob', 'relu_fn', 'batch_norm', 'use_se',
     'se_coefficient', 'local_pooling', 'condconv_num_experts',
-    'clip_projection_output', 'blocks_args', 'fix_head_stem',
+    'clip_projection_output', 'blocks_args', 'fix_head_stem', 'use_bfloat16'
 ])
 # Note: the default value of None is not necessarily valid. It is valid to leave
 # width_coefficient, depth_coefficient at None, which is treated as 1.0 (and

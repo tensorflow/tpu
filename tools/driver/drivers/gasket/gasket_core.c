@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (C) 2020 Google LLC.
+ * Copyright (C) 2021 Google LLC.
  */
 #include "gasket_core.h"
 #include "gasket_interrupt.h"
@@ -21,12 +21,12 @@ struct gasket_unforkable_mapping {
  char last_mapped_unforkable_process_name[TASK_COMM_LEN];
 };
 struct gasket_internal_desc {
- const struct gasket_driver_desc *driver_desc;
- struct mutex mutex;
- struct class *legacy_class;
- struct pci_driver pci;
- struct gasket_dev *devs[GASKET_DEV_MAX];
- struct gasket_unforkable_mapping unforkable_maps;
+  const struct gasket_device_desc *device_desc;
+  struct mutex mutex;
+  struct class *legacy_class;
+  struct pci_driver pci;
+  struct gasket_dev *devs[GASKET_DEV_MAX];
+  struct gasket_unforkable_mapping unforkable_maps;
 };
 enum do_map_region_status {
  DO_MAP_REGION_SUCCESS,
@@ -50,8 +50,7 @@ static int gasket_find_dev_slot(
  struct gasket_internal_desc *internal_desc, const char *kobj_name);
 static int gasket_add_cdev(struct gasket_dev *gasket_dev,
  const struct file_operations *file_ops, struct module *owner);
-static int gasket_enable_dev(struct gasket_internal_desc *internal_desc,
- struct gasket_dev *gasket_dev);
+static int gasket_enable_dev(struct gasket_dev *gasket_dev);
 static void gasket_disable_dev(struct gasket_dev *gasket_dev);
 static struct gasket_internal_desc *lookup_internal_desc(
  struct pci_dev *pci_dev);
@@ -105,7 +104,6 @@ static const struct file_operations gasket_file_ops = {
  .release = gasket_release,
  .unlocked_ioctl = gasket_ioctl,
 };
-EXPORT_SYMBOL(gasket_file_ops);
 static const struct gasket_sysfs_attribute gasket_sysfs_generic_attrs[] = {
  GASKET_SYSFS_RO(bar_offsets, gasket_sysfs_data_show, ATTR_BAR_OFFSETS),
  GASKET_SYSFS_RO(bar_sizes, gasket_sysfs_data_show, ATTR_BAR_SIZES),
@@ -142,7 +140,7 @@ static const struct gasket_sysfs_attribute gasket_sysfs_generic_attrs[] = {
 MODULE_DESCRIPTION("Gasket driver framework");
 MODULE_VERSION(GASKET_FRAMEWORK_VERSION);
 MODULE_LICENSE("GPL");
-MODULE_AUTHOR("ASIC-SW <noreply@google.com>");
+MODULE_AUTHOR("Googler <noreply@google.com>");
 module_init(gasket_init);
 module_exit(gasket_exit);
 static inline int check_and_invoke_callback(
@@ -175,8 +173,8 @@ static int __init gasket_init(void)
  gasket_nodev_info("Performing one-time init of the Gasket framework.");
  mutex_lock(&g_mutex);
  for (i = 0; i < GASKET_FRAMEWORK_DESC_MAX; i++) {
-  g_descs[i].driver_desc = NULL;
-  mutex_init(&g_descs[i].mutex);
+   g_descs[i].device_desc = NULL;
+   mutex_init(&g_descs[i].mutex);
  }
  gasket_sysfs_init();
  mutex_unlock(&g_mutex);
@@ -185,128 +183,122 @@ static int __init gasket_init(void)
 static void gasket_exit(void)
 {
 }
-int gasket_register_device(const struct gasket_driver_desc *driver_desc)
-{
- int i, ret;
- int desc_idx = -1;
- struct gasket_internal_desc *internal;
- gasket_nodev_info("Initializing Gasket framework device");
- mutex_lock(&g_mutex);
- for (i = 0; i < GASKET_FRAMEWORK_DESC_MAX; i++) {
-  if (g_descs[i].driver_desc == driver_desc) {
-   gasket_nodev_error(
-    "%s driver already loaded/registered",
-    driver_desc->name);
-   mutex_unlock(&g_mutex);
-   return -EBUSY;
+int __gasket_register_device(const struct gasket_device_desc *device_desc,
+                             const char *driver_name) {
+  int i, ret;
+  int desc_idx = -1;
+  struct gasket_internal_desc *internal;
+  gasket_nodev_info("Initializing Gasket framework device");
+  mutex_lock(&g_mutex);
+  for (i = 0; i < GASKET_FRAMEWORK_DESC_MAX; i++) {
+    if (g_descs[i].device_desc == device_desc) {
+      gasket_nodev_error("%s driver already loaded/registered",
+                         device_desc->name);
+      mutex_unlock(&g_mutex);
+      return -EBUSY;
+    }
   }
- }
- for (i = 0; i < GASKET_FRAMEWORK_DESC_MAX; i++) {
-  if (!g_descs[i].driver_desc) {
-   g_descs[i].driver_desc = driver_desc;
-   desc_idx = i;
-   break;
+  for (i = 0; i < GASKET_FRAMEWORK_DESC_MAX; i++) {
+    if (!g_descs[i].device_desc) {
+      g_descs[i].device_desc = device_desc;
+      desc_idx = i;
+      break;
+    }
   }
- }
- mutex_unlock(&g_mutex);
- gasket_nodev_info("loaded %s driver, framework version %s",
-  driver_desc->name, GASKET_FRAMEWORK_VERSION);
- if (desc_idx == -1) {
-  gasket_nodev_error("too many Gasket drivers loaded: %d\n",
-   GASKET_FRAMEWORK_DESC_MAX);
-  return -EBUSY;
- }
- gasket_nodev_info("Performing initial internal structure setup.");
- internal = &g_descs[desc_idx];
- mutex_init(&internal->mutex);
- memset(internal->devs, 0, sizeof(struct gasket_dev *) * GASKET_DEV_MAX);
- memset(&internal->pci, 0, sizeof(internal->pci));
- internal->pci.name = driver_desc->name;
- internal->pci.id_table = driver_desc->pci_id_table;
- internal->pci.probe = gasket_pci_probe;
- internal->pci.remove = gasket_pci_remove;
- internal->unforkable_maps.unforkable_map_count = 0;
- internal->unforkable_maps.last_mapped_unforkable_pid = -1;
- memset(internal->unforkable_maps.last_mapped_unforkable_process_name, 0,
-  TASK_COMM_LEN);
- if (driver_desc->legacy_support) {
-  internal->legacy_class = class_create(
-   driver_desc->module, driver_desc->name);
-  if (IS_ERR_OR_NULL(internal->legacy_class)) {
-   ret = PTR_ERR(internal->legacy_class);
-   gasket_nodev_error(
-    "cannot register %s legacy class [ret=%d]",
-    driver_desc->name, ret);
-   goto fail1;
+  mutex_unlock(&g_mutex);
+  gasket_nodev_info("loaded %s driver, framework version %s", device_desc->name,
+                    GASKET_FRAMEWORK_VERSION);
+  if (desc_idx == -1) {
+    gasket_nodev_error("too many Gasket drivers loaded: %d\n",
+                       GASKET_FRAMEWORK_DESC_MAX);
+    return -EBUSY;
   }
- }
- gasket_nodev_info("Registering PCI driver.");
- ret = __pci_register_driver(
-  &internal->pci, driver_desc->module, driver_desc->name);
- if (ret) {
-  gasket_nodev_error("cannot register pci driver [ret=%d]", ret);
-  goto fail2;
- }
- if (driver_desc->legacy_support) {
-  gasket_nodev_info("Registering legacy driver.");
-  ret = register_chrdev_region(
-   MKDEV(driver_desc->legacy_major,
-    driver_desc->legacy_minor),
-   GASKET_DEV_MAX, driver_desc->name);
+  gasket_nodev_info("Performing initial internal structure setup.");
+  internal = &g_descs[desc_idx];
+  mutex_init(&internal->mutex);
+  memset(internal->devs, 0, sizeof(struct gasket_dev *) * GASKET_DEV_MAX);
+  memset(&internal->pci, 0, sizeof(internal->pci));
+  internal->pci.name = driver_name;
+  internal->pci.id_table = device_desc->pci_id_table;
+  internal->pci.probe = gasket_pci_probe;
+  internal->pci.remove = gasket_pci_remove;
+  internal->unforkable_maps.unforkable_map_count = 0;
+  internal->unforkable_maps.last_mapped_unforkable_pid = -1;
+  memset(internal->unforkable_maps.last_mapped_unforkable_process_name, 0,
+         TASK_COMM_LEN);
+  if (device_desc->legacy_support) {
+    internal->legacy_class =
+        class_create(device_desc->module, device_desc->name);
+    if (IS_ERR_OR_NULL(internal->legacy_class)) {
+      ret = PTR_ERR(internal->legacy_class);
+      gasket_nodev_error("cannot register %s legacy class [ret=%d]",
+                         device_desc->name, ret);
+      goto fail1;
+    }
+  }
+  gasket_nodev_info("Registering PCI driver.");
+  ret = __pci_register_driver(&internal->pci, device_desc->module,
+                              device_desc->name);
   if (ret) {
-   gasket_nodev_error(
-    "Cannot register char driver [ret=%d]", ret);
-   goto fail3;
+    gasket_nodev_error("cannot register pci driver [ret=%d]", ret);
+    goto fail2;
   }
- }
- gasket_nodev_info("Driver registered successfully.");
- return 0;
+  if (device_desc->legacy_support) {
+    gasket_nodev_info("Registering legacy driver.");
+    ret = register_chrdev_region(
+        MKDEV(device_desc->legacy_major, device_desc->legacy_minor),
+        GASKET_DEV_MAX, device_desc->name);
+    if (ret) {
+      gasket_nodev_error("Cannot register char driver [ret=%d]", ret);
+      goto fail3;
+    }
+  }
+  gasket_nodev_info("Driver registered successfully.");
+  return 0;
 fail3:
  pci_unregister_driver(&internal->pci);
 fail2:
- if (driver_desc->legacy_support)
-  class_destroy(internal->legacy_class);
+  if (device_desc->legacy_support) class_destroy(internal->legacy_class);
 fail1:
- g_descs[desc_idx].driver_desc = NULL;
- return ret;
+  g_descs[desc_idx].device_desc = NULL;
+  return ret;
 }
-EXPORT_SYMBOL(gasket_register_device);
-void gasket_unregister_device(const struct gasket_driver_desc *driver_desc)
-{
- int i, desc_idx;
- struct gasket_internal_desc *internal_desc = NULL;
- mutex_lock(&g_mutex);
- for (i = 0; i < GASKET_FRAMEWORK_DESC_MAX; i++) {
-  if (g_descs[i].driver_desc == driver_desc) {
-   internal_desc = &g_descs[i];
-   desc_idx = i;
-   break;
-  }
- }
- mutex_unlock(&g_mutex);
- if (internal_desc == NULL) {
-  gasket_nodev_error("request to unregister unknown desc: %s",
-   driver_desc->name);
-  return;
- }
- pci_unregister_driver(&internal_desc->pci);
- if (driver_desc->legacy_support) {
-  unregister_chrdev_region(MKDEV(
-   driver_desc->legacy_major, driver_desc->legacy_minor),
-   GASKET_DEV_MAX);
-  class_destroy(internal_desc->legacy_class);
- }
- for (i = 0; i < GASKET_DEV_MAX; i++) {
+EXPORT_SYMBOL(__gasket_register_device);
+void gasket_unregister_device(const struct gasket_device_desc *device_desc) {
+  int i, desc_idx;
+  struct gasket_internal_desc *internal_desc = NULL;
   mutex_lock(&g_mutex);
-  while (g_descs[desc_idx].devs[i]) {
-   mutex_unlock(&g_mutex);
-   usleep_range(500, 1000);
-   mutex_lock(&g_mutex);
-  };
+  for (i = 0; i < GASKET_FRAMEWORK_DESC_MAX; i++) {
+    if (g_descs[i].device_desc == device_desc) {
+      internal_desc = &g_descs[i];
+      desc_idx = i;
+      break;
+    }
+  }
   mutex_unlock(&g_mutex);
- }
- g_descs[desc_idx].driver_desc = NULL;
- gasket_nodev_info("removed %s driver", driver_desc->name);
+  if (internal_desc == NULL) {
+    gasket_nodev_error("request to unregister unknown desc: %s",
+                       device_desc->name);
+    return;
+  }
+  pci_unregister_driver(&internal_desc->pci);
+  if (device_desc->legacy_support) {
+    unregister_chrdev_region(
+        MKDEV(device_desc->legacy_major, device_desc->legacy_minor),
+        GASKET_DEV_MAX);
+    class_destroy(internal_desc->legacy_class);
+  }
+  for (i = 0; i < GASKET_DEV_MAX; i++) {
+    mutex_lock(&g_mutex);
+    while (g_descs[desc_idx].devs[i]) {
+      mutex_unlock(&g_mutex);
+      usleep_range(500, 1000);
+      mutex_lock(&g_mutex);
+    };
+    mutex_unlock(&g_mutex);
+  }
+  g_descs[desc_idx].device_desc = NULL;
+  gasket_nodev_info("removed %s driver", device_desc->name);
 }
 EXPORT_SYMBOL(gasket_unregister_device);
 static int gasket_alloc_dev(
@@ -314,8 +306,8 @@ static int gasket_alloc_dev(
  struct gasket_dev **pdev, const char *kobj_name)
 {
  int ret, dev_idx;
- const struct gasket_driver_desc *driver_desc =
-  internal_desc->driver_desc;
+ const struct gasket_device_desc *device_desc = internal_desc->device_desc;
+ const struct gasket_driver_desc *driver_desc;
  struct gasket_dev *gasket_dev;
  struct device *parent;
  gasket_nodev_info("Allocating a Gasket device.");
@@ -328,6 +320,18 @@ static int gasket_alloc_dev(
  dev_idx = gasket_find_dev_slot(internal_desc, kobj_name);
  if (dev_idx < 0)
   return dev_idx;
+ if (internal_desc->device_desc->driver_desc) {
+   driver_desc = internal_desc->device_desc->driver_desc;
+ } else if (internal_desc->device_desc->driver_desc_cb) {
+   driver_desc = internal_desc->device_desc->driver_desc_cb(pci_dev);
+ } else {
+   gasket_nodev_error("Must provide a driver desc or cb");
+   return -EINVAL;
+ }
+ if (driver_desc == NULL) {
+   gasket_nodev_info("Driver desc cb returned null");
+   return 1;
+ }
  gasket_dev = *pdev = kzalloc(sizeof(*gasket_dev), GFP_KERNEL);
  if (!gasket_dev) {
   gasket_nodev_error("no memory for device");
@@ -341,7 +345,7 @@ static int gasket_alloc_dev(
   internal_desc->devs[dev_idx] = NULL;
   return ret;
  }
- gasket_dev->accel_dev.accel_type = driver_desc->name;
+ gasket_dev->accel_dev.accel_type = device_desc->name;
  gasket_dev->accel_dev.chip_vendor = "Google, LLC";
  gasket_dev->accel_dev.chip_model = driver_desc->chip_model;
  gasket_dev->accel_dev.chip_revision = driver_desc->chip_version;
@@ -351,25 +355,26 @@ static int gasket_alloc_dev(
   gasket_dev->accel_dev.chip_revision;
  gasket_dev->accel_dev.fops = &gasket_file_ops;
  gasket_dev->internal_desc = internal_desc;
+ gasket_dev->driver_desc = driver_desc;
  gasket_dev->pci_dev = pci_dev;
  gasket_dev->dev_idx = dev_idx;
  snprintf(gasket_dev->kobj_name, GASKET_NAME_MAX, "%s", kobj_name);
  gasket_dev->num_page_tables = driver_desc->num_page_tables;
- if (driver_desc->legacy_support) {
-  snprintf(gasket_dev->legacy_cdev_name, GASKET_NAME_MAX, "%s_%u",
-   driver_desc->name, gasket_dev->dev_idx);
-  gasket_dev->legacy_devt = MKDEV(driver_desc->legacy_major,
-   driver_desc->legacy_minor + gasket_dev->dev_idx);
-  gasket_dev->legacy_cdev_added = 0;
-  gasket_dev->legacy_device = device_create(
-   internal_desc->legacy_class, parent,
-   gasket_dev->legacy_devt, gasket_dev,
-   gasket_dev->legacy_cdev_name);
-  if (gasket_dev->legacy_device == NULL) {
-   internal_desc->devs[dev_idx] = NULL;
-   accel_dev_put(&gasket_dev->accel_dev);
-   return 1;
-  }
+ if (device_desc->legacy_support) {
+   snprintf(gasket_dev->legacy_cdev_name, GASKET_NAME_MAX, "%s_%u",
+            device_desc->name, gasket_dev->dev_idx);
+   gasket_dev->legacy_devt =
+       MKDEV(device_desc->legacy_major,
+             device_desc->legacy_minor + gasket_dev->dev_idx);
+   gasket_dev->legacy_cdev_added = 0;
+   gasket_dev->legacy_device = device_create(
+       internal_desc->legacy_class, parent, gasket_dev->legacy_devt, gasket_dev,
+       gasket_dev->legacy_cdev_name);
+   if (gasket_dev->legacy_device == NULL) {
+     internal_desc->devs[dev_idx] = NULL;
+     accel_dev_put(&gasket_dev->accel_dev);
+     return 1;
+   }
  }
  return 0;
 }
@@ -428,6 +433,7 @@ static int gasket_pci_probe(
  const char *kobj_name = dev_name(&pci_dev->dev);
  struct gasket_internal_desc *internal_desc;
  struct gasket_dev *gasket_dev;
+ const struct gasket_device_desc *device_desc;
  const struct gasket_driver_desc *driver_desc;
  gasket_nodev_info("add Gasket device %s", kobj_name);
  mutex_lock(&g_mutex);
@@ -437,10 +443,11 @@ static int gasket_pci_probe(
   gasket_nodev_info("PCI probe called for unknown driver type");
   return -ENODEV;
  }
- driver_desc = internal_desc->driver_desc;
  ret = gasket_alloc_dev(internal_desc, pci_dev, &gasket_dev, kobj_name);
  if (ret)
   return ret;
+ device_desc = internal_desc->device_desc;
+ driver_desc = gasket_dev->driver_desc;
  ret = check_and_invoke_callback(
   gasket_dev, driver_desc->add_dev_cb);
  if (ret) {
@@ -450,11 +457,10 @@ static int gasket_pci_probe(
  ret = gasket_setup_pci(pci_dev, gasket_dev);
  if (ret)
   goto fail2;
- ret = gasket_enable_dev(internal_desc, gasket_dev);
+ ret = gasket_enable_dev(gasket_dev);
  if (ret) {
-  gasket_log_error(gasket_dev,
-   "cannot setup %s device", driver_desc->name);
-  goto fail3;
+   gasket_log_error(gasket_dev, "cannot setup %s device", device_desc->name);
+   goto fail3;
  }
  accel_dev_set_state(&gasket_dev->accel_dev, "available");
  return 0;
@@ -471,6 +477,7 @@ static void gasket_pci_remove(struct pci_dev *pci_dev)
  int i;
  struct gasket_internal_desc *internal_desc;
  struct gasket_dev *gasket_dev = NULL;
+ const struct gasket_device_desc *device_desc;
  const struct gasket_driver_desc *driver_desc;
  mutex_lock(&g_mutex);
  internal_desc = lookup_internal_desc(pci_dev);
@@ -479,7 +486,6 @@ static void gasket_pci_remove(struct pci_dev *pci_dev)
   return;
  }
  mutex_unlock(&g_mutex);
- driver_desc = internal_desc->driver_desc;
  mutex_lock(&internal_desc->mutex);
  for (i = 0; i < GASKET_DEV_MAX; i++) {
   if (internal_desc->devs[i] &&
@@ -491,6 +497,8 @@ static void gasket_pci_remove(struct pci_dev *pci_dev)
  mutex_unlock(&internal_desc->mutex);
  if (!gasket_dev)
   return;
+ device_desc = internal_desc->device_desc;
+ driver_desc = gasket_dev->driver_desc;
  mutex_lock(&gasket_dev->mutex);
  gasket_dev->status = GASKET_STATUS_DRIVER_EXIT;
  if (gasket_dev->ownership.write_open_count > 0) {
@@ -504,18 +512,16 @@ static void gasket_pci_remove(struct pci_dev *pci_dev)
   mutex_lock(&gasket_dev->mutex);
  }
  mutex_unlock(&gasket_dev->mutex);
- gasket_log_info(gasket_dev,
-  "removing %s device %s", internal_desc->driver_desc->name,
-  gasket_dev->kobj_name);
+ gasket_log_info(gasket_dev, "removing %s device %s", device_desc->name,
+                 gasket_dev->kobj_name);
  check_and_invoke_callback(gasket_dev, driver_desc->sysfs_cleanup_cb);
  gasket_sysfs_remove_mapping(&gasket_dev->accel_dev.dev);
  gasket_disable_dev(gasket_dev);
  gasket_cleanup_pci(gasket_dev);
  check_and_invoke_callback_nolock(
   gasket_dev, driver_desc->remove_dev_cb);
- if (driver_desc->legacy_support)
-  device_destroy(
-   internal_desc->legacy_class, gasket_dev->legacy_devt);
+ if (gasket_dev->internal_desc->device_desc->legacy_support)
+   device_destroy(internal_desc->legacy_class, gasket_dev->legacy_devt);
  accel_dev_put(&gasket_dev->accel_dev);
 }
 bool gasket_pci_is_iommu_enabled(struct pci_dev *pdev)
@@ -526,9 +532,7 @@ EXPORT_SYMBOL(gasket_pci_is_iommu_enabled);
 static void gasket_setup_pci_iommu(struct gasket_dev *gasket_dev)
 {
  struct pci_dev *pdev = gasket_dev->pci_dev;
- struct gasket_internal_desc *internal_desc = gasket_dev->internal_desc;
- const struct gasket_driver_desc *driver_desc =
-  internal_desc->driver_desc;
+ const struct gasket_driver_desc *driver_desc = gasket_dev->driver_desc;
  if (gasket_pci_is_iommu_enabled(pdev)) {
   gasket_log_info(gasket_dev,
    "IOMMU Mappings: Already enabled");
@@ -575,20 +579,16 @@ static void gasket_cleanup_pci(struct gasket_dev *gasket_dev)
 }
 static int gasket_map_pci_bar(struct gasket_dev *gasket_dev, int bar_num)
 {
- struct gasket_internal_desc *internal_desc = gasket_dev->internal_desc;
- const struct gasket_driver_desc *driver_desc =
-  internal_desc->driver_desc;
- ulong desc_bytes = driver_desc->bar_descriptions[bar_num].size;
- int ret;
- if (desc_bytes == 0)
-  return 0;
- gasket_dev->bar_data[bar_num].phys_base =
-  (ulong)pci_resource_start(gasket_dev->pci_dev, bar_num);
- if (!gasket_dev->bar_data[bar_num].phys_base) {
-  gasket_log_error(gasket_dev, "Cannot get BAR%u base address",
-   bar_num);
-  return -EINVAL;
- }
+  const struct gasket_driver_desc *driver_desc = gasket_dev->driver_desc;
+  ulong desc_bytes = driver_desc->bar_descriptions[bar_num].size;
+  int ret;
+  if (desc_bytes == 0) return 0;
+  gasket_dev->bar_data[bar_num].phys_base =
+      (ulong)pci_resource_start(gasket_dev->pci_dev, bar_num);
+  if (!gasket_dev->bar_data[bar_num].phys_base) {
+    gasket_log_error(gasket_dev, "Cannot get BAR%u base address", bar_num);
+    return -EINVAL;
+  }
  gasket_dev->bar_data[bar_num].length_bytes =
   (ulong)pci_resource_len(gasket_dev->pci_dev, bar_num);
  if (gasket_dev->bar_data[bar_num].length_bytes < desc_bytes) {
@@ -607,8 +607,8 @@ static int gasket_map_pci_bar(struct gasket_dev *gasket_dev, int bar_num)
   return -EINVAL;
  }
  gasket_dev->bar_data[bar_num].virt_base =
-  ioremap_nocache(gasket_dev->bar_data[bar_num].phys_base,
-   gasket_dev->bar_data[bar_num].length_bytes);
+     ioremap(gasket_dev->bar_data[bar_num].phys_base,
+             gasket_dev->bar_data[bar_num].length_bytes);
  if (!gasket_dev->bar_data[bar_num].virt_base) {
   gasket_log_error(gasket_dev,
    "Cannot remap BAR %d memory region %p",
@@ -625,13 +625,10 @@ fail:
   gasket_dev->bar_data[bar_num].length_bytes);
  return ret;
 }
-EXPORT_SYMBOL(gasket_map_pci_bar);
 static void gasket_unmap_pci_bar(struct gasket_dev *dev, int bar_num)
 {
  ulong base, bytes;
- struct gasket_internal_desc *internal_desc = dev->internal_desc;
- const struct gasket_driver_desc *driver_desc =
-  internal_desc->driver_desc;
+ const struct gasket_driver_desc *driver_desc = dev->driver_desc;
  if (driver_desc->bar_descriptions[bar_num].size == 0 ||
   !dev->bar_data[bar_num].virt_base)
   return;
@@ -670,13 +667,13 @@ void gasket_remove_cdev_mapping(struct gasket_dev *gasket_dev)
  hash_del(&gasket_dev->hlist_node);
 }
 static int gasket_enable_dev(
- struct gasket_internal_desc *internal_desc,
  struct gasket_dev *gasket_dev)
 {
  int i, tbl_idx;
  int ret;
- const struct gasket_driver_desc *driver_desc =
-  internal_desc->driver_desc;
+ const struct gasket_device_desc *device_desc =
+     gasket_dev->internal_desc->device_desc;
+ const struct gasket_driver_desc *driver_desc = gasket_dev->driver_desc;
  if (driver_desc->legacy_interrupts && driver_desc->interrupts) {
   gasket_log_error(gasket_dev,
    "Can not use both legacy and non-legacy interrupt interfaces");
@@ -695,16 +692,14 @@ static int gasket_enable_dev(
  if (ret)
   goto fail1;
  if (driver_desc->legacy_interrupts != NULL) {
-  ret = legacy_gasket_interrupt_init(gasket_dev,
-   driver_desc->name,
-   driver_desc->legacy_interrupts,
-   driver_desc->num_interrupts,
-   driver_desc->legacy_interrupt_pack_width,
-   driver_desc->legacy_interrupt_bar_index);
+   ret = legacy_gasket_interrupt_init(
+       gasket_dev, device_desc->name, driver_desc->legacy_interrupts,
+       driver_desc->num_interrupts, driver_desc->legacy_interrupt_pack_width,
+       driver_desc->legacy_interrupt_bar_index);
  } else {
-  ret = gasket_interrupt_init(gasket_dev, driver_desc->name,
-   driver_desc->interrupts, driver_desc->num_interrupts,
-   driver_desc->num_msix_interrupts);
+   ret = gasket_interrupt_init(
+       gasket_dev, device_desc->name, driver_desc->interrupts,
+       driver_desc->num_interrupts, driver_desc->num_msix_interrupts);
  }
  if (ret) {
   gasket_log_error(gasket_dev,
@@ -736,6 +731,17 @@ static int gasket_enable_dev(
   goto fail3;
  }
  gasket_dev->hardware_revision = ret;
+ if (driver_desc->firmware_version_cb) {
+   ret = driver_desc->firmware_version_cb(gasket_dev,
+                                          &gasket_dev->accel_dev.fw_version[0],
+                                          &gasket_dev->accel_dev.fw_version[1],
+                                          &gasket_dev->accel_dev.fw_version[2],
+                                          &gasket_dev->accel_dev.fw_version[3]);
+   if (ret) {
+     gasket_log_error(gasket_dev, "Error getting firmware revision: %d", ret);
+     goto fail3;
+   }
+ }
  ret = check_and_invoke_callback(
   gasket_dev, driver_desc->enable_dev_cb);
  if (ret) {
@@ -747,13 +753,12 @@ static int gasket_enable_dev(
  if (gasket_dev->status == GASKET_STATUS_DEAD)
   gasket_log_error(gasket_dev, "Device reported as unhealthy.");
  gasket_add_cdev_mapping(gasket_dev, gasket_dev->accel_dev.cdev.dev);
- if (driver_desc->legacy_support) {
-  ret = gasket_add_cdev(gasket_dev, &gasket_file_ops,
-   driver_desc->module);
-  if (ret)
-   goto fail4;
-  hash_add(cdev_to_gasket_dev, &gasket_dev->legacy_hlist_node,
-   gasket_dev->legacy_devt);
+ if (gasket_dev->internal_desc->device_desc->legacy_support) {
+   ret = gasket_add_cdev(gasket_dev, &gasket_file_ops,
+                         gasket_dev->internal_desc->device_desc->module);
+   if (ret) goto fail4;
+   hash_add(cdev_to_gasket_dev, &gasket_dev->legacy_hlist_node,
+            gasket_dev->legacy_devt);
  }
  return 0;
 fail4:
@@ -772,26 +777,26 @@ fail1:
 }
 static void gasket_disable_dev(struct gasket_dev *gasket_dev)
 {
- const struct gasket_driver_desc *driver_desc =
-  gasket_dev->internal_desc->driver_desc;
- int i;
- for (i = 0; i < GASKET_MAX_CLONES; i++)
-  if (gasket_dev->clones[i] != NULL)
-   gasket_clone_cleanup(gasket_dev->clones[i]);
- gasket_dev->status = GASKET_STATUS_DEAD;
- gasket_remove_cdev_mapping(gasket_dev);
- gasket_sysfs_stop(gasket_dev);
- gasket_interrupt_cleanup(gasket_dev);
- for (i = 0; i < driver_desc->num_page_tables; ++i) {
-  if (gasket_dev->page_table[i] != NULL) {
-   gasket_page_table_reset(gasket_dev->page_table[i]);
-   gasket_page_table_cleanup(gasket_dev->page_table[i]);
+  const struct gasket_driver_desc *driver_desc = gasket_dev->driver_desc;
+  int i;
+  for (i = 0; i < GASKET_MAX_CLONES; i++)
+    if (gasket_dev->clones[i] != NULL)
+      gasket_clone_cleanup(gasket_dev->clones[i]);
+  gasket_dev->status = GASKET_STATUS_DEAD;
+  gasket_remove_cdev_mapping(gasket_dev);
+  gasket_sysfs_stop(gasket_dev);
+  gasket_interrupt_cleanup(gasket_dev);
+  for (i = 0; i < driver_desc->num_page_tables; ++i) {
+    if (gasket_dev->page_table[i] != NULL) {
+      gasket_page_table_reset(gasket_dev->page_table[i]);
+      gasket_page_table_cleanup(gasket_dev->page_table[i]);
+    }
   }
- }
- if (driver_desc->legacy_support && gasket_dev->legacy_cdev_added) {
-  hash_del(&gasket_dev->legacy_hlist_node);
-  cdev_del(&gasket_dev->legacy_cdev);
- }
+  if (gasket_dev->internal_desc->device_desc->legacy_support &&
+      gasket_dev->legacy_cdev_added) {
+    hash_del(&gasket_dev->legacy_hlist_node);
+    cdev_del(&gasket_dev->legacy_cdev);
+  }
  if (gasket_dev->accel_registered) {
   accel_dev_unregister(&gasket_dev->accel_dev);
   gasket_dev->accel_registered = false;
@@ -800,31 +805,27 @@ static void gasket_disable_dev(struct gasket_dev *gasket_dev)
 }
 int gasket_sysfs_start(struct gasket_dev *gasket_dev)
 {
- const struct gasket_driver_desc *driver_desc =
-   gasket_dev->internal_desc->driver_desc;
- int ret;
- ret = gasket_sysfs_create_mapping(
-  &gasket_dev->accel_dev.dev, gasket_dev);
- if (ret)
-  return ret;
- ret = sysfs_create_link(&gasket_dev->accel_dev.dev.kobj,
-  &gasket_dev->pci_dev->dev.kobj,
-  dev_name(&gasket_dev->pci_dev->dev));
- if (ret) {
-  gasket_log_error(
-   gasket_dev, "Cannot create sysfs PCI link: %d", ret);
-  goto fail1;
- }
- if (driver_desc->legacy_support) {
-  ret = sysfs_create_link(&gasket_dev->legacy_device->kobj,
-   &gasket_dev->pci_dev->dev.kobj,
-   dev_name(&gasket_dev->pci_dev->dev));
+  const struct gasket_driver_desc *driver_desc = gasket_dev->driver_desc;
+  int ret;
+  ret = gasket_sysfs_create_mapping(&gasket_dev->accel_dev.dev, gasket_dev);
+  if (ret) return ret;
+  ret = sysfs_create_link(&gasket_dev->accel_dev.dev.kobj,
+                          &gasket_dev->pci_dev->dev.kobj,
+                          dev_name(&gasket_dev->pci_dev->dev));
   if (ret) {
-   gasket_log_error(gasket_dev,
-    "Cannot create legacy sysfs PCI link: %d", ret);
-   goto fail1;
+    gasket_log_error(gasket_dev, "Cannot create sysfs PCI link: %d", ret);
+    goto fail1;
   }
- }
+  if (gasket_dev->internal_desc->device_desc->legacy_support) {
+    ret = sysfs_create_link(&gasket_dev->legacy_device->kobj,
+                            &gasket_dev->pci_dev->dev.kobj,
+                            dev_name(&gasket_dev->pci_dev->dev));
+    if (ret) {
+      gasket_log_error(gasket_dev, "Cannot create legacy sysfs PCI link: %d",
+                       ret);
+      goto fail1;
+    }
+  }
  ret = gasket_sysfs_create_entries(
   &gasket_dev->accel_dev.dev, gasket_sysfs_generic_attrs);
  if (ret)
@@ -846,12 +847,10 @@ fail1:
 }
 static int gasket_sysfs_stop(struct gasket_dev *gasket_dev)
 {
- const struct gasket_driver_desc *driver_desc =
-  gasket_dev->internal_desc->driver_desc;
- gasket_sysfs_remove_mapping(&gasket_dev->accel_dev.dev);
- check_and_invoke_callback_nolock(
-  gasket_dev, driver_desc->sysfs_cleanup_cb);
- return 0;
+  const struct gasket_driver_desc *driver_desc = gasket_dev->driver_desc;
+  gasket_sysfs_remove_mapping(&gasket_dev->accel_dev.dev);
+  check_and_invoke_callback_nolock(gasket_dev, driver_desc->sysfs_cleanup_cb);
+  return 0;
 }
 static void clone_release(struct accel_dev *dev)
 {
@@ -860,8 +859,7 @@ int gasket_clone_create(struct gasket_dev *parent, struct gasket_dev *clone)
 {
  int i, ret = 0;
  bool parent_had_space = false;
- const struct gasket_driver_desc *driver_desc =
-   parent->internal_desc->driver_desc;
+ const struct gasket_driver_desc *driver_desc = parent->driver_desc;
  __must_hold(&parent->mutex);
  if (parent->parent) {
   gasket_log_error(parent, "Clones cannot have clones!");
@@ -889,6 +887,7 @@ int gasket_clone_create(struct gasket_dev *parent, struct gasket_dev *clone)
  clone->accel_dev.accel_type = parent->accel_dev.accel_type;
  clone->parent = parent;
  clone->internal_desc = parent->internal_desc;
+ clone->driver_desc = driver_desc;
  clone->pci_dev = parent->pci_dev;
  clone->dev_idx = parent->dev_idx;
  memcpy(clone->kobj_name, parent->kobj_name, GASKET_NAME_MAX);
@@ -939,8 +938,7 @@ int gasket_clone_cleanup(struct gasket_dev *clone)
 {
  int i;
  struct gasket_dev *parent = clone->parent;
- const struct gasket_driver_desc *driver_desc =
-   parent->internal_desc->driver_desc;
+ const struct gasket_driver_desc *driver_desc = parent->driver_desc;
  __must_hold(&parent->mutex);
  mutex_lock(&clone->mutex);
  gasket_remove_cdev_mapping(clone);
@@ -961,10 +959,9 @@ static struct gasket_internal_desc *lookup_internal_desc(
  int i;
  __must_hold(&g_mutex);
  for (i = 0; i < GASKET_FRAMEWORK_DESC_MAX; i++) {
-  if (g_descs[i].driver_desc &&
-   pci_match_id(
-    g_descs[i].driver_desc->pci_id_table, pci_dev))
-   return &g_descs[i];
+   if (g_descs[i].device_desc &&
+       pci_match_id(g_descs[i].device_desc->pci_id_table, pci_dev))
+     return &g_descs[i];
  }
  return NULL;
 }
@@ -982,48 +979,54 @@ const char *gasket_num_name_lookup(
 EXPORT_SYMBOL(gasket_num_name_lookup);
 static int gasket_open(struct inode *inode, struct file *filp)
 {
- int ret;
- struct gasket_dev *gasket_dev;
- const struct gasket_driver_desc *driver_desc;
- struct gasket_ownership *ownership;
- char task_name[TASK_COMM_LEN];
- gasket_dev = gasket_dev_from_devt(inode->i_cdev->dev);
- if (!gasket_dev) {
-  gasket_nodev_error("Unable to retrieve device data.");
-  return -EINVAL;
- }
- driver_desc = gasket_dev->internal_desc->driver_desc;
- ownership = &gasket_dev->ownership;
- if (gasket_dev->status == GASKET_STATUS_DRIVER_EXIT) {
-  gasket_log_info(
-   gasket_dev,
-   "Cannot open device %s; driver is being removed.",
-   filp->f_path.dentry->d_iname);
-  return -ENXIO;
- }
- get_task_comm(task_name, current);
- filp->private_data = gasket_dev;
- inode->i_size = 0;
- gasket_log_debug(gasket_dev,
-  "Attempting to open with tgid %u (%s) (f_mode: 0%03o, fmode_write: %d is_root: %u)",
-  current->tgid, task_name, filp->f_mode,
-  (filp->f_mode & FMODE_WRITE), capable(CAP_SYS_ADMIN));
- if (!(filp->f_mode & FMODE_WRITE)) {
-  gasket_log_debug(gasket_dev, "Allowing read-only opening.");
-  return 0;
- }
+  int ret = 0;
+  struct gasket_dev *gasket_dev;
+  const struct gasket_driver_desc *driver_desc;
+  struct gasket_ownership *ownership;
+  struct gasket_filp_data *filp_data;
+  char task_name[TASK_COMM_LEN];
+  gasket_dev = gasket_dev_from_devt(inode->i_cdev->dev);
+  if (!gasket_dev) {
+    gasket_nodev_error("Unable to retrieve device data.");
+    return -EINVAL;
+  }
+  driver_desc = gasket_dev->driver_desc;
+  ownership = &gasket_dev->ownership;
+  if (gasket_dev->status == GASKET_STATUS_DRIVER_EXIT) {
+    gasket_log_info(gasket_dev,
+                    "Cannot open device %s; driver is being removed.",
+                    filp->f_path.dentry->d_iname);
+    return -ENXIO;
+  }
+  filp->private_data = filp_data = kzalloc(sizeof(*filp_data), GFP_KERNEL);
+  if (!filp_data) {
+    gasket_log_error(gasket_dev, "Failed to allocate per-fd private data!");
+    return -ENOMEM;
+  }
+  filp_data->gasket_dev = gasket_dev;
+  get_task_comm(task_name, current);
+  inode->i_size = 0;
+  gasket_log_debug(gasket_dev,
+                   "Attempting to open with tgid %u (%s) (f_mode: 0%03o, "
+                   "fmode_write: %d is_root: %u)",
+                   current->tgid, task_name, filp->f_mode,
+                   (filp->f_mode & FMODE_WRITE), capable(CAP_SYS_ADMIN));
+  if (!(filp->f_mode & FMODE_WRITE)) {
+    gasket_log_debug(gasket_dev, "Allowing read-only opening.");
+    return 0;
+  }
  mutex_lock(&gasket_dev->mutex);
  gasket_log_debug(
   gasket_dev, "Current owner open count (owning tgid %u): %d.",
   ownership->owner, ownership->write_open_count);
- if (driver_desc->device_open_cb != NULL) {
-  ret = driver_desc->device_open_cb(gasket_dev, filp);
-  if (ret) {
-   gasket_log_error(
-    gasket_dev, "Error in device open cb: %d", ret);
-   mutex_unlock(&gasket_dev->mutex);
-   return ret;
-  }
+ if (driver_desc->device_open_cb) {
+   ret = driver_desc->device_open_cb(filp_data, filp);
+   if (ret) {
+     gasket_log_error(gasket_dev, "Error in device open cb: %d", ret);
+     filp->private_data = NULL;
+     kfree(filp_data);
+     goto out;
+   }
  }
  if (!ownership->is_owned) {
   ownership->is_owned = 1;
@@ -1034,51 +1037,56 @@ static int gasket_open(struct inode *inode, struct file *filp)
  ownership->write_open_count++;
  gasket_log_debug(gasket_dev, "New open count (owning tgid %u): %d",
   ownership->owner, ownership->write_open_count);
- mutex_unlock(&gasket_dev->mutex);
  gasket_log_debug(
   gasket_dev, "Open of %s by tgid %u succeeded.",
   filp->f_path.dentry->d_iname, current->tgid);
- return 0;
+out:
+  mutex_unlock(&gasket_dev->mutex);
+  return ret;
 }
-static void gasket_close(struct gasket_dev *gasket_dev)
-{
- int i;
- const struct gasket_driver_desc *driver_desc =
-   gasket_dev->internal_desc->driver_desc;
- gasket_log_info(gasket_dev, "Device is now free");
- gasket_dev->ownership.is_owned = 0;
- gasket_dev->ownership.owner = 0;
- check_and_invoke_callback_nolock(
-  gasket_dev, driver_desc->device_close_cb);
- if (gasket_dev_is_overseer(gasket_dev))
-  return;
- for (i = 0; i < driver_desc->num_page_tables; ++i) {
-  const struct gasket_page_table_config *config =
-   &driver_desc->page_table_configs[i];
-  bool do_unmap = true;
-  if (config->owns_page_table_cb)
-   do_unmap = config->owns_page_table_cb(gasket_dev, i);
-  if (do_unmap) {
-   gasket_page_table_unmap_all(
-    gasket_dev->page_table[i]);
-   gasket_page_table_garbage_collect(
-    gasket_dev->page_table[i]);
+static void gasket_close(struct gasket_dev *gasket_dev,
+                         struct gasket_filp_data *filp_data,
+                         struct file *file) {
+  int i;
+  const struct gasket_driver_desc *driver_desc = gasket_dev->driver_desc;
+  gasket_log_info(gasket_dev, "Device is now free");
+  gasket_dev->ownership.is_owned = 0;
+  gasket_dev->ownership.owner = 0;
+  if (filp_data && driver_desc->device_close_cb)
+    driver_desc->device_close_cb(filp_data, file);
+  if (gasket_dev_is_overseer(gasket_dev)) return;
+  for (i = 0; i < driver_desc->num_page_tables; ++i) {
+    const struct gasket_page_table_config *config =
+        &driver_desc->page_table_configs[i];
+    bool do_unmap = true;
+    if (config->owns_page_table_cb)
+      do_unmap = config->owns_page_table_cb(gasket_dev, i);
+    if (do_unmap) {
+      gasket_page_table_unmap_all(gasket_dev->page_table[i]);
+      gasket_page_table_garbage_collect(gasket_dev->page_table[i]);
+    }
   }
- }
 }
 static int gasket_release(struct inode *inode, struct file *file)
 {
- struct gasket_dev *gasket_dev;
- struct gasket_ownership *ownership;
- const struct gasket_driver_desc *driver_desc;
- char task_name[TASK_COMM_LEN];
- gasket_dev = gasket_dev_from_devt(inode->i_cdev->dev);
- if (!gasket_dev) {
-  gasket_nodev_error("Unable to retrieve device data");
-  return -EINVAL;
- }
- driver_desc = gasket_dev->internal_desc->driver_desc;
- ownership = &gasket_dev->ownership;
+  struct gasket_filp_data *filp_data = file->private_data;
+  struct gasket_dev *gasket_dev;
+  struct gasket_ownership *ownership;
+  const struct gasket_driver_desc *driver_desc;
+  char task_name[TASK_COMM_LEN];
+  gasket_dev = gasket_dev_from_devt(inode->i_cdev->dev);
+  if (!gasket_dev) {
+    gasket_nodev_error("Unable to retrieve device data");
+    return -EINVAL;
+  }
+  driver_desc = gasket_dev->driver_desc;
+  ownership = &gasket_dev->ownership;
+  if (!filp_data || gasket_dev != filp_data->gasket_dev) {
+    gasket_log_error(gasket_dev,
+                     "Releasing device node that has missing/inconsistent "
+                     "filp_data, not invoking callbacks");
+    filp_data = NULL;
+  }
  get_task_comm(task_name, current);
  mutex_lock(&gasket_dev->mutex);
  gasket_log_debug(gasket_dev,
@@ -1088,12 +1096,13 @@ static int gasket_release(struct inode *inode, struct file *file)
  gasket_log_debug(gasket_dev, "Current open count (owning tgid %u): %d",
   ownership->owner, ownership->write_open_count);
  if (file->f_mode & FMODE_WRITE) {
-  if (driver_desc->device_release_cb)
-   driver_desc->device_release_cb(gasket_dev, file);
-  if (ownership->write_open_count == 1)
-   gasket_close(gasket_dev);
-  ownership->write_open_count--;
+   if (filp_data && driver_desc->device_release_cb)
+     driver_desc->device_release_cb(filp_data, file);
+   if (ownership->write_open_count == 1)
+     gasket_close(gasket_dev, filp_data, file);
+   ownership->write_open_count--;
  }
+ kfree(file->private_data);
  gasket_log_debug(gasket_dev, "New open count (owning tgid %u): %d",
   ownership->owner, ownership->write_open_count);
  mutex_unlock(&gasket_dev->mutex);
@@ -1118,7 +1127,7 @@ static int gasket_mmap_has_permissions(
    requested_permissions, bar_permissions);
   return 0;
  }
-#ifndef YETI_GUEST_KERNEL
+#ifndef STADIA_KERNEL
  if ((vma->vm_flags & VM_WRITE) &&
   (gasket_dev->ownership.is_owned &&
    gasket_dev->ownership.owner != current->tgid)) {
@@ -1129,24 +1138,23 @@ static int gasket_mmap_has_permissions(
 #endif
  return 1;
 }
-static int gasket_get_mmap_bar_index(
- const struct gasket_dev *gasket_dev, ulong mmap_addr)
-{
- int i;
- const struct gasket_driver_desc *driver_desc;
- driver_desc = gasket_dev->internal_desc->driver_desc;
- for (i = 0; i < GASKET_NUM_BARS; ++i) {
-  struct gasket_bar_desc bar_desc =
-   driver_desc->bar_descriptions[i];
-  if (bar_desc.permissions != GASKET_NOMAP) {
-   if ((mmap_addr >= bar_desc.base) &&
-    (mmap_addr < (bar_desc.base + bar_desc.size))) {
-    return i;
-   }
+int gasket_get_mmap_bar_index(const struct gasket_dev *gasket_dev,
+                              ulong mmap_addr) {
+  int i;
+  const struct gasket_driver_desc *driver_desc;
+  driver_desc = gasket_dev->driver_desc;
+  for (i = 0; i < GASKET_NUM_BARS; ++i) {
+    struct gasket_bar_desc bar_desc = driver_desc->bar_descriptions[i];
+    if (bar_desc.permissions != GASKET_NOMAP) {
+      if ((mmap_addr >= bar_desc.base) &&
+          (mmap_addr < (bar_desc.base + bar_desc.size))) {
+        return i;
+      }
+    }
   }
- }
- return -EINVAL;
+  return -EINVAL;
 }
+EXPORT_SYMBOL(gasket_get_mmap_bar_index);
 static int gasket_get_phys_bar_index(
  const struct gasket_dev *gasket_dev, ulong phys_addr)
 {
@@ -1176,14 +1184,14 @@ static bool gasket_mm_get_mapping_addrs(
   *virt_offset = range_start - bar_offset;
   mappable_region->length_bytes =
    min(requested_length - *virt_offset, range_length);
-  return true;
+  return (mappable_region->length_bytes != 0);
  } else if (bar_offset > range_start &&
      bar_offset < range_end) {
   mappable_region->start = bar_offset;
   *virt_offset = 0;
   mappable_region->length_bytes = min(
    requested_length, range_end - bar_offset);
-  return true;
+  return (mappable_region->length_bytes != 0);
  }
  return false;
 }
@@ -1270,7 +1278,9 @@ static int gasket_mmap(struct file *filp, struct vm_area_struct *vma)
  vm_flags_t req_perms;
  ulong raw_offset, vma_size;
  const struct gasket_driver_desc *driver_desc;
- struct gasket_dev *gasket_dev = (struct gasket_dev *)filp->private_data;
+ struct gasket_filp_data *filp_data =
+     (struct gasket_filp_data *)filp->private_data;
+ struct gasket_dev *gasket_dev = filp_data->gasket_dev;
  const struct gasket_bar_desc *bar_desc;
  struct gasket_mappable_region *map_regions = NULL;
  int num_map_regions = 0;
@@ -1280,7 +1290,7 @@ static int gasket_mmap(struct file *filp, struct vm_area_struct *vma)
   trace_gasket_mmap_exit(-EINVAL);
   return -EINVAL;
  }
- driver_desc = gasket_dev->internal_desc->driver_desc;
+ driver_desc = gasket_dev->driver_desc;
  if (vma->vm_start & (PAGE_SIZE - 1)) {
   gasket_log_error(
    gasket_dev, "Base address not page-aligned: 0x%p\n",
@@ -1288,8 +1298,7 @@ static int gasket_mmap(struct file *filp, struct vm_area_struct *vma)
   trace_gasket_mmap_exit(-EINVAL);
   return -EINVAL;
  }
- raw_offset = (vma->vm_pgoff << PAGE_SHIFT) +
-  driver_desc->legacy_mmap_address_offset;
+ raw_offset = vma->vm_pgoff << PAGE_SHIFT;
  vma_size = vma->vm_end - vma->vm_start;
  trace_gasket_mmap_entry(
   dev_name(&gasket_dev->accel_dev.dev),
@@ -1313,10 +1322,9 @@ static int gasket_mmap(struct file *filp, struct vm_area_struct *vma)
   return -EPERM;
  }
  if (driver_desc->get_mappable_regions_cb) {
-  ret = driver_desc->get_mappable_regions_cb(
-   gasket_dev, bar_index, &map_regions, &num_map_regions);
-  if (ret)
-   return ret;
+   ret = driver_desc->get_mappable_regions_cb(filp_data, bar_index,
+                                              &map_regions, &num_map_regions);
+   if (ret) return ret;
  } else {
   if (!gasket_mmap_has_permissions(gasket_dev, vma,
        bar_desc->permissions)) {
@@ -1401,8 +1409,7 @@ static int gasket_get_hw_status(struct gasket_dev *gasket_dev)
 {
  int i;
  enum gasket_status status = GASKET_STATUS_ALIVE;
- const struct gasket_driver_desc *driver_desc =
-  gasket_dev->internal_desc->driver_desc;
+ const struct gasket_driver_desc *driver_desc = gasket_dev->driver_desc;
  if (driver_desc->device_status_cb) {
   gasket_log_debug(
    gasket_dev, "Invoking device-specific callback.");
@@ -1433,26 +1440,24 @@ static int gasket_get_hw_status(struct gasket_dev *gasket_dev)
 }
 static long gasket_ioctl(struct file *filp, uint cmd, ulong arg)
 {
- struct gasket_dev *gasket_dev;
- const struct gasket_driver_desc *driver_desc;
- char path[256];
- if (filp == NULL)
-  return -ENODEV;
- gasket_dev = (struct gasket_dev *)filp->private_data;
- if (gasket_dev == NULL) {
-  gasket_nodev_error(
-   "Unable to find Gasket structure for file %s",
-   d_path(&filp->f_path, path, 256));
-  return -ENODEV;
- }
- driver_desc = gasket_dev->internal_desc->driver_desc;
- if (driver_desc == NULL) {
-  gasket_log_error(
-   gasket_dev,
-   "Unable to find device descriptor for file %s",
-   d_path(&filp->f_path, path, 256));
-  return -ENODEV;
- }
+  struct gasket_filp_data *filp_data;
+  struct gasket_dev *gasket_dev;
+  const struct gasket_driver_desc *driver_desc;
+  char path[256];
+  if (filp == NULL) return -ENODEV;
+  filp_data = (struct gasket_filp_data *)filp->private_data;
+  if (filp_data == NULL || filp_data->gasket_dev == NULL) {
+    gasket_nodev_error("Unable to find Gasket structure for file %s",
+                       d_path(&filp->f_path, path, 256));
+    return -ENODEV;
+  }
+  gasket_dev = filp_data->gasket_dev;
+  driver_desc = gasket_dev->driver_desc;
+  if (driver_desc == NULL) {
+    gasket_log_error(gasket_dev, "Unable to find device descriptor for file %s",
+                     d_path(&filp->f_path, path, 256));
+    return -ENODEV;
+  }
  if (!gasket_is_supported_ioctl(cmd)) {
   if (driver_desc->ioctl_handler_cb)
    return driver_desc->ioctl_handler_cb(filp, cmd, arg);
@@ -1465,9 +1470,11 @@ static long gasket_ioctl(struct file *filp, uint cmd, ulong arg)
 int gasket_reset(struct gasket_dev *gasket_dev, uint reset_type)
 {
  int ret;
+ if (gasket_dev->parent) mutex_lock(&gasket_dev->parent->mutex);
  mutex_lock(&gasket_dev->mutex);
  ret = gasket_reset_nolock(gasket_dev, reset_type);
  mutex_unlock(&gasket_dev->mutex);
+ if (gasket_dev->parent) mutex_unlock(&gasket_dev->parent->mutex);
  return ret;
 }
 EXPORT_SYMBOL(gasket_reset);
@@ -1476,7 +1483,7 @@ int gasket_reset_nolock(struct gasket_dev *gasket_dev, uint reset_type)
  int ret;
  int i;
  const struct gasket_driver_desc *driver_desc;
- driver_desc = gasket_dev->internal_desc->driver_desc;
+ driver_desc = gasket_dev->driver_desc;
  if (!driver_desc->device_reset_cb) {
   gasket_log_error(
    gasket_dev, "No device reset callback was registered.");
@@ -1504,12 +1511,6 @@ int gasket_reset_nolock(struct gasket_dev *gasket_dev, uint reset_type)
  return 0;
 }
 EXPORT_SYMBOL(gasket_reset_nolock);
-gasket_ioctl_permissions_cb_t gasket_get_ioctl_permissions_cb(
- struct gasket_dev *gasket_dev)
-{
- return gasket_dev->internal_desc->driver_desc->ioctl_permissions_cb;
-}
-EXPORT_SYMBOL(gasket_get_ioctl_permissions_cb);
 static ssize_t gasket_write_mappable_regions(
  char *buf, const struct gasket_driver_desc *driver_desc, int bar_index)
 {
@@ -1523,15 +1524,13 @@ static ssize_t gasket_write_mappable_regions(
   return 0;
  for (i = 0; (i < bar_desc.num_mappable_regions) &&
   (total_written < PAGE_SIZE); i++) {
-  min_addr = bar_desc.mappable_regions[i].start -
-      driver_desc->legacy_mmap_address_offset;
-  max_addr = bar_desc.mappable_regions[i].start -
-      driver_desc->legacy_mmap_address_offset +
-      bar_desc.mappable_regions[i].length_bytes;
-  written = scnprintf(buf, PAGE_SIZE - total_written,
-   "0x%08lx-0x%08lx\n", min_addr, max_addr);
-  total_written += written;
-  buf += written;
+   min_addr = bar_desc.mappable_regions[i].start;
+   max_addr = bar_desc.mappable_regions[i].start +
+              bar_desc.mappable_regions[i].length_bytes;
+   written = scnprintf(buf, PAGE_SIZE - total_written, "0x%08lx-0x%08lx\n",
+                       min_addr, max_addr);
+   total_written += written;
+   buf += written;
  }
  return total_written;
 }
@@ -1553,7 +1552,7 @@ static ssize_t gasket_sysfs_data_show(
  if (gasket_attr == NULL) {
   return 0;
  }
- driver_desc = gasket_dev->internal_desc->driver_desc;
+ driver_desc = gasket_dev->driver_desc;
  unforkable_maps = &gasket_dev->internal_desc->unforkable_maps;
  sysfs_type =
   (enum gasket_sysfs_attribute_type) gasket_attr->data.attr_type;
@@ -1581,17 +1580,17 @@ static ssize_t gasket_sysfs_data_show(
   }
   break;
  case ATTR_DRIVER_VERSION:
-  ret = snprintf(buf, PAGE_SIZE, "%s\n",
-   gasket_dev->internal_desc->driver_desc->driver_version);
-  break;
+   ret = snprintf(buf, PAGE_SIZE, "%s\n",
+                  gasket_dev->driver_desc->driver_version);
+   break;
  case ATTR_FRAMEWORK_VERSION:
   ret = snprintf(
    buf, PAGE_SIZE, "%s\n", GASKET_FRAMEWORK_VERSION);
   break;
  case ATTR_DEVICE_TYPE:
-  ret = snprintf(buf, PAGE_SIZE, "%s\n",
-   gasket_dev->internal_desc->driver_desc->name);
-  break;
+   ret = snprintf(buf, PAGE_SIZE, "%s\n",
+                  gasket_dev->internal_desc->device_desc->name);
+   break;
  case ATTR_HARDWARE_REVISION:
   ret = snprintf(
    buf, PAGE_SIZE, "%d\n", gasket_dev->hardware_revision);
@@ -1657,10 +1656,10 @@ static struct gasket_dev *gasket_dev_from_devt(dev_t devt)
  }
  hash_for_each_possible(
   cdev_to_gasket_dev, hash_entry, legacy_hlist_node, devt) {
-  if (hash_entry->internal_desc->driver_desc->legacy_support &&
-   hash_entry->legacy_devt == devt) {
-   return hash_entry;
-  }
+   if (hash_entry->internal_desc->device_desc->legacy_support &&
+       hash_entry->legacy_devt == devt) {
+     return hash_entry;
+   }
  }
  return NULL;
 }

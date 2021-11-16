@@ -39,6 +39,12 @@ def evaluator_generator(params):
         annotation_file=params.val_json_file,
         include_mask=True,
         per_category_metrics=params.per_category_metrics)
+  elif params.type == 'lvis_box':
+    evaluator = coco_evaluator.LVISEvaluator(
+        annotation_file=params.val_json_file, include_mask=False)
+  elif params.type == 'lvis_box_and_mask':
+    evaluator = coco_evaluator.LVISEvaluator(
+        annotation_file=params.val_json_file, include_mask=True)
   else:
     raise ValueError('The detection evaluation type `{}` is not supported.'
                      .format(params.type))

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (C) 2020 Google LLC.
+ * Copyright (C) 2021 Google LLC.
  */
 #include "gasket_sysfs.h"
 #include "gasket_logging.h"
@@ -74,7 +74,6 @@ int gasket_sysfs_create_mapping(
  if (map_idx == GASKET_SYSFS_NUM_MAPPINGS) {
   gasket_log_error(
    gasket_dev, "All mappings have been exhausted!");
-  mutex_unlock(&function_mutex);
   ret = -ENOMEM;
   goto unlock_function;
  }

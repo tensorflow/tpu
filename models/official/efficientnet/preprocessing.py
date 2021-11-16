@@ -23,7 +23,7 @@ import tensorflow.compat.v1 as tf
 
 
 IMAGE_SIZE = 224
-CROP_PADDING = 32
+CROP_FRACTION = 0.875
 
 
 def distorted_bounding_box_crop(image_bytes,
@@ -121,8 +121,10 @@ def _decode_and_center_crop(image_bytes, image_size, resize_method=None):
   image_height = shape[0]
   image_width = shape[1]
 
+  # crop_fraction = image_size / (image_size + crop_padding)
+  crop_padding = round(image_size * (1/CROP_FRACTION - 1))
   padded_center_crop_size = tf.cast(
-      ((image_size / (image_size + CROP_PADDING)) *
+      ((image_size / (image_size + crop_padding)) *
        tf.cast(tf.minimum(image_height, image_width), tf.float32)),
       tf.int32)
 

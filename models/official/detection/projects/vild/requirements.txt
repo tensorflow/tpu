@@ -1,0 +1,4 @@
+tensorflow
+pycocotools
+lvis
+opencv-python

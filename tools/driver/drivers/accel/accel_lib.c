@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (C) 2020 Google LLC.
+ * Copyright (C) 2021 Google LLC.
  */
 #include <linux/accel_lib.h>
 #include <linux/sched.h>
