@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (C) 2020 Google LLC.
+ * Copyright (C) 2021 Google LLC.
  */
 #include <linux/accel.h>
 #include <linux/fs.h>
@@ -197,14 +197,27 @@ static ssize_t chip_revision_show(struct device *dev,
  return sprintf(buf, "%s\n", v);
 }
 static DEVICE_ATTR_RO(chip_revision);
+static ssize_t chip_serial_number_show(struct device *dev,
+                                       struct device_attribute *attr,
+                                       char *buf) {
+  struct accel_dev *adev = to_accel_dev(dev);
+  const char *v = adev->chip_serial_number;
+  if (!v) v = "";
+  return sprintf(buf, "%s\n", v);
+}
+static DEVICE_ATTR_RO(chip_serial_number);
 static ssize_t fw_version_show(struct device *dev,
           struct device_attribute *attr,
           char *buf)
 {
  struct accel_dev *adev = to_accel_dev(dev);
- return sprintf(buf, "%d.%d.%d.%d\n",
-         adev->fw_version[0], adev->fw_version[1],
-         adev->fw_version[2], adev->fw_version[3]);
+ if (adev->fw_version_str) {
+   return sprintf(buf, "%s\n", adev->fw_version_str);
+ } else {
+   return sprintf(buf, "%u.%u.%u.%u\n", adev->fw_version[0],
+                  adev->fw_version[1], adev->fw_version[2],
+                  adev->fw_version[3]);
+ }
 }
 static DEVICE_ATTR_RO(fw_version);
 static ssize_t logic_vendor_show(struct device *dev,
@@ -263,18 +276,19 @@ static ssize_t logic_build_time_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(logic_build_time);
 static struct attribute *accel_dev_attrs[] = {
- &dev_attr_accel_type.attr,
- &dev_attr_chip_vendor.attr,
- &dev_attr_chip_model.attr,
- &dev_attr_chip_revision.attr,
- &dev_attr_fw_version.attr,
- &dev_attr_logic_vendor.attr,
- &dev_attr_logic_model.attr,
- &dev_attr_logic_revision.attr,
- &dev_attr_logic_build_cl.attr,
- &dev_attr_logic_build_time.attr,
- &dev_attr_state.attr,
- NULL,
+    &dev_attr_accel_type.attr,
+    &dev_attr_chip_vendor.attr,
+    &dev_attr_chip_model.attr,
+    &dev_attr_chip_revision.attr,
+    &dev_attr_chip_serial_number.attr,
+    &dev_attr_fw_version.attr,
+    &dev_attr_logic_vendor.attr,
+    &dev_attr_logic_model.attr,
+    &dev_attr_logic_revision.attr,
+    &dev_attr_logic_build_cl.attr,
+    &dev_attr_logic_build_time.attr,
+    &dev_attr_state.attr,
+    NULL,
 };
 ATTRIBUTE_GROUPS(accel_dev);
 static int accel_dev_uevent(struct device *dev, struct kobj_uevent_env *env)
@@ -368,6 +382,6 @@ static void __exit accel_exit(void)
 module_init(accel_init)
 module_exit(accel_exit)
 MODULE_DESCRIPTION("Google Accelerator Class driver");
-MODULE_AUTHOR("ASIC-SW <noreply@google.com>");
-MODULE_AUTHOR("ASIC-SW <noreply@google.com>");
+MODULE_AUTHOR("Googler <noreply@google.com>");
+MODULE_AUTHOR("Googler <noreply@google.com>");
 MODULE_LICENSE("GPL");

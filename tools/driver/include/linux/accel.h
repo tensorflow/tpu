@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (C) 2020 Google LLC.
+ * Copyright (C) 2021 Google LLC.
  */
 #ifndef __ACCEL_H__
 #define __ACCEL_H__ 
@@ -18,7 +18,9 @@ struct accel_dev {
  const char *chip_vendor;
  const char *chip_model;
  const char *chip_revision;
+ const char *chip_serial_number;
  unsigned int fw_version[4];
+ const char *fw_version_str;
  const char *logic_vendor;
  const char *logic_model;
  const char *logic_revision;

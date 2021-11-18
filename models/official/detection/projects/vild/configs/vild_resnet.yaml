@@ -1,0 +1,164 @@
+anchor:
+  anchor_size: 8
+  aspect_ratios: [1.0, 2.0, 0.5]
+  num_scales: 1
+architecture:
+  backbone: resnet
+  feat_distill_weight: 0.5
+  filter_distill_boxes_size: 0
+  include_mask: true
+  mask_target_size: 28
+  max_level: 6
+  max_num_rois: 300
+  min_level: 2
+  multilevel_features: fpn
+  normalize_feat_during_training: true
+  num_classes: 1204
+  parser: vild_parser
+  pre_parser: null
+  space_to_depth_block_size: 1
+  use_bfloat16: false
+  visual_feature_dim: 512
+  visual_feature_distill: vanilla
+batch_norm_activation:
+  activation: relu
+  batch_norm_epsilon: 0.0001
+  batch_norm_momentum: 0.997
+  batch_norm_trainable: true
+  use_sync_bn: true
+dropblock:
+  dropblock_keep_prob: null
+  dropblock_size: null
+enable_summary: false
+eval:
+  eval_batch_size: 8
+  eval_dataset_type: tfrecord
+  eval_samples: 19809
+  eval_timeout: null
+  min_eval_interval: 5
+  num_steps_per_eval: 1000
+  per_category_metrics: false
+  skip_eval_loss: false
+  suffix: ''
+  type: lvis_box_and_mask
+  use_json_file: true
+fpn:
+  fpn_feat_dims: 256
+  use_batch_norm: true
+  use_separable_conv: false
+frcnn_box_loss:
+  huber_loss_delta: 1.0
+frcnn_class_loss:
+  mask_rare: true
+frcnn_head:
+  class_agnostic_bbox_pred: true
+  clip_dim: 512
+  fc_dims: 1024
+  normalize_classifier: true
+  normalize_visual: true
+  num_convs: 4
+  num_fcs: 2
+  num_filters: 256
+  temperature: 100.0
+  use_batch_norm: true
+  use_separable_conv: false
+mask_sampling:
+  num_mask_samples_per_image: 128
+mrcnn_head:
+  class_agnostic_mask_pred: true
+  num_convs: 4
+  num_filters: 256
+  use_batch_norm: true
+  use_separable_conv: false
+postprocess:
+  apply_nms: true
+  apply_sigmoid: false
+  discard_background: false
+  max_total_size: 300
+  nms_iou_threshold: 0.5
+  nms_version: v1
+  pre_nms_num_boxes: 1000
+  score_threshold: 0.0
+  use_batched_nms: false
+predict:
+  predict_batch_size: 8
+resnet:
+  init_drop_connect_rate: null
+  resnet_depth: 50
+roi_proposal:
+  rpn_min_size_threshold: 0.0
+  rpn_nms_threshold: 0.7
+  rpn_post_nms_top_k: 1000
+  rpn_pre_nms_top_k: 2000
+  rpn_score_threshold: 0.0
+  test_rpn_min_size_threshold: 0.0
+  test_rpn_nms_threshold: 0.7
+  test_rpn_post_nms_top_k: 1000
+  test_rpn_pre_nms_top_k: 1000
+  test_rpn_score_threshold: 0.0
+  use_batched_nms: false
+roi_sampling:
+  bg_iou_thresh_hi: 0.5
+  bg_iou_thresh_lo: 0.0
+  cascade_iou_thresholds: null
+  fg_fraction: 0.25
+  fg_iou_thresh: 0.5
+  mix_gt_boxes: true
+  num_samples_per_image: 512
+rpn_box_loss:
+  huber_loss_delta: 0.1111111111111111
+rpn_head:
+  anchors_per_location: null
+  cast_to_float32: true
+  num_convs: 2
+  num_filters: 256
+  use_batch_norm: true
+  use_separable_conv: false
+rpn_score_loss:
+  rpn_batch_size_per_im: 256
+train:
+  checkpoint:
+    path: ''
+    prefix: ''
+    skip_variables_regex: ''
+  frozen_variable_prefix: frcnn_layer_0/fast_rcnn_head/class-predict
+  gradient_clip_norm: 0.0
+  input_partition_dims: null
+  iterations_per_loop: 100
+  l2_weight_decay: 4.0e-05
+  learning_rate:
+    init_learning_rate: 0.32
+    learning_rate_levels: [0.032, 0.0032]
+    learning_rate_steps: [162000, 171000, 175500]
+    type: step
+    warmup_learning_rate: 0.0032
+    warmup_steps: 1000
+  losses: all
+  num_cores_per_replica: null
+  optimizer:
+    momentum: 0.9
+    type: momentum
+  pre_parser_dataset:
+    dataset_type: tfrecord
+    file_pattern: ''
+  regularization_variable_regex: .*(kernel|weight):0$
+  space_to_depth_block_size: 1
+  total_steps: 180000
+  train_batch_size: 256
+  train_dataset_type: tfrecord
+  transpose_input: true
+type: vild
+vild_parser:
+  aug_rand_hflip: true
+  aug_scale_max: 2.0
+  aug_scale_min: 0.1
+  copy_paste: false
+  mask_crop_size: 112
+  max_num_instances: 300
+  output_size: [1024, 1024]
+  regenerate_source_id: false
+  rpn_batch_size_per_im: 256
+  rpn_fg_fraction: 0.5
+  rpn_match_threshold: 0.7
+  rpn_unmatched_threshold: 0.3
+  skip_crowd_during_training: true

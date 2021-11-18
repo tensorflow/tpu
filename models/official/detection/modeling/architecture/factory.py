@@ -22,6 +22,7 @@ import json
 
 from absl import logging
 # pylint: disable=g-bad-import-order
+from projects.vild.modeling import vild_head
 from modeling.architecture import efficientnet
 from modeling.architecture import fpn
 from modeling.architecture import heads
@@ -188,6 +189,33 @@ def fast_rcnn_head_generator(params):
       head_params.fc_dims,
       params.batch_norm_activation.activation,
       head_params.use_batch_norm,
+      batch_norm_activation=batch_norm_activation_generator(
+          params.batch_norm_activation),
+      class_agnostic_bbox_pred=head_params.class_agnostic_bbox_pred)
+
+
+def vild_fast_rcnn_head_generator(params):
+  """Generator function for Fast R-CNN head architecture."""
+  head_params = params.frcnn_head
+  return vild_head.ViLDFastrcnnHead(
+      num_classes=params.architecture.num_classes,
+      num_convs=head_params.num_convs,
+      num_filters=head_params.num_filters,
+      use_separable_conv=head_params.use_separable_conv,
+      num_fcs=head_params.num_fcs,
+      fc_dims=head_params.fc_dims,
+      # for vild classifier: start
+      clip_dim=head_params.clip_dim,
+      classifier_weight_path=head_params.classifier_weight_path,
+      normalize_classifier=head_params.normalize_classifier,
+      normalize_visual=head_params.normalize_visual,
+      temperature=head_params.temperature,
+      # feature distillation
+      visual_feature_distill=params.architecture.visual_feature_distill,
+      max_distill_rois=params.architecture.max_num_rois,
+      # for vild classifier: end
+      activation=params.batch_norm_activation.activation,
+      use_batch_norm=head_params.use_batch_norm,
       batch_norm_activation=batch_norm_activation_generator(
           params.batch_norm_activation),
       class_agnostic_bbox_pred=head_params.class_agnostic_bbox_pred)

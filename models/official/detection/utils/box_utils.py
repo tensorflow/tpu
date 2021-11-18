@@ -522,11 +522,11 @@ def bbox_overlap(boxes, gt_boxes):
     return iou
 
 
-def get_non_empty_box_indices(boxes):
+def get_non_empty_box_indices(boxes, filter_size=0):
   """Get indices for non-empty boxes."""
   # Selects indices if box height or width is 0.
   height = boxes[:, 2] - boxes[:, 0]
   width = boxes[:, 3] - boxes[:, 1]
-  indices = tf.where(tf.logical_and(tf.greater(height, 0),
-                                    tf.greater(width, 0)))
+  indices = tf.where(tf.logical_and(tf.greater(height, filter_size),
+                                    tf.greater(width, filter_size)))
   return indices[:, 0]

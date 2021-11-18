@@ -1,7 +1,7 @@
-menu "Tpu devices"
+menu "tpu_common devices"
 
 config TPU_COMMON_COMMON
- tristate "Tpu Common library"
+ tristate "tpu_common Common library"
  help
  This common library provides functionality common to tpu_common
  devices.
@@ -9,30 +9,20 @@ config TPU_COMMON_COMMON
  To compile this library as a module, choose M here.  The module
  will be called tpu_common_common.
 
-config TPU_V1_CORE
-  tristate "tpu_v1 Core Library"
+config TPU_V2_CORE
+  tristate "tpu_v2 Core Library"
   depends on GASKET_FRAMEWORK
   depends on TPU_COMMON_COMMON
   help
-  This module provides functionality common to tpu_v1 class
+  This module provides functionality common to tpu_v2 class
   devices.
 
   To compile this driver as a module, choose M here.  The module
-  will be called tpu_v1_core.
-
-config TPU_V1_DRIVER
-  tristate "tpu_v1 Driver"
-  depends on TPU_V1_CORE
-  help
-  This driver supports the tpu_v1 device.  Say Y if you want to
-  include this driver in the kernel.
-
-  To compile this driver as a module, choose M here.  The module
-  will be called tpu_v1.
+  will be called tpu_v2_core.
 
 config TPU_V2_DRIVER
   tristate "tpu_v2 Driver"
-  depends on TPU_V1_CORE
+  depends on TPU_V2_CORE
   help
   This driver supports the tpu_v2 device.  Say Y if you want to
   include this driver in the kernel.
@@ -40,5 +30,47 @@ config TPU_V2_DRIVER
   To compile this driver as a module, choose M here.  The module
   will be called tpu_v2.
 
+config TPU_V3_DRIVER
+  tristate "tpu_v3 Driver"
+  depends on TPU_V2_CORE
+  help
+  This driver supports the tpu_v3 device.  Say Y if you want to
+  include this driver in the kernel.
+
   To compile this driver as a module, choose M here.  The module
+  will be called tpu_v3.
+
+config TPU_V4_COMMON_COMMON
+ tristate "TPU_V4_COMMON Common library"
+ depends on ASIC_SW
+ help
+ This common library provides functionality common to tpuv4common
+ devices.
+
+ To compile this library as a module, choose M here.  The module
+ will be called tpuv4common_common.
+
+config TPU_V4_DRIVER
+  tristate "tpu_v4 Driver"
+  depends on GASKET_FRAMEWORK
+  depends on TPU_COMMON_COMMON
+  depends on TPU_V4_COMMON_COMMON
+  help
+  This driver supports the tpu_v4 device.  Say Y if you want to
+  include this driver in the kernel.
+
+  To compile this driver as a module, choose M here.  The module
+  will be called tpu_v4.
+
+config TPU_V4_LITE_DRIVER
+  tristate "tpu_v4_lite Driver"
+  depends on GASKET_FRAMEWORK
+  depends on TPU_COMMON_COMMON
+  depends on TPU_V4_COMMON_COMMON
+  help
+  This driver supports the tpu_v4_lite device.  Say Y if you want to
+  include this driver in the kernel.
+
+  To compile this driver as a module, choose M here.  The module
+  will be called tpu_v4_lite.
 endmenu

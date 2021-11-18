@@ -16,7 +16,6 @@ r"""Defines input_fn of UNet-3D for TF Estimator."""
 
 from __future__ import absolute_import
 from __future__ import division
-#Standard imports
 from __future__ import print_function
 
 import functools

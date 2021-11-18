@@ -13,7 +13,8 @@
 # limitations under the License.
 # ==============================================================================
 """Config template to train classification models."""
-
+import sys
+sys.path.insert(0, 'tpu/models')
 from configs import base_config
 from hyperparameters import params_dict
 

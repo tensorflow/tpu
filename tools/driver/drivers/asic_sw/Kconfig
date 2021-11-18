@@ -1,0 +1,8 @@
+config ASIC_SW
+  tristate "ASIC-SW"
+  depends on GASKET_FRAMEWORK
+  help
+  A common library used by asic_sw developed kernel drivers.
+
+  To compile this driver as a module, choose M here.  The module
+  will be called asic_sw.

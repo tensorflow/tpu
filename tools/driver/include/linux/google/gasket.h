@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (C) 2020 Google LLC.
+ * Copyright (C) 2021 Google LLC.
  */
 #ifndef __LINUX_GASKET_H__
 #define __LINUX_GASKET_H__ 
@@ -26,6 +26,11 @@ struct gasket_page_table_ioctl {
  uint64_t host_address;
  uint64_t device_address;
 };
+struct gasket_page_table_dmabuf_ioctl {
+  uint64_t page_table_index;
+  uint64_t device_address;
+  int dma_buf_fd;
+};
 #define GASKET_IOCTL_BASE 0xDC
 #define GASKET_IOCTL_RESET _IOW(GASKET_IOCTL_BASE, 0, unsigned long)
 #define GASKET_IOCTL_SET_EVENTFD \
@@ -47,4 +52,6 @@ struct gasket_page_table_ioctl {
  _IOW(GASKET_IOCTL_BASE, 11, struct gasket_interrupt_mapping)
 #define GASKET_IOCTL_UNREGISTER_INTERRUPT \
  _IOW(GASKET_IOCTL_BASE, 12, unsigned long)
+#define GASKET_IOCTL_MAP_DMA_BUF \
+  _IOW(GASKET_IOCTL_BASE, 13, struct gasket_page_table_dmabuf_ioctl)
 #endif

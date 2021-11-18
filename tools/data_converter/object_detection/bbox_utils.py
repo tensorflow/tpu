@@ -13,7 +13,6 @@
 # limitations under the License.
 # ==============================================================================
 """Utility functions for bboxes."""
-#Standard imports
 
 import enum
 

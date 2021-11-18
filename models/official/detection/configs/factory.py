@@ -19,6 +19,7 @@ from configs import maskrcnn_config
 from configs import retinanet_config
 from configs import segmentation_config
 from configs import shapemask_config
+from projects.vild.configs import vild_config
 from hyperparameters import params_dict
 
 
@@ -39,6 +40,9 @@ def config_generator(model):
   elif model == 'shapemask':
     default_config = shapemask_config.SHAPEMASK_CFG
     restrictions = shapemask_config.SHAPEMASK_RESTRICTIONS
+  elif model == 'vild':
+    default_config = vild_config.VILD_CFG
+    restrictions = vild_config.VILD_RESTRICTIONS
   else:
     raise ValueError('Model %s is not supported.' % model)
 

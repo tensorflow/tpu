@@ -365,6 +365,8 @@ def model_fn(features, labels, mode, params):
     override_params['depth_coefficient'] = FLAGS.depth_coefficient
   if FLAGS.width_coefficient:
     override_params['width_coefficient'] = FLAGS.width_coefficient
+  if FLAGS.use_bfloat16:
+    override_params['use_bfloat16'] = FLAGS.use_bfloat16
 
   def normalize_features(features, mean_rgb, stddev_rgb):
     """Normalize the image given the means and stddevs."""
