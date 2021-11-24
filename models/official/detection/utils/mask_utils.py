@@ -18,8 +18,9 @@ from __future__ import division
 from __future__ import print_function
 
 import math
+
+from cvx2 import latest as cv2
 import numpy as np
-import cv2
 
 
 def paste_instance_masks(masks,
@@ -189,4 +190,3 @@ def paste_instance_masks_v2(masks,
 
   segms = np.array(segms)
   return segms
-
