@@ -263,7 +263,7 @@ class Parser(object):
 
     # If not using category, makes all categories with id = 1.
     if not self._use_category:
-      classes = tf.greater(classes, 0)
+      classes = tf.cast(tf.greater(classes, 0), dtype=tf.int32)
 
     image = self.get_normalized_image(data)
 
