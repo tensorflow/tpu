@@ -41,6 +41,27 @@ _PARAM_RE = re.compile(r"""
   \[[^\]]*\]))                 # list of values
   ($|,\s*)""", re.VERBOSE)
 
+# Yaml loader with an implicit resolver to parse float decimal and exponential
+# format. The regular experission parse the following cases:
+# 1- Decimal number with an optional exponential term.
+# 2- Integer number with an exponential term.
+# 3- Decimal number with an optional exponential term.
+# 4- Decimal number.
+
+LOADER = yaml.SafeLoader
+LOADER.add_implicit_resolver(
+    'tag:yaml.org,2002:float',
+    re.compile(
+        r"""
+    ^(?:[-+]?(?:[0-9][0-9_]*)\\.[0-9_]*(?:[eE][-+]?[0-9]+)?
+    |
+    [-+]?(?:[0-9][0-9_]*)(?:[eE][-+]?[0-9]+)
+    |
+    \\.[0-9_]+(?:[eE][-+][0-9]+)?
+    |
+    [-+]?[0-9][0-9_]*(?::[0-5]?[0-9])+\\.[0-9_]*)$""", re.X),
+    list('-+0123456789.'))
+
 
 class ParamsDict(object):
   """A hyperparameter container class."""
@@ -292,7 +313,7 @@ class ParamsDict(object):
 def read_yaml_to_params_dict(file_path):
   """Reads a YAML file to a ParamsDict."""
   with tf.gfile.Open(file_path, 'r') as f:
-    params_dict = yaml.load(f)
+    params_dict = yaml.load(f, Loader=LOADER)
     return ParamsDict(params_dict)
 
 
@@ -411,12 +432,12 @@ def override_params_dict(params, dict_or_string_or_yaml_file, is_strict):
           nested_csv_str_to_json_str(dict_or_string_or_yaml_file))
     except ValueError:
       pass
-    params_dict = yaml.load(dict_or_string_or_yaml_file)
+    params_dict = yaml.load(dict_or_string_or_yaml_file, Loader=LOADER)
     if isinstance(params_dict, dict):
       params.override(params_dict, is_strict)
     else:
       with tf.gfile.Open(dict_or_string_or_yaml_file) as f:
-        params.override(yaml.load(f), is_strict)
+        params.override(yaml.load(f, Loader=yaml.FullLoader), is_strict)
   else:
     raise ValueError('Unknown input type to parse.')
   return params
