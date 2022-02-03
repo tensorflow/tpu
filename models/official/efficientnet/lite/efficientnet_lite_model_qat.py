@@ -417,4 +417,11 @@ class FunctionalModel(FunctionalModelBuilder):
           outputs = self._fc(outputs)
         self.endpoints['head'] = outputs
 
-    return outputs
+    return [outputs] + list(
+        filter(lambda endpoint: endpoint is not None, [
+            self.endpoints.get('reduction_1'),
+            self.endpoints.get('reduction_2'),
+            self.endpoints.get('reduction_3'),
+            self.endpoints.get('reduction_4'),
+            self.endpoints.get('reduction_5'),
+        ]))

@@ -171,7 +171,7 @@ def build_model(images,
       model = efficientnet_lite_model_qat.FunctionalModel(
           model_name, blocks_args, global_params, features_only,
           pooled_features_only)
-      outputs = model(images, training=training)
+      outputs = model(images, training=training)[0]
     else:
       model = efficientnet_model.Model(blocks_args, global_params)
       outputs = model(
