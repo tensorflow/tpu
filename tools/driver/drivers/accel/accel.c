@@ -7,6 +7,7 @@
 #include <linux/kdev_t.h>
 #include <linux/slab.h>
 #include <linux/types.h>
+#include <linux/genhd.h>
 #define ACCEL_MAX_DEVICES 512
 static bool accel_class_registered;
 static struct class accel_class;
