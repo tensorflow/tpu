@@ -36,7 +36,9 @@ class TfExampleDecoder(object):
       # copypara:strip_begin
       include_polygon=False,
       # copypara:strip_end
-      regenerate_source_id=False):
+      regenerate_source_id=False,
+      label_key='image/object/class/label',
+      label_dtype=tf.int64):
     self._include_mask = include_mask
     # copypara:strip_begin
     self._include_polygon = include_polygon
@@ -51,10 +53,13 @@ class TfExampleDecoder(object):
         'image/object/bbox/xmax': tf.VarLenFeature(tf.float32),
         'image/object/bbox/ymin': tf.VarLenFeature(tf.float32),
         'image/object/bbox/ymax': tf.VarLenFeature(tf.float32),
-        'image/object/class/label': tf.VarLenFeature(tf.int64),
         'image/object/area': tf.VarLenFeature(tf.float32),
         'image/object/is_crowd': tf.VarLenFeature(tf.int64),
     }
+    self._label_key = label_key
+    self._label_dtype = label_dtype
+    self._keys_to_features[self._label_key] = tf.VarLenFeature(
+        self._label_dtype)
     if include_mask:
       self._keys_to_features['image/object/mask'] = tf.VarLenFeature(tf.string)
 
@@ -150,7 +155,7 @@ class TfExampleDecoder(object):
     is_crowds = tf.cond(
         tf.greater(tf.shape(parsed_tensors['image/object/is_crowd'])[0], 0),
         lambda: tf.cast(parsed_tensors['image/object/is_crowd'], dtype=tf.bool),
-        lambda: tf.zeros_like(parsed_tensors['image/object/class/label'], dtype=tf.bool))  # pylint: disable=line-too-long
+        lambda: tf.zeros_like(parsed_tensors[self._label_key], dtype=tf.bool))
     if self._regenerate_source_id:
       source_id = _get_source_id_from_encoded_image(parsed_tensors)
     else:
@@ -161,12 +166,13 @@ class TfExampleDecoder(object):
     if self._include_mask:
       masks = self._decode_masks(parsed_tensors)
 
+    groundtruth_classes = parsed_tensors[self._label_key]
     decoded_tensors = {
         'image': image,
         'source_id': source_id,
         'height': parsed_tensors['image/height'],
         'width': parsed_tensors['image/width'],
-        'groundtruth_classes': parsed_tensors['image/object/class/label'],
+        'groundtruth_classes': groundtruth_classes,
         'groundtruth_is_crowd': is_crowds,
         'groundtruth_area': areas,
         'groundtruth_boxes': boxes,
