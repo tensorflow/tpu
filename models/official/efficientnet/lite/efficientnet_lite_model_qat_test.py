@@ -31,7 +31,6 @@ class EfficientnetLiteModelQatTest(parameterized.TestCase, tf.test.TestCase):
     images = tf.random.stateless_uniform((1, 224, 224, 3), seed=(2, 3))
 
     tf.random.set_seed(0)
-
     outputs, _ = efficientnet_lite_builder.build_model(
         images,
         model_name=model_name,
@@ -39,6 +38,7 @@ class EfficientnetLiteModelQatTest(parameterized.TestCase, tf.test.TestCase):
         training=False,
         features_only=False,
         pooled_features_only=False)
+
     tf.random.set_seed(0)
     outputs_qat, _ = efficientnet_lite_builder.build_model(
         images,
@@ -54,7 +54,7 @@ class EfficientnetLiteModelQatTest(parameterized.TestCase, tf.test.TestCase):
                             ('efficientnet-lite2',), ('efficientnet-lite3',),
                             ('efficientnet-lite4',))
   def test_model_quantizable(self, model_name):
-    images = tf.random.uniform((1, 224, 224, 3))
+    images = tf.random.stateless_uniform((1, 224, 224, 3), seed=(2, 3))
     override_params = {}
     override_params['batch_norm'] = tf.keras.layers.BatchNormalization
     blocks_args, global_params = efficientnet_lite_builder.get_model_params(
