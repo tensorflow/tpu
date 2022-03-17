@@ -28,7 +28,8 @@ class EfficientnetLiteModelQatTest(parameterized.TestCase, tf.test.TestCase):
                             ('efficientnet-lite2',), ('efficientnet-lite3',),
                             ('efficientnet-lite4',))
   def test_values_match(self, model_name):
-    images = tf.random.uniform((1, 224, 224, 3))
+    images = tf.random.stateless_uniform((1, 224, 224, 3), seed=(2, 3))
+
     tf.random.set_seed(0)
 
     outputs, _ = efficientnet_lite_builder.build_model(
