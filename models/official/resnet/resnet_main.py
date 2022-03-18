@@ -12,15 +12,58 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Train a ResNet-50 model on ImageNet on TPU."""
+"""Train a ResNet-50 model on ImageNet on TPU.
+
+# Train on GPUs.
+python resnet_main.py --use_tpu=False --mode=train \
+  --model_dir=/home/ubuntu/resnet-model \
+  --data_dir=gs://cloud-tpu-test-datasets/fake_imagenet \
+  --train_batch_size=256 --train_steps=112590 --iterations_per_loop=1251 2>&1 | tee run.log
+
+V100 16GB
+
+  Problem: bs=256 has some improvement over bs=128, but only ~1.+x
+
+float32, BS=128:     365 imgs/sec
+AMP float16, BS=128: 730 imgs/sec
+AMP float16, BS=256: 750 imgs/sec    *** Why?
+TODO: enable XLA
+
+  amp noxla
+    - bs=256 OOMs
+    - bs=128 - 360 imgs/sec
+
+   disable_meta_optimizer=False
+    - bs=256 - 750 imgs/sec
+    - bs=128 - 730 imgs/sec
+
+  noamp noxla
+    - bs=256 OOMs
+    - bs=128 - 365 imgs/sec
+
+   disable_meta_optimizer=False
+    - bs=256 OOMs
+    - bs=128 - 370 imgs/sec
+
+  -------
+
+  amp xla
+    - bs=256 OOMs
+    - bs=128 - 360 imgs/sec
+
+    disable_meta_optimizer=False
+
+      (jit={1,2,fusible}) no longer printing thput, altho GPU has util.
+"""
 
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
 import os
+import pprint
 import time
-
+import sys
 from absl import app
 from absl import flags
 from absl import logging
@@ -228,6 +271,16 @@ flags.DEFINE_bool(
     'export_moving_average', False,
     'Whether to export model using moving average variables.')
 
+flags.DEFINE_bool(
+    'amp', False,
+    'Whether to use automated mixed precision.')
+
+flags.DEFINE_bool(
+    'xla', False,
+    'Whether to use accelerated linear algebra.')
+
+flags.DEFINE_integer('loss_scale', -1, 'Loss Scale for AMP.')
+
 
 # The input tensor is in the range of [0, 255], we need to scale them to the
 # range of [0, 1]
@@ -368,8 +421,12 @@ def resnet_model_fn(features, labels, mode, params):
     features = tf.transpose(features, [3, 0, 1, 2])  # HWCN to NHWC
 
   # Normalize the image to zero mean and unit variance.
-  features -= tf.constant(MEAN_RGB, shape=[1, 1, 3], dtype=features.dtype)
-  features /= tf.constant(STDDEV_RGB, shape=[1, 1, 3], dtype=features.dtype)
+  if params['data_format'] == 'channels_first':
+    features -= tf.constant(MEAN_RGB, shape=[3, 1, 1], dtype=features.dtype)
+    features /= tf.constant(STDDEV_RGB, shape=[3, 1, 1], dtype=features.dtype)
+  else:
+    features -= tf.constant(MEAN_RGB, shape=[1, 1, 3], dtype=features.dtype)
+    features /= tf.constant(STDDEV_RGB, shape=[1, 1, 3], dtype=features.dtype)
 
   # DropBlock keep_prob for the 4 block groups of ResNet architecture.
   # None means applying no DropBlock at the corresponding block group.
@@ -454,10 +511,9 @@ def resnet_model_fn(features, labels, mode, params):
         export_outputs={
             'classify': tf.estimator.export.PredictOutput(predictions)},
         scaffold_fn=scaffold_fn)
-
   # If necessary, in the model_fn, use params['batch_size'] instead the batch
   # size flags (--train_batch_size or --eval_batch_size).
-  batch_size = params['batch_size']   # pylint: disable=unused-variable
+  # batch_size = params['batch_size']   # pylint: disable=unused-variable
 
   # Calculate loss, which includes softmax cross entropy and L2 regularization.
   one_hot_labels = tf.one_hot(labels, params['num_label_classes'])
@@ -506,6 +562,8 @@ def resnet_model_fn(features, labels, mode, params):
       # user, this should look like regular synchronous training.
       optimizer = tf.tpu.CrossShardOptimizer(optimizer)
 
+    if FLAGS.amp:
+        optimizer = tf.train.experimental.enable_mixed_precision_graph_rewrite(optimizer, loss_scale='dynamic' if FLAGS.loss_scale==-1 else FLAGS.loss_scale)
     # Batch normalization requires UPDATE_OPS to be added as a dependency to
     # the train operation.
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
@@ -589,6 +647,7 @@ def resnet_model_fn(features, labels, mode, params):
       Returns:
         A dict of the metrics to return from evaluation.
       """
+      #logits = tf.Print(logits, [tf.shape(logits)])
       predictions = tf.argmax(logits, axis=1)
       top_1_accuracy = tf.metrics.accuracy(labels, predictions)
       in_top_5 = tf.cast(tf.nn.in_top_k(logits, labels, 5), tf.float32)
@@ -611,7 +670,6 @@ def resnet_model_fn(features, labels, mode, params):
       saver = tf.train.Saver(restore_vars_dict)
       return tf.train.Scaffold(saver=saver)
     scaffold_fn = eval_scaffold
-
   return tf.estimator.tpu.TPUEstimatorSpec(
       mode=mode,
       loss=loss,
@@ -684,32 +742,74 @@ def main(unused_argv):
 
   params = flags_to_params.override_params_from_input_flags(params, FLAGS)
 
+  # From Nvidia Repo, explained here: https://github.com/NVIDIA/DeepLearningExamples/issues/57
+  os.environ['CUDA_CACHE_DISABLE'] = '0'
+  os.environ['TF_GPU_THREAD_MODE'] = 'gpu_private'
+  os.environ['TF_GPU_THREAD_COUNT'] = '2'
+  os.environ['TF_USE_CUDNN_BATCHNORM_SPATIAL_PERSISTENT'] = '1'
+  os.environ['TF_ADJUST_HUE_FUSED'] = '1'
+  os.environ['TF_ADJUST_SATURATION_FUSED'] = '1'
+  os.environ['TF_ENABLE_WINOGRAD_NONFUSED'] = '1'
+  os.environ['TF_SYNC_ON_FINISH'] = '0'
+  os.environ['TF_AUTOTUNE_THRESHOLD'] = '2'
+  os.environ['TF_DISABLE_NVTX_RANGES'] = '1'
+  # Enable AMP
+  amp = FLAGS.amp
+  xla = FLAGS.xla
+  # Step 1: Set up Docker https://ngc.nvidia.com/catalog/containers/nvidia:tensorflow
+  # Step 2: add --amp flag
+  if amp:
+    os.environ["TF_ENABLE_AUTO_MIXED_PRECISION_GRAPH_REWRITE"] = "1"
+    pass
+    # These two lines have no effect.
+    # os.environ['TF_CPP_VMODULE'] = 'auto_mixed_precision=2'
+    # os.environ['TF_AUTO_MIXED_PRECISION_GRAPH_REWRITE_LOG_PATH'] = '/home/ubuntu/amp-log'
+
+    # These three lines are redundant.
+    # os.environ['TF_ENABLE_AUTO_MIXED_PRECISION_GRAPH_REWRITE'] = '1'
+    # os.environ['TF_ENABLE_AUTO_MIXED_PRECISION'] = '1'
+    # os.environ['TF_ENABLE_AUTO_MIXED_PRECISION_LOSS_SCALING'] = '1'
+  if xla:
+      # https://github.com/tensorflow/tensorflow/blob/8d72537c6abf5a44103b57b9c2e22c14f5f49698/tensorflow/compiler/jit/flags.cc#L78-L87
+      # 1: on for things very likely to be improved
+      # 2: on for everything
+      # fusible: only for Tensorflow operations that XLA knows how to fuse
+      #
+      # os.environ['TF_XLA_FLAGS'] = '--tf_xla_auto_jit=1'
+      # os.environ['TF_XLA_FLAGS'] = '--tf_xla_auto_jit=2'
+      # Best Performing XLA Option
+      os.environ['TF_XLA_FLAGS'] = '--tf_xla_auto_jit=fusible'
+      os.environ["TF_XLA_FLAGS"] = (os.environ.get("TF_XLA_FLAGS", "") + " --tf_xla_enable_lazy_compilation=false")
+
   params.validate()
   params.lock()
+  tf.logging.info('Params:\n%s', pprint.pformat(params.as_dict()))
 
-  tpu_cluster_resolver = tf.distribute.cluster_resolver.TPUClusterResolver(
-      FLAGS.tpu if (FLAGS.tpu or params.use_tpu) else '',
-      zone=FLAGS.tpu_zone,
-      project=FLAGS.gcp_project)
-
+  tpu_cluster_resolver = None
+  devices = tf.config.list_physical_devices('GPU')
   if params.use_async_checkpointing:
     save_checkpoints_steps = None
   else:
     save_checkpoints_steps = max(5000, params.iterations_per_loop)
+
+  session_config = tf.GraphOptions(
+    rewrite_options=rewriter_config_pb2.RewriterConfig(
+      # disable_meta_optimizer=True,  # NOTE: this line would keep AMP disabled.
+      auto_mixed_precision=1 if FLAGS.amp else 2,
+  ))
+  # strategy = tf.distribute.MirroredStrategy(cross_device_ops=tf.distribute.NcclAllReduce())
+  strategy = tf.distribute.experimental.MultiWorkerMirroredStrategy(communication=tf.distribute.experimental.CollectiveCommunication.NCCL)
+
   config = tf.estimator.tpu.RunConfig(
-      cluster=tpu_cluster_resolver,
+      #cluster=None, #tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
       save_checkpoints_steps=save_checkpoints_steps,
       log_step_count_steps=FLAGS.log_step_count_steps,
+      train_distribute=strategy,
+      eval_distribute=strategy,
       session_config=tf.ConfigProto(
-          graph_options=tf.GraphOptions(
-              rewrite_options=rewriter_config_pb2.RewriterConfig(
-                  disable_meta_optimizer=True))),
-      tpu_config=tf.estimator.tpu.TPUConfig(
-          iterations_per_loop=params.iterations_per_loop,
-          num_shards=params.num_cores,
-          per_host_input_for_training=tf.estimator.tpu.InputPipelineConfig
-          .PER_HOST_V2))  # pylint: disable=line-too-long
+          graph_options=session_config,
+          allow_soft_placement=True),)  # pylint: disable=line-too-long
 
   resnet_classifier = tf.estimator.tpu.TPUEstimator(
       use_tpu=params.use_tpu,
@@ -767,9 +867,11 @@ def main(unused_argv):
 
   steps_per_epoch = params.num_train_images // params.train_batch_size
   eval_steps = params.num_eval_images // params.eval_batch_size
+  
+  if FLAGS.mode == 'infer':
+    inf_steps = 10000
 
   if FLAGS.mode == 'eval':
-
     # Run evaluation when there's a new checkpoint
     for ckpt in tf.train.checkpoints_iterator(
         FLAGS.model_dir, timeout=FLAGS.eval_timeout):
@@ -790,7 +892,6 @@ def main(unused_argv):
           tf.logging.info(
               'Evaluation finished after training step %d', current_step)
           break
-
       except tf.errors.NotFoundError:
         # Since the coordinator is on a different job than the TPU worker,
         # sometimes the TPU worker does not finish initializing until long after
@@ -798,8 +899,20 @@ def main(unused_argv):
         # file could have been deleted already.
         tf.logging.info(
             'Checkpoint %s no longer exists, skipping checkpoint', ckpt)
-
-  else:   # FLAGS.mode == 'train' or FLAGS.mode == 'train_and_eval'
+  elif FLAGS.mode == 'infer':
+    # Run evaluation when there's a new checkpoint
+    for ckpt in tf.train.checkpoints_iterator(
+        FLAGS.model_dir, timeout=FLAGS.eval_timeout):
+      tf.logging.info('Model Serving (over Imagenet Training).')
+      start_timestamp = time.time()  # This time will include compilation time
+      inf_results = resnet_classifier.evaluate(
+          input_fn=imagenet_train.input_fn,
+          steps=inf_steps,
+          checkpoint_path=ckpt)
+      elapsed_time = int(time.time() - start_timestamp)
+      tf.logging.info('Inference results: %s. Elapsed seconds: %d',
+                      inf_results, elapsed_time)
+  else:
     try:
       current_step = tf.train.load_variable(FLAGS.model_dir,
                                             tf.GraphKeys.GLOBAL_STEP)
@@ -834,10 +947,12 @@ def main(unused_argv):
                 save_steps=FLAGS.profile_every_n_steps,
                 output_dir=FLAGS.model_dir, tpu=FLAGS.tpu)
             )
-      resnet_classifier.train(
-          input_fn=imagenet_train.input_fn,
-          max_steps=params.train_steps,
-          hooks=hooks)
+      tf.estimator.train_and_evaluate(resnet_classifier, train_spec=tf.estimator.TrainSpec(input_fn=imagenet_train.input_fn, max_steps=params.train_steps, hooks=hooks), eval_spec=tf.estimator.EvalSpec(input_fn=imagenet_eval.input_fn, steps=None, start_delay_secs=1e9))
+      #resnet_classifier.train(input_fn=imagenet_train.input_fn,max_steps=params.train_steps,hooks=hooks)
+
+      elapsed_time = int(time.time() - start_timestamp)
+      tf.logging.info('Finished training up to step %d. Elapsed seconds %d.',
+                      params.train_steps, elapsed_time)
 
     else:
       assert FLAGS.mode == 'train_and_eval'
@@ -846,8 +961,9 @@ def main(unused_argv):
         # At the end of training, a checkpoint will be written to --model_dir.
         next_checkpoint = min(current_step + FLAGS.steps_per_eval,
                               params.train_steps)
-        resnet_classifier.train(
-            input_fn=imagenet_train.input_fn, max_steps=next_checkpoint)
+        tf.estimator.train_and_evaluate(resnet_classifier, train_spec=tf.estimator.TrainSpec(input_fn=imagenet_train.input_fn, max_steps=next_checkpoint), eval_spec=tf.estimator.EvalSpec())
+        #resnet_classifier.train(
+            #input_fn=imagenet_train.input_fn, max_steps=next_checkpoint)
         current_step = next_checkpoint
 
         tf.logging.info('Finished training up to step %d. Elapsed seconds %d.',
