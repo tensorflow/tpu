@@ -45,21 +45,6 @@ def process_prediction_for_eval(prediction):
       new_box = scale * np.array([x1, y1, x2 - x1, y2 - y1])
       processed_box_coordinates[image_id, box_id, :] = new_box
   prediction['detection_boxes'] = processed_box_coordinates
-
-  # +++
-  box_coordinates_rois = prediction['selected_box_rois']
-  box_coordinates_rois_coordinates = np.zeros_like(box_coordinates_rois)
-
-  for image_id in range(box_coordinates_rois.shape[0]):
-      scale = image_info[image_id][2]
-      for box_id in range(box_coordinates_rois.shape[1]):
-          # Map [y1, x1, y2, x2] -> [x1, y1, w, h] and multiply detections
-          # by image scale.
-          y1, x1, y2, x2 = box_coordinates_rois[image_id, box_id, :]
-          new_box = scale * np.array([x1, y1, x2 - x1, y2 - y1])
-          box_coordinates_rois_coordinates[image_id, box_id, :] = new_box
-  prediction['selected_box_rois'] = box_coordinates_rois_coordinates
-
   return prediction
 
 
@@ -223,7 +208,6 @@ def write_image_summary(predictions, summary_writer, current_step):
           len(predictions['detection_boxes'][i]),
           int(predictions['num_detections'][i]))
       detection_boxes = predictions['detection_boxes'][i][:num_detections]
-      selected_box_rois = predictions['selected_box_rois'][i][:num_detections]
       detection_scores = predictions['detection_scores'][i][:num_detections]
       detection_classes = predictions['detection_classes'][i][:num_detections]
 
@@ -237,10 +221,6 @@ def write_image_summary(predictions, summary_writer, current_step):
       detection_boxes = detection_boxes * np.array(
           [image_width, image_height, image_width, image_height])
 
-      selected_box_rois = selected_box_rois / np.array([w, h, w, h])
-      selected_box_rois = selected_box_rois * np.array(
-          [image_width, image_height, image_width, image_height])
-
       gt_boxes = None
       if 'groundtruth_boxes' in predictions:
         gt_boxes = predictions['groundtruth_boxes'][i]
@@ -251,7 +231,7 @@ def write_image_summary(predictions, summary_writer, current_step):
       if include_mask:
         instance_masks = predictions['detection_masks'][i][0:num_detections]
         segmentations = coco_metric.generate_segmentation_from_masks(
-            instance_masks, selected_box_rois, image_height, image_width)
+            instance_masks, detection_boxes, image_height, image_width)
 
       # From [x, y, w, h] to [x1, y1, x2, y2] and
       # process_prediction_for_eval() set the box to be [x, y] format, need to

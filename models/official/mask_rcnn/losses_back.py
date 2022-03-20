@@ -133,30 +133,7 @@ def _fast_rcnn_box_loss(box_outputs, box_targets, class_targets, normalizer=1.0,
     return box_loss
 
 
-def gIoU_loss(boxes1, boxes2,weight):
-    boxes1_area = (boxes1[..., 2] - boxes1[..., 0]) * (boxes1[..., 3] - boxes1[..., 1])
-    boxes2_area = (boxes2[..., 2] - boxes2[..., 0]) * (boxes2[..., 3] - boxes2[..., 1])
-    left_up = tf.maximum(boxes1[..., :2], boxes2[..., :2])
-    right_down = tf.minimum(boxes1[..., 2:], boxes2[..., 2:])
-
-    inter_section = tf.maximum(right_down - left_up, 0.0)
-    inter_area = inter_section[..., 0] * inter_section[..., 1]
-    union_area = boxes1_area + boxes2_area - inter_area
-    iou = inter_area / union_area
-
-    enclose_left_up = tf.minimum(boxes1[..., :2], boxes2[..., :2])
-    enclose_right_down = tf.maximum(boxes1[..., 2:], boxes2[..., 2:])
-    enclose = tf.maximum(enclose_right_down - enclose_left_up, 0.0)
-    enclose_area = enclose[..., 0] * enclose[..., 1]
-    giou = iou - 1.0 * (enclose_area - union_area) / enclose_area
-    mask = tf.cast(tf.greater(weight, 0),tf.float32)
-    mask = tf.stop_gradient(mask)
-
-    loss = (1 - giou)*mask
-    loss = tf.reduce_mean(loss)
-    return loss
-
-def fast_rcnn_loss(class_outputs, box_outputs, class_targets, box_targets, selected_class_targets,
+def fast_rcnn_loss(class_outputs, box_outputs, class_targets, box_targets,
                    params):
   """Computes the box and class loss (Fast-RCNN branch) of Mask-RCNN.
 
@@ -196,10 +173,29 @@ def fast_rcnn_loss(class_outputs, box_outputs, class_targets, box_targets, selec
     class_loss = _fast_rcnn_class_loss(
         class_outputs, class_targets_one_hot)
 
+    # Selects the box from `box_outputs` based on `class_targets`, with which
+    # the box has the maximum overlap.
+    batch_size, num_rois, _ = box_outputs.get_shape().as_list()
+    box_outputs = tf.reshape(box_outputs,
+                             [batch_size, num_rois, params['num_classes'], 4])
 
-    box_loss = (0.1*params['fast_rcnn_box_loss_weight'] *_fast_rcnn_box_loss(box_outputs, box_targets, selected_class_targets))
-    # box_loss = params['fast_rcnn_box_loss_weight'] * gIoU_loss(box_outputs,box_targets,selected_class_targets)
+    box_indices = tf.reshape(
+        class_targets + tf.tile(
+            tf.expand_dims(
+                tf.range(batch_size) * num_rois * params['num_classes'], 1),
+            [1, num_rois]) + tf.tile(
+                tf.expand_dims(tf.range(num_rois) * params['num_classes'], 0),
+                [batch_size, 1]), [-1])
 
+    box_outputs = tf.matmul(
+        tf.one_hot(
+            box_indices,
+            batch_size * num_rois * params['num_classes'],
+            dtype=box_outputs.dtype), tf.reshape(box_outputs, [-1, 4]))
+    box_outputs = tf.reshape(box_outputs, [batch_size, -1, 4])
+
+    box_loss = (params['fast_rcnn_box_loss_weight'] *
+                _fast_rcnn_box_loss(box_outputs, box_targets, class_targets))
     total_loss = class_loss + box_loss
     return total_loss, class_loss, box_loss
 
