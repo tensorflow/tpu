@@ -24,6 +24,7 @@ from absl import app as absl_app
 from absl import flags
 import numpy as np
 import tensorflow.compat.v1 as tf
+from tensorflow.compat.v1 import estimator as tf_estimator
 from official.r1.utils.logs import hooks_helper
 from official.recommendation import constants as rconst
 from official.recommendation import movielens
@@ -202,23 +203,23 @@ def create_tpu_estimator(model_fn, feature_columns, params):
       project=params["gcp_project"],
       coordinator_name="coordinator")
 
-  config = tf.estimator.tpu.RunConfig(
+  config = tf_estimator.tpu.RunConfig(
       cluster=tpu_cluster_resolver,
       model_dir=params["model_dir"],
-      tpu_config=tf.estimator.tpu.TPUConfig(
+      tpu_config=tf_estimator.tpu.TPUConfig(
           iterations_per_loop=params["iterations_per_loop"],
           experimental_host_call_every_n_steps=100,
-          per_host_input_for_training=tf.estimator.tpu.InputPipelineConfig
+          per_host_input_for_training=tf_estimator.tpu.InputPipelineConfig
           .PER_HOST_V2))
 
-  return tf.estimator.tpu.TPUEstimator(
+  return tf_estimator.tpu.TPUEstimator(
       use_tpu=params["use_tpu"],
       model_fn=model_fn,
       config=config,
       train_batch_size=params["global_batch_size"],
       eval_batch_size=params["eval_global_batch_size"],
       params=params,
-      embedding_config_spec=tf.estimator.tpu.experimental.EmbeddingConfigSpec(
+      embedding_config_spec=tf_estimator.tpu.experimental.EmbeddingConfigSpec(
           feature_columns=feature_columns,
           optimization_parameters=tf.tpu.experimental.AdamParameters(
               learning_rate=params["learning_rate"],
@@ -382,19 +383,19 @@ def create_model_fn(feature_columns):
     softmax_logits = tf.concat([tf.zeros(logits.shape, dtype=logits.dtype),
                                 logits], axis=1)
 
-    if mode == tf.estimator.ModeKeys.EVAL:
+    if mode == tf_estimator.ModeKeys.EVAL:
       duplicate_mask = tf.cast(features[rconst.DUPLICATE_MASK], tf.float32)
       cross_entropy, metric_fn, in_top_k, ndcg, metric_weights = (
           neumf_model.compute_eval_loss_and_metrics_helper(
               logits, softmax_logits, duplicate_mask, params["num_neg"],
               params["match_mlperf"]))
 
-      return tf.estimator.tpu.TPUEstimatorSpec(
+      return tf_estimator.tpu.TPUEstimatorSpec(
           mode=mode,
           loss=cross_entropy,
           eval_metrics=(metric_fn, [in_top_k, ndcg, metric_weights]))
 
-    elif mode == tf.estimator.ModeKeys.TRAIN:
+    elif mode == tf_estimator.ModeKeys.TRAIN:
       labels = tf.cast(features[rconst.TRAIN_LABEL_KEY], tf.int32)
       valid_pt_mask = features[rconst.VALID_POINT_MASK]
       optimizer = tf.train.AdamOptimizer(
@@ -420,7 +421,7 @@ def create_model_fn(feature_columns):
       update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
       train_op = tf.group(minimize_op, update_ops)
 
-      return tf.estimator.tpu.TPUEstimatorSpec(
+      return tf_estimator.tpu.TPUEstimatorSpec(
           mode=mode, loss=loss, train_op=train_op)
 
     else:

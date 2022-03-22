@@ -21,6 +21,7 @@ from __future__ import print_function
 import os
 
 import tensorflow.compat.v1 as tf
+from tensorflow.compat.v1 import estimator as tf_estimator
 
 import resnet_preprocessing
 
@@ -40,7 +41,7 @@ def image_serving_input_fn():
   )
   images = tf.map_fn(
       _preprocess_image, image_bytes_list, back_prop=False, dtype=tf.float32)
-  return tf.estimator.export.ServingInputReceiver(
+  return tf_estimator.export.ServingInputReceiver(
       images, {'image_bytes': image_bytes_list})
 
 
