@@ -26,6 +26,7 @@ import os
 from absl import logging
 import six
 import tensorflow.compat.v1 as tf
+from tensorflow.compat.v1 import estimator as tf_estimator
 
 import preprocessing
 
@@ -53,7 +54,7 @@ def build_image_serving_input_fn(image_size,
     )
     images = tf.map_fn(
         _preprocess_image, image_bytes_list, back_prop=False, dtype=tf.float32)
-    return tf.estimator.export.ServingInputReceiver(
+    return tf_estimator.export.ServingInputReceiver(
         images, {'image_bytes': image_bytes_list})
   return _image_serving_input_fn
 

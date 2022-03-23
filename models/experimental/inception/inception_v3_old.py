@@ -25,6 +25,7 @@ from absl import app
 from absl import flags
 from six.moves import range
 import tensorflow.compat.v1 as tf
+from tensorflow.compat.v1 import estimator as tf_estimator
 
 from tensorflow.contrib import slim
 from tensorflow.contrib import tpu as contrib_tpu
@@ -108,7 +109,7 @@ def model_fn(features, labels, mode, params):
   """Inception v3 model using Estimator API."""
   del params
 
-  if mode != tf.estimator.ModeKeys.TRAIN:
+  if mode != tf_estimator.ModeKeys.TRAIN:
     raise RuntimeError('mode {} is not supported yet'.format(mode))
 
   num_labels = FLAGS.num_labels

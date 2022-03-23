@@ -27,6 +27,7 @@ from __future__ import division
 from __future__ import print_function
 
 import tensorflow.compat.v1 as tf
+from tensorflow.compat.v1 import estimator as tf_estimator
 
 import retinanet_architecture
 import retinanet_model
@@ -104,15 +105,15 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
     cls_outputs = _model_outputs()
 
   # First check if it is in PREDICT mode.
-  if mode == tf.estimator.ModeKeys.PREDICT:
+  if mode == tf_estimator.ModeKeys.PREDICT:
     predictions = {
         'image': features,
         'cls_outputs': cls_outputs
     }
-    return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions)
+    return tf_estimator.EstimatorSpec(mode=mode, predictions=predictions)
 
   # Load pretrained model from checkpoint.
-  if params['resnet_checkpoint'] and mode == tf.estimator.ModeKeys.TRAIN:
+  if params['resnet_checkpoint'] and mode == tf_estimator.ModeKeys.TRAIN:
 
     def scaffold_fn():
       """Loads pretrained model through scaffold function."""
@@ -138,7 +139,7 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
   # Add L2 regularization loss
   total_loss = cls_loss + weight_decay_loss
 
-  if mode == tf.estimator.ModeKeys.TRAIN:
+  if mode == tf_estimator.ModeKeys.TRAIN:
     optimizer = tf.train.MomentumOptimizer(
         learning_rate, momentum=params['momentum'])
     if params['use_tpu']:
@@ -158,7 +159,7 @@ def _model_fn(features, labels, mode, params, model, variable_filter_fn=None):
 
   # Evaluation only works on GPU/CPU host and batch_size=1
   eval_metrics = None
-  if mode == tf.estimator.ModeKeys.EVAL:
+  if mode == tf_estimator.ModeKeys.EVAL:
     batch_size = params['batch_size']
 
     def metric_fn(**kwargs):

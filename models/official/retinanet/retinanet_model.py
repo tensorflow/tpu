@@ -27,6 +27,7 @@ from __future__ import division
 from __future__ import print_function
 
 import tensorflow.compat.v1 as tf
+from tensorflow.compat.v1 import estimator as tf_estimator
 
 import anchors
 import coco_metric
@@ -382,7 +383,7 @@ def _model_fn(features, labels, mode, params, model, use_tpu_estimator_spec,
 
   # In predict mode features is a dict with input as value of the 'inputs'.
   image_info = None
-  if (mode == tf.estimator.ModeKeys.PREDICT
+  if (mode == tf_estimator.ModeKeys.PREDICT
       and isinstance(features, dict) and 'inputs' in features):
     image_info = features['image_info']
     labels = None
@@ -412,7 +413,7 @@ def _model_fn(features, labels, mode, params, model, use_tpu_estimator_spec,
     levels = cls_outputs.keys()
 
   # First check if it is in PREDICT mode.
-  if mode == tf.estimator.ModeKeys.PREDICT:
+  if mode == tf_estimator.ModeKeys.PREDICT:
     # Postprocess on host; memory layout for NMS on TPU is very inefficient.
     def _predict_postprocess_wrapper(args):
       return _predict_postprocess(*args)
@@ -428,10 +429,10 @@ def _model_fn(features, labels, mode, params, model, use_tpu_estimator_spec,
       })
 
     return contrib_tpu.TPUEstimatorSpec(
-        mode=tf.estimator.ModeKeys.PREDICT, predictions=predictions)
+        mode=tf_estimator.ModeKeys.PREDICT, predictions=predictions)
 
   # Load pretrained model from checkpoint.
-  if params['resnet_checkpoint'] and mode == tf.estimator.ModeKeys.TRAIN:
+  if params['resnet_checkpoint'] and mode == tf_estimator.ModeKeys.TRAIN:
 
     def scaffold_fn():
       """Loads pretrained model through scaffold function."""
@@ -458,7 +459,7 @@ def _model_fn(features, labels, mode, params, model, use_tpu_estimator_spec,
       if 'batch_normalization' not in v.name
   ])
 
-  if mode == tf.estimator.ModeKeys.TRAIN:
+  if mode == tf_estimator.ModeKeys.TRAIN:
     optimizer = tf.train.MomentumOptimizer(
         learning_rate, momentum=params['momentum'])
     if params['use_tpu']:
@@ -481,7 +482,7 @@ def _model_fn(features, labels, mode, params, model, use_tpu_estimator_spec,
     train_op = None
 
   eval_metrics = None
-  if mode == tf.estimator.ModeKeys.EVAL:
+  if mode == tf_estimator.ModeKeys.EVAL:
     def metric_fn(**kwargs):
       """Returns a dictionary that has the evaluation metrics."""
       batch_size = params['batch_size']
@@ -529,7 +530,7 @@ def _model_fn(features, labels, mode, params, model, use_tpu_estimator_spec,
         eval_metrics=eval_metrics,
         scaffold_fn=scaffold_fn)
   else:
-    return tf.estimator.EstimatorSpec(
+    return tf_estimator.EstimatorSpec(
         mode=mode,
         loss=total_loss,
         # TODO(rostam): Fix bug to get scaffold working.

@@ -22,6 +22,7 @@ from __future__ import print_function
 import six
 
 import tensorflow.compat.v1 as tf
+from tensorflow.compat.v1 import estimator as tf_estimator
 
 from dataloader import anchor
 from dataloader import mode_keys
@@ -54,7 +55,7 @@ def serving_input_fn(batch_size,
   """
   placeholder, features = inputs.build_serving_input(
       input_type, batch_size, desired_image_size, stride)
-  return tf.estimator.export.ServingInputReceiver(
+  return tf_estimator.export.ServingInputReceiver(
       features=features, receiver_tensors={
           input_name: placeholder,
       })
@@ -231,7 +232,7 @@ def serving_model_fn_builder(export_tpu_model,
   def _serving_model_fn(features, labels, mode, params):
     """Builds the serving model_fn."""
     del labels  # unused.
-    if mode != tf.estimator.ModeKeys.PREDICT:
+    if mode != tf_estimator.ModeKeys.PREDICT:
       raise ValueError('To build the serving model_fn, set '
                        'mode = `tf.estimator.ModeKeys.PREDICT`')
 
@@ -244,8 +245,8 @@ def serving_model_fn_builder(export_tpu_model,
     predictions = serving_model_graph(features, model_params)
 
     if export_tpu_model:
-      return tf.estimator.tpu.TPUEstimatorSpec(
+      return tf_estimator.tpu.TPUEstimatorSpec(
           mode=mode, predictions=predictions)
-    return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions)
+    return tf_estimator.EstimatorSpec(mode=mode, predictions=predictions)
 
   return _serving_model_fn

@@ -21,6 +21,7 @@ from __future__ import print_function
 
 from six.moves import range
 import tensorflow.compat.v1 as tf
+from tensorflow.compat.v1 import estimator as tf_estimator
 
 from dataloader import mode_keys
 from modeling import factory
@@ -56,7 +57,7 @@ def serving_input_fn(batch_size, desired_image_size, stride):
   features.update({'key': keys_placeholder})
   features.update({'score_thresholds': score_threshold_placeholder})
 
-  return tf.estimator.export.ServingInputReceiver(
+  return tf_estimator.export.ServingInputReceiver(
       features=features, receiver_tensors=receiver_tensors)
 
 
@@ -74,7 +75,7 @@ def serving_model_fn_builder(export_tpu_model, output_image_info):
   def _serving_model_fn(features, labels, mode, params):
     """Builds the serving model_fn."""
     del labels  # unused.
-    if mode != tf.estimator.ModeKeys.PREDICT:
+    if mode != tf_estimator.ModeKeys.PREDICT:
       raise ValueError('To build the serving model_fn, set '
                        'mode = `tf.estimator.ModeKeys.PREDICT`')
 
@@ -147,8 +148,8 @@ def serving_model_fn_builder(export_tpu_model, output_image_info):
           features['image_info'], name='image_info')
 
     if export_tpu_model:
-      return tf.estimator.tpu.TPUEstimatorSpec(
+      return tf_estimator.tpu.TPUEstimatorSpec(
           mode=mode, predictions=predictions)
-    return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions)
+    return tf_estimator.EstimatorSpec(mode=mode, predictions=predictions)
 
   return _serving_model_fn

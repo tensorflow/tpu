@@ -25,6 +25,7 @@ from absl import app
 from absl import flags
 import absl.logging as _logging  # pylint: disable=unused-import
 import tensorflow.compat.v1 as tf
+from tensorflow.compat.v1 import estimator as tf_estimator
 
 import inception_preprocessing
 import inception_v4_model as inception
@@ -448,7 +449,7 @@ def image_serving_input_fn():
   )
   images = tf.map_fn(
       preprocess_raw_bytes, image_bytes_list, back_prop=False, dtype=tf.float32)
-  return tf.estimator.export.ServingInputReceiver(
+  return tf_estimator.export.ServingInputReceiver(
       images, {'image_bytes': image_bytes_list})
 
 
@@ -478,8 +479,8 @@ def tensor_transform_fn(data, perm):
 def inception_model_fn(features, labels, mode, params):
   """Inception v4 model using Estimator API."""
   num_classes = FLAGS.num_classes
-  is_training = (mode == tf.estimator.ModeKeys.TRAIN)
-  is_eval = (mode == tf.estimator.ModeKeys.EVAL)
+  is_training = (mode == tf_estimator.ModeKeys.TRAIN)
+  is_eval = (mode == tf_estimator.ModeKeys.EVAL)
 
   if isinstance(features, dict):
     features = features['feature']
@@ -521,15 +522,15 @@ def inception_model_fn(features, labels, mode, params):
       'probabilities': tf.nn.softmax(logits, name='softmax_tensor')
   }
 
-  if mode == tf.estimator.ModeKeys.PREDICT:
-    return tf.estimator.EstimatorSpec(
+  if mode == tf_estimator.ModeKeys.PREDICT:
+    return tf_estimator.EstimatorSpec(
         mode=mode,
         predictions=predictions,
         export_outputs={
-            'classify': tf.estimator.export.PredictOutput(predictions)
+            'classify': tf_estimator.export.PredictOutput(predictions)
         })
 
-  if mode == tf.estimator.ModeKeys.EVAL and FLAGS.display_tensors and (
+  if mode == tf_estimator.ModeKeys.EVAL and FLAGS.display_tensors and (
       not FLAGS.use_tpu):
     with tf.control_dependencies([
         tf.Print(
