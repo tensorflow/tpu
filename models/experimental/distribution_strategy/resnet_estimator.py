@@ -26,6 +26,7 @@ import json
 import os
 from absl import app
 import tensorflow.compat.v1 as tf
+from tensorflow.compat.v1 import estimator as tf_estimator
 
 import imagenet_input
 import resnet_model
@@ -87,7 +88,7 @@ def learning_rate_schedule(current_epoch):
 
 def model_fn(features, labels, mode):
   """Definition for ResNet model."""
-  is_training = mode == tf.estimator.ModeKeys.TRAIN
+  is_training = mode == tf_estimator.ModeKeys.TRAIN
 
   if FLAGS.transpose_input:
     features = tf.transpose(features, [3, 0, 1, 2])  # Double-transpose trick
@@ -122,10 +123,10 @@ def model_fn(features, labels, mode):
 
   logits = tf.cast(logits, tf.float32)
 
-  if mode == tf.estimator.ModeKeys.PREDICT:
+  if mode == tf_estimator.ModeKeys.PREDICT:
     assert False, 'Not implemented correctly right now!'
     predictions = {'logits': logits}
-    return tf.estimator.EstimatorSpec(mode, predictions=predictions)
+    return tf_estimator.EstimatorSpec(mode, predictions=predictions)
 
   cross_entropy = tf.losses.sparse_softmax_cross_entropy(
       labels=labels, logits=logits)
@@ -135,7 +136,7 @@ def model_fn(features, labels, mode):
       for v in tf.trainable_variables()
       if 'batch_normalization' not in v.name])
 
-  if mode == tf.estimator.ModeKeys.EVAL:
+  if mode == tf_estimator.ModeKeys.EVAL:
     predictions = tf.argmax(logits, axis=1)
     top_1_accuracy = tf.metrics.accuracy(labels, predictions)
     # TODO(priyag): Add this back when in_top_k is supported on TPU.
@@ -147,10 +148,10 @@ def model_fn(features, labels, mode):
         # 'top_5_accuracy': top_5_accuracy,
     }
 
-    return tf.estimator.EstimatorSpec(
+    return tf_estimator.EstimatorSpec(
         mode, loss=loss, eval_metric_ops=eval_metric_ops)
 
-  assert mode == tf.estimator.ModeKeys.TRAIN
+  assert mode == tf_estimator.ModeKeys.TRAIN
 
   global_step = tf.train.get_or_create_global_step()
   batches_per_epoch = (_NUM_TRAIN_IMAGES /
@@ -169,7 +170,7 @@ def model_fn(features, labels, mode):
   update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
   with tf.control_dependencies(update_ops):
     train_op = optimizer.minimize(loss, global_step=global_step)
-  return tf.estimator.EstimatorSpec(mode, loss=loss, train_op=train_op)
+  return tf_estimator.EstimatorSpec(mode, loss=loss, train_op=train_op)
 
 
 def main(unused_argv):
@@ -195,7 +196,7 @@ def main(unused_argv):
       tpu_cluster_resolver, steps_per_run=steps_per_run_train)
   eval_distribution = contrib_distribute.TPUStrategy(
       tpu_cluster_resolver, steps_per_run=steps_per_run_eval)
-  config = tf.estimator.RunConfig(
+  config = tf_estimator.RunConfig(
       model_dir=FLAGS.model_dir,
       train_distribute=train_distribution,
       eval_distribute=eval_distribution,
@@ -203,7 +204,7 @@ def main(unused_argv):
       save_checkpoints_secs=None,
       keep_checkpoint_max=10)
 
-  resnet_estimator = tf.estimator.Estimator(
+  resnet_estimator = tf_estimator.Estimator(
       model_fn=model_fn, config=config)
 
   train_input, eval_input = [
