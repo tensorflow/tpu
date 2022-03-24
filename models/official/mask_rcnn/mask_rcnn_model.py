@@ -31,6 +31,7 @@ from absl import logging
 import numpy as np
 import six
 import tensorflow.compat.v1 as tf
+from tensorflow.compat.v1 import estimator as tf_estimator
 import tensorflow.compat.v2 as tf2
 
 import anchors
@@ -382,10 +383,10 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
   Returns:
     tpu_spec: the TPUEstimatorSpec to run training, evaluation, or prediction.
   """
-  if (mode == tf.estimator.ModeKeys.PREDICT or
-      mode == tf.estimator.ModeKeys.EVAL):
+  if (mode == tf_estimator.ModeKeys.PREDICT or
+      mode == tf_estimator.ModeKeys.EVAL):
     if ((params['include_groundtruth_in_features'] or
-         mode == tf.estimator.ModeKeys.EVAL) and ('labels' in features)):
+         mode == tf_estimator.ModeKeys.EVAL) and ('labels' in features)):
       # In include groundtruth for eval.
       labels = features['labels']
 
@@ -396,7 +397,7 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
   if params['precision'] == 'bfloat16':
     with tf.tpu.bfloat16_scope():
       model_outputs = build_model_graph(features, labels,
-                                        mode == tf.estimator.ModeKeys.TRAIN,
+                                        mode == tf_estimator.ModeKeys.TRAIN,
                                         params)
       model_outputs.update({
           'source_id': features['source_ids'],
@@ -411,7 +412,7 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
       cast_outputs_to_float(model_outputs)
   else:
     model_outputs = build_model_graph(features, labels,
-                                      mode == tf.estimator.ModeKeys.TRAIN,
+                                      mode == tf_estimator.ModeKeys.TRAIN,
                                       params)
     model_outputs.update({
         'source_id': features['source_ids'],
@@ -421,8 +422,8 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
   # First check if it is in PREDICT or EVAL mode to fill out predictions.
   # Predictions are used during the eval step to generate metrics.
   predictions = {}
-  if (mode == tf.estimator.ModeKeys.PREDICT or
-      mode == tf.estimator.ModeKeys.EVAL):
+  if (mode == tf_estimator.ModeKeys.PREDICT or
+      mode == tf_estimator.ModeKeys.EVAL):
     if 'orig_images' in features:
       model_outputs['orig_images'] = features['orig_images']
     if labels and params['include_groundtruth_in_features']:
@@ -432,11 +433,11 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
     model_outputs.pop('fpn_features', None)
     predictions.update(model_outputs)
     # If we are doing PREDICT, we can return here.
-    if mode == tf.estimator.ModeKeys.PREDICT:
+    if mode == tf_estimator.ModeKeys.PREDICT:
       if params['use_tpu']:
-        return tf.estimator.tpu.TPUEstimatorSpec(mode=mode,
+        return tf_estimator.tpu.TPUEstimatorSpec(mode=mode,
                                                  predictions=predictions)
-      return tf.estimator.EstimatorSpec(mode=mode,
+      return tf_estimator.EstimatorSpec(mode=mode,
                                         predictions=predictions)
 
   # Set up training loss and learning rate.
@@ -469,7 +470,7 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
        model_outputs['class_outputs'], model_outputs['box_outputs'],
        model_outputs['class_targets'], model_outputs['box_targets'], params)
   # Only training has the mask loss. Reference: https://github.com/facebookresearch/Detectron/blob/master/detectron/modeling/model_builder.py  # pylint: disable=line-too-long
-  if mode == tf.estimator.ModeKeys.TRAIN and params['include_mask']:
+  if mode == tf_estimator.ModeKeys.TRAIN and params['include_mask']:
     mask_loss = losses.mask_rcnn_loss(
         model_outputs['mask_outputs'], model_outputs['mask_targets'],
         model_outputs['selected_class_targets'], params)
@@ -489,7 +490,7 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
                 l2_regularization_loss)
 
   host_call = None
-  if mode == tf.estimator.ModeKeys.TRAIN:
+  if mode == tf_estimator.ModeKeys.TRAIN:
     optimizer = create_optimizer(learning_rate, params)
     if params['use_tpu']:
       optimizer = tf.tpu.CrossShardOptimizer(optimizer)
@@ -664,13 +665,13 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
     scaffold_fn = None
 
   if params['use_tpu']:
-    return tf.estimator.tpu.TPUEstimatorSpec(
+    return tf_estimator.tpu.TPUEstimatorSpec(
         mode=mode,
         loss=total_loss,
         train_op=train_op,
         host_call=host_call,
         scaffold_fn=scaffold_fn)
-  return tf.estimator.EstimatorSpec(
+  return tf_estimator.EstimatorSpec(
       mode=mode, loss=total_loss, train_op=train_op)
 
 

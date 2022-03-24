@@ -21,6 +21,7 @@ from __future__ import print_function
 from absl import flags
 from absl import logging
 import tensorflow.compat.v1 as tf
+from tensorflow.compat.v1 import estimator as tf_estimator
 
 import sys
 sys.path.insert(0, 'tpu/models')
@@ -143,14 +144,14 @@ def main(argv):
   if FLAGS.mode in ('train', 'train_and_eval'):
     train_input_fn = dataloader.InputReader(
         params.training_file_pattern,
-        mode=tf.estimator.ModeKeys.TRAIN,
+        mode=tf_estimator.ModeKeys.TRAIN,
         use_fake_data=FLAGS.use_fake_data,
         use_instance_mask=params.include_mask)
   if (FLAGS.mode in ('eval', 'train_and_eval') or
       (FLAGS.mode == 'train' and FLAGS.eval_after_training)):
     eval_input_fn = dataloader.InputReader(
         params.validation_file_pattern,
-        mode=tf.estimator.ModeKeys.PREDICT,
+        mode=tf_estimator.ModeKeys.PREDICT,
         num_examples=params.eval_samples,
         use_instance_mask=params.include_mask)
 

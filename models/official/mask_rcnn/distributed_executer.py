@@ -24,6 +24,7 @@ import os
 from absl import logging
 import numpy as np
 import tensorflow.compat.v1 as tf
+from tensorflow.compat.v1 import estimator as tf_estimator
 
 from hyperparameters import params_dict
 import evaluation
@@ -118,10 +119,10 @@ class DistributedExecuter(object):
     else:
       # As MirroredStrategy only supports `train_and_evaluate`, for training,
       # we pass dummy `eval_spec`.
-      train_spec = tf.estimator.TrainSpec(
+      train_spec = tf_estimator.TrainSpec(
           input_fn=train_input_fn, max_steps=self._model_params.total_steps)
-      eval_spec = tf.estimator.EvalSpec(input_fn=tf.data.Dataset)
-      tf.estimator.train_and_evaluate(train_estimator, train_spec, eval_spec)
+      eval_spec = tf_estimator.EvalSpec(input_fn=tf.data.Dataset)
+      tf_estimator.train_and_evaluate(train_estimator, train_spec, eval_spec)
 
     eval_results = None
     if not run_eval_after_train:
@@ -324,15 +325,15 @@ class TPUEstimatorExecuter(DistributedExecuter):
       input_partition_dims = None
       num_shards = num_cores
 
-    tpu_config = tf.estimator.tpu.TPUConfig(
+    tpu_config = tf_estimator.tpu.TPUConfig(
         self._model_params.iterations_per_loop,
         num_shards=num_shards,
         num_cores_per_replica=num_cores_per_replica,
         input_partition_dims=input_partition_dims,
         tpu_job_name=self._tpu_job_name,
-        per_host_input_for_training=tf.estimator.tpu.InputPipelineConfig
+        per_host_input_for_training=tf_estimator.tpu.InputPipelineConfig
         .PER_HOST_V2)
-    run_config = tf.estimator.tpu.RunConfig(
+    run_config = tf_estimator.tpu.RunConfig(
         cluster=tpu_cluster_resolver,
         evaluation_master=self._flags.eval_master,
         model_dir=self._flags.model_dir,
@@ -362,7 +363,7 @@ class TPUEstimatorExecuter(DistributedExecuter):
     return params
 
   def build_mask_rcnn_estimator(self, params, run_config, unused_mode):
-    estimator = tf.estimator.tpu.TPUEstimator(
+    estimator = tf_estimator.tpu.TPUEstimator(
         model_fn=self._model_fn,
         use_tpu=params['use_tpu'],
         train_batch_size=self._model_params.train_batch_size,
@@ -402,7 +403,7 @@ class MultiWorkerExecuter(DistributedExecuter):
 
     multiworker_strategy = (
         tf.distribute.experimental.MultiWorkerMirroredStrategy())
-    run_config = tf.estimator.RunConfig(
+    run_config = tf_estimator.RunConfig(
         train_distribute=multiworker_strategy, model_dir=self._flags.model_dir)
     return run_config
 
@@ -430,7 +431,7 @@ class MultiWorkerExecuter(DistributedExecuter):
     """Returns Mask Rcnn model running on MultiWorkerMirroredStrategy."""
     assert mode in ('train', 'eval')
     if mode == 'train':
-      return tf.estimator.Estimator(
+      return tf_estimator.Estimator(
           model_fn=self._model_fn,
           model_dir=self._flags.model_dir,
           config=run_config,
@@ -439,8 +440,8 @@ class MultiWorkerExecuter(DistributedExecuter):
     # Evaluation on multi-worker mirrored strategy is done in CPU for now
     # as only `train_and_evaluate` is supported and eval pipeline for
     # Mask RCNN model is uses `predict` API.
-    cpu_run_config = tf.estimator.RunConfig(model_dir=self._flags.model_dir)
-    return tf.estimator.Estimator(
+    cpu_run_config = tf_estimator.RunConfig(model_dir=self._flags.model_dir)
+    return tf_estimator.Estimator(
         model_fn=self._model_fn,
         model_dir=self._flags.model_dir,
         config=cpu_run_config,
