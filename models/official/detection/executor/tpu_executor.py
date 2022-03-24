@@ -27,6 +27,7 @@ from absl import logging
 import numpy as np
 import six
 import tensorflow.compat.v1 as tf
+from tensorflow.compat.v1 import estimator as tf_estimator
 
 from evaluation import coco_utils
 from evaluation import factory
@@ -97,16 +98,16 @@ class TpuExecutor(object):
         ]
 
       # Sets up config for TPUEstimator.
-      tpu_config = tf.estimator.tpu.TPUConfig(
+      tpu_config = tf_estimator.tpu.TPUConfig(
           params.train.iterations_per_loop,
           num_cores_per_replica=num_cores_per_replica,
           input_partition_dims=input_partition_dims,
           tpu_job_name=self._tpu_job_name,
-          per_host_input_for_training=tf.estimator.tpu.InputPipelineConfig
+          per_host_input_for_training=tf_estimator.tpu.InputPipelineConfig
           .PER_HOST_V2  # pylint: disable=line-too-long
       )
 
-      run_config = tf.estimator.tpu.RunConfig(
+      run_config = tf_estimator.tpu.RunConfig(
           session_config=tf.ConfigProto(
               isolate_session_state=params.isolate_session_state),
           cluster=self._tpu_cluster_resolver,
@@ -116,7 +117,7 @@ class TpuExecutor(object):
           tpu_config=tpu_config,
           keep_checkpoint_max=self._keep_checkpoint_max,
       )
-      self._estimator = tf.estimator.tpu.TPUEstimator(
+      self._estimator = tf_estimator.tpu.TPUEstimator(
           model_fn=model_fn,
           use_tpu=params.use_tpu,
           train_batch_size=params.train.train_batch_size,
@@ -135,9 +136,9 @@ class TpuExecutor(object):
       devices = ['device:GPU:{}'.format(i) for i in range(len(gpu_devices))]
       strategy = tf.distribute.MirroredStrategy(devices=devices)
       tf.logging.info('Number of devices: %s', strategy.num_replicas_in_sync)
-      run_config = tf.estimator.RunConfig(
+      run_config = tf_estimator.RunConfig(
           train_distribute=strategy, model_dir=params.model_dir)
-      self._estimator = tf.estimator.Estimator(
+      self._estimator = tf_estimator.Estimator(
           model_fn=model_fn, config=run_config, params=model_params)
 
   def train(self, input_fn, steps):

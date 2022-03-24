@@ -27,6 +27,7 @@ from absl import flags
 import absl.logging as _logging  # pylint: disable=unused-import
 import numpy as np
 import tensorflow.compat.v1 as tf
+from tensorflow.compat.v1 import estimator as tf_estimator
 import tensorflow_gan as tfgan
 
 import cifar_input
@@ -77,7 +78,7 @@ _NUM_VIZ_IMAGES = 80   # For generating a 8x10 grid of generator samples
 
 def input_fn(mode, params, dataset):
   """Mode-aware input function."""
-  is_train = mode == tf.estimator.ModeKeys.TRAIN
+  is_train = mode == tf_estimator.ModeKeys.TRAIN
   features, _ = dataset.InputFunction(is_train, FLAGS.noise_dim)(params)
   return features['random_noise'], features['real_images']
 
@@ -105,10 +106,10 @@ def main(argv):
   tpu_cluster_resolver = contrib_cluster_resolver.TPUClusterResolver(
       FLAGS.tpu, zone=FLAGS.tpu_zone, project=FLAGS.gcp_project)
 
-  config = tf.compat.v1.estimator.tpu.RunConfig(
+  config = tf_estimator.tpu.RunConfig(
       cluster=tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
-      tpu_config=tf.compat.v1.estimator.tpu.TPUConfig(
+      tpu_config=tf_estimator.tpu.TPUConfig(
           num_shards=FLAGS.num_shards,
           iterations_per_loop=FLAGS.iterations_per_loop))
 
@@ -121,7 +122,7 @@ def main(argv):
 
   def unconditional_generator(noise, mode):
     """Generator with extra argument for tf.Estimator's `mode`."""
-    is_training = (mode == tf.estimator.ModeKeys.TRAIN)
+    is_training = (mode == tf_estimator.ModeKeys.TRAIN)
     return model.generator(noise, is_training=is_training)
 
   def unconditional_discriminator(images, unused_conditioning):
