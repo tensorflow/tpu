@@ -21,6 +21,7 @@ from __future__ import print_function
 from absl import app
 from absl import flags
 import tensorflow.compat.v1 as tf
+from tensorflow.compat.v1 import estimator as tf_estimator
 
 from hyperparameters import params_dict
 import input_reader
@@ -117,11 +118,11 @@ def main(argv):
   eval_input_shapes = None
   if FLAGS.mode in ('train', 'train_and_eval'):
     train_input_fn = input_reader.LiverInputFn(
-        params.training_file_pattern, params, mode=tf.estimator.ModeKeys.TRAIN)
+        params.training_file_pattern, params, mode=tf_estimator.ModeKeys.TRAIN)
     train_input_shapes = train_input_fn.get_input_shapes(params)
   if FLAGS.mode in ('eval', 'train_and_eval'):
     eval_input_fn = input_reader.LiverInputFn(
-        params.eval_file_pattern, params, mode=tf.estimator.ModeKeys.EVAL)
+        params.eval_file_pattern, params, mode=tf_estimator.ModeKeys.EVAL)
     eval_input_shapes = eval_input_fn.get_input_shapes(params)
 
   assert train_input_shapes is not None or eval_input_shapes is not None

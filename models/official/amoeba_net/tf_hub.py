@@ -41,6 +41,7 @@ import re
 from absl import app
 from absl import flags
 import tensorflow.compat.v1 as tf
+from tensorflow.compat.v1 import estimator as tf_estimator
 import tensorflow_hub as hub
 
 import amoeba_net
@@ -270,7 +271,7 @@ def _make_model_fn(hub_module_spec):
       }
 
     eval_metric_ops = metric_fn(labels, logits)
-    return tf.estimator.EstimatorSpec(
+    return tf_estimator.EstimatorSpec(
         mode=mode, loss=loss, train_op=None, eval_metric_ops=eval_metric_ops)
 
   return _model_fn
@@ -279,8 +280,8 @@ def _make_model_fn(hub_module_spec):
 def eval_from_hub(model_dir, input_fn, eval_steps):
   """Eval using hub module."""
   hub_module_spec = hub.load_module_spec(model_dir)
-  run_config = tf.estimator.RunConfig(model_dir=model_dir)
-  image_classifier = tf.estimator.Estimator(
+  run_config = tf_estimator.RunConfig(model_dir=model_dir)
+  image_classifier = tf_estimator.Estimator(
       model_fn=_make_model_fn(hub_module_spec), config=run_config, params={})
   eval_results = image_classifier.evaluate(input_fn=input_fn, steps=eval_steps)
   tf.logging.info('Evaluation results: %s' % eval_results)

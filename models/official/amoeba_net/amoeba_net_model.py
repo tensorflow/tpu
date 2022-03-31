@@ -24,6 +24,7 @@ import time
 import numpy as np
 import six
 import tensorflow.compat.v1 as tf
+from tensorflow.compat.v1 import estimator as tf_estimator
 
 import inception_preprocessing
 import model_builder
@@ -252,8 +253,8 @@ class AmoebaNetEstimatorModel(object):
 
   def _build_network(self, features, labels, mode):
     """Build a network that returns loss and logits from features and labels."""
-    is_training = (mode == tf.estimator.ModeKeys.TRAIN)
-    is_predict = (mode == tf.estimator.ModeKeys.PREDICT)
+    is_training = (mode == tf_estimator.ModeKeys.TRAIN)
+    is_predict = (mode == tf_estimator.ModeKeys.PREDICT)
     steps_per_epoch = float(
         self.hparams.num_train_images) / self.hparams.train_batch_size
     num_total_steps = int(steps_per_epoch * self.hparams.num_epochs)
@@ -345,9 +346,9 @@ class AmoebaNetEstimatorModel(object):
       A tf.estimator.EstimatorSpec.
     """
     del params
-    is_training = (mode == tf.estimator.ModeKeys.TRAIN)
-    eval_active = (mode == tf.estimator.ModeKeys.EVAL)
-    is_predict = (mode == tf.estimator.ModeKeys.PREDICT)
+    is_training = (mode == tf_estimator.ModeKeys.TRAIN)
+    eval_active = (mode == tf_estimator.ModeKeys.EVAL)
+    is_predict = (mode == tf_estimator.ModeKeys.PREDICT)
     if is_training:
       features = tf.transpose(features, [3, 0, 1, 2])  # HWCN to NHWC
     loss, logits = self._build_network(features, labels, mode)
@@ -357,7 +358,7 @@ class AmoebaNetEstimatorModel(object):
       if self.hparams.use_tpu:
         return contrib_tpu.TPUEstimatorSpec(mode=mode, predictions=predictions)
       else:
-        return tf.estimator.EstimatorSpec(mode=mode,
+        return tf_estimator.EstimatorSpec(mode=mode,
                                           predictions=predictions)
     host_call = None
     train_op = None
@@ -426,7 +427,7 @@ class AmoebaNetEstimatorModel(object):
           train_op=train_op,
           host_call=host_call,
           eval_metrics=eval_metrics)
-    return tf.estimator.EstimatorSpec(
+    return tf_estimator.EstimatorSpec(
         mode=mode, loss=loss, train_op=train_op,
         eval_metric_ops=eval_metric_ops)
 

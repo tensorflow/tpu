@@ -32,6 +32,7 @@ from absl import app
 from absl import flags
 import absl.logging as _logging  # pylint: disable=unused-import
 import tensorflow.compat.v1 as tf
+from tensorflow.compat.v1 import estimator as tf_estimator
 import amoeba_net_model as model_lib
 from common import inference_warmup
 from tensorflow.contrib import cluster_resolver as contrib_cluster_resolver
@@ -245,7 +246,7 @@ def build_image_serving_input_receiver_fn(shape,
     )
     images = tf.map_fn(
         _preprocess_image, image_bytes_list, back_prop=False, dtype=dtype)
-    return tf.estimator.export.TensorServingInputReceiver(
+    return tf_estimator.export.TensorServingInputReceiver(
         features=images, receiver_tensors=image_bytes_list)
 
   return serving_input_receiver_fn
@@ -360,10 +361,10 @@ def main(_):
   else:
     save_checkpoints_steps = (FLAGS.save_checkpoints_steps or
                               FLAGS.iterations_per_loop)
-    run_config = tf.estimator.RunConfig(
+    run_config = tf_estimator.RunConfig(
         model_dir=FLAGS.model_dir,
         save_checkpoints_steps=save_checkpoints_steps)
-    image_classifier = tf.estimator.Estimator(
+    image_classifier = tf_estimator.Estimator(
         model_fn=model.model_fn,
         config=run_config,
         params=estimator_parmas)

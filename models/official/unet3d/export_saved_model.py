@@ -25,6 +25,7 @@ from __future__ import print_function
 import functools
 from absl import flags
 import tensorflow.compat.v1 as tf
+from tensorflow.compat.v1 import estimator as tf_estimator
 
 from hyperparameters import params_dict
 import unet_config
@@ -106,13 +107,13 @@ def serving_input_fn(batch_size, input_type, params, input_name='input'):
   """
   if input_type == 'image_tensor':
     placeholder, features = image_tensor_input(batch_size, params)
-    return tf.estimator.export.ServingInputReceiver(
+    return tf_estimator.export.ServingInputReceiver(
         features=features, receiver_tensors={
             input_name: placeholder,
         })
   elif input_type == 'tf_example':
     placeholder, features = tf_example_input(batch_size, params)
-    return tf.estimator.export.ServingInputReceiver(
+    return tf_estimator.export.ServingInputReceiver(
         features=features, receiver_tensors={
             input_name: placeholder,
         })
@@ -123,7 +124,7 @@ def serving_input_fn(batch_size, input_type, params, input_name='input'):
 def serving_model_fn(features, labels, mode, params):
   """Builds the serving model_fn."""
   del labels  # unused.
-  if mode != tf.estimator.ModeKeys.PREDICT:
+  if mode != tf_estimator.ModeKeys.PREDICT:
     raise ValueError('To build the serving model_fn, set '
                      'mode = `tf.estimator.ModeKeys.PREDICT`')
   return unet_model.unet_model_fn(
@@ -142,15 +143,15 @@ def main(_):
   model_params = dict(
       params.as_dict(),
       use_tpu=FLAGS.use_tpu,
-      mode=tf.estimator.ModeKeys.PREDICT,
+      mode=tf_estimator.ModeKeys.PREDICT,
       transpose_input=False)
 
   print(' - Setting up TPUEstimator...')
-  estimator = tf.estimator.tpu.TPUEstimator(
+  estimator = tf_estimator.tpu.TPUEstimator(
       model_fn=serving_model_fn,
       model_dir=FLAGS.model_dir,
-      config=tf.estimator.tpu.RunConfig(
-          tpu_config=tf.estimator.tpu.TPUConfig(
+      config=tf_estimator.tpu.RunConfig(
+          tpu_config=tf_estimator.tpu.TPUConfig(
               iterations_per_loop=FLAGS.iterations_per_loop),
           master='local',
           evaluation_master='local'),
