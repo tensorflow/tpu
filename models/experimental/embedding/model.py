@@ -23,6 +23,7 @@ import functools
 from absl import app as absl_app
 from absl import flags
 import tensorflow.compat.v1 as tf
+from tensorflow.compat.v1 import estimator as tf_estimator
 
 FLAGS = flags.FLAGS
 
@@ -66,23 +67,23 @@ def create_tpu_estimator(model_fn, feature_columns, params):
       project=params["gcp_project"],
       coordinator_name="coordinator")
 
-  config = tf.estimator.tpu.RunConfig(
+  config = tf_estimator.tpu.RunConfig(
       cluster=tpu_cluster_resolver,
       model_dir=params["model_dir"],
-      tpu_config=tf.estimator.tpu.TPUConfig(
+      tpu_config=tf_estimator.tpu.TPUConfig(
           iterations_per_loop=params["iterations_per_loop"],
           experimental_host_call_every_n_steps=100,
-          per_host_input_for_training=tf.estimator.tpu.InputPipelineConfig
+          per_host_input_for_training=tf_estimator.tpu.InputPipelineConfig
           .PER_HOST_V2))
 
-  return tf.estimator.tpu.TPUEstimator(
+  return tf_estimator.tpu.TPUEstimator(
       use_tpu=params["use_tpu"],
       model_fn=model_fn,
       config=config,
       train_batch_size=params["global_batch_size"],
       eval_batch_size=params["eval_global_batch_size"],
       params=params,
-      embedding_config_spec=tf.estimator.tpu.experimental.EmbeddingConfigSpec(
+      embedding_config_spec=tf_estimator.tpu.experimental.EmbeddingConfigSpec(
           feature_columns=feature_columns,
           pipeline_execution_with_tensor_core=params["pipeline_execution"],
           optimization_parameters=tf.tpu.experimental.AdagradParameters(
@@ -187,7 +188,7 @@ def create_model_fn(feature_columns):
     logits = logits_fn(features, feature_columns, params)
     labels = tf.squeeze(features["label"])
 
-    if mode == tf.estimator.ModeKeys.EVAL:
+    if mode == tf_estimator.ModeKeys.EVAL:
       loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
           labels=labels,
           logits=logits
@@ -200,12 +201,12 @@ def create_model_fn(feature_columns):
             "recall@5": tf.metrics.recall_at_k(labels, logits, 5)
         }
 
-      return tf.estimator.tpu.TPUEstimatorSpec(
+      return tf_estimator.tpu.TPUEstimatorSpec(
           mode=mode,
           loss=loss,
           eval_metrics=(metric_fn, [labels, logits]))
 
-    elif mode == tf.estimator.ModeKeys.TRAIN:
+    elif mode == tf_estimator.ModeKeys.TRAIN:
 
       optimizer = tf.train.AdamOptimizer(
           learning_rate=params["learning_rate"], beta1=params["beta1"],
@@ -219,7 +220,7 @@ def create_model_fn(feature_columns):
 
       train_op = optimizer.minimize(loss, tf.train.get_global_step())
 
-      return tf.estimator.tpu.TPUEstimatorSpec(
+      return tf_estimator.tpu.TPUEstimatorSpec(
           mode=mode, loss=loss, train_op=train_op)
 
     else:

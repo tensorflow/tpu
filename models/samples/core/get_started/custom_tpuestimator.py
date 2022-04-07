@@ -19,6 +19,7 @@ from __future__ import print_function
 
 import iris_data_tpu as iris_data
 import tensorflow.compat.v1 as tf
+from tensorflow.compat.v1 import estimator as tf_estimator
 from tensorflow.contrib import cluster_resolver as contrib_cluster_resolver
 from tensorflow.contrib import tpu as contrib_tpu
 
@@ -97,7 +98,7 @@ def my_model(features, labels, mode, params):
 
   # Compute predictions.
   predicted_classes = tf.argmax(logits, 1)
-  if mode == tf.estimator.ModeKeys.PREDICT:
+  if mode == tf_estimator.ModeKeys.PREDICT:
     predictions = {
         "class_ids": predicted_classes[:, tf.newaxis],
         "probabilities": tf.nn.softmax(logits),
@@ -109,12 +110,12 @@ def my_model(features, labels, mode, params):
   loss = tf.losses.sparse_softmax_cross_entropy(labels=labels,
                                                 logits=logits)
 
-  if mode == tf.estimator.ModeKeys.EVAL:
+  if mode == tf_estimator.ModeKeys.EVAL:
     return contrib_tpu.TPUEstimatorSpec(
         mode=mode, loss=loss, eval_metrics=(metric_fn, [labels, logits]))
 
   # Create training op.
-  if mode == tf.estimator.ModeKeys.TRAIN:
+  if mode == tf_estimator.ModeKeys.TRAIN:
     optimizer = tf.train.AdagradOptimizer(learning_rate=0.1)
     if FLAGS.use_tpu:
       optimizer = contrib_tpu.CrossShardOptimizer(optimizer)

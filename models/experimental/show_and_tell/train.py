@@ -23,6 +23,7 @@ import os
 # Standard Imports
 from absl import app
 import tensorflow.compat.v1 as tf
+from tensorflow.compat.v1 import estimator as tf_estimator
 
 import configuration
 import show_and_tell_model
@@ -64,9 +65,9 @@ tf.flags.DEFINE_integer("iterations_per_loop", 100,
                         "TPU batch iterations per loop.")
 
 MODEKEY_TO_MODE = {
-    tf.estimator.ModeKeys.PREDICT: "inference",
-    tf.estimator.ModeKeys.EVAL: "evaluate",
-    tf.estimator.ModeKeys.TRAIN: "train",
+    tf_estimator.ModeKeys.PREDICT: "inference",
+    tf_estimator.ModeKeys.EVAL: "evaluate",
+    tf_estimator.ModeKeys.TRAIN: "train",
 }
 
 

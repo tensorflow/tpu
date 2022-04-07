@@ -21,6 +21,7 @@ from __future__ import print_function
 import functools
 from absl import logging
 import tensorflow.compat.v1 as tf
+from tensorflow.compat.v1 import estimator as tf_estimator
 
 
 class InputFn(object):
@@ -29,7 +30,7 @@ class InputFn(object):
   def __init__(self, file_pattern, params, mode):
     self._file_pattern = file_pattern
     self._mode = mode
-    self._is_training = (mode == tf.estimator.ModeKeys.TRAIN)
+    self._is_training = (mode == tf_estimator.ModeKeys.TRAIN)
     self._parser_fn = self.create_parser_fn(params)
     if params.compressed_input:
       self._dataset_fn = functools.partial(

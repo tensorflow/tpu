@@ -25,6 +25,7 @@ from absl import flags
 from absl import logging
 import numpy as np
 import tensorflow.compat.v1 as tf
+from tensorflow.compat.v1 import estimator as tf_estimator
 import tensorflow.compat.v2 as tf2
 
 from hyperparameters import common_hparams_flags
@@ -279,14 +280,14 @@ def build_model_fn(features, labels, mode, params):
   Returns:
     A `TPUEstimatorSpec` for the model
   """
-  is_training = (mode == tf.estimator.ModeKeys.TRAIN)
+  is_training = (mode == tf_estimator.ModeKeys.TRAIN)
   # This is essential, if using a keras-derived model.
   tf.keras.backend.set_learning_phase(is_training)
 
   if isinstance(features, dict):
     features = features['feature']
 
-  if mode == tf.estimator.ModeKeys.PREDICT:
+  if mode == tf_estimator.ModeKeys.PREDICT:
     # Adds an identify node to help TFLite export.
     features = tf.identity(features, 'float_image_input')
 
@@ -301,7 +302,7 @@ def build_model_fn(features, labels, mode, params):
   else:
     stats_shape = [1, 1, 3]
 
-  if params['transpose_input'] and mode != tf.estimator.ModeKeys.PREDICT:
+  if params['transpose_input'] and mode != tf_estimator.ModeKeys.PREDICT:
     features = tf.transpose(features, [3, 0, 1, 2])  # HWCN to NHWC
 
   # Normalize the image to zero mean and unit variance.
@@ -372,7 +373,7 @@ def build_model_fn(features, labels, mode, params):
       tf.logging.info('Adding fake quantization ops for evaluation.')
       quantize.create_eval_graph()
 
-  if mode == tf.estimator.ModeKeys.PREDICT:
+  if mode == tf_estimator.ModeKeys.PREDICT:
     scaffold_fn = None
     if FLAGS.export_moving_average:
       # If the model is trained with moving average decay, to match evaluation
@@ -394,11 +395,11 @@ def build_model_fn(features, labels, mode, params):
         'classes': tf.argmax(logits, axis=1),
         'probabilities': tf.nn.softmax(logits, name='softmax_tensor')
     }
-    return tf.estimator.tpu.TPUEstimatorSpec(
+    return tf_estimator.tpu.TPUEstimatorSpec(
         mode=mode,
         predictions=predictions,
         export_outputs={
-            'classify': tf.estimator.export.PredictOutput(predictions)
+            'classify': tf_estimator.export.PredictOutput(predictions)
         },
         scaffold_fn=scaffold_fn)
 
@@ -468,7 +469,7 @@ def build_model_fn(features, labels, mode, params):
     train_op = None
 
   eval_metrics = None
-  if mode == tf.estimator.ModeKeys.EVAL:
+  if mode == tf_estimator.ModeKeys.EVAL:
 
     def metric_fn(labels, logits):
       """Evaluation metric function.
@@ -535,7 +536,7 @@ def build_model_fn(features, labels, mode, params):
 
     scaffold_fn = eval_scaffold
 
-  return tf.estimator.tpu.TPUEstimatorSpec(
+  return tf_estimator.tpu.TPUEstimatorSpec(
       mode=mode,
       loss=loss,
       train_op=train_op,
@@ -676,7 +677,7 @@ def main(unused_argv):
   # automatically detect summary ops to run on CPU instead of TPU.
   tf.config.set_soft_device_placement(True)
 
-  config = tf.estimator.tpu.RunConfig(
+  config = tf_estimator.tpu.RunConfig(
       cluster=tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
       save_checkpoints_steps=save_checkpoints_steps,
@@ -685,9 +686,9 @@ def main(unused_argv):
           graph_options=tf.GraphOptions(
               rewrite_options=rewriter_config_pb2.RewriterConfig(
                   disable_meta_optimizer=True))),
-      tpu_config=tf.estimator.tpu.TPUConfig(
+      tpu_config=tf_estimator.tpu.TPUConfig(
           iterations_per_loop=params.iterations_per_loop,
-          per_host_input_for_training=tf.estimator.tpu.InputPipelineConfig
+          per_host_input_for_training=tf_estimator.tpu.InputPipelineConfig
           .PER_HOST_V2))  # pylint: disable=line-too-long
 
   # Validates Flags.
@@ -698,7 +699,7 @@ def main(unused_argv):
         (params.precision, params.use_keras))
 
   # Initializes model parameters.
-  mnasnet_est = tf.estimator.tpu.TPUEstimator(
+  mnasnet_est = tf_estimator.tpu.TPUEstimator(
       use_tpu=params.use_tpu,
       model_fn=build_model_fn,
       config=config,

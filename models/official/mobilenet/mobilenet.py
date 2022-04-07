@@ -31,6 +31,7 @@ from absl import flags
 
 import absl.logging
 import tensorflow.compat.v1 as tf
+from tensorflow.compat.v1 import estimator as tf_estimator
 
 import supervised_images
 from hyperparameters import common_hparams_flags
@@ -191,7 +192,7 @@ def image_serving_input_fn():
   images = tf.map_fn(
       supervised_images.preprocess_raw_bytes, image_bytes_list,
       back_prop=False, dtype=tf.float32)
-  return tf.estimator.export.ServingInputReceiver(
+  return tf_estimator.export.ServingInputReceiver(
       images, {'image_bytes': image_bytes_list})
 
 
@@ -212,15 +213,15 @@ def tensor_serving_input_fn(params):
              params['serving_image_size'], 3],
       dtype=tf.float32,
   )
-  return tf.estimator.export.TensorServingInputReceiver(
+  return tf_estimator.export.TensorServingInputReceiver(
       features=input_placeholder, receiver_tensors=input_placeholder)
 
 
 def model_fn(features, labels, mode, params):
   """Mobilenet v1 model using Estimator API."""
   num_classes = params['num_classes']
-  training_active = (mode == tf.estimator.ModeKeys.TRAIN)
-  eval_active = (mode == tf.estimator.ModeKeys.EVAL)
+  training_active = (mode == tf_estimator.ModeKeys.TRAIN)
+  eval_active = (mode == tf_estimator.ModeKeys.EVAL)
 
   if isinstance(features, dict):
     features = features['feature']
@@ -241,15 +242,15 @@ def model_fn(features, labels, mode, params):
       'probabilities': tf.nn.softmax(logits, name='softmax_tensor')
   }
 
-  if mode == tf.estimator.ModeKeys.PREDICT:
-    return tf.estimator.EstimatorSpec(
+  if mode == tf_estimator.ModeKeys.PREDICT:
+    return tf_estimator.EstimatorSpec(
         mode=mode,
         predictions=predictions,
         export_outputs={
-            'classify': tf.estimator.export.PredictOutput(predictions)
+            'classify': tf_estimator.export.PredictOutput(predictions)
         })
 
-  if mode == tf.estimator.ModeKeys.EVAL and FLAGS.display_tensors and (
+  if mode == tf_estimator.ModeKeys.EVAL and FLAGS.display_tensors and (
       not params['use_tpu']):
     with tf.control_dependencies([
         tf.Print(
@@ -333,7 +334,7 @@ def model_fn(features, labels, mode, params):
 
     eval_metrics = (metric_fn, [labels, eval_predictions])
 
-  return tf.estimator.tpu.TPUEstimatorSpec(
+  return tf_estimator.tpu.TPUEstimatorSpec(
       mode=mode, loss=loss, train_op=train_op, eval_metrics=eval_metrics)
 
 
@@ -412,7 +413,7 @@ def main(unused_argv):
   per_host_input_for_training = (params.num_cores <= 8 if
                                  FLAGS.mode == 'train' else True)
 
-  run_config = tf.estimator.tpu.RunConfig(
+  run_config = tf_estimator.tpu.RunConfig(
       cluster=tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
       save_checkpoints_secs=FLAGS.save_checkpoints_secs,
@@ -420,11 +421,11 @@ def main(unused_argv):
       session_config=tf.ConfigProto(
           allow_soft_placement=True,
           log_device_placement=FLAGS.log_device_placement),
-      tpu_config=tf.estimator.tpu.TPUConfig(
+      tpu_config=tf_estimator.tpu.TPUConfig(
           iterations_per_loop=iterations,
           per_host_input_for_training=per_host_input_for_training))
 
-  inception_classifier = tf.estimator.tpu.TPUEstimator(
+  inception_classifier = tf_estimator.tpu.TPUEstimator(
       model_fn=model_fn,
       use_tpu=params.use_tpu,
       config=run_config,

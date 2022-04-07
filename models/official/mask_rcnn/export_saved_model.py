@@ -36,6 +36,7 @@ from __future__ import print_function
 import functools
 from absl import flags
 import tensorflow.compat.v1 as tf
+from tensorflow.compat.v1 import estimator as tf_estimator
 
 import sys
 sys.path.insert(0, 'tpu/models')
@@ -98,11 +99,11 @@ def main(_):
   model_params = dict(
       list(config.as_dict().items()),
       use_tpu=FLAGS.use_tpu,
-      mode=tf.estimator.ModeKeys.PREDICT,
+      mode=tf_estimator.ModeKeys.PREDICT,
       transpose_input=False)
 
   print(' - Setting up TPUEstimator...')
-  estimator = tf.estimator.tpu.TPUEstimator(
+  estimator = tf_estimator.tpu.TPUEstimator(
       model_fn=serving.serving_model_fn_builder(
           FLAGS.output_source_id, FLAGS.output_image_info,
           FLAGS.output_box_features, FLAGS.output_normalized_coordinates,

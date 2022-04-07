@@ -23,6 +23,7 @@ from collections import namedtuple
 import functools
 import os
 import tensorflow.compat.v1 as tf
+from tensorflow.compat.v1 import estimator as tf_estimator
 import resnet_preprocessing
 from tensorflow.contrib import cloud as contrib_cloud
 
@@ -42,7 +43,7 @@ def image_serving_input_fn():
   )
   images = tf.map_fn(
       _preprocess_image, image_bytes_list, back_prop=False, dtype=tf.float32)
-  return tf.estimator.export.ServingInputReceiver(
+  return tf_estimator.export.ServingInputReceiver(
       images, {'image_bytes': image_bytes_list})
 
 

@@ -26,6 +26,7 @@ from absl import flags
 from absl import logging
 import numpy as np
 import tensorflow.compat.v1 as tf
+from tensorflow.compat.v1 import estimator as tf_estimator
 import tensorflow.compat.v2 as tf2
 
 from common import inference_warmup
@@ -349,7 +350,7 @@ def resnet_model_fn(features, labels, mode, params):
   Returns:
     A `TPUEstimatorSpec` for the model
   """
-  is_training = (mode == tf.estimator.ModeKeys.TRAIN)
+  is_training = (mode == tf_estimator.ModeKeys.TRAIN)
 
   if isinstance(features, dict):
     features = features['feature']
@@ -362,7 +363,7 @@ def resnet_model_fn(features, labels, mode, params):
     assert not params['transpose_input']    # channels_first only for GPU
     features = tf.transpose(features, [0, 3, 1, 2])
 
-  if params['transpose_input'] and mode != tf.estimator.ModeKeys.PREDICT:
+  if params['transpose_input'] and mode != tf_estimator.ModeKeys.PREDICT:
     image_size = tf.sqrt(tf.shape(features)[0] / (3 * tf.shape(labels)[0]))
     features = tf.reshape(features, [image_size, image_size, 3, -1])
     features = tf.transpose(features, [3, 0, 1, 2])  # HWCN to NHWC
@@ -417,7 +418,7 @@ def resnet_model_fn(features, labels, mode, params):
         dropout_rate=params['dropout_rate'],
         bn_momentum=params['bn_momentum'])
     return network(
-        inputs=features, is_training=(mode == tf.estimator.ModeKeys.TRAIN))
+        inputs=features, is_training=(mode == tf_estimator.ModeKeys.TRAIN))
 
   if params['precision'] == 'bfloat16':
     with tf.tpu.bfloat16_scope():
@@ -426,7 +427,7 @@ def resnet_model_fn(features, labels, mode, params):
   elif params['precision'] == 'float32':
     logits = build_network()
 
-  if mode == tf.estimator.ModeKeys.PREDICT:
+  if mode == tf_estimator.ModeKeys.PREDICT:
     scaffold_fn = None
     if FLAGS.export_moving_average:
       # If the model is trained with moving average decay, to match evaluation
@@ -448,12 +449,12 @@ def resnet_model_fn(features, labels, mode, params):
         'classes': tf.argmax(logits, axis=1),
         'probabilities': tf.nn.softmax(logits, name='softmax_tensor')
     }
-    return tf.estimator.EstimatorSpec(
+    return tf_estimator.EstimatorSpec(
         mode=mode,
         predictions=predictions,
         export_outputs={
-            'classify': tf.estimator.export.PredictOutput(predictions)},
-        scaffold_fn=scaffold_fn)
+            'classify': tf_estimator.export.PredictOutput(predictions)},
+        scaffold=scaffold_fn)
 
   # If necessary, in the model_fn, use params['batch_size'] instead the batch
   # size flags (--train_batch_size or --eval_batch_size).
@@ -483,7 +484,7 @@ def resnet_model_fn(features, labels, mode, params):
     ema_vars = get_ema_vars()
 
   host_call = None
-  if mode == tf.estimator.ModeKeys.TRAIN:
+  if mode == tf_estimator.ModeKeys.TRAIN:
     # Compute the current epoch and associated learning rate from global_step.
     global_step = tf.train.get_global_step()
     steps_per_epoch = params['num_train_images'] / params['train_batch_size']
@@ -569,7 +570,7 @@ def resnet_model_fn(features, labels, mode, params):
     train_op = None
 
   eval_metrics = None
-  if mode == tf.estimator.ModeKeys.EVAL:
+  if mode == tf_estimator.ModeKeys.EVAL:
     def metric_fn(labels, logits):
       """Evaluation metric function. Evaluates accuracy.
 
@@ -612,7 +613,7 @@ def resnet_model_fn(features, labels, mode, params):
       return tf.train.Scaffold(saver=saver)
     scaffold_fn = eval_scaffold
 
-  return tf.estimator.tpu.TPUEstimatorSpec(
+  return tf_estimator.tpu.TPUEstimatorSpec(
       mode=mode,
       loss=loss,
       train_op=train_op,
@@ -696,7 +697,7 @@ def main(unused_argv):
     save_checkpoints_steps = None
   else:
     save_checkpoints_steps = max(5000, params.iterations_per_loop)
-  config = tf.estimator.tpu.RunConfig(
+  config = tf_estimator.tpu.RunConfig(
       cluster=tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
       save_checkpoints_steps=save_checkpoints_steps,
@@ -705,13 +706,13 @@ def main(unused_argv):
           graph_options=tf.GraphOptions(
               rewrite_options=rewriter_config_pb2.RewriterConfig(
                   disable_meta_optimizer=True))),
-      tpu_config=tf.estimator.tpu.TPUConfig(
+      tpu_config=tf_estimator.tpu.TPUConfig(
           iterations_per_loop=params.iterations_per_loop,
           num_shards=params.num_cores,
-          per_host_input_for_training=tf.estimator.tpu.InputPipelineConfig
+          per_host_input_for_training=tf_estimator.tpu.InputPipelineConfig
           .PER_HOST_V2))  # pylint: disable=line-too-long
 
-  resnet_classifier = tf.estimator.tpu.TPUEstimator(
+  resnet_classifier = tf_estimator.tpu.TPUEstimator(
       use_tpu=params.use_tpu,
       model_fn=resnet_model_fn,
       config=config,

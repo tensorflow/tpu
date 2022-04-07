@@ -25,6 +25,7 @@ from __future__ import division
 from __future__ import print_function
 
 import tensorflow.compat.v1 as tf
+from tensorflow.compat.v1 import estimator as tf_estimator
 from tensorflow.contrib import layers as contrib_layers
 from tensorflow.contrib import tpu as contrib_tpu
 
@@ -93,7 +94,7 @@ def metric_fn(labels, logits, learning_rate):
 
 def model_fn(features, labels, mode, params):
   """TPUEstimatorSpec for the Squeezenet model."""
-  is_training = mode == tf.estimator.ModeKeys.TRAIN
+  is_training = mode == tf_estimator.ModeKeys.TRAIN
   logits = squeezenet(
       features, is_training=is_training, num_classes=params["num_classes"])
 

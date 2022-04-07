@@ -19,6 +19,7 @@ data for category classification, bounding box regression, and number of
 positive examples to normalize the loss during training.
 
 """
+from tensorflow.compat.v1 import estimator as tf_estimator
 import tensorflow.compat.v1 as tf
 
 import anchors
@@ -80,7 +81,7 @@ class InputReader(object):
 
   def __init__(self,
                file_pattern,
-               mode=tf.estimator.ModeKeys.TRAIN,
+               mode=tf_estimator.ModeKeys.TRAIN,
                num_examples=0,
                use_fake_data=False,
                use_instance_mask=False,
@@ -161,8 +162,8 @@ class InputReader(object):
                              source_id)
         source_id = tf.string_to_number(source_id)
 
-        if (self._mode == tf.estimator.ModeKeys.PREDICT or
-            self._mode == tf.estimator.ModeKeys.EVAL):
+        if (self._mode == tf_estimator.ModeKeys.PREDICT or
+            self._mode == tf_estimator.ModeKeys.EVAL):
           image = preprocess_ops.normalize_image(image)
           if params['resize_method'] == 'retinanet':
             image, image_info, _, _, _ = preprocess_ops.resize_crop_pad(
@@ -184,7 +185,7 @@ class InputReader(object):
                                                    params['image_size'])
             features['orig_images'] = resized_image
           if (params['include_groundtruth_in_features'] or
-              self._mode == tf.estimator.ModeKeys.EVAL):
+              self._mode == tf_estimator.ModeKeys.EVAL):
             labels = _prepare_labels_for_eval(
                 data,
                 target_num_instances=self._max_num_instances,
@@ -194,7 +195,7 @@ class InputReader(object):
           else:
             return {'features': features}
 
-        elif self._mode == tf.estimator.ModeKeys.TRAIN:
+        elif self._mode == tf_estimator.ModeKeys.TRAIN:
           instance_masks = None
           if self._use_instance_mask:
             instance_masks = data['groundtruth_instance_masks']
@@ -205,7 +206,7 @@ class InputReader(object):
             classes = tf.cast(tf.greater(classes, 0), dtype=tf.float32)
 
           if (params['skip_crowd_during_training'] and
-              self._mode == tf.estimator.ModeKeys.TRAIN):
+              self._mode == tf_estimator.ModeKeys.TRAIN):
             indices = tf.where(tf.logical_not(data['groundtruth_is_crowd']))
             classes = tf.gather_nd(classes, indices)
             boxes = tf.gather_nd(boxes, indices)
@@ -318,19 +319,19 @@ class InputReader(object):
     dataset_fn = self._create_dataset_fn()
     batch_size = params['batch_size'] if 'batch_size' in params else 1
     dataset = tf.data.Dataset.list_files(
-        self._file_pattern, shuffle=(self._mode == tf.estimator.ModeKeys.TRAIN))
+        self._file_pattern, shuffle=(self._mode == tf_estimator.ModeKeys.TRAIN))
     if input_context is not None:
       dataset = dataset.shard(input_context.num_input_pipelines,
                               input_context.input_pipeline_id)
-    if self._mode == tf.estimator.ModeKeys.TRAIN:
+    if self._mode == tf_estimator.ModeKeys.TRAIN:
       dataset = dataset.repeat()
 
     dataset = dataset.apply(
         tf.data.experimental.parallel_interleave(
             dataset_fn,
             cycle_length=32,
-            sloppy=(self._mode == tf.estimator.ModeKeys.TRAIN)))
-    if self._mode == tf.estimator.ModeKeys.TRAIN:
+            sloppy=(self._mode == tf_estimator.ModeKeys.TRAIN)))
+    if self._mode == tf_estimator.ModeKeys.TRAIN:
       dataset = dataset.shuffle(64)
 
     # Parse the fetched records to input tensors for model function.
@@ -343,7 +344,7 @@ class InputReader(object):
 
     # Enable TPU performance optimization: transpose input, space-to-depth
     # image transform, or both.
-    if (self._mode == tf.estimator.ModeKeys.TRAIN and
+    if (self._mode == tf_estimator.ModeKeys.TRAIN and
         (params['transpose_input'] or
          (params['backbone'].startswith('resnet') and
           params['conv0_space_to_depth_block_size'] > 0))):

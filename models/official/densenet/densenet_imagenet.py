@@ -26,6 +26,7 @@ from absl import app
 from absl import flags
 import absl.logging as _logging  # pylint: disable=unused-import
 import tensorflow.compat.v1 as tf
+from tensorflow.compat.v1 import estimator as tf_estimator
 
 import densenet_model
 import vgg_preprocessing
@@ -256,17 +257,17 @@ def model_fn(features, labels, mode, params):
 
   if FLAGS.network_depth == 169:
     logits = densenet_model.densenet_imagenet_169(
-        features, is_training=(mode == tf.estimator.ModeKeys.TRAIN))
+        features, is_training=(mode == tf_estimator.ModeKeys.TRAIN))
   elif FLAGS.network_depth == 201:
     logits = densenet_model.densenet_imagenet_201(
-        features, is_training=(mode == tf.estimator.ModeKeys.TRAIN))
+        features, is_training=(mode == tf_estimator.ModeKeys.TRAIN))
   elif FLAGS.network_depth == 121:
     logits = densenet_model.densenet_imagenet_121(
-        features, is_training=(mode == tf.estimator.ModeKeys.TRAIN))
+        features, is_training=(mode == tf_estimator.ModeKeys.TRAIN))
   else:
     tf.logging.info("Number of layers not supported, revert to 121")
     logits = densenet_model.densenet_imagenet_121(
-        features, is_training=(mode == tf.estimator.ModeKeys.TRAIN))
+        features, is_training=(mode == tf_estimator.ModeKeys.TRAIN))
 
   # Calculate loss, which includes softmax cross entropy and L2 regularization.
   cross_entropy = tf.losses.softmax_cross_entropy(
@@ -296,7 +297,7 @@ def model_fn(features, labels, mode, params):
           params["batch_size"],
       ]), [params["batch_size"], 1])
 
-  if mode == tf.estimator.ModeKeys.TRAIN:
+  if mode == tf_estimator.ModeKeys.TRAIN:
     optimizer = tf.train.MomentumOptimizer(
         learning_rate=learning_rate, momentum=_MOMENTUM)
     optimizer = contrib_tpu.CrossShardOptimizer(optimizer)
@@ -309,7 +310,7 @@ def model_fn(features, labels, mode, params):
     train_op = None
 
   eval_metrics = None
-  if mode == tf.estimator.ModeKeys.EVAL:
+  if mode == tf_estimator.ModeKeys.EVAL:
 
     def metric_fn(labels, logits, lr_repeat, ce_repeat):
       """Evaluation metric fn. Performed on CPU, do not reference TPU ops."""

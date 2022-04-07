@@ -29,6 +29,7 @@ from absl import app
 from absl import flags
 from absl import logging
 import tensorflow.compat.v1 as tf
+from tensorflow.compat.v1 import estimator as tf_estimator
 
 # Cloud TPU Cluster Resolver flags
 flags.DEFINE_string(
@@ -99,20 +100,20 @@ def model_fn(features, labels, mode, params):
                              padding="same")(y)
   y = tf.layers.Flatten()(y)
   y = tf.layers.Dense(1024, activation="relu")(y)
-  y = tf.layers.Dropout(0.4)(y, training=(mode == tf.estimator.ModeKeys.TRAIN))
+  y = tf.layers.Dropout(0.4)(y, training=(mode == tf_estimator.ModeKeys.TRAIN))
 
   logits = tf.layers.Dense(10)(y)
 
-  if mode == tf.estimator.ModeKeys.PREDICT:
+  if mode == tf_estimator.ModeKeys.PREDICT:
     predictions = {
         "class_ids": tf.argmax(logits, axis=1),
         "probabilities": tf.nn.softmax(logits),
     }
-    return tf.estimator.tpu.TPUEstimatorSpec(mode, predictions=predictions)
+    return tf_estimator.tpu.TPUEstimatorSpec(mode, predictions=predictions)
 
   loss = tf.losses.sparse_softmax_cross_entropy(labels=labels, logits=logits)
 
-  if mode == tf.estimator.ModeKeys.TRAIN:
+  if mode == tf_estimator.ModeKeys.TRAIN:
     learning_rate = tf.train.exponential_decay(
         FLAGS.learning_rate,
         tf.train.get_global_step(),
@@ -121,13 +122,13 @@ def model_fn(features, labels, mode, params):
     optimizer = tf.train.GradientDescentOptimizer(learning_rate=learning_rate)
     if FLAGS.use_tpu:
       optimizer = tf.tpu.CrossShardOptimizer(optimizer)
-    return tf.estimator.tpu.TPUEstimatorSpec(
+    return tf_estimator.tpu.TPUEstimatorSpec(
         mode=mode,
         loss=loss,
         train_op=optimizer.minimize(loss, tf.train.get_global_step()))
 
-  if mode == tf.estimator.ModeKeys.EVAL:
-    return tf.estimator.tpu.TPUEstimatorSpec(
+  if mode == tf_estimator.ModeKeys.EVAL:
+    return tf_estimator.tpu.TPUEstimatorSpec(
         mode=mode, loss=loss, eval_metrics=(metric_fn, [labels, logits]))
 
 
@@ -183,15 +184,15 @@ def main(argv):
       project=FLAGS.gcp_project
   )
 
-  run_config = tf.estimator.tpu.RunConfig(
+  run_config = tf_estimator.tpu.RunConfig(
       cluster=tpu_cluster_resolver,
       model_dir=FLAGS.model_dir,
       session_config=tf.ConfigProto(
           allow_soft_placement=True, log_device_placement=True),
-      tpu_config=tf.estimator.tpu.TPUConfig(FLAGS.iterations, FLAGS.num_shards),
+      tpu_config=tf_estimator.tpu.TPUConfig(FLAGS.iterations, FLAGS.num_shards),
   )
 
-  estimator = tf.estimator.tpu.TPUEstimator(
+  estimator = tf_estimator.tpu.TPUEstimator(
       model_fn=model_fn,
       use_tpu=FLAGS.use_tpu,
       train_batch_size=FLAGS.batch_size,

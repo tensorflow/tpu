@@ -22,6 +22,7 @@ import os
 from absl import flags
 from absl import logging
 import numpy as np
+from tensorflow.compat.v1 import estimator as tf_estimator
 import tensorflow.compat.v1 as tf
 
 from hyperparameters import params_dict
@@ -162,15 +163,15 @@ class TPUEstimatorExecuter(object):
       num_shards = tpu_flags.num_cores
 
     # Sets up config for TPUEstimator.
-    tpu_config = tf.estimator.tpu.TPUConfig(
+    tpu_config = tf_estimator.tpu.TPUConfig(
         tpu_flags.iterations_per_loop,
         num_shards=num_shards,
         num_cores_per_replica=num_cores_per_replica,
         input_partition_dims=input_partition_dims,
-        per_host_input_for_training=tf.estimator.tpu.InputPipelineConfig.PER_HOST_V2  # pylint: disable=line-too-long
+        per_host_input_for_training=tf_estimator.tpu.InputPipelineConfig.PER_HOST_V2  # pylint: disable=line-too-long
     )
 
-    run_config = tf.estimator.tpu.RunConfig(
+    run_config = tf_estimator.tpu.RunConfig(
         cluster=tpu_cluster_resolver,
         evaluation_master=eval_master,
         model_dir=self._model_dir,
@@ -183,7 +184,7 @@ class TPUEstimatorExecuter(object):
         use_tpu=tpu_flags.use_tpu,
     )
 
-    return tf.estimator.tpu.TPUEstimator(
+    return tf_estimator.tpu.TPUEstimator(
         model_fn=model_fn,
         use_tpu=tpu_flags.use_tpu,
         train_batch_size=params.train_batch_size,

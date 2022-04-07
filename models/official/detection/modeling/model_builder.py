@@ -14,7 +14,7 @@
 # ==============================================================================
 """Model builder for detection model."""
 
-import tensorflow.compat.v1 as tf
+from tensorflow.compat.v1 import estimator as tf_estimator
 
 from modeling import factory
 
@@ -43,11 +43,11 @@ class ModelFn(object):
       tpu_spec: the TPUEstimatorSpec to run training, evaluation, or
       prediction.).
     """
-    if mode == tf.estimator.ModeKeys.TRAIN:
+    if mode == tf_estimator.ModeKeys.TRAIN:
       return self._model.train(features, labels)
-    elif mode == tf.estimator.ModeKeys.EVAL:
+    elif mode == tf_estimator.ModeKeys.EVAL:
       return self._model.evaluate(features, labels)
-    elif mode == tf.estimator.ModeKeys.PREDICT:
+    elif mode == tf_estimator.ModeKeys.PREDICT:
       return self._model.predict(features)
     else:
       raise ValueError('%s mode is not supported.' % mode)

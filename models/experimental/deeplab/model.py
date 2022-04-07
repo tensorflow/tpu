@@ -14,6 +14,7 @@
 # ==============================================================================
 """Provide model_fn for TPUEstimator training and evaluation."""
 
+from tensorflow.compat.v1 import estimator as tf_estimator
 import tensorflow.compat.v1 as tf
 from tensorflow.contrib import slim as contrib_slim
 from tensorflow.contrib import summary as contrib_summary
@@ -41,10 +42,10 @@ def _build_network(features, mode, params):
           params['model_options'],
           params['image_pyramid'],
           weight_decay=0.0,
-          is_training=mode == tf.estimator.ModeKeys.TRAIN,
+          is_training=mode == tf_estimator.ModeKeys.TRAIN,
           fine_tune_batch_norm=(
               params['fine_tune_batch_norm']
-              if mode == tf.estimator.ModeKeys.TRAIN else False)
+              if mode == tf_estimator.ModeKeys.TRAIN else False)
       )
     for level, output in outputs_to_scales_to_logits.iteritems():
       for scale, logits in output.iteritems():
@@ -55,10 +56,10 @@ def _build_network(features, mode, params):
         params['model_options'],
         params['image_pyramid'],
         weight_decay=params['weight_decay'],
-        is_training=mode == tf.estimator.ModeKeys.TRAIN,
+        is_training=mode == tf_estimator.ModeKeys.TRAIN,
         fine_tune_batch_norm=(
             params['fine_tune_batch_norm']
-            if mode == tf.estimator.ModeKeys.TRAIN else False)
+            if mode == tf_estimator.ModeKeys.TRAIN else False)
     )
   return outputs_to_scales_to_logits
 
@@ -89,7 +90,7 @@ def loss_fn(features, labels, mode, params):
 def _create_eval_metric(features, labels, params):
   """Creates eval_metric for model_fn."""
   outputs_to_scales_to_logits = _build_network(
-      features, tf.estimator.ModeKeys.EVAL, params)
+      features, tf_estimator.ModeKeys.EVAL, params)
 
   semantic_merged_logits = (
       outputs_to_scales_to_logits[common.OUTPUT_TYPE][_MERGED_LOGITS_SCOPE])
@@ -169,7 +170,7 @@ def model_fn(features, labels, mode, params):
 
   host_call = None
   train_op = None
-  if mode == tf.estimator.ModeKeys.TRAIN:
+  if mode == tf_estimator.ModeKeys.TRAIN:
     num_batches_per_epoch = params['num_batches_per_epoch']
     global_step = tf.train.get_global_step()
     current_epoch = tf.cast(global_step, tf.float32) / num_batches_per_epoch
@@ -239,11 +240,11 @@ def model_fn(features, labels, mode, params):
                    [global_step_t, loss_t, learning_rate_t, current_epoch_t])
 
   eval_metrics = None
-  if mode == tf.estimator.ModeKeys.EVAL:
+  if mode == tf_estimator.ModeKeys.EVAL:
     eval_metrics = _create_eval_metric(features, labels, params)
 
   # Restore from checkpoint if available.
-  if params['init_checkpoint'] and mode == tf.estimator.ModeKeys.TRAIN:
+  if params['init_checkpoint'] and mode == tf_estimator.ModeKeys.TRAIN:
     tf.logging.info('Found an init checkpoint.')
     model_variant = params['model_options'].model_variant
     var_scope = '{}/'.format(feature_extractor.name_scope[model_variant])

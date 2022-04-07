@@ -30,6 +30,7 @@ import functools
 import os
 from absl import flags
 import tensorflow.compat.v1 as tf
+from tensorflow.compat.v1 import estimator as tf_estimator
 
 from configs import factory
 from serving import detection
@@ -129,7 +130,7 @@ def export(export_dir,
   model_params = dict(
       params.as_dict(),
       use_tpu=use_tpu,
-      mode=tf.estimator.ModeKeys.PREDICT,
+      mode=tf_estimator.ModeKeys.PREDICT,
       transpose_input=False)
   tf.logging.info('model_params is:\n %s', model_params)
 
@@ -156,11 +157,11 @@ def export(export_dir,
     raise ValueError('The model type `{} is not supported.'.format(model))
 
   print(' - Setting up TPUEstimator...')
-  estimator = tf.estimator.tpu.TPUEstimator(
+  estimator = tf_estimator.tpu.TPUEstimator(
       model_fn=model_fn,
       model_dir=None,
-      config=tf.estimator.tpu.RunConfig(
-          tpu_config=tf.estimator.tpu.TPUConfig(iterations_per_loop=1),
+      config=tf_estimator.tpu.RunConfig(
+          tpu_config=tf_estimator.tpu.TPUConfig(iterations_per_loop=1),
           master='local',
           evaluation_master='local'),
       params=model_params,

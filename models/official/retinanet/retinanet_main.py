@@ -27,6 +27,7 @@ from absl import app
 from absl import flags
 import numpy as np
 import tensorflow.compat.v1 as tf
+from tensorflow.compat.v1 import estimator as tf_estimator
 
 from common import inference_warmup
 import dataloader
@@ -226,7 +227,7 @@ def build_serving_input_fn(image_size, batch_size):
         dtype=(tf.float32, tf.float32))
     # Get static dimension for cpu.
     images = tf.reshape(images, [batch_size, image_size, image_size, 3])
-    return tf.estimator.export.ServingInputReceiver(
+    return tf_estimator.export.ServingInputReceiver(
         features={
             'inputs': images,
             'image_info': images_info
@@ -429,7 +430,7 @@ def main(argv):
       else:
         dist_strat = tf.distribute.MirroredStrategy(devices=devices)
 
-      run_config = tf.estimator.RunConfig(
+      run_config = tf_estimator.RunConfig(
           session_config=config_proto,
           train_distribute=dist_strat,
           eval_distribute=dist_strat)
@@ -467,7 +468,7 @@ def main(argv):
       dist_strat = tf.distribute.experimental.MultiWorkerMirroredStrategy(
           communication=_COLLECTIVE_COMMUNICATION_OPTIONS[
               FLAGS.all_reduce_alg])
-      run_config = tf.estimator.RunConfig(
+      run_config = tf_estimator.RunConfig(
           session_config=config_proto,
           train_distribute=dist_strat)
 
@@ -530,7 +531,7 @@ def main(argv):
 
         evaluation.write_summary(eval_results, summary_writer, total_steps)
     else:
-      train_estimator = tf.estimator.Estimator(
+      train_estimator = tf_estimator.Estimator(
           model_fn=retinanet_model.est_retinanet_model_fn,
           model_dir=FLAGS.model_dir,
           config=run_config,
@@ -546,13 +547,13 @@ def main(argv):
       elif FLAGS.distribution_strategy == 'multi_worker_mirrored':
         total_steps = int((FLAGS.num_epochs * FLAGS.num_examples_per_epoch) /
                           (len(worker_hosts) * FLAGS.train_batch_size))
-        train_spec = tf.estimator.TrainSpec(
+        train_spec = tf_estimator.TrainSpec(
             input_fn=dataloader.InputReader(
                 FLAGS.training_file_pattern, is_training=True),
             max_steps=total_steps)
-        eval_spec = tf.estimator.EvalSpec(input_fn=tf.data.Dataset)
+        eval_spec = tf_estimator.EvalSpec(input_fn=tf.data.Dataset)
         tf.logging.info('Starting `MultiWorkerMirroredStrategy` training...')
-        tf.estimator.train_and_evaluate(train_estimator, train_spec, eval_spec)
+        tf_estimator.train_and_evaluate(train_estimator, train_spec, eval_spec)
       else:
         raise ValueError('Unrecognized distribution strategy.')
 
@@ -586,7 +587,7 @@ def main(argv):
             '--distribution_strategy=multi_worker_mirrored is not supported '
             'for eval.')
       elif FLAGS.distribution_strategy == 'mirrored':
-        eval_estimator = tf.estimator.Estimator(
+        eval_estimator = tf_estimator.Estimator(
             model_fn=retinanet_model.est_retinanet_model_fn,
             model_dir=FLAGS.model_dir,
             config=run_config,

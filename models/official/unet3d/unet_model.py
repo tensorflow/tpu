@@ -25,6 +25,7 @@ from __future__ import division
 from __future__ import print_function
 
 import tensorflow.compat.v1 as tf
+from tensorflow.compat.v1 import estimator as tf_estimator
 import tensorflow.compat.v2 as tf2
 import metrics
 
@@ -297,7 +298,7 @@ def _unet_model_fn(image, labels, mode, params):
   Returns:
     EstimatorSpec or TPUEstimatorSpec.
   """
-  is_training = mode == tf.estimator.ModeKeys.TRAIN
+  is_training = mode == tf_estimator.ModeKeys.TRAIN
   with tf.variable_scope('base', reuse=tf.AUTO_REUSE):
     if params['use_bfloat16']:
       with tf.tpu.bfloat16_scope():
@@ -325,7 +326,7 @@ def _unet_model_fn(image, labels, mode, params):
             data_format=params['data_format'])
 
   loss = None
-  if mode == tf.estimator.ModeKeys.TRAIN or mode == tf.estimator.ModeKeys.EVAL:
+  if mode == tf_estimator.ModeKeys.TRAIN or mode == tf_estimator.ModeKeys.EVAL:
     with tf.variable_scope('loss', reuse=tf.AUTO_REUSE):
       if params['loss'] == 'adaptive_dice32':
         predictions = tf.nn.softmax(logits)
@@ -335,7 +336,7 @@ def _unet_model_fn(image, labels, mode, params):
             labels.get_shape().as_list())
         loss = metrics.adaptive_dice32(labels, predictions)
       else:
-        if mode == tf.estimator.ModeKeys.TRAIN and params[
+        if mode == tf_estimator.ModeKeys.TRAIN and params[
             'use_index_label_in_train']:
           assert (len(labels.get_shape().as_list()) + 1 == len(
               logits.get_shape().as_list()
@@ -355,7 +356,7 @@ def _unet_model_fn(image, labels, mode, params):
         loss = tf.losses.sparse_softmax_cross_entropy(
             labels=labels_idx, logits=logits)
 
-  if mode == tf.estimator.ModeKeys.TRAIN:
+  if mode == tf_estimator.ModeKeys.TRAIN:
     learning_rate = tf.train.exponential_decay(
         float(params['init_learning_rate']),
         tf.train.get_or_create_global_step(),
@@ -405,14 +406,14 @@ def _unet_model_fn(image, labels, mode, params):
       host_call = (host_call_fn, [gs_t, lr_t])
 
     if params['use_tpu']:
-      return tf.estimator.tpu.TPUEstimatorSpec(
+      return tf_estimator.tpu.TPUEstimatorSpec(
           mode=mode, loss=loss, train_op=train_op, host_call=host_call)
     # Note: hook cannot accesss tensors defined in model_fn in TPUEstimator.
     logging_hook = tf.train.LoggingTensorHook({'loss': loss}, every_n_iter=10)
-    return tf.estimator.EstimatorSpec(
+    return tf_estimator.EstimatorSpec(
         mode=mode, loss=loss, training_hooks=[logging_hook], train_op=train_op)
 
-  if mode == tf.estimator.ModeKeys.EVAL:
+  if mode == tf_estimator.ModeKeys.EVAL:
     # Reshape labels/logits to R2 tensor to avoid TPU padding issue.
     # TPU tends to pad the last dimension to 128x,
     # and the second to last dimension to 8x.
@@ -421,30 +422,30 @@ def _unet_model_fn(image, labels, mode, params):
     original_shape = [params['eval_batch_size']] + (
         params['input_image_size'] + [-1])
     if params['use_tpu']:
-      return tf.estimator.tpu.TPUEstimatorSpec(
+      return tf_estimator.tpu.TPUEstimatorSpec(
           mode=mode, loss=loss,
           eval_metrics=(get_metric_fn(original_shape), [labels_r2, logits_r2]))
-    return tf.estimator.EstimatorSpec(
+    return tf_estimator.EstimatorSpec(
         mode=mode, loss=loss,
         eval_metrics=(get_metric_fn(original_shape), [labels_r2, logits_r2]))
 
-  if mode == tf.estimator.ModeKeys.PREDICT:
+  if mode == tf_estimator.ModeKeys.PREDICT:
     predictions = {
         'classes': tf.identity(tf.math.argmax(logits, axis=-1), 'Classes'),
         'scores': tf.identity(tf.nn.softmax(logits, axis=-1), 'Scores'),
     }
     if params['use_tpu']:
-      return tf.estimator.tpu.TPUEstimatorSpec(
+      return tf_estimator.tpu.TPUEstimatorSpec(
           mode=mode,
           predictions=predictions,
           export_outputs={
-              'classify': tf.estimator.export.PredictOutput(predictions)
+              'classify': tf_estimator.export.PredictOutput(predictions)
           })
-    return tf.estimator.EstimatorSpec(
-        mode=tf.estimator.ModeKeys.PREDICT,
+    return tf_estimator.EstimatorSpec(
+        mode=tf_estimator.ModeKeys.PREDICT,
         predictions=predictions,
         export_outputs={
-            'classify': tf.estimator.export.PredictOutput(predictions)
+            'classify': tf_estimator.export.PredictOutput(predictions)
         })
 
 

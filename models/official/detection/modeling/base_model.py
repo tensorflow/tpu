@@ -26,6 +26,7 @@ import re
 import six
 from six.moves import zip
 import tensorflow.compat.v1 as tf
+from tensorflow.compat.v1 import estimator as tf_estimator
 import tensorflow.compat.v2 as tf2
 
 from dataloader import mode_keys
@@ -324,8 +325,8 @@ class BaseModel(six.with_metaclass(abc.ABCMeta, object)):
     else:
       host_call_fn = None
 
-    tpu_estimator_spec = tf.estimator.tpu.TPUEstimatorSpec(
-        mode=tf.estimator.ModeKeys.TRAIN,
+    tpu_estimator_spec = tf_estimator.tpu.TPUEstimatorSpec(
+        mode=tf_estimator.ModeKeys.TRAIN,
         loss=total_loss,
         train_op=train_op,
         host_call=host_call_fn,
@@ -363,8 +364,8 @@ class BaseModel(six.with_metaclass(abc.ABCMeta, object)):
 
     eval_metrics = self.build_metrics(outputs, labels)
 
-    tpu_estimator_spec = tf.estimator.tpu.TPUEstimatorSpec(
-        mode=tf.estimator.ModeKeys.EVAL,
+    tpu_estimator_spec = tf_estimator.tpu.TPUEstimatorSpec(
+        mode=tf_estimator.ModeKeys.EVAL,
         loss=model_loss,
         eval_metrics=eval_metrics)
 
@@ -397,8 +398,8 @@ class BaseModel(six.with_metaclass(abc.ABCMeta, object)):
 
     predictions = self.build_predictions(outputs, labels)
 
-    tpu_estimator_spec = tf.estimator.tpu.TPUEstimatorSpec(
-        mode=tf.estimator.ModeKeys.PREDICT,
+    tpu_estimator_spec = tf_estimator.tpu.TPUEstimatorSpec(
+        mode=tf_estimator.ModeKeys.PREDICT,
         predictions=predictions)
 
     if self._use_tpu:
