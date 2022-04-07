@@ -454,7 +454,7 @@ def resnet_model_fn(features, labels, mode, params):
         predictions=predictions,
         export_outputs={
             'classify': tf_estimator.export.PredictOutput(predictions)},
-        scaffold_fn=scaffold_fn)
+        scaffold=scaffold_fn)
 
   # If necessary, in the model_fn, use params['batch_size'] instead the batch
   # size flags (--train_batch_size or --eval_batch_size).
