@@ -14,8 +14,8 @@
 # ==============================================================================
 """LoadGen based traffic handler."""
 
-import queue
 import tempfile
+import threading
 from typing import Iterable
 from absl import logging
 import numpy as np
@@ -29,20 +29,20 @@ import mlperf_loadgen as lg
 
 # Single stream
 _DEFAULT_SINGLE_STREAM_LATENCY_PERCENTILE = 0.9
-_DEFAULT_SINGLE_STREAM_TARGET_LATENCY = 10
+_DEFAULT_SINGLE_STREAM_TARGET_LATENCY = 10*int(1e6)
 _DEFAULT_SINGLE_STREAM_QUERY_COUNT = 1024
 
 # Multi stream
 _DEFAULT_MULTI_STREAM_QPS = 20
 _DEFAULT_MULTI_STREAM_QUERY_COUNT = 270336
 _DEFAULT_MULTI_STREAM_LATENCY_PERCENTILE = 0.99
-_DEFAULT_MULTI_STREAM_TARGET_LATENCY = 50
+_DEFAULT_MULTI_STREAM_TARGET_LATENCY = 50*int(1e6)
 
 # Server
 _DEFAULT_SERVER_QPS = 1.0
 _DEFAULT_SERVER_QUERY_COUNT = 270336
 _DEFAULT_SERVER_LATENCY_PERCENTILE = 0.99
-_DEFAULT_SERVER_TARGET_LATENCY = 10
+_DEFAULT_SERVER_TARGET_LATENCY = 10*int(1e6)
 
 
 class LoadGenHandler(traffic_handler.TrafficHandler):
@@ -124,13 +124,13 @@ class LoadGenHandler(traffic_handler.TrafficHandler):
 
     logging.info("Constructing SUT.")
     sut = lg.ConstructSUT(
-        self.issue_queries,
+        self.issue_query,
         self.flush_queries,
         self.process_metrics)
     logging.info("Constructing QSL.")
     qsl = lg.ConstructQSL(
         self.total_sample_count,
-        self.performance_sample_count,
+        self.performance_sample_count or self.total_sample_count,
         self.load_samples,
         self.unload_samples)
     logging.info("Starting test.")
@@ -150,33 +150,26 @@ class LoadGenHandler(traffic_handler.TrafficHandler):
       if sample_index in self._sample_map:
         del self._sample_map[sample_index]
 
-  def issue_queries(self, queries: Iterable[lg.QuerySample]):
-    """Sends queries to the system under test.
+  def issue_query(self, samples: Iterable[lg.QuerySample]):
+    """Sends query samples to the system under test.
 
-    This load test creates individual workers for each request, and marks
-    completion once all workers complete.
+    Creates a separate thread for each sample in the query.
 
     Args:
-      queries: A list of `QuerySample`s.
+      samples: A list of `QuerySample`s.
 
     """
-    worker_queue = queue.Queue()
     def on_completion(query: lg.QuerySample):
       response = lg.QuerySampleResponse(query.id, 0, 0)
       lg.QuerySamplesComplete([response])
-      worker_queue.get()
-      worker_queue.task_done()
 
-    for query in queries:
-      query_id = query.index
-      worker_queue.put(query)
-      self.target.send(
-          query=self._sample_map[query_id],
-          completion_callback=on_completion,
-          query_handle=query)
-
-    # Wait until workers are complete
-    worker_queue.join()
+    for sample in samples:
+      threading.Thread(
+          target=self.target.send,
+          kwargs=dict(
+              query=self._sample_map[sample.index],
+              completion_callback=on_completion,
+              query_handle=sample)).start()
 
   def flush_queries(self):
     """Flushes queries, if applicable."""
