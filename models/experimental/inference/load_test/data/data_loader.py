@@ -24,3 +24,7 @@ class DataLoader(abc.ABC):
   def get_sample(self, index: int) -> Mapping[str, Any]:
     """Returns a mapping of input name to example."""
     pass
+
+  def get_samples_count(self) -> int:
+    """Returns total count of available samples."""
+    return None

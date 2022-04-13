@@ -18,17 +18,23 @@ from typing import Any, Mapping
 from absl import logging
 
 from load_test.data import data_loader
+from load_test.data import squad_bert
 from load_test.data import synthetic_bert
 from load_test.data import synthetic_image
 
 
 def get_data_loader(
     name: str, **kwargs: Mapping[str, Any]) -> data_loader.DataLoader:
+  """Returns the data loader."""
+
   if name == "synthetic_images":
     logging.info("Creating synthetic image data loader.")
     return synthetic_image.SyntheticImageDataLoader(**kwargs)
   elif name == "synthetic_bert":
     logging.info("Creating synthetic bert data loader.")
     return synthetic_bert.SyntheticBertLoader(**kwargs)
+  elif name == "squad_bert":
+    logging.info("Creating SQuAD 1.1 bert data loader.")
+    return squad_bert.SquadBertLoader(**kwargs)
   else:
     raise ValueError("Unsupported data loader type.")

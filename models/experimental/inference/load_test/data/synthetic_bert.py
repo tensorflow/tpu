@@ -35,9 +35,10 @@ class SyntheticBertLoader(data_loader.DataLoader):
     self.input_mask_ids_field = 'input_mask'
 
   def get_sample(self, index: int) -> Mapping[str, np.array]:
-    """Generates a synthetic image."""
+    """Generates a synthetic BERT query."""
     del index
     ones_seq = np.ones(self.seq_length, dtype=np.int32)
+
     return {
         self.input_word_ids_field: np.copy(ones_seq),
         self.input_type_ids_field: np.copy(ones_seq),

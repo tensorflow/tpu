@@ -15,12 +15,14 @@
 """Target factory."""
 
 from typing import Any, Mapping
+
 from absl import logging
 
 from load_test.targets import dummy_target
 from load_test.targets import grpc_target
 from load_test.targets import rest_target
 from load_test.targets import target
+from load_test.targets import vertex_gapic_target
 
 
 def get_target(
@@ -35,5 +37,8 @@ def get_target(
   elif name == "rest":
     logging.info("Creating REST target.")
     return rest_target.ServingRestTarget(**kwargs)
+  elif name == "vertex_gapic":
+    logging.info("Creating Vertex GAPIC target.")
+    return vertex_gapic_target.VertexGapicTarget(**kwargs)
   else:
     raise ValueError("Unsupported target type.")
