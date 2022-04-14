@@ -98,9 +98,6 @@ def setup_env_vars():
   if accelerator_type not in ['v4-8', 'v4-16', 'v4-32', 'v4-64']:
     os.environ['TPU_TOPOLOGY_WRAP'] = 'true,true,true'
 
-  if accelerator_type in ['v4-256', 'v4-512', 'v4-2048', 'v4-6912']:
-    os.environ['TPU_TOPOLOGY_TWIST'] = 'true'
-
   # Set the hostname override.
   os.environ['TPU_HOSTNAME_OVERRIDE'] = get_host_ip()
 
