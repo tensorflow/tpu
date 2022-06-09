@@ -35,14 +35,14 @@ class SquadBertLoader(data_loader.DataLoader):
   vocab_file: str = 'gs://cloud-tpu-checkpoints/bert/v3/uncased_L-12_H-768_A-12/vocab.txt'
   dataset_file: str = 'https://raw.githubusercontent.com/rajpurkar/SQuAD-explorer/master/dataset/dev-v1.1.json'
 
-  def _load_from_cache(self, features_cache: str):
-    logging.info('Loading cached features from %s...', features_cache)
-    with open(features_cache, 'rb') as cache_file:
+  def _load_from_cache(self, cache: str):
+    logging.info('Loading cached dataset from %s...', cache)
+    with open(cache, 'rb') as cache_file:
       self._features = pickle.load(cache_file)
 
-  def _store_in_cache(self, features_cache: str):
-    logging.info('Caching features at %s...', features_cache)
-    with open(features_cache, 'wb') as cache_file:
+  def _store_in_cache(self, cache: str):
+    logging.info('Caching dataset at %s...', cache)
+    with open(cache, 'wb') as cache_file:
       pickle.dump(self._features, cache_file)
 
   def _process_dataset(self):
@@ -74,19 +74,19 @@ class SquadBertLoader(data_loader.DataLoader):
         output_fn=append_feature,
         batch_size=1)
 
-  def __init__(self, features_cache: str = None):
+  def __init__(self, cache: str = None, **kwargs: Mapping[str, Any]):
     self._input_word_ids_field = 'input_ids'
     self._input_type_ids_field = 'segment_ids'
     self._input_mask_ids_field = 'input_mask'
     self._features = []
 
-    if features_cache and os.path.exists(features_cache):
-      self._load_from_cache(features_cache)
+    if cache and os.path.exists(cache):
+      self._load_from_cache(cache)
     else:
       self._process_dataset()
 
-    if features_cache and not os.path.exists(features_cache):
-      self._store_in_cache(features_cache)
+    if cache and not os.path.exists(cache):
+      self._store_in_cache(cache)
 
   def get_sample(self, index: int) -> Mapping[str, Any]:
     """Generates a SQuAD 1.1 BERT query."""

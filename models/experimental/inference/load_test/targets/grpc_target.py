@@ -56,10 +56,7 @@ class TfServingGrpcWorker:
         logging.error(exception)
 
       if self._completion_callback:
-        if self._query_handle:
-          callback_args = [self._query_handle]
-        else:
-          callback_args = []
+        callback_args = [self._query_handle, not exception]
         self._completion_callback(*callback_args)
 
     def _send_rpc():

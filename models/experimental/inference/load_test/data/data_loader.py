@@ -28,3 +28,11 @@ class DataLoader(abc.ABC):
   def get_samples_count(self) -> int:
     """Returns total count of available samples."""
     return None
+
+  def get_type_overwrites(self) -> Mapping[str, Any]:
+    """Returns a mapping of features to tf.dtypes.DType.
+
+    Used in gRPC when the default type inference is incorrect.
+    """
+
+    return {}

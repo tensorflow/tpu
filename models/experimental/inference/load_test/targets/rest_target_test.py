@@ -40,8 +40,8 @@ class RestTargetTest(tf.test.TestCase):
 
     callback_responses = []
 
-    def callback():
-      callback_responses.append(0)
+    def callback(a, b):
+      callback_responses.append((a, b))
 
     image_shape = (5, 5, 3)
     array = np.uint8(np.random.rand(*image_shape) * 255)

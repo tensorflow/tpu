@@ -17,7 +17,9 @@
 from typing import Any, Mapping
 from absl import logging
 
+from load_test.data import criteo
 from load_test.data import data_loader
+from load_test.data import sentiment_bert
 from load_test.data import squad_bert
 from load_test.data import synthetic_bert
 from load_test.data import synthetic_image
@@ -36,5 +38,11 @@ def get_data_loader(
   elif name == "squad_bert":
     logging.info("Creating SQuAD 1.1 bert data loader.")
     return squad_bert.SquadBertLoader(**kwargs)
+  elif name == "sentiment_bert":
+    logging.info("Creating IMDB sentiment analysis data loader.")
+    return sentiment_bert.SentimentBertLoader(**kwargs)
+  elif name == "criteo":
+    logging.info("Creating Criteo data loader.")
+    return criteo.CriteoLoader(**kwargs)
   else:
     raise ValueError("Unsupported data loader type.")

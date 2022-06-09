@@ -82,8 +82,6 @@ class FunctionalMBConvBlock(FunctionalModelBuilder):
     self._batch_norm_epsilon = global_params.batch_norm_epsilon
     self._batch_norm = global_params.batch_norm
     self._data_format = global_params.data_format
-    self._conv_kernel_initializer = tf.compat.v2.keras.initializers.VarianceScaling(
-        scale=2.0, mode='fan_out', distribution='untruncated_normal')
     if self._data_format == 'channels_first':
       self._channel_axis = 1
       self._spatial_dims = [2, 3]
@@ -103,13 +101,18 @@ class FunctionalMBConvBlock(FunctionalModelBuilder):
     """Builds block according to the arguments."""
     conv2d_id = 0
     batch_norm_id = 0
+
+    def conv_kernel_initializer():
+      return tf.compat.v2.keras.initializers.VarianceScaling(
+          scale=2.0, mode='fan_out', distribution='untruncated_normal')
+
     if self._block_args.expand_ratio != 1:
       self._expand_conv = tf.keras.layers.Conv2D(
           filters=(self._block_args.input_filters *
                    self._block_args.expand_ratio),
           kernel_size=[1, 1],
           strides=[1, 1],
-          kernel_initializer=self._conv_kernel_initializer,
+          kernel_initializer=conv_kernel_initializer(),
           padding='same',
           data_format=self._data_format,
           use_bias=False,
@@ -129,7 +132,7 @@ class FunctionalMBConvBlock(FunctionalModelBuilder):
             self._block_args.kernel_size, self._block_args.kernel_size
         ],
         strides=self._block_args.strides,
-        depthwise_initializer=self._conv_kernel_initializer,
+        depthwise_initializer=conv_kernel_initializer(),
         padding='same',
         data_format=self._data_format,
         use_bias=False,
@@ -151,7 +154,7 @@ class FunctionalMBConvBlock(FunctionalModelBuilder):
         filters=self._block_args.output_filters,
         kernel_size=[1, 1],
         strides=[1, 1],
-        kernel_initializer=self._conv_kernel_initializer,
+        kernel_initializer=conv_kernel_initializer(),
         padding='same',
         data_format=self._data_format,
         use_bias=False,
@@ -239,8 +242,6 @@ class FunctionalModel(FunctionalModelBuilder):
     self._relu_fn = functools.partial(tf.keras.layers.ReLU, 6.0)
     self._batch_norm = global_params.batch_norm
     self._fix_head_stem = global_params.fix_head_stem
-    self._conv_kernel_initializer = tf.compat.v2.keras.initializers.VarianceScaling(
-        scale=2.0, mode='fan_out', distribution='untruncated_normal')
     self._dense_kernel_initializer = tf.keras.initializers.VarianceScaling(
         scale=1.0 / 3.0, mode='fan_out', distribution='uniform')
     self.endpoints = None
@@ -264,7 +265,8 @@ class FunctionalModel(FunctionalModelBuilder):
                                                  self._fix_head_stem),
         kernel_size=[3, 3],
         strides=[2, 2],
-        kernel_initializer=self._conv_kernel_initializer,
+        kernel_initializer=tf.compat.v2.keras.initializers.VarianceScaling(
+            scale=2.0, mode='fan_out', distribution='untruncated_normal'),
         padding='same',
         data_format=self._global_params.data_format,
         use_bias=False,
@@ -323,7 +325,8 @@ class FunctionalModel(FunctionalModelBuilder):
                                                  self._fix_head_stem),
         kernel_size=[1, 1],
         strides=[1, 1],
-        kernel_initializer=self._conv_kernel_initializer,
+        kernel_initializer=tf.compat.v2.keras.initializers.VarianceScaling(
+            scale=2.0, mode='fan_out', distribution='untruncated_normal'),
         padding='same',
         data_format=self._global_params.data_format,
         use_bias=False,

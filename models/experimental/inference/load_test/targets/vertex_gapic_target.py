@@ -52,16 +52,14 @@ class VertexGapicWorker:
 class VertexGapicTarget(target.Target):
   """A Vertex AI Endpoint target assuming GAPIC communication."""
 
-  def __init__(self, endpoint_id: str, project_id: str, region: str):
-    client_options = {
-        'api_endpoint':
-            f'{region}-aiplatform.googleapis.com'
-    }
+  def __init__(self, endpoint_id: str, project_id: str, region: str,
+               **kwargs: Mapping[str, Any]):
+    client_options = {'api_endpoint': f'{region}-aiplatform.googleapis.com'}
     self._vertex_endpoint = f'projects/{project_id}/locations/{region}/endpoints/{endpoint_id}'
     self._prediction_service_client = aip.PredictionServiceClient(
         client_options=client_options)
 
-  def prepare(self, sample: Mapping[str, Any]) -> List[str]:
+  def prepare(self, sample: Mapping[str, Any]) -> List[Any]:
     """Runs sample pre-processing."""
     return [sample]
 

@@ -44,13 +44,12 @@ class ServingRestWorkerPost:
     """Starts the post request."""
     response = requests.post(
         self._url, data=self._model_input_bytes, headers=self._headers)
-    logging.info(response.text)
+    if response.status_code != 200:
+      logging.error('Response returned status code %s, content: %s',
+                    response.status_code, response.text)
     if self._completion_callback:
-      if self._query_handle:
-        callback_args = [self._query_handle]
-      else:
-        callback_args = []
-      self._completion_callback(*callback_args)
+      self._completion_callback(
+          *[self._query_handle, response.status_code == 200])
 
 
 class ServingRestTarget(target.Target):

@@ -12,9 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Load gen script runner with a Vertex AI gRPC target."""
+"""LoadGen script runner for Vertex AI targets."""
 
 import dataclasses
+import subprocess
 
 from absl import app
 from absl import flags
@@ -35,15 +36,17 @@ class RuntimeSettings:
   endpoint_id: str
   region: str
   scenario: str
-  data_type: str
+  api_type: str
+  dataset: str
+  data_file: str
   total_sample_count: int
   performance_sample_count: int
   target_latency_percentile: float
   target_latency_ns: int
-  query_count: int
-  duration_ms: int
+  min_query_count: int
+  min_duration_ms: int
   qps: int
-  features_cache: str
+  cache: str
 
 
 def define_flags():
@@ -55,53 +58,71 @@ def define_flags():
       default=None)
   flags.DEFINE_string(
       "endpoint_id",
-      help="Vertex AI endpoint ID",
+      help="Vertex AI endpoint ID number",
       required=True,
       default=None)
   flags.DEFINE_string(
       "region",
       help="GCP region",
-      default="us-central1")
-  flags.DEFINE_string(
+      required=True,
+      default=None)
+  flags.DEFINE_enum(
       "scenario",
+      enum_values=["single_stream", "multi_stream", "server"],
       help="The MLPerf scenario. Possible values: "
            "single_stream | multi_stream | server.",
       default="server")
+  flags.DEFINE_enum(
+      "dataset",
+      enum_values=["criteo", "squad_bert", "sentiment_bert"],
+      help="The dataset to use. Possible values: "
+           "criteo | squad_bert | sentiment_bert.",
+      default=None)
   flags.DEFINE_string(
-      "data_type",
-      help="The data format.",
-      default="squad_bert")
+      "data_file",
+      help="Path to the file containing the requests data. Can be a local file"
+           "or a GCS path. Required for criteo and sentiment_bert datasets.",
+      default=None)
   flags.DEFINE_integer(
       "performance_sample_count",
-      help="Number of samples used in perfomance test.",
+      help="Number of samples used in perfomance test. If not set defaults to"
+           "total_sample_count.",
       default=None)
   flags.DEFINE_integer(
       "total_sample_count",
-      help="Total number of samples available.",
+      help="Total number of samples available. Should only be set for"
+           "synthetic, generated datasets.",
       default=None)
   flags.DEFINE_float(
       "target_latency_percentile",
       help="The target latency percentile.",
-      default=99)
+      default=0.99)
   flags.DEFINE_integer(
       "target_latency_ns",
-      help="The target latency in ns.",
-      default=130*int(1e6))
+      help="The target latency in nanoseconds. If achieved latency exceeds"
+      "the target, the perfomance constraint of the run will not be satisfied.",
+      default=130 * int(1e6))
   flags.DEFINE_integer(
-      "query_count",
-      help="The minimum query count.",
-      default=1024)
+      "min_query_count",
+      help="The minimum number of queries used in the run.",
+      default=1)
   flags.DEFINE_integer(
-      "duration_ms",
-      help="The minimum duration ms.",
-      default=60*1000)
+      "min_duration_ms",
+      help="The minimum duration of the run in milliseconds.",
+      default=10000)
   flags.DEFINE_integer(
       "qps",
       help="The expected target QPS.",
-      default=1)
+      default=10)
   flags.DEFINE_string(
-      "features_cache",
-      help="Path to the cached features file.",
+      "cache",
+      help="Path to the cached dataset file. Used in squad_bert benchmark.",
+      default=None)
+  flags.DEFINE_enum(
+      "api_type",
+      enum_values=["rest", "gapic", "grpc"],
+      help="API over which requests will be send. Possible values: "
+           "rest | gapic | grpc.",
       default=None)
 
 
@@ -112,45 +133,64 @@ def validate_flags() -> RuntimeSettings:
     `RuntimeSettings` - the runtime settings.
 
   """
-  scenario = FLAGS.scenario.lower()
+  dataset = FLAGS.dataset.lower()
+  data_file = FLAGS.data_file
 
-  if scenario not in ["single_stream", "multi_stream", "server"]:
+  if dataset in ["criteo", "sentiment_bert"] and not data_file:
     raise ValueError(
-        "Scenario should be one of `single_stream` | `multi_stream` | `server`."
-        " Received %s" % scenario)
+        f"Data file (--data_file) with requests is required with the "
+        f"{dataset} dataset.")
 
   return RuntimeSettings(
       project_id=FLAGS.project_id,
       endpoint_id=FLAGS.endpoint_id,
       region=FLAGS.region,
-      scenario=scenario,
-      data_type=FLAGS.data_type.lower(),
+      scenario=FLAGS.scenario,
+      api_type=FLAGS.api_type,
+      dataset=FLAGS.dataset.lower(),
+      data_file=FLAGS.data_file,
       performance_sample_count=FLAGS.performance_sample_count,
       total_sample_count=FLAGS.total_sample_count,
-      query_count=FLAGS.query_count,
-      duration_ms=FLAGS.duration_ms,
+      min_query_count=FLAGS.min_query_count,
+      min_duration_ms=FLAGS.min_duration_ms,
       target_latency_percentile=FLAGS.target_latency_percentile,
       target_latency_ns=FLAGS.target_latency_ns,
       qps=FLAGS.qps,
-      features_cache=FLAGS.features_cache)
+      cache=FLAGS.cache)
+
+
+def get_access_token() -> str:
+  """Gets the gcloud access token used for authenticating REST requests.
+
+  Returns:
+    The access token string.
+  """
+
+  gcloud_access_token = (
+      subprocess.check_output(
+          "gcloud auth print-access-token".split(" ")).decode().rstrip("\n"))
+
+  return gcloud_access_token
 
 
 def main(_) -> None:
   settings = validate_flags()
 
+  data_kwargs = dict(cache=settings.cache, data_file=settings.data_file)
+  data_loader = data_loader_factory.get_data_loader(
+      name=settings.dataset, **data_kwargs)
+
   target_kwargs = dict(
       project_id=settings.project_id,
       endpoint_id=settings.endpoint_id,
-      region=settings.region)
-  data_kwargs = dict(
-      features_cache=settings.features_cache)
-  target = target_factory.get_target(name="vertex_gapic", **target_kwargs)
-  data_loader = data_loader_factory.get_data_loader(
-      name=settings.data_type, **data_kwargs)
+      region=settings.region,
+      types=data_loader.get_type_overwrites(),
+      access_token=get_access_token())
+  target = target_factory.get_target(
+      name=f"vertex_{settings.api_type}", **target_kwargs)
 
   total_count = settings.total_sample_count or data_loader.get_samples_count()
   performance_count = settings.performance_sample_count or total_count
-
   handler_kwargs = dict(
       target=target,
       data_loader=data_loader,
@@ -158,14 +198,13 @@ def main(_) -> None:
       performance_sample_count=performance_count,
       total_sample_count=total_count,
       target_latency_percentile=settings.target_latency_percentile,
-      duration_ms=settings.duration_ms,
-      query_count=settings.query_count,
+      duration_ms=settings.min_duration_ms,
+      query_count=settings.min_query_count,
       target_latency_ns=settings.target_latency_ns,
       qps=settings.qps)
   handler = traffic_handler_factory.get_traffic_handler(
       name="loadgen", **handler_kwargs)
   handler.start()
-
 
 if __name__ == "__main__":
   define_flags()
