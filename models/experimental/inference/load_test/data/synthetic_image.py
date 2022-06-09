@@ -14,7 +14,7 @@
 # ==============================================================================
 """Synthetic image data loader."""
 import io
-from typing import Mapping
+from typing import Mapping, Any
 import numpy as np
 from PIL import Image
 
@@ -28,7 +28,8 @@ class SyntheticImageDataLoader(data_loader.DataLoader):
       self,
       image_width: int = 224,
       image_height: int = 224,
-      image_format: str = 'jpeg'):
+      image_format: str = 'jpeg',
+      **kwargs: Mapping[str, Any]):
     self._image_width = image_width
     self._image_height = image_height
     self._image_format = image_format

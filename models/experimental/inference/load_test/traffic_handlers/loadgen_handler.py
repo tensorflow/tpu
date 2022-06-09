@@ -68,6 +68,9 @@ class LoadGenHandler(traffic_handler.TrafficHandler):
     self._query_count = query_count
     self._duration_ms = duration_ms
     self._qps = qps
+    self._lock = threading.Lock()
+    self._completed_queries = 0
+    self._failed_queries = 0
 
   def get_test_settings(self) -> lg.TestSettings:
     settings = lg.TestSettings()
@@ -110,6 +113,7 @@ class LoadGenHandler(traffic_handler.TrafficHandler):
       raise ValueError("Unsupported scenario.")
 
     settings.mode = lg.TestMode.PerformanceOnly
+
     return settings
 
   def start(self):
@@ -118,7 +122,7 @@ class LoadGenHandler(traffic_handler.TrafficHandler):
 
     log_settings = lg.LogSettings()
     log_settings.log_output.outdir = tempfile.mkdtemp()
-    log_settings.log_output.copy_detail_to_stdout = True
+    log_settings.log_output.copy_detail_to_stdout = False
     log_settings.log_output.copy_summary_to_stdout = True
     log_settings.enable_trace = False
 
@@ -159,9 +163,12 @@ class LoadGenHandler(traffic_handler.TrafficHandler):
       samples: A list of `QuerySample`s.
 
     """
-    def on_completion(query: lg.QuerySample):
+    def on_completion(query: lg.QuerySample, success=True):
       response = lg.QuerySampleResponse(query.id, 0, 0)
       lg.QuerySamplesComplete([response])
+      with self._lock:
+        self._completed_queries += 1
+        self._failed_queries += int(not success)
 
     for sample in samples:
       threading.Thread(
@@ -177,7 +184,10 @@ class LoadGenHandler(traffic_handler.TrafficHandler):
 
   def process_metrics(self, latencies_ns: Iterable[float]):
     """Processes the latencies."""
-    logging.info("latencies: [p50: %.5f p90:%.5f p99:%.5f]",
+    logging.info("latencies: [p50: %.5f p90:%.5f p99:%.5f]\n",
                  np.percentile(latencies_ns, 50),
                  np.percentile(latencies_ns, 90),
                  np.percentile(latencies_ns, 99))
+
+    logging.info("Completed Queries: %d, Failed Queries: %d\n",
+                 self._completed_queries, self._failed_queries)

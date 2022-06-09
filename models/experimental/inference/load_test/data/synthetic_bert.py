@@ -13,7 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 """Synthetic BERT data loader."""
-from typing import Mapping
+from typing import Mapping, Any
 import numpy as np
 from load_test.data import data_loader
 
@@ -24,7 +24,8 @@ class SyntheticBertLoader(data_loader.DataLoader):
   def __init__(
       self,
       seq_length: int = 384,
-      use_v2_feature_names: bool = True):
+      use_v2_feature_names: bool = True,
+      **kwargs: Mapping[str, Any]):
     self.seq_length = seq_length
     if use_v2_feature_names:
       self.input_word_ids_field = 'input_word_ids'

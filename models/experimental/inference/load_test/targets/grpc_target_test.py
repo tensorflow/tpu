@@ -41,13 +41,13 @@ class GrpcTargetTest(tf.test.TestCase):
 
   def test_basic_functionality(self):
     callback_responses = []
-    def callback():
-      callback_responses.append(0)
+    def callback(a, b):
+      callback_responses.append((a, b))
 
     target = grpc_target.TfServingGrpcTarget(grpc_channel="")
     request = target.prepare({"input": 0})
     target.send(request, callback)
-    self.assertGreater(len(callback_responses), 0)
+    self.assertNotEmpty(callback_responses)
 
 
 if __name__ == "__main__":

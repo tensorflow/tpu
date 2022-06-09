@@ -9,49 +9,49 @@ please follow the official [documentation](https://cloud.google.com/vertex-ai/do
 
 ## Run the benchmark
 
-Running the benchmark invovles building a docker image and executing the load test from it.
+Running the benchmark involves building a docker image and executing the load test from it.
 
 ```bash
-# Set environment variables
-export IMAGE_NAME=load-test-image
-export PROJECT_ID=your-gcp-project-id
-export ENDPOINT_ID=your-vertex-ai-endpoint-id
-export QPS=10
+IMAGE_NAME=load-test-image
 
 # Build the load test image
 docker build -t $IMAGE_NAME -f tools/Dockerfile .
 
 # Start the container in interactive mode
-docker run -it \
-  -e PROJECT_ID=${PROJECT_ID} \
-  -e ENDPOINT_ID=${ENDPOINT_ID} \
-  -e QPS=${QPS} \
-  $IMAGE_NAME \
-  bash
+docker run -it $IMAGE_NAME bash
 ```
 
 Then from within the docker container run:
 
 ```bash
-# Obtain GCP user credentials
+# Obtain GCP user credentials. Follow the instructions on the screen.
 gcloud auth application-default login --no-browser
 
-# Run the load test against Vertex AI Endpoint
+# Set parameters.
+PROJECT_ID=your-gcp-project-id
+ENDPOINT_ID=123456789123
+REGION=us-central1
+DURATION=10000 # In milliseconds
+API_TYPE=rest # rest | grpc | gapic
+QPS=10
+DATASET=criteo # criteo | sentiment_bert | squad_bert
+DATA_FILE=gs://path/to/requests.jsonl # A jsonl file with requests is required for criteo and sentiment_bert datasets. Either a path to a GCS location or a local path.
+
+# Run the benchmark against Vertex AI Endpoint.
 cd tpu/models/experimental/inference/load_test/examples
-python3 -m loadgen_vertex_gapic_main \
-  --project_id=${PROJECT_ID}   \
-  --endpoint_id=${ENDPOINT_ID} \
-  --qps=${QPS}  # 10 queries per second
+python3 -m loadgen_vertex_main  \
+  --project_id=${PROJECT_ID}    \
+  --endpoint_id=${ENDPOINT_ID}  \
+  --region=${REGION}            \
+  --min_duration_ms=${DURATION} \
+  --api_type=${API_TYPE}        \
+  --qps=${QPS}                  \
+  --dataset=${DATASET}          \
+  --data_file=${DATA_FILE}
 ```
 
-Other common flags include:
+The gRPC protocol will only work with private endpoints. Please follow `Setup private endpoint for online prediction` section from [Vertex AI Samples](https://github.com/GoogleCloudPlatform/vertex-ai-samples/blob/main/notebooks/community/vertex_endpoints/optimized_tensorflow_runtime/tabular_optimized_online_prediction.ipynb) to set up a private endpoint.
 
-* `duration_ms` - minimum number of miliseconds the benchmark should run (defaults to 1 minute).
-* `query_count` - minimum number of queries the benchmark should send (defaults to 1024).
-* `total_sample_count` - total number of different samples available to the benchmark (defaults to all the samples available in the dataset file).
-* `region` - GCP region in which the Vertex AI endpoint is deployed (defaults to *us-central-1*).
-* `features_cache` - a path to the cache file containing the pre-processed features for the SQuAD dataset. Improves the dataset loading time from O(minutes) to O(seconds). If file does not exist, the cache will be created at the specified location.
+See `examples/loadgen_vertex_main.py` for all available flags.
 
-See `examples/loadgen_vertex_gapic_main.py` for all available flags.
-
-
+<sub>Readme author: cezarym@</sub>
