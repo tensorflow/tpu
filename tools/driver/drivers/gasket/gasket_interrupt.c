@@ -255,22 +255,25 @@ fail_configure:
  gasket_interrupt_msix_teardown(gasket_dev->interrupt_data);
  return ret;
 }
-static int gasket_interrupt_clear_eventfd(struct gasket_dev *gasket_dev,
-                                          struct gasket_filp_data *filp_data,
-                                          int interrupt) {
-  struct gasket_interrupt_data *interrupt_data = gasket_dev->interrupt_data;
-  ulong flags;
-  if (filp_data && gasket_dev->driver_desc->interrupt_permissions_cb) {
-    int retval =
-        gasket_dev->driver_desc->interrupt_permissions_cb(filp_data, interrupt);
-    if (retval < 0) return retval;
-  }
-  write_lock_irqsave(&interrupt_data->eventfd_ctx_lock, flags);
-  if (interrupt_data->eventfd_ctxs[interrupt] != NULL)
-    eventfd_ctx_put(interrupt_data->eventfd_ctxs[interrupt]);
-  interrupt_data->eventfd_ctxs[interrupt] = NULL;
-  write_unlock_irqrestore(&interrupt_data->eventfd_ctx_lock, flags);
-  return 0;
+static int gasket_interrupt_clear_eventfd(
+ struct gasket_dev *gasket_dev, struct gasket_filp_data *filp_data,
+ int interrupt)
+{
+ struct gasket_interrupt_data *interrupt_data =
+  gasket_dev->interrupt_data;
+ ulong flags;
+ if (filp_data && gasket_dev->driver_desc->interrupt_permissions_cb) {
+  int retval = gasket_dev->driver_desc->interrupt_permissions_cb(
+   filp_data, interrupt);
+  if (retval < 0)
+   return retval;
+ }
+ write_lock_irqsave(&interrupt_data->eventfd_ctx_lock, flags);
+ if (interrupt_data->eventfd_ctxs[interrupt] != NULL)
+  eventfd_ctx_put(interrupt_data->eventfd_ctxs[interrupt]);
+ interrupt_data->eventfd_ctxs[interrupt] = NULL;
+ write_unlock_irqrestore(&interrupt_data->eventfd_ctx_lock, flags);
+ return 0;
 }
 static void gasket_interrupt_free_irq(
  struct gasket_interrupt_data *interrupt_data,
@@ -289,11 +292,13 @@ static void gasket_interrupt_free_irq(
  }
  interrupt_data->num_configured--;
 }
-static void gasket_interrupt_clear_all_eventfds(struct gasket_dev *gasket_dev) {
-  struct gasket_interrupt_data *interrupt_data = gasket_dev->interrupt_data;
-  int i;
-  for (i = 0; i < interrupt_data->num_msix_interrupts; i++)
-    gasket_interrupt_clear_eventfd(gasket_dev, NULL, i);
+static void gasket_interrupt_clear_all_eventfds(struct gasket_dev *gasket_dev)
+{
+ struct gasket_interrupt_data *interrupt_data =
+  gasket_dev->interrupt_data;
+ int i;
+ for (i = 0; i < interrupt_data->num_msix_interrupts; i++)
+  gasket_interrupt_clear_eventfd(gasket_dev, NULL, i);
 }
 static void gasket_interrupt_msix_teardown(
  struct gasket_interrupt_data *interrupt_data)
@@ -331,6 +336,7 @@ int gasket_interrupt_reinit(struct gasket_dev *gasket_dev)
   ret = gasket_interrupt_setup(gasket_dev);
  return ret;
 }
+EXPORT_SYMBOL(gasket_interrupt_reinit);
 int gasket_interrupt_reset_counts(struct gasket_dev *gasket_dev)
 {
  gasket_log_debug(gasket_dev, "Clearing interrupt counts.");
@@ -493,54 +499,65 @@ int gasket_interrupt_system_status(struct gasket_dev *gasket_dev)
  }
  return GASKET_STATUS_ALIVE;
 }
-static int gasket_interrupt_set_eventfd(struct gasket_filp_data *filp_data,
-                                        int interrupt, int event_fd) {
-  struct gasket_dev *gasket_dev = filp_data->gasket_dev;
-  struct gasket_interrupt_data *interrupt_data = gasket_dev->interrupt_data;
-  struct eventfd_ctx *ctx;
-  ulong flags;
-  if (gasket_dev->driver_desc->interrupt_permissions_cb) {
-    int retval =
-        gasket_dev->driver_desc->interrupt_permissions_cb(filp_data, interrupt);
-    if (retval < 0) return retval;
-  }
-  ctx = eventfd_ctx_fdget(event_fd);
-  if (IS_ERR(ctx)) return PTR_ERR(ctx);
-  write_lock_irqsave(&interrupt_data->eventfd_ctx_lock, flags);
-  if (interrupt_data->eventfd_ctxs[interrupt] != NULL)
-    eventfd_ctx_put(interrupt_data->eventfd_ctxs[interrupt]);
-  interrupt_data->eventfd_ctxs[interrupt] = ctx;
-  write_unlock_irqrestore(&interrupt_data->eventfd_ctx_lock, flags);
-  return 0;
+static int gasket_interrupt_set_eventfd(
+ struct gasket_filp_data *filp_data, int interrupt, int event_fd)
+{
+ struct gasket_dev *gasket_dev = filp_data->gasket_dev;
+ struct gasket_interrupt_data *interrupt_data =
+  gasket_dev->interrupt_data;
+ struct eventfd_ctx *ctx;
+ ulong flags;
+ if (gasket_dev->driver_desc->interrupt_permissions_cb) {
+  int retval = gasket_dev->driver_desc->interrupt_permissions_cb(
+   filp_data, interrupt);
+  if (retval < 0)
+   return retval;
+ }
+ ctx = eventfd_ctx_fdget(event_fd);
+ if (IS_ERR(ctx))
+  return PTR_ERR(ctx);
+ write_lock_irqsave(&interrupt_data->eventfd_ctx_lock, flags);
+ if (interrupt_data->eventfd_ctxs[interrupt] != NULL)
+  eventfd_ctx_put(interrupt_data->eventfd_ctxs[interrupt]);
+ interrupt_data->eventfd_ctxs[interrupt] = ctx;
+ write_unlock_irqrestore(&interrupt_data->eventfd_ctx_lock, flags);
+ return 0;
 }
-int legacy_gasket_interrupt_set_eventfd(struct gasket_filp_data *filp_data,
-                                        int interrupt, int event_fd) {
-  struct gasket_dev *gasket_dev = filp_data->gasket_dev;
-  struct gasket_interrupt_data *interrupt_data = gasket_dev->interrupt_data;
-  if (!gasket_interrupt_is_legacy(interrupt_data)) {
-    gasket_nodev_error("Unable to run legacy set_eventfd on device.");
-    return -EPERM;
-  }
-  if (interrupt < 0 || interrupt >= interrupt_data->num_interrupts) {
-    gasket_nodev_error("Unable to set eventfd on invalid interrupt number.");
-    return -EINVAL;
-  }
-  return gasket_interrupt_set_eventfd(filp_data, interrupt, event_fd);
+int legacy_gasket_interrupt_set_eventfd(
+ struct gasket_filp_data *filp_data, int interrupt, int event_fd)
+{
+ struct gasket_dev *gasket_dev = filp_data->gasket_dev;
+ struct gasket_interrupt_data *interrupt_data =
+  gasket_dev->interrupt_data;
+ if (!gasket_interrupt_is_legacy(interrupt_data)) {
+  gasket_nodev_error(
+   "Unable to run legacy set_eventfd on device.");
+  return -EPERM;
+ }
+ if (interrupt < 0 || interrupt >= interrupt_data->num_interrupts) {
+  gasket_nodev_error(
+   "Unable to set eventfd on invalid interrupt number.");
+  return -EINVAL;
+ }
+ return gasket_interrupt_set_eventfd(filp_data, interrupt, event_fd);
 }
-int legacy_gasket_interrupt_clear_eventfd(struct gasket_filp_data *filp_data,
-                                          int interrupt) {
-  struct gasket_dev *gasket_dev = filp_data->gasket_dev;
-  struct gasket_interrupt_data *interrupt_data = gasket_dev->interrupt_data;
-  if (!gasket_interrupt_is_legacy(interrupt_data)) {
-    gasket_nodev_error("Unable to run legacy clear_eventfd on device.");
-    return -EPERM;
-  }
-  if (interrupt < 0 || interrupt >= interrupt_data->num_interrupts) {
-    gasket_nodev_error(
-        "Trying to clear eventfd from invalid interrupt number.");
-    return -EINVAL;
-  }
-  return gasket_interrupt_clear_eventfd(gasket_dev, filp_data, interrupt);
+int legacy_gasket_interrupt_clear_eventfd(
+ struct gasket_filp_data *filp_data, int interrupt)
+{
+ struct gasket_dev *gasket_dev = filp_data->gasket_dev;
+ struct gasket_interrupt_data *interrupt_data =
+  gasket_dev->interrupt_data;
+ if (!gasket_interrupt_is_legacy(interrupt_data)) {
+  gasket_nodev_error(
+   "Unable to run legacy clear_eventfd on device.");
+  return -EPERM;
+ }
+ if (interrupt < 0 || interrupt >= interrupt_data->num_interrupts) {
+  gasket_nodev_error(
+   "Trying to clear eventfd from invalid interrupt number.");
+  return -EINVAL;
+ }
+ return gasket_interrupt_clear_eventfd(gasket_dev, filp_data, interrupt);
 }
 struct eventfd_ctx **gasket_interrupt_get_eventfd_ctxs(
  struct gasket_interrupt_data *interrupt_data)
@@ -621,91 +638,99 @@ static irqreturn_t gasket_interrupt_handler(int irq, void *dev_id)
  ++(interrupt_data->interrupt_counts[interrupt]);
  return IRQ_HANDLED;
 }
-int gasket_interrupt_register_mapping(struct gasket_filp_data *filp_data,
-                                      int interrupt, int event_fd,
-                                      int bar_index, u64 reg) {
-  struct gasket_dev *gasket_dev = filp_data->gasket_dev;
-  struct gasket_interrupt_data *interrupt_data = gasket_dev->interrupt_data;
-  const struct gasket_interrupt_desc *interrupt_desc;
-  int i;
-  bool valid;
-  int ret;
-  int register_index;
-  if (gasket_interrupt_is_legacy(interrupt_data)) {
-    gasket_log_error(gasket_dev,
-                     "Unable to register_interrupt_mapping on legacy device.");
-    return -EPERM;
+int gasket_interrupt_register_mapping(
+ struct gasket_filp_data *filp_data,
+ int interrupt, int event_fd, int bar_index, u64 reg)
+{
+ struct gasket_dev *gasket_dev = filp_data->gasket_dev;
+ struct gasket_interrupt_data *interrupt_data =
+  gasket_dev->interrupt_data;
+ const struct gasket_interrupt_desc *interrupt_desc;
+ int i;
+ bool valid;
+ int ret;
+ int register_index;
+ if (gasket_interrupt_is_legacy(interrupt_data)) {
+  gasket_log_error(gasket_dev,
+   "Unable to register_interrupt_mapping on legacy device.");
+  return -EPERM;
+ }
+ if (interrupt < 0 || interrupt >= interrupt_data->num_msix_interrupts) {
+  gasket_log_error(gasket_dev,
+   "Interrupt number %d is invalid.", interrupt);
+  return -EINVAL;
+ }
+ valid = false;
+ for (i = 0; i < interrupt_data->num_interrupts; i++) {
+  interrupt_desc = &interrupt_data->interrupts[i];
+  if (interrupt_desc->bar_index == bar_index &&
+   interrupt_desc->reg == reg) {
+   valid = true;
+   register_index = i;
+   break;
   }
-  if (interrupt < 0 || interrupt >= interrupt_data->num_msix_interrupts) {
-    gasket_log_error(gasket_dev, "Interrupt number %d is invalid.", interrupt);
-    return -EINVAL;
-  }
-  valid = false;
-  for (i = 0; i < interrupt_data->num_interrupts; i++) {
-    interrupt_desc = &interrupt_data->interrupts[i];
-    if (interrupt_desc->bar_index == bar_index && interrupt_desc->reg == reg) {
-      valid = true;
-      register_index = i;
-      break;
-    }
-  }
-  if (!valid) {
-    gasket_log_error(gasket_dev,
-                     "Bar %d offset 0x%llx is not a valid interrupt register.",
-                     bar_index, reg);
-    return -EINVAL;
-  }
-  if (interrupt_data->configured_registers[register_index]) {
-    gasket_log_error(gasket_dev,
-                     "Bar %d offset 0x%llx at index %d is already configured.",
-                     bar_index, reg, register_index);
-    return -EINVAL;
-  }
-  if (interrupt_data->configured_interrupts[interrupt]) {
-    gasket_log_error(gasket_dev, "Interrupt %d has already been mapped.",
-                     interrupt);
-    return -EINVAL;
-  }
-  ret = gasket_interrupt_set_eventfd(filp_data, interrupt, event_fd);
-  if (ret) {
-    gasket_log_error(gasket_dev,
-                     "Error when setting eventfd %d for interrupt %d: %d",
-                     event_fd, interrupt, ret);
-    return ret;
-  }
-  ret = gasket_interrupt_configure(gasket_dev, interrupt);
-  if (ret) {
-    gasket_log_error(gasket_dev, "Error when configuring interrupt %d: %d",
-                     interrupt, ret);
-    goto fail_interrupt_configure;
-  }
-  gasket_dev_write_64(gasket_dev, interrupt, bar_index, reg);
-  interrupt_data->mapped_registers[interrupt] = register_index;
-  interrupt_data->configured_registers[register_index] = true;
-  return 0;
-fail_interrupt_configure:
-  gasket_interrupt_clear_eventfd(gasket_dev, filp_data, interrupt);
+ }
+ if (!valid) {
+  gasket_log_error(gasket_dev,
+   "Bar %d offset 0x%llx is not a valid interrupt register.",
+   bar_index, reg);
+  return -EINVAL;
+ }
+ if (interrupt_data->configured_registers[register_index]) {
+  gasket_log_error(gasket_dev,
+   "Bar %d offset 0x%llx at index %d is already configured.",
+   bar_index, reg, register_index);
+  return -EINVAL;
+ }
+ if (interrupt_data->configured_interrupts[interrupt]) {
+  gasket_log_error(gasket_dev,
+   "Interrupt %d has already been mapped.", interrupt);
+  return -EINVAL;
+ }
+ ret = gasket_interrupt_set_eventfd(filp_data, interrupt, event_fd);
+ if (ret) {
+  gasket_log_error(gasket_dev,
+   "Error when setting eventfd %d for interrupt %d: %d",
+   event_fd, interrupt, ret);
   return ret;
+ }
+ ret = gasket_interrupt_configure(gasket_dev, interrupt);
+ if (ret) {
+  gasket_log_error(gasket_dev,
+   "Error when configuring interrupt %d: %d",
+   interrupt, ret);
+  goto fail_interrupt_configure;
+ }
+ gasket_dev_write_32(gasket_dev, interrupt, bar_index, reg);
+ interrupt_data->mapped_registers[interrupt] = register_index;
+ interrupt_data->configured_registers[register_index] = true;
+ return 0;
+fail_interrupt_configure:
+ gasket_interrupt_clear_eventfd(gasket_dev, filp_data, interrupt);
+ return ret;
 }
-int gasket_interrupt_unregister_mapping(struct gasket_filp_data *filp_data,
-                                        int interrupt) {
-  struct gasket_dev *gasket_dev = filp_data->gasket_dev;
-  struct gasket_interrupt_data *interrupt_data;
-  int register_index;
-  interrupt_data = gasket_dev->interrupt_data;
-  if (gasket_interrupt_is_legacy(interrupt_data)) {
-    gasket_log_error(gasket_dev,
-                     "Unable to unregister interrupt on legacy device.");
-    return -EPERM;
-  }
-  if (interrupt < 0 || interrupt >= interrupt_data->num_msix_interrupts) {
-    gasket_log_error(gasket_dev, "Trying to unregister interrupt number %d ",
-                     interrupt);
-    return -EINVAL;
-  }
-  register_index = interrupt_data->mapped_registers[interrupt];
-  interrupt_data->configured_registers[register_index] = false;
-  interrupt_data->mapped_registers[interrupt] = 0;
-  gasket_interrupt_free_irq(interrupt_data, interrupt);
-  return gasket_interrupt_clear_eventfd(gasket_dev, filp_data, interrupt);
+int gasket_interrupt_unregister_mapping(
+ struct gasket_filp_data *filp_data, int interrupt)
+{
+ struct gasket_dev *gasket_dev = filp_data->gasket_dev;
+ struct gasket_interrupt_data *interrupt_data;
+ int register_index;
+ interrupt_data = gasket_dev->interrupt_data;
+ if (gasket_interrupt_is_legacy(interrupt_data)) {
+  gasket_log_error(gasket_dev,
+   "Unable to unregister interrupt on legacy device.");
+  return -EPERM;
+ }
+ if (interrupt < 0 || interrupt >= interrupt_data->num_msix_interrupts) {
+  gasket_log_error(gasket_dev,
+   "Trying to unregister interrupt number %d ",
+   interrupt);
+  return -EINVAL;
+ }
+ register_index = interrupt_data->mapped_registers[interrupt];
+ interrupt_data->configured_registers[register_index] = false;
+ interrupt_data->mapped_registers[interrupt] = 0;
+ gasket_interrupt_free_irq(interrupt_data, interrupt);
+ return gasket_interrupt_clear_eventfd(gasket_dev, filp_data, interrupt);
 }
+EXPORT_SYMBOL(gasket_interrupt_unregister_mapping);

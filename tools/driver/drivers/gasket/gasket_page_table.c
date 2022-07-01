@@ -3,7 +3,6 @@
  * Copyright (C) 2021 Google LLC.
  */
 #include "gasket_page_table.h"
-
 #include <linux/dma-buf.h>
 #include <linux/file.h>
 #include <linux/init.h>
@@ -32,17 +31,17 @@
  gasket_log_debug((pg_tbl)->gasket_dev, \
   "Page table ID %d: " format, (pg_tbl)->config->id, ##arg)
 enum pte_status {
-  PTE_FREE,
-  PTE_INUSE,
-  PTE_INUSE_PFN,
-  PTE_INUSE_SGT,
+ PTE_FREE,
+ PTE_INUSE,
+ PTE_INUSE_PFN,
+ PTE_INUSE_SGT,
 };
 struct gasket_sgt_mapping {
-  struct sg_table *sgt;
-  struct dma_buf_attachment *dbuf_attach;
-  ulong dev_addr;
-  size_t size;
-  struct list_head entry;
+ struct sg_table *sgt;
+ struct dma_buf_attachment *dbuf_attach;
+ ulong dev_addr;
+ size_t size;
+ struct list_head entry;
 };
 struct gasket_page_table_entry {
  enum pte_status status;
@@ -70,20 +69,20 @@ static int gasket_map_simple_pages(
 static int gasket_map_extended_pages(
  struct gasket_page_table *pg_tbl, ulong host_addr,
  ulong dev_addr, uint num_pages);
-static int gasket_map_sgt_simple_pages(struct gasket_page_table *pg_tbl,
-                                       struct gasket_sgt_mapping *mapping);
-static int gasket_map_sgt_extended_pages(struct gasket_page_table *pg_tbl,
-                                         struct gasket_sgt_mapping *mapping);
+static int gasket_map_sgt_simple_pages(
+ struct gasket_page_table *pg_tbl, struct gasket_sgt_mapping *mapping);
+static int gasket_map_sgt_extended_pages(
+ struct gasket_page_table *pg_tbl, struct gasket_sgt_mapping *mapping);
 static struct gasket_sgt_mapping *gasket_page_table_import_dma_buf(
-    struct gasket_page_table *pg_tbl, int dma_buf_fd);
+ struct gasket_page_table *pg_tbl, int dma_buf_fd);
 static void gasket_page_table_detach_sgt_mapping(
-    struct gasket_page_table *pg_tbl, struct gasket_sgt_mapping *mapping);
+ struct gasket_page_table *pg_tbl, struct gasket_sgt_mapping *mapping);
 static int gasket_page_table_validate_sgt_mappings(
-    struct gasket_page_table *pg_tbl, ulong dev_addr, uint num_pages);
+ struct gasket_page_table *pg_tbl, ulong dev_addr, uint num_pages);
 static int gasket_page_table_detach_sgt_mappings(
-    struct gasket_page_table *pg_tbl, ulong dev_addr, uint num_pages);
-static size_t gasket_sgt_get_contiguous_size(struct gasket_page_table *pg_tbl,
-                                             struct sg_table *sgt);
+ struct gasket_page_table *pg_tbl, ulong dev_addr, uint num_pages);
+static size_t gasket_sgt_get_contiguous_size(
+ struct gasket_page_table *pg_tbl, struct sg_table *sgt);
 static int gasket_perform_mapping(
  struct gasket_page_table *pg_tbl,
  struct gasket_page_table_entry *pte_base, u64 __iomem *att_base,
@@ -145,7 +144,7 @@ int gasket_page_table_init(struct gasket_page_table **ppg_tbl,
   "Attempting to initialize page table of size 0x%lx.",
   total_entries);
  gasket_log_debug(gasket_dev,
-  "Table has base reg 0x%x, extended offset reg 0x%x.",
+  "Table has base reg 0x%llx, extended offset reg 0x%llx.",
   page_table_config->base_reg,
   page_table_config->extended_reg);
  *ppg_tbl = kzalloc(sizeof(**ppg_tbl), GFP_KERNEL);
@@ -226,43 +225,48 @@ int gasket_page_table_partition(
  return 0;
 }
 EXPORT_SYMBOL(gasket_page_table_partition);
-int gasket_page_table_dma_buf_map(struct gasket_page_table *pg_tbl,
-                                  int dma_buf_fd, ulong dev_addr) {
-  int ret;
-  uint num_pages;
-  struct gasket_sgt_mapping *mapping;
-  struct dma_buf *dbuf;
-  mapping = gasket_page_table_import_dma_buf(pg_tbl, dma_buf_fd);
-  if (IS_ERR(mapping)) return PTR_ERR(mapping);
-  mutex_lock(&pg_tbl->mutex);
-  INIT_LIST_HEAD(&mapping->entry);
-  mapping->dev_addr = dev_addr;
-  dbuf = mapping->dbuf_attach->dmabuf;
-  if (mapping->size != gasket_sgt_get_contiguous_size(pg_tbl, mapping->sgt)) {
-    gasket_pg_tbl_error(pg_tbl, "failed to map non-contiguous scatterlist");
-    ret = -EINVAL;
-    goto dma_buf_map_failed;
-  }
-  num_pages = mapping->size >> PAGE_SHIFT;
-  if (gasket_page_table_is_dev_addr_bad(pg_tbl, dev_addr, mapping->size)) {
-    ret = -EINVAL;
-    goto dma_buf_map_failed;
-  }
-  if (gasket_addr_is_simple(pg_tbl, dev_addr))
-    ret = gasket_map_sgt_simple_pages(pg_tbl, mapping);
-  else
-    ret = gasket_map_sgt_extended_pages(pg_tbl, mapping);
-  if (ret) {
-    gasket_pg_tbl_error(pg_tbl, "failed to map dma_buf: %d", ret);
-    goto dma_buf_map_failed;
-  }
-  list_add_tail(&mapping->entry, &pg_tbl->sgt_mappings);
-  mutex_unlock(&pg_tbl->mutex);
-  return ret;
+int gasket_page_table_dma_buf_map(
+ struct gasket_page_table *pg_tbl, int dma_buf_fd, ulong dev_addr)
+{
+ int ret;
+ uint num_pages;
+ struct gasket_sgt_mapping *mapping;
+ struct dma_buf *dbuf;
+ mapping = gasket_page_table_import_dma_buf(pg_tbl, dma_buf_fd);
+ if (IS_ERR(mapping))
+  return PTR_ERR(mapping);
+ mutex_lock(&pg_tbl->mutex);
+ INIT_LIST_HEAD(&mapping->entry);
+ mapping->dev_addr = dev_addr;
+ dbuf = mapping->dbuf_attach->dmabuf;
+ if (mapping->size !=
+  gasket_sgt_get_contiguous_size(pg_tbl, mapping->sgt)) {
+  gasket_pg_tbl_error(
+   pg_tbl, "failed to map non-contiguous scatterlist");
+  ret = -EINVAL;
+  goto dma_buf_map_failed;
+ }
+ num_pages = mapping->size >> PAGE_SHIFT;
+ if (gasket_page_table_is_dev_addr_bad(
+      pg_tbl, dev_addr, mapping->size)) {
+  ret = -EINVAL;
+  goto dma_buf_map_failed;
+ }
+ if (gasket_addr_is_simple(pg_tbl, dev_addr))
+  ret = gasket_map_sgt_simple_pages(pg_tbl, mapping);
+ else
+  ret = gasket_map_sgt_extended_pages(pg_tbl, mapping);
+ if (ret) {
+  gasket_pg_tbl_error(pg_tbl, "failed to map dma_buf: %d", ret);
+  goto dma_buf_map_failed;
+ }
+ list_add_tail(&mapping->entry, &pg_tbl->sgt_mappings);
+ mutex_unlock(&pg_tbl->mutex);
+ return ret;
 dma_buf_map_failed:
-  gasket_page_table_detach_sgt_mapping(pg_tbl, mapping);
-  mutex_unlock(&pg_tbl->mutex);
-  return ret;
+ gasket_page_table_detach_sgt_mapping(pg_tbl, mapping);
+ mutex_unlock(&pg_tbl->mutex);
+ return ret;
 }
 EXPORT_SYMBOL(gasket_page_table_dma_buf_map);
 int gasket_page_table_map(struct gasket_page_table *pg_tbl, ulong host_addr,
@@ -270,7 +274,6 @@ int gasket_page_table_map(struct gasket_page_table *pg_tbl, ulong host_addr,
 {
  int ret = 0;
  uint num_pages;
- if (current->mm) mmap_read_lock(current->mm);
  mutex_lock(&pg_tbl->mutex);
  if (gasket_page_table_are_addrs_bad(pg_tbl, host_addr, dev_addr,
          bytes)) {
@@ -286,7 +289,6 @@ int gasket_page_table_map(struct gasket_page_table *pg_tbl, ulong host_addr,
   }
  }
  mutex_unlock(&pg_tbl->mutex);
- if (current->mm) mmap_read_unlock(current->mm);
  return ret;
 }
 EXPORT_SYMBOL(gasket_page_table_map);
@@ -353,6 +355,7 @@ int gasket_page_table_are_addrs_bad(struct gasket_page_table *pg_tbl,
    host_addr);
   return 1;
  }
+ down_read(&current->mm->mmap_lock);
  vma = find_vma(current->mm, current_ptr);
  if (unlikely(!vma)) {
   gasket_pg_tbl_error(pg_tbl,
@@ -391,8 +394,10 @@ int gasket_page_table_are_addrs_bad(struct gasket_page_table *pg_tbl,
    goto fail;
   }
  }
+ up_read(&current->mm->mmap_lock);
  return gasket_page_table_is_dev_addr_bad(pg_tbl, dev_addr, bytes);
 fail:
+ up_read(&current->mm->mmap_lock);
  gasket_pg_tbl_error(pg_tbl,
   "Failure while checking host range [0x%lx, 0x%lx)", host_addr,
   host_addr + bytes);
@@ -424,55 +429,55 @@ int gasket_page_table_is_dev_addr_bad(
 EXPORT_SYMBOL(gasket_page_table_is_dev_addr_bad);
 uint gasket_page_table_max_size(struct gasket_page_table *pg_tbl)
 {
-  if (unlikely(!pg_tbl)) {
-    gasket_nodev_error("Passed a null page table.");
-    return 0;
-  }
+ if (unlikely(!pg_tbl)) {
+  gasket_nodev_error("Passed a null page table.");
+  return 0;
+ }
  return pg_tbl->config->total_entries;
 }
 EXPORT_SYMBOL(gasket_page_table_max_size);
 uint gasket_page_table_num_entries(struct gasket_page_table *pg_tbl)
 {
-  if (unlikely(!pg_tbl)) {
-    gasket_nodev_error("Passed a null page table.");
-    return 0;
-  }
+ if (unlikely(!pg_tbl)) {
+  gasket_nodev_error("Passed a null page table.");
+  return 0;
+ }
  return pg_tbl->num_simple_entries + pg_tbl->num_extended_entries;
 }
 EXPORT_SYMBOL(gasket_page_table_num_entries);
 uint gasket_page_table_num_simple_entries(struct gasket_page_table *pg_tbl)
 {
-  if (unlikely(!pg_tbl)) {
-    gasket_nodev_error("Passed a null page table.");
-    return 0;
-  }
+ if (unlikely(!pg_tbl)) {
+  gasket_nodev_error("Passed a null page table.");
+  return 0;
+ }
  return pg_tbl->num_simple_entries;
 }
 EXPORT_SYMBOL(gasket_page_table_num_simple_entries);
 uint gasket_page_table_num_extended_entries(struct gasket_page_table *pg_tbl)
 {
-  if (unlikely(!pg_tbl)) {
-    gasket_nodev_error("Passed a null page table.");
-    return 0;
-  }
+ if (unlikely(!pg_tbl)) {
+  gasket_nodev_error("Passed a null page table.");
+  return 0;
+ }
  return pg_tbl->num_extended_entries;
 }
 EXPORT_SYMBOL(gasket_page_table_num_extended_entries);
 uint gasket_page_table_num_active_pages(struct gasket_page_table *pg_tbl)
 {
-  if (unlikely(!pg_tbl)) {
-    gasket_nodev_error("Passed a null page table.");
-    return 0;
-  }
+ if (unlikely(!pg_tbl)) {
+  gasket_nodev_error("Passed a null page table.");
+  return 0;
+ }
  return pg_tbl->num_active_pages;
 }
 EXPORT_SYMBOL(gasket_page_table_num_active_pages);
 int gasket_page_table_system_status(struct gasket_page_table *pg_tbl)
 {
-  if (unlikely(!pg_tbl)) {
-    gasket_nodev_error("Passed a null page table.");
-    return GASKET_STATUS_LAMED;
-  }
+ if (unlikely(!pg_tbl)) {
+  gasket_nodev_error("Passed a null page table.");
+  return GASKET_STATUS_LAMED;
+ }
  if (gasket_page_table_num_entries(pg_tbl) == 0) {
   gasket_log_error(pg_tbl->gasket_dev,
    "Page table size is 0.");
@@ -533,7 +538,7 @@ static int gasket_map_extended_pages(
    slot_base + slot_idx, host_addr, dev_addr, len, 0);
   if (ret) {
    gasket_page_table_unmap_nolock(
-    pg_tbl, dev_addr_start, num_pages);
+    pg_tbl, dev_addr_start, num_pages - remain);
    return ret;
   }
   remain -= len;
@@ -545,8 +550,9 @@ static int gasket_map_extended_pages(
  return 0;
 }
 static bool use_hpa_for_pfn_mappings(struct pci_dev *dev, ulong host_addr,
-                                     ulong size) {
-  return false;
+    ulong size)
+{
+ return false;
 }
 static int perform_pfn_mapping(struct gasket_page_table *pg_tbl,
  struct gasket_page_table_entry *ptes, u64 __iomem *slots,
@@ -557,51 +563,60 @@ static int perform_pfn_mapping(struct gasket_page_table *pg_tbl,
  struct vm_area_struct *vma;
  const size_t size = (size_t)num_pages << PAGE_SHIFT;
  unsigned long vma_offset;
- bool always_use_hpa = false;
+        bool always_use_hpa = false;
  phys_addr_t host_phys_addr;
  dma_addr_t host_dma_addr = 0;
  dma_addr_t page_dma_addr;
  dma_addr_t device_dma_addr;
+ down_read(&current->mm->mmap_lock);
  vma = find_vma(current->mm, host_addr);
  if (vma == NULL) {
-  return -EFAULT;
+  ret = -EFAULT;
+  goto error_mm;
  }
  if (!(vma->vm_flags & VM_PFNMAP)) {
   gasket_pg_tbl_error(pg_tbl,
    "VMA region is not VM_PFNMAP: host_addr=%#lx, size=%#lx, vm_flags=%#lx, vm_pgoff=%#lx",
    host_addr, size, vma->vm_flags, vma->vm_pgoff);
-  return -EINVAL;
+  ret = -EINVAL;
+  goto error_mm;
  }
  if (host_addr + size > vma->vm_end) {
   gasket_pg_tbl_error(pg_tbl,
    "VMA region does not cover the requested range: host_addr=%#lx, size=%#lx, vm_start=%#lx, vm_end=%#lx, vm_pgoff=%#lx",
    host_addr, size, vma->vm_start, vma->vm_end,
    vma->vm_pgoff);
-  return -EINVAL;
+  ret = -EINVAL;
+  goto error_mm;
  }
  vma_offset = host_addr - vma->vm_start;
  host_phys_addr = (vma->vm_pgoff << PAGE_SHIFT) + vma_offset;
+ up_read(&current->mm->mmap_lock);
  gasket_pg_tbl_debug(pg_tbl,
   "%s: virt_addr_valid=%d, host_phys_addr=%#llx, iommu_ops=%p\n",
   __func__, virt_addr_valid(host_phys_addr), host_phys_addr,
   pg_tbl->gasket_dev->pci_dev->dev.bus->iommu_ops);
- always_use_hpa = use_hpa_for_pfn_mappings(pg_tbl->gasket_dev->pci_dev,
-                                           host_phys_addr, size);
+        always_use_hpa = use_hpa_for_pfn_mappings(pg_tbl->gasket_dev->pci_dev,
+                                                   host_phys_addr, size);
  if (gasket_pci_is_iommu_enabled(pg_tbl->gasket_dev->pci_dev) &&
-     !always_use_hpa) {
-   ret = dma_mapping_error(&pg_tbl->gasket_dev->pci_dev->dev, host_dma_addr);
-   if (ret) {
-     gasket_pg_tbl_error(
-         pg_tbl, "Error allocating IOVA for PFN region for DMA: %d", ret);
-     return ret;
-   }
-   ret = dma_mapping_error(&pg_tbl->gasket_dev->pci_dev->dev, page_dma_addr);
-   if (ret) {
-     gasket_pg_tbl_error(pg_tbl, "Error mapping IOVA to PFN region for DMA: %d",
-                         ret);
-     goto error;
-   }
-   WARN_ON(host_dma_addr != page_dma_addr);
+            !always_use_hpa) {
+  ret = dma_mapping_error(
+   &pg_tbl->gasket_dev->pci_dev->dev, host_dma_addr);
+  if (ret) {
+   gasket_pg_tbl_error(pg_tbl,
+    "Error allocating IOVA for PFN region for DMA: %d",
+    ret);
+   return ret;
+  }
+  ret = dma_mapping_error(
+   &pg_tbl->gasket_dev->pci_dev->dev, page_dma_addr);
+  if (ret) {
+   gasket_pg_tbl_error(pg_tbl,
+    "Error mapping IOVA to PFN region for DMA: %d",
+    ret);
+   goto error;
+  }
+  WARN_ON(host_dma_addr != page_dma_addr);
  } else {
 #ifdef CONFIG_VIRT_TO_BUS
   ret = 0;
@@ -641,9 +656,11 @@ static int perform_pfn_mapping(struct gasket_page_table *pg_tbl,
  pg_tbl->num_active_pages += num_pages;
  return 0;
 error:
-  if (gasket_pci_is_iommu_enabled(pg_tbl->gasket_dev->pci_dev) &&
-      host_dma_addr && !always_use_hpa) {
-  }
+ if (gasket_pci_is_iommu_enabled(pg_tbl->gasket_dev->pci_dev) &&
+     host_dma_addr && !always_use_hpa) {}
+ return ret;
+error_mm:
+ up_read(&current->mm->mmap_lock);
  return ret;
 }
 static int gasket_perform_mapping(struct gasket_page_table *pg_tbl,
@@ -667,7 +684,7 @@ static int gasket_perform_mapping(struct gasket_page_table *pg_tbl,
  pages = kmalloc_array(num_pages, sizeof(struct page *), GFP_KERNEL);
  if (!pages)
   return -ENOMEM;
- ret = get_user_pages(host_addr, num_pages, FOLL_WRITE, pages, NULL);
+ ret = get_user_pages_fast(host_addr, num_pages, 1, pages);
  if (ret == -EFAULT) {
   ret = perform_pfn_mapping(pg_tbl, ptes, slots, host_addr,
        dev_addr, num_pages,
@@ -791,22 +808,24 @@ static int gasket_alloc_extended_subtable(struct gasket_page_table *pg_tbl,
  subtable_bytes = sizeof(struct gasket_page_table_entry) *
     GASKET_PAGES_PER_SUBTABLE;
  pte->sublevel = vmalloc(subtable_bytes);
- if (!pte->sublevel) goto fail_subtable_allocate;
+ if (!pte->sublevel)
+  goto fail_subtable_allocate;
  memset(pte->sublevel, 0, subtable_bytes);
  pte->dma_addr = dma_map_page(dev, pte->page, 0, PAGE_SIZE,
   DMA_BIDIRECTIONAL);
- if (unlikely(dma_mapping_error(dev, pte->dma_addr))) goto fail_dma_map;
+ if (unlikely(dma_mapping_error(dev, pte->dma_addr)))
+  goto fail_dma_map;
  mb();
  dma_addr = pte->dma_addr | GASKET_VALID_SLOT_FLAG;
  writeq(dma_addr, slot);
  pte->status = PTE_INUSE;
  return 0;
 fail_dma_map:
-  vfree(pte->sublevel);
+ vfree(pte->sublevel);
 fail_subtable_allocate:
-  free_page(page_addr);
-  memset(pte, 0, sizeof(struct gasket_page_table_entry));
-  return -ENOMEM;
+ free_page(page_addr);
+ memset(pte, 0, sizeof(struct gasket_page_table_entry));
+ return -ENOMEM;
 }
 static int gasket_page_table_unmap_nolock(
  struct gasket_page_table *pg_tbl, ulong dev_addr, uint num_pages)
@@ -822,350 +841,376 @@ static int gasket_page_table_unmap_nolock(
 static int gasket_unmap_simple_pages(
  struct gasket_page_table *pg_tbl, ulong dev_addr, uint num_pages)
 {
-  int ret;
-  uint slot = gasket_simple_page_idx(pg_tbl, dev_addr);
-  ret = gasket_page_table_validate_sgt_mappings(pg_tbl, dev_addr, num_pages);
-  if (ret) {
-    gasket_pg_tbl_error(
-        pg_tbl, "Partial unmapping of scatterlist is not allowed: %d", ret);
-    return ret;
-  }
-  ret = gasket_perform_unmapping(pg_tbl, pg_tbl->entries + slot,
-                                 pg_tbl->base_slot + slot, dev_addr, num_pages,
-                                 1, NULL);
-  if (ret) return ret;
-  gasket_page_table_detach_sgt_mappings(pg_tbl, dev_addr, num_pages);
+ int ret;
+ uint slot = gasket_simple_page_idx(pg_tbl, dev_addr);
+ ret = gasket_page_table_validate_sgt_mappings(
+  pg_tbl, dev_addr, num_pages);
+ if (ret) {
+  gasket_pg_tbl_error(pg_tbl,
+   "Partial unmapping of scatterlist is not allowed: %d",
+   ret);
   return ret;
+ }
+ ret = gasket_perform_unmapping(pg_tbl, pg_tbl->entries + slot,
+  pg_tbl->base_slot + slot, dev_addr, num_pages, 1, NULL);
+ if (ret)
+  return ret;
+ gasket_page_table_detach_sgt_mappings(pg_tbl, dev_addr, num_pages);
+ return ret;
 }
 static void perform_sgt_dma_addr_mapping(struct gasket_page_table *pg_tbl,
-                                         struct gasket_page_table_entry *ptes,
-                                         u64 __iomem *slots,
-                                         dma_addr_t dma_addr, uint num_pages,
-                                         int is_simple_mapping) {
-  int i;
-  dma_addr_t page_dma_addr;
-  dma_addr_t device_dma_addr;
-  gasket_pg_tbl_debug(pg_tbl, "Mapping dma_addr=%#llx, iommu_ops=%p\n",
-                      dma_addr,
-                      pg_tbl->gasket_dev->pci_dev->dev.bus->iommu_ops);
-  page_dma_addr = dma_addr;
-  for (i = 0; i < num_pages; ++i, page_dma_addr += PAGE_SIZE) {
-    ptes[i].dma_addr = page_dma_addr;
-    device_dma_addr = page_dma_addr | GASKET_VALID_SLOT_FLAG;
-    if (is_simple_mapping)
-      writeq(device_dma_addr, &slots[i]);
-    else
-      ((u64 __force *)slots)[i] = device_dma_addr;
-    ptes[i].status = PTE_INUSE_SGT;
-  }
-  pg_tbl->num_active_pages += num_pages;
+ struct gasket_page_table_entry *ptes, u64 __iomem *slots,
+ dma_addr_t dma_addr, uint num_pages, int is_simple_mapping)
+{
+ int i;
+ dma_addr_t page_dma_addr;
+ dma_addr_t device_dma_addr;
+ gasket_pg_tbl_debug(pg_tbl, "Mapping dma_addr=%#llx, iommu_ops=%p\n",
+  dma_addr, pg_tbl->gasket_dev->pci_dev->dev.bus->iommu_ops);
+ page_dma_addr = dma_addr;
+ for (i = 0; i < num_pages; ++i, page_dma_addr += PAGE_SIZE) {
+  ptes[i].dma_addr = page_dma_addr;
+  device_dma_addr = page_dma_addr | GASKET_VALID_SLOT_FLAG;
+  if (is_simple_mapping)
+   writeq(device_dma_addr, &slots[i]);
+  else
+   ((u64 __force *)slots)[i] = device_dma_addr;
+  ptes[i].status = PTE_INUSE_SGT;
+ }
+ pg_tbl->num_active_pages += num_pages;
 }
-static size_t gasket_sgt_get_contiguous_size(struct gasket_page_table *pg_tbl,
-                                             struct sg_table *sgt) {
-  int i;
-  size_t sz = 0;
-  dma_addr_t start;
-  struct scatterlist *sg;
-  start = sg_dma_address(sgt->sgl);
-  for_each_sg(sgt->sgl, sg, sgt->nents, i) {
-    if (!IS_ALIGNED(sg_dma_address(sg), PAGE_SIZE) ||
-        !IS_ALIGNED(sg_dma_len(sg), PAGE_SIZE)) {
-      gasket_pg_tbl_error(pg_tbl,
-                          "Entry in sg_table is not page aligned: dma_address: "
-                          "0x%llx size: 0x%x",
-                          sg_dma_address(sg), sg->length);
-      break;
-    }
-    if (sg_dma_address(sg) != start) {
-      break;
-    }
-    start += sg_dma_len(sg);
-    sz += sg_dma_len(sg);
+static size_t gasket_sgt_get_contiguous_size(
+ struct gasket_page_table *pg_tbl, struct sg_table *sgt)
+{
+ int i;
+ size_t sz = 0;
+ dma_addr_t start;
+ struct scatterlist *sg;
+ start = sg_dma_address(sgt->sgl);
+ for_each_sg(sgt->sgl, sg, sgt->nents, i) {
+  if (!IS_ALIGNED(sg_dma_address(sg), PAGE_SIZE) ||
+   !IS_ALIGNED(sg_dma_len(sg), PAGE_SIZE)) {
+   gasket_pg_tbl_error(pg_tbl,
+    "Entry in sg_table is not page aligned: dma_address: 0x%llx size: 0x%x",
+    sg_dma_address(sg), sg->length);
+   break;
   }
-  return sz;
+  if (sg_dma_address(sg) != start) {
+   break;
+  }
+  start += sg_dma_len(sg);
+  sz += sg_dma_len(sg);
+ }
+ return sz;
 }
 #if LINUX_VERSION_CODE > KERNEL_VERSION(5, 7, 19)
 static void gasket_page_table_dma_buf_move_notify(
-    struct dma_buf_attachment *attachment) {
-  struct gasket_sgt_mapping *mapping;
-  struct gasket_page_table *pg_tbl;
-  pg_tbl = attachment->importer_priv;
-  if (!pg_tbl) {
-    gasket_pg_tbl_warn(pg_tbl,
-                       "dma_buf move notify received with invalid pg_tbl.");
-    return;
+ struct dma_buf_attachment *attachment)
+{
+ struct gasket_sgt_mapping *mapping;
+ struct gasket_page_table *pg_tbl;
+ pg_tbl = attachment->importer_priv;
+ if (!pg_tbl) {
+  gasket_pg_tbl_warn(pg_tbl,
+   "dma_buf move notify received with invalid pg_tbl.");
+  return;
+ }
+ mutex_lock(&pg_tbl->mutex);
+ list_for_each_entry(mapping, &pg_tbl->sgt_mappings, entry) {
+  if (mapping->dbuf_attach == attachment) {
+   gasket_pg_tbl_warn(pg_tbl,
+    "dma_buf attachment moved: %p", attachment);
+   break;
   }
-  mutex_lock(&pg_tbl->mutex);
-  list_for_each_entry(mapping, &pg_tbl->sgt_mappings, entry) {
-    if (mapping->dbuf_attach == attachment) {
-      gasket_pg_tbl_warn(pg_tbl, "dma_buf attachment moved: %p", attachment);
-      break;
-    }
-  }
-  mutex_unlock(&pg_tbl->mutex);
+ }
+ mutex_unlock(&pg_tbl->mutex);
 }
 static const struct dma_buf_attach_ops gasket_dma_buf_attach_ops = {
-    .allow_peer2peer = true,
-    .move_notify = gasket_page_table_dma_buf_move_notify,
+ .allow_peer2peer = true,
+ .move_notify = gasket_page_table_dma_buf_move_notify,
 };
 #endif
 static struct gasket_sgt_mapping *gasket_page_table_import_dma_buf(
-    struct gasket_page_table *pg_tbl, int dma_buf_fd) {
-  int ret;
-  struct gasket_dev *gasket_dev;
-  struct gasket_sgt_mapping *mapping;
-  struct dma_buf *dbuf;
-  gasket_dev = pg_tbl->gasket_dev;
-  dbuf = dma_buf_get(dma_buf_fd);
-  if (IS_ERR(dbuf)) {
-    ret = PTR_ERR(dbuf);
-    gasket_log_error(gasket_dev,
-                     "failed to get dma_buf using filedescriptor: %d", ret);
-    return ERR_PTR(ret);
-  }
-  if (dbuf->size == 0) {
-    gasket_log_error(gasket_dev, "Cannot import dma_buf with zero size");
-    ret = -EINVAL;
-    goto failed_mapping_alloc;
-  }
-  ret = 0;
-  mapping = kzalloc(sizeof(*mapping), GFP_KERNEL);
-  if (!mapping) {
-    gasket_log_error(gasket_dev,
-                     "failed to allocate memory for mapping struct");
-    ret = -ENOMEM;
-    goto failed_mapping_alloc;
-  }
+ struct gasket_page_table *pg_tbl, int dma_buf_fd)
+{
+ int ret;
+ struct gasket_dev *gasket_dev;
+ struct gasket_sgt_mapping *mapping;
+ struct dma_buf *dbuf;
+ gasket_dev = pg_tbl->gasket_dev;
+ dbuf = dma_buf_get(dma_buf_fd);
+ if (IS_ERR(dbuf)) {
+  ret = PTR_ERR(dbuf);
+  gasket_log_error(gasket_dev,
+   "failed to get dma_buf using filedescriptor: %d", ret);
+  return ERR_PTR(ret);
+ }
+ if (dbuf->size == 0) {
+  gasket_log_error(
+   gasket_dev, "Cannot import dma_buf with zero size");
+  ret = -EINVAL;
+  goto failed_mapping_alloc;
+ }
+ ret = 0;
+ mapping = kzalloc(sizeof(*mapping), GFP_KERNEL);
+ if (!mapping) {
+  gasket_log_error(gasket_dev,
+   "failed to allocate memory for mapping struct");
+  ret = -ENOMEM;
+  goto failed_mapping_alloc;
+ }
 #if LINUX_VERSION_CODE > KERNEL_VERSION(5, 7, 19)
-  mapping->dbuf_attach = dma_buf_dynamic_attach(
-      dbuf, &gasket_dev->pci_dev->dev, &gasket_dma_buf_attach_ops, pg_tbl);
+ mapping->dbuf_attach = dma_buf_dynamic_attach(dbuf,
+  &gasket_dev->pci_dev->dev, &gasket_dma_buf_attach_ops, pg_tbl);
 #else
-  mapping->dbuf_attach = dma_buf_attach(dbuf, &gasket_dev->pci_dev->dev);
+ mapping->dbuf_attach = dma_buf_attach(dbuf, &gasket_dev->pci_dev->dev);
 #endif
-  if (IS_ERR(mapping->dbuf_attach)) {
-    ret = PTR_ERR(mapping->dbuf_attach);
-    gasket_log_error(gasket_dev, "failed to attach to the dma_buf: %d", ret);
-    goto failed_attach;
-  }
-  mapping->size = dbuf->size;
+ if (IS_ERR(mapping->dbuf_attach)) {
+  ret = PTR_ERR(mapping->dbuf_attach);
+  gasket_log_error(
+   gasket_dev, "failed to attach to the dma_buf: %d", ret);
+  goto failed_attach;
+ }
+ mapping->size = dbuf->size;
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 7, 19)
+ dma_resv_lock(dbuf->resv, NULL);
+#endif
+ mapping->sgt =
+  dma_buf_map_attachment(mapping->dbuf_attach, DMA_BIDIRECTIONAL);
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 7, 19)
+ dma_resv_unlock(dbuf->resv);
+#endif
+ if (IS_ERR(mapping->sgt)) {
+  ret = PTR_ERR(mapping->sgt);
+  gasket_log_error(gasket_dev,
+   "failed to map dma_buf attachment: %d", ret);
+  goto failed_map;
+ }
+ return mapping;
+failed_map:
+ dma_buf_detach(dbuf, mapping->dbuf_attach);
+failed_attach:
+ kfree(mapping);
+failed_mapping_alloc:
+ dma_buf_put(dbuf);
+ return ERR_PTR(ret);
+}
+static void gasket_page_table_detach_sgt_mapping(
+ struct gasket_page_table *pg_tbl, struct gasket_sgt_mapping *mapping)
+{
+ struct dma_buf *dbuf;
+ lockdep_assert_held(&pg_tbl->mutex);
+ if (!list_empty(&mapping->entry))
+  list_del_init(&mapping->entry);
+ if (mapping->dbuf_attach) {
+  dbuf = mapping->dbuf_attach->dmabuf;
 #if LINUX_VERSION_CODE > KERNEL_VERSION(5, 7, 19)
   dma_resv_lock(dbuf->resv, NULL);
 #endif
-  mapping->sgt =
-      dma_buf_map_attachment(mapping->dbuf_attach, DMA_BIDIRECTIONAL);
+  dma_buf_unmap_attachment(
+   mapping->dbuf_attach, mapping->sgt, DMA_BIDIRECTIONAL);
 #if LINUX_VERSION_CODE > KERNEL_VERSION(5, 7, 19)
   dma_resv_unlock(dbuf->resv);
 #endif
-  if (IS_ERR(mapping->sgt)) {
-    ret = PTR_ERR(mapping->sgt);
-    gasket_log_error(gasket_dev, "failed to map dma_buf attachment: %d", ret);
-    goto failed_map;
-  }
-  return mapping;
-failed_map:
   dma_buf_detach(dbuf, mapping->dbuf_attach);
-failed_attach:
-  kfree(mapping);
-failed_mapping_alloc:
   dma_buf_put(dbuf);
-  return ERR_PTR(ret);
+ }
+ kfree(mapping);
 }
-static void gasket_page_table_detach_sgt_mapping(
-    struct gasket_page_table *pg_tbl, struct gasket_sgt_mapping *mapping) {
-  struct dma_buf *dbuf;
-  lockdep_assert_held(&pg_tbl->mutex);
-  if (!list_empty(&mapping->entry)) list_del_init(&mapping->entry);
-  if (mapping->dbuf_attach) {
-    dbuf = mapping->dbuf_attach->dmabuf;
-#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 7, 19)
-    dma_resv_lock(dbuf->resv, NULL);
-#endif
-    dma_buf_unmap_attachment(mapping->dbuf_attach, mapping->sgt,
-                             DMA_BIDIRECTIONAL);
-#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 7, 19)
-    dma_resv_unlock(dbuf->resv);
-#endif
-    dma_buf_detach(dbuf, mapping->dbuf_attach);
-    dma_buf_put(dbuf);
+static int gasket_map_sgt_simple_pages(
+ struct gasket_page_table *pg_tbl, struct gasket_sgt_mapping *mapping)
+{
+ int ret;
+ ulong dev_addr;
+ dma_addr_t dma_address;
+ uint num_pages, slot_idx;
+ lockdep_assert_held(&pg_tbl->mutex);
+ dev_addr = mapping->dev_addr;
+ slot_idx = gasket_simple_page_idx(pg_tbl, dev_addr);
+ dma_address = sg_dma_address(mapping->sgt->sgl);
+ num_pages = mapping->size >> PAGE_SHIFT;
+ ret = gasket_alloc_simple_entries(pg_tbl, dev_addr, num_pages);
+ if (ret) {
+  gasket_pg_tbl_error(pg_tbl,
+   "page table slots %u (@ 0x%lx) to %u are not available",
+   slot_idx, dev_addr, slot_idx + num_pages - 1);
+  return ret;
+ }
+ perform_sgt_dma_addr_mapping(pg_tbl, pg_tbl->entries + slot_idx,
+  pg_tbl->base_slot + slot_idx, dma_address, num_pages, 1);
+ if (pg_tbl->config->map_buffer_cb) {
+  ret = pg_tbl->config->map_buffer_cb(pg_tbl->gasket_dev,
+   pg_tbl->config->id, dma_address, dev_addr, num_pages);
+  if (ret) {
+   gasket_pg_tbl_error(pg_tbl,
+    "Map buffer callback error for dev_addr=%#lx, dma_addr=%#llx, num_pages=%d: %d",
+    dev_addr, dma_address, num_pages, ret);
+   gasket_page_table_unmap_nolock(
+    pg_tbl, dev_addr, num_pages);
   }
-  kfree(mapping);
+ }
+ return ret;
 }
-static int gasket_map_sgt_simple_pages(struct gasket_page_table *pg_tbl,
-                                       struct gasket_sgt_mapping *mapping) {
-  int ret;
-  ulong dev_addr;
-  dma_addr_t dma_address;
-  uint num_pages, slot_idx;
-  lockdep_assert_held(&pg_tbl->mutex);
+static int gasket_map_sgt_extended_pages(
+ struct gasket_page_table *pg_tbl, struct gasket_sgt_mapping *mapping)
+{
+ int ret;
+ ulong dev_addr = mapping->dev_addr;
+ ulong dev_addr_end;
+ uint remain_pages, num_pages, slot_idx, len;
+ struct gasket_page_table_entry *pte;
+ dma_addr_t dma_address;
+ u64 __iomem *slot_base;
+ lockdep_assert_held(&pg_tbl->mutex);
+ dma_address = sg_dma_address(mapping->sgt->sgl);
+ num_pages = mapping->size >> PAGE_SHIFT;
+ ret = gasket_alloc_extended_entries(pg_tbl, dev_addr, num_pages);
+ if (ret) {
+  dev_addr_end = dev_addr + (num_pages * PAGE_SIZE) - 1;
+  gasket_pg_tbl_error(pg_tbl,
+   "page table slots (%lu,%lu) (@ 0x%lx) to (%lu,%lu) are not available",
+   gasket_extended_lvl0_page_idx(pg_tbl, dev_addr),
+   gasket_extended_lvl1_page_idx(pg_tbl, dev_addr),
+   dev_addr,
+   gasket_extended_lvl0_page_idx(pg_tbl, dev_addr_end),
+   gasket_extended_lvl1_page_idx(pg_tbl, dev_addr_end));
+  return ret;
+ }
+ slot_idx = gasket_extended_lvl1_page_idx(pg_tbl, dev_addr);
+ pte = pg_tbl->entries + pg_tbl->num_simple_entries +
+       gasket_extended_lvl0_page_idx(pg_tbl, dev_addr);
+ remain_pages = num_pages;
+ while (remain_pages > 0) {
+  len = min(remain_pages, GASKET_PAGES_PER_SUBTABLE - slot_idx);
+  slot_base = (u64 __iomem *)(page_address(pte->page));
+  perform_sgt_dma_addr_mapping(pg_tbl, pte->sublevel + slot_idx,
+   slot_base + slot_idx, dma_address, len, 0);
+  slot_idx = 0;
+  pte++;
+  remain_pages -= len;
+  dma_address += len * PAGE_SIZE;
+  dev_addr += len * PAGE_SIZE;
+ }
+ if (pg_tbl->config->map_buffer_cb) {
   dev_addr = mapping->dev_addr;
-  slot_idx = gasket_simple_page_idx(pg_tbl, dev_addr);
   dma_address = sg_dma_address(mapping->sgt->sgl);
-  num_pages = mapping->size >> PAGE_SHIFT;
-  ret = gasket_alloc_simple_entries(pg_tbl, dev_addr, num_pages);
+  ret = pg_tbl->config->map_buffer_cb(pg_tbl->gasket_dev,
+   pg_tbl->config->id, dma_address, dev_addr, num_pages);
   if (ret) {
-    gasket_pg_tbl_error(pg_tbl,
-                        "page table slots %u (@ 0x%lx) to %u are not available",
-                        slot_idx, dev_addr, slot_idx + num_pages - 1);
-    return ret;
+   gasket_pg_tbl_error(pg_tbl,
+    "Map buffer callback error for dev_addr=%#lx, dma_addr=%#llx, num_pages=%d: %d",
+    dev_addr, dma_address, num_pages, ret);
+   gasket_page_table_unmap_nolock(
+    pg_tbl, dev_addr, num_pages);
   }
-  perform_sgt_dma_addr_mapping(pg_tbl, pg_tbl->entries + slot_idx,
-                               pg_tbl->base_slot + slot_idx, dma_address,
-                               num_pages, 1);
-  if (pg_tbl->config->map_buffer_cb) {
-    ret = pg_tbl->config->map_buffer_cb(pg_tbl->gasket_dev, pg_tbl->config->id,
-                                        dma_address, dev_addr, num_pages);
-    if (ret) {
-      gasket_pg_tbl_error(pg_tbl,
-                          "Map buffer callback error for dev_addr=%#lx, "
-                          "dma_addr=%#llx, num_pages=%d: %d",
-                          dev_addr, dma_address, num_pages, ret);
-      gasket_page_table_unmap_nolock(pg_tbl, dev_addr, num_pages);
-    }
-  }
-  return ret;
-}
-static int gasket_map_sgt_extended_pages(struct gasket_page_table *pg_tbl,
-                                         struct gasket_sgt_mapping *mapping) {
-  int ret;
-  ulong dev_addr = mapping->dev_addr;
-  ulong dev_addr_end;
-  uint remain_pages, num_pages, slot_idx, len;
-  struct gasket_page_table_entry *pte;
-  dma_addr_t dma_address;
-  u64 __iomem *slot_base;
-  lockdep_assert_held(&pg_tbl->mutex);
-  dma_address = sg_dma_address(mapping->sgt->sgl);
-  num_pages = mapping->size >> PAGE_SHIFT;
-  ret = gasket_alloc_extended_entries(pg_tbl, dev_addr, num_pages);
-  if (ret) {
-    dev_addr_end = dev_addr + (num_pages * PAGE_SIZE) - 1;
-    gasket_pg_tbl_error(
-        pg_tbl,
-        "page table slots (%lu,%lu) (@ 0x%lx) to (%lu,%lu) are not available",
-        gasket_extended_lvl0_page_idx(pg_tbl, dev_addr),
-        gasket_extended_lvl1_page_idx(pg_tbl, dev_addr), dev_addr,
-        gasket_extended_lvl0_page_idx(pg_tbl, dev_addr_end),
-        gasket_extended_lvl1_page_idx(pg_tbl, dev_addr_end));
-    return ret;
-  }
-  slot_idx = gasket_extended_lvl1_page_idx(pg_tbl, dev_addr);
-  pte = pg_tbl->entries + pg_tbl->num_simple_entries +
-        gasket_extended_lvl0_page_idx(pg_tbl, dev_addr);
-  remain_pages = num_pages;
-  while (remain_pages > 0) {
-    len = min(remain_pages, GASKET_PAGES_PER_SUBTABLE - slot_idx);
-    slot_base = (u64 __iomem *)(page_address(pte->page));
-    perform_sgt_dma_addr_mapping(pg_tbl, pte->sublevel + slot_idx,
-                                 slot_base + slot_idx, dma_address, len, 0);
-    slot_idx = 0;
-    pte++;
-    remain_pages -= len;
-    dma_address += len * PAGE_SIZE;
-    dev_addr += len * PAGE_SIZE;
-  }
-  if (pg_tbl->config->map_buffer_cb) {
-    dev_addr = mapping->dev_addr;
-    dma_address = sg_dma_address(mapping->sgt->sgl);
-    ret = pg_tbl->config->map_buffer_cb(pg_tbl->gasket_dev, pg_tbl->config->id,
-                                        dma_address, dev_addr, num_pages);
-    if (ret) {
-      gasket_pg_tbl_error(pg_tbl,
-                          "Map buffer callback error for dev_addr=%#lx, "
-                          "dma_addr=%#llx, num_pages=%d: %d",
-                          dev_addr, dma_address, num_pages, ret);
-      gasket_page_table_unmap_nolock(pg_tbl, dev_addr, num_pages);
-    }
-  }
-  return ret;
+ }
+ return ret;
 }
 static int gasket_unmap_extended_pages(struct gasket_page_table *pg_tbl,
-                                       ulong dev_addr, uint num_pages,
-                                       bool strict) {
-  uint slot_idx, remain, len;
-  ulong start_dev_addr = dev_addr;
-  struct gasket_page_table_entry *pte;
-  u64 __iomem *slot_base;
-  int ret = 0;
-  int num_unmapped = 0;
-  ret = gasket_page_table_validate_sgt_mappings(pg_tbl, dev_addr, num_pages);
-  if (ret) {
-    gasket_pg_tbl_error(
-        pg_tbl, "Partial unmapping of scatterlist is not allowed: %d", ret);
-    return ret;
-  }
-  remain = num_pages;
-  slot_idx = gasket_extended_lvl1_page_idx(pg_tbl, dev_addr);
-  pte = pg_tbl->entries + pg_tbl->num_simple_entries +
-        gasket_extended_lvl0_page_idx(pg_tbl, dev_addr);
-  while (remain > 0) {
-    len = min(remain, GASKET_PAGES_PER_SUBTABLE - slot_idx);
-    WARN_ON(pte->status == PTE_INUSE_PFN);
-    if (pte->status == PTE_INUSE || pte->status == PTE_INUSE_SGT) {
-      slot_base = (u64 __iomem *)(page_address(pte->page));
-      ret = gasket_perform_unmapping(pg_tbl, pte->sublevel + slot_idx,
-                                     slot_base + slot_idx, dev_addr, len, 0,
-                                     &num_unmapped);
-    }
-    remain -= len;
-    slot_idx = 0;
-    pte++;
-    dev_addr += len * PAGE_SIZE;
-  }
-  if (strict && num_unmapped != num_pages) {
-    gasket_pg_tbl_error(
-        pg_tbl,
-        "Strict checking: incorrect number of pages freed; expected %d, got %d",
-        num_pages, num_unmapped);
-    return -ENOENT;
-  }
-  gasket_page_table_detach_sgt_mappings(pg_tbl, start_dev_addr, num_pages);
+ ulong dev_addr, uint num_pages, bool strict)
+{
+ uint slot_idx, remain, len;
+ ulong start_dev_addr = dev_addr;
+ struct gasket_page_table_entry *pte;
+ u64 __iomem *slot_base;
+ int ret = 0;
+ int num_unmapped = 0;
+ ret = gasket_page_table_validate_sgt_mappings(
+  pg_tbl, dev_addr, num_pages);
+ if (ret) {
+  gasket_pg_tbl_error(pg_tbl,
+   "Partial unmapping of scatterlist is not allowed: %d",
+   ret);
   return ret;
+ }
+ remain = num_pages;
+ slot_idx = gasket_extended_lvl1_page_idx(pg_tbl, dev_addr);
+ pte = pg_tbl->entries + pg_tbl->num_simple_entries +
+       gasket_extended_lvl0_page_idx(pg_tbl, dev_addr);
+ while (remain > 0) {
+  len = min(remain, GASKET_PAGES_PER_SUBTABLE - slot_idx);
+  WARN_ON(pte->status == PTE_INUSE_PFN);
+  if (pte->status == PTE_INUSE || pte->status == PTE_INUSE_SGT) {
+   slot_base = (u64 __iomem *)(page_address(pte->page));
+   ret = gasket_perform_unmapping(
+    pg_tbl, pte->sublevel + slot_idx,
+    slot_base + slot_idx, dev_addr, len, 0,
+    &num_unmapped);
+  }
+  remain -= len;
+  slot_idx = 0;
+  pte++;
+  dev_addr += len * PAGE_SIZE;
+ }
+ if (strict && num_unmapped != num_pages) {
+  gasket_pg_tbl_error(pg_tbl,
+   "Strict checking: incorrect number of pages freed; expected %d, got %d",
+   num_pages, num_unmapped);
+  return -ENOENT;
+ }
+ gasket_page_table_detach_sgt_mappings(
+  pg_tbl, start_dev_addr, num_pages);
+ return ret;
 }
 static int gasket_page_table_validate_sgt_mappings(
-    struct gasket_page_table *pg_tbl, ulong dev_addr, uint num_pages) {
-  uint sgt_num_pages;
-  ulong mapping_dev_addr_end;
-  ulong dev_addr_end = dev_addr + num_pages;
-  struct gasket_sgt_mapping *mapping;
-  list_for_each_entry(mapping, &pg_tbl->sgt_mappings, entry) {
-    sgt_num_pages = mapping->size >> PAGE_SHIFT;
-    mapping_dev_addr_end = mapping->dev_addr + sgt_num_pages;
-    if (mapping->dev_addr > dev_addr_end || dev_addr > mapping_dev_addr_end) {
-      continue;
-    }
-    if (mapping->dev_addr < dev_addr || mapping_dev_addr_end > dev_addr_end) {
-      return -EINVAL;
-    }
+ struct gasket_page_table *pg_tbl, ulong dev_addr, uint num_pages)
+{
+ ulong mapping_dev_addr_end;
+ ulong dev_addr_end = dev_addr + ((ulong)num_pages << PAGE_SHIFT) - 1;
+ struct gasket_sgt_mapping *mapping;
+ list_for_each_entry(mapping, &pg_tbl->sgt_mappings, entry) {
+  mapping_dev_addr_end = mapping->dev_addr + mapping->size - 1;
+  if (mapping->dev_addr > dev_addr_end ||
+   dev_addr > mapping_dev_addr_end) {
+   continue;
   }
-  return 0;
+  if (mapping->dev_addr < dev_addr ||
+   mapping_dev_addr_end > dev_addr_end) {
+   return -EINVAL;
+  }
+ }
+ return 0;
 }
 static int gasket_page_table_detach_sgt_mappings(
-    struct gasket_page_table *pg_tbl, ulong dev_addr, uint num_pages) {
-  int ret;
-  uint sgt_num_pages;
-  ulong mapping_dev_addr_end;
-  ulong dev_addr_end = dev_addr + num_pages;
-  struct gasket_sgt_mapping *mapping, *mapping2;
-  list_for_each_entry_safe(mapping, mapping2, &pg_tbl->sgt_mappings, entry) {
-    sgt_num_pages = mapping->size >> PAGE_SHIFT;
-    mapping_dev_addr_end = mapping->dev_addr + sgt_num_pages;
-    if (mapping->dev_addr > dev_addr_end || dev_addr > mapping_dev_addr_end) {
-      continue;
-    }
-    if (pg_tbl->config->unmap_buffer_cb) {
-      ret = pg_tbl->config->unmap_buffer_cb(pg_tbl->gasket_dev,
-                                            pg_tbl->config->id, dev_addr,
-                                            (mapping->size >> PAGE_SHIFT));
-      if (ret) {
-        gasket_pg_tbl_error(
-            pg_tbl,
-            "Unmap buffer callback error for dev_addr=%#lx: %d (ignoring)",
-            dev_addr, ret);
-      }
-    }
-    gasket_page_table_detach_sgt_mapping(pg_tbl, mapping);
+ struct gasket_page_table *pg_tbl, ulong dev_addr, uint num_pages)
+{
+ int ret, i;
+ uint sgt_num_pages, sgl_num_pages;
+ ulong mapping_dev_addr_end;
+ ulong dev_addr_end = dev_addr + ((ulong)num_pages << PAGE_SHIFT);
+ struct gasket_sgt_mapping *mapping, *mapping2;
+ struct scatterlist *sgl;
+ ulong current_dev_addr;
+ list_for_each_entry_safe(
+  mapping, mapping2, &pg_tbl->sgt_mappings, entry)
+ {
+  sgt_num_pages = mapping->size >> PAGE_SHIFT;
+  mapping_dev_addr_end = mapping->dev_addr + mapping->size;
+  if (mapping->dev_addr >= dev_addr_end ||
+   dev_addr >= mapping_dev_addr_end) {
+   continue;
   }
-  return 0;
+  if (pg_tbl->config->unmap_buffer_cb) {
+   current_dev_addr = dev_addr;
+   for_each_sg(mapping->sgt->sgl, sgl, mapping->sgt->nents,
+    i) {
+    sgl_num_pages = sg_dma_len(sgl) >> PAGE_SHIFT;
+    ret = pg_tbl->config->unmap_buffer_cb(
+     pg_tbl->gasket_dev, pg_tbl->config->id,
+     current_dev_addr, sgl_num_pages);
+    if (ret) {
+     gasket_pg_tbl_error(pg_tbl,
+      "Unmap buffer callback error for (dev_addr=%#lx, num_pages=%u): %d (ignoring)",
+      current_dev_addr, sgl_num_pages,
+      ret);
+    }
+    current_dev_addr += sgl_num_pages * PAGE_SIZE;
+   }
+  }
+  gasket_page_table_detach_sgt_mapping(pg_tbl, mapping);
+  pg_tbl->num_active_pages -= sgt_num_pages;
+ }
+ return 0;
 }
 static int validate_pfn_mappings(struct gasket_page_table_entry *ptes,
     uint num_pages)
@@ -1195,7 +1240,7 @@ static int gasket_perform_unmapping(struct gasket_page_table *pg_tbl,
  struct device *dev = &pg_tbl->gasket_dev->pci_dev->dev;
  int i;
  int ret;
- bool used_hpa;
+        bool used_hpa;
  ret = validate_pfn_mappings(ptes, num_pages);
  if (ret)
   return ret;
@@ -1241,13 +1286,16 @@ static int gasket_perform_unmapping(struct gasket_page_table *pg_tbl,
     }
    }
 #ifdef CONFIG_VIRT_TO_BUS
-   used_hpa = use_hpa_for_pfn_mappings(
-       pg_tbl->gasket_dev->pci_dev, virt_to_phys(bus_to_virt(ptes[i].dma_addr)),
-       ptes[i].pfn_num_pages << PAGE_SHIFT);
+                        used_hpa = use_hpa_for_pfn_mappings(
+                            pg_tbl->gasket_dev->pci_dev,
+                            virt_to_phys(bus_to_virt(ptes[i].dma_addr)),
+                            ptes[i].pfn_num_pages << PAGE_SHIFT);
 #else
-   used_hpa = false;
+                        used_hpa = false;
 #endif
-   if (gasket_pci_is_iommu_enabled(pg_tbl->gasket_dev->pci_dev) && !used_hpa) {
+                        if (gasket_pci_is_iommu_enabled(
+     pg_tbl->gasket_dev->pci_dev) &&
+                            !used_hpa) {
    }
    pg_tbl->num_active_pages -= ptes[i].pfn_num_pages;
   }

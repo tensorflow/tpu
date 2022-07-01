@@ -2,82 +2,81 @@
 /*
  * Copyright (C) 2021 Google LLC.
  */
-// NOLINT(whitespace/indent)
 #ifndef _DRIVERS_CHAR_TPU_COMMON_TPU_V4_COMMON_TPU_V4_COMMON_USERSPACE_LST_PORT_INDIRECT_ACCESSOR_H_
-#define _DRIVERS_CHAR_TPU_COMMON_TPU_V4_COMMON_TPU_V4_COMMON_USERSPACE_LST_PORT_INDIRECT_ACCESSOR_H_
+#define _DRIVERS_CHAR_TPU_COMMON_TPU_V4_COMMON_TPU_V4_COMMON_USERSPACE_LST_PORT_INDIRECT_ACCESSOR_H_ 
 #include "drivers/gasket/gasket_types.h"
 enum tpuv4common_lock_lock_value {
-  kTpuv4commonLockLockValueUnlocked = 0,
-  kTpuv4commonLockLockValueLocked = 1
+ kTpuv4commonLockLockValueUnlocked = 0,
+ kTpuv4commonLockLockValueLocked = 1
 };
 typedef enum tpuv4common_lock_lock_value tpuv4common_lock_lock_value;
 enum tpuv4common_data_link_layer_request_request_value {
-  kTpuv4commonDataLinkLayerRequestRequestValueNoRequest = 0,
-  kTpuv4commonDataLinkLayerRequestRequestValueGoUp = 1,
-  kTpuv4commonDataLinkLayerRequestRequestValueGoDown = 2
+ kTpuv4commonDataLinkLayerRequestRequestValueNoRequest = 0,
+ kTpuv4commonDataLinkLayerRequestRequestValueGoUp = 1,
+ kTpuv4commonDataLinkLayerRequestRequestValueGoDown = 2
 };
 typedef enum tpuv4common_data_link_layer_request_request_value
-    tpuv4common_data_link_layer_request_request_value;
+ tpuv4common_data_link_layer_request_request_value;
 enum tpuv4common_data_link_layer_status_status_value {
-  kTpuv4commonDataLinkLayerStatusStatusValueDown = 1,
-  kTpuv4commonDataLinkLayerStatusStatusValueGoingUp = 2,
-  kTpuv4commonDataLinkLayerStatusStatusValueUp = 3
+ kTpuv4commonDataLinkLayerStatusStatusValueDown = 1,
+ kTpuv4commonDataLinkLayerStatusStatusValueGoingUp = 2,
+ kTpuv4commonDataLinkLayerStatusStatusValueUp = 3
 };
 typedef enum tpuv4common_data_link_layer_status_status_value
-    tpuv4common_data_link_layer_status_status_value;
+ tpuv4common_data_link_layer_status_status_value;
 enum tpuv4common_unused_register_two_config_status_value {
-  kTpuv4commonIciConnectorInfoConfigStatusValueUnknown = 0,
-  kTpuv4commonIciConnectorInfoConfigStatusValueConfigValid = 1,
-  kTpuv4commonIciConnectorInfoConfigStatusValueConfigInvalid = 2
+ kTpuv4commonIciConnectorInfoConfigStatusValueUnknown = 0,
+ kTpuv4commonIciConnectorInfoConfigStatusValueConfigValid = 1,
+ kTpuv4commonIciConnectorInfoConfigStatusValueConfigInvalid = 2
 };
 typedef enum tpuv4common_unused_register_two_config_status_value
-    tpuv4common_unused_register_two_config_status_value;
+ tpuv4common_unused_register_two_config_status_value;
 enum tpuv4common_unused_register_two_connector_id_value {
-  kTpuv4commonIciConnectorInfoConnectorIdValueIci0 = 0,
-  kTpuv4commonIciConnectorInfoConnectorIdValueIci1 = 1,
-  kTpuv4commonIciConnectorInfoConnectorIdValueIci2 = 2,
-  kTpuv4commonIciConnectorInfoConnectorIdValueIci3 = 3,
-  kTpuv4commonIciConnectorInfoConnectorIdValueIci4 = 4,
-  kTpuv4commonIciConnectorInfoConnectorIdValueIci5 = 5,
-  kTpuv4commonIciConnectorInfoConnectorIdValueIci6 = 6,
-  kTpuv4commonIciConnectorInfoConnectorIdValueIci7 = 7,
-  kTpuv4commonIciConnectorInfoConnectorIdValueIci8 = 8,
-  kTpuv4commonIciConnectorInfoConnectorIdValueIci9 = 9,
-  kTpuv4commonIciConnectorInfoConnectorIdValueIci10 = 10,
-  kTpuv4commonIciConnectorInfoConnectorIdValueIci11 = 11,
-  kTpuv4commonIciConnectorInfoConnectorIdValueIci12 = 12,
-  kTpuv4commonIciConnectorInfoConnectorIdValueIci13 = 13,
-  kTpuv4commonIciConnectorInfoConnectorIdValueIci14 = 14,
-  kTpuv4commonIciConnectorInfoConnectorIdValueIci15 = 15
+ kTpuv4commonIciConnectorInfoConnectorIdValueIci0 = 0,
+ kTpuv4commonIciConnectorInfoConnectorIdValueIci1 = 1,
+ kTpuv4commonIciConnectorInfoConnectorIdValueIci2 = 2,
+ kTpuv4commonIciConnectorInfoConnectorIdValueIci3 = 3,
+ kTpuv4commonIciConnectorInfoConnectorIdValueIci4 = 4,
+ kTpuv4commonIciConnectorInfoConnectorIdValueIci5 = 5,
+ kTpuv4commonIciConnectorInfoConnectorIdValueIci6 = 6,
+ kTpuv4commonIciConnectorInfoConnectorIdValueIci7 = 7,
+ kTpuv4commonIciConnectorInfoConnectorIdValueIci8 = 8,
+ kTpuv4commonIciConnectorInfoConnectorIdValueIci9 = 9,
+ kTpuv4commonIciConnectorInfoConnectorIdValueIci10 = 10,
+ kTpuv4commonIciConnectorInfoConnectorIdValueIci11 = 11,
+ kTpuv4commonIciConnectorInfoConnectorIdValueIci12 = 12,
+ kTpuv4commonIciConnectorInfoConnectorIdValueIci13 = 13,
+ kTpuv4commonIciConnectorInfoConnectorIdValueIci14 = 14,
+ kTpuv4commonIciConnectorInfoConnectorIdValueIci15 = 15
 };
 typedef enum tpuv4common_unused_register_two_connector_id_value
-    tpuv4common_unused_register_two_connector_id_value;
+ tpuv4common_unused_register_two_connector_id_value;
 enum tpuv4common_unused_register_two_connector_type_value {
-  kTpuv4commonIciConnectorInfoConnectorTypeValueInternal = 0,
-  kTpuv4commonIciConnectorInfoConnectorTypeValueCopper = 1,
-  kTpuv4commonIciConnectorInfoConnectorTypeValueOptics = 2
+ kTpuv4commonIciConnectorInfoConnectorTypeValueInternal = 0,
+ kTpuv4commonIciConnectorInfoConnectorTypeValueCopper = 1,
+ kTpuv4commonIciConnectorInfoConnectorTypeValueOptics = 2
 };
 typedef enum tpuv4common_unused_register_two_connector_type_value
-    tpuv4common_unused_register_two_connector_type_value;
+ tpuv4common_unused_register_two_connector_type_value;
 enum tpuv4common_unused_register_two_orientation_value {
-  kTpuv4commonIciConnectorInfoOrientationValueUnknown = 0,
-  kTpuv4commonIciConnectorInfoOrientationValueX = 1,
-  kTpuv4commonIciConnectorInfoOrientationValueY = 2,
-  kTpuv4commonIciConnectorInfoOrientationValueZ = 3
+ kTpuv4commonIciConnectorInfoOrientationValueUnknown = 0,
+ kTpuv4commonIciConnectorInfoOrientationValueX = 1,
+ kTpuv4commonIciConnectorInfoOrientationValueY = 2,
+ kTpuv4commonIciConnectorInfoOrientationValueZ = 3
 };
 typedef enum tpuv4common_unused_register_two_orientation_value
-    tpuv4common_unused_register_two_orientation_value;
+ tpuv4common_unused_register_two_orientation_value;
 enum tpuv4common_unused_register_two_polarity_value {
-  kTpuv4commonIciConnectorInfoPolarityValueUnknown = 0,
-  kTpuv4commonIciConnectorInfoPolarityValuePositive = 1,
-  kTpuv4commonIciConnectorInfoPolarityValueNegative = 2
+ kTpuv4commonIciConnectorInfoPolarityValueUnknown = 0,
+ kTpuv4commonIciConnectorInfoPolarityValuePositive = 1,
+ kTpuv4commonIciConnectorInfoPolarityValueNegative = 2
 };
 typedef enum tpuv4common_unused_register_two_polarity_value
-    tpuv4common_unused_register_two_polarity_value;
+ tpuv4common_unused_register_two_polarity_value;
 enum tpuv4common_physical_layer_state_value_value {
-  kTpuv4commonPhysicalLayerStateValueValueDisabled = 0,
-  kTpuv4commonPhysicalLayerStateValueValueDown = 1,
-  kTpuv4commonPhysicalLayerStateValueValueUp = 2
+ kTpuv4commonPhysicalLayerStateValueValueDisabled = 0,
+ kTpuv4commonPhysicalLayerStateValueValueDown = 1,
+ kTpuv4commonPhysicalLayerStateValueValueUp = 2
 };
 typedef enum tpuv4common_physical_layer_state_value_value
  tpuv4common_physical_layer_state_value_value;

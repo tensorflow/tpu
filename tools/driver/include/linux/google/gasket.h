@@ -27,9 +27,9 @@ struct gasket_page_table_ioctl {
  uint64_t device_address;
 };
 struct gasket_page_table_dmabuf_ioctl {
-  uint64_t page_table_index;
-  uint64_t device_address;
-  int dma_buf_fd;
+ uint64_t page_table_index;
+ uint64_t device_address;
+ int dma_buf_fd;
 };
 #define GASKET_IOCTL_BASE 0xDC
 #define GASKET_IOCTL_RESET _IOW(GASKET_IOCTL_BASE, 0, unsigned long)
@@ -53,5 +53,5 @@ struct gasket_page_table_dmabuf_ioctl {
 #define GASKET_IOCTL_UNREGISTER_INTERRUPT \
  _IOW(GASKET_IOCTL_BASE, 12, unsigned long)
 #define GASKET_IOCTL_MAP_DMA_BUF \
-  _IOW(GASKET_IOCTL_BASE, 13, struct gasket_page_table_dmabuf_ioctl)
+ _IOW(GASKET_IOCTL_BASE, 13, struct gasket_page_table_dmabuf_ioctl)
 #endif

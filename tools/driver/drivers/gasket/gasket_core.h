@@ -59,8 +59,8 @@ struct gasket_page_table_config {
  enum gasket_page_table_mode mode;
  ulong total_entries;
  int bar_index;
- int base_reg;
- int extended_reg;
+ u64 base_reg;
+ u64 extended_reg;
  int extended_bit;
  int (*map_buffer_cb)(struct gasket_dev *dev, int page_table_id,
   ulong dma_addr, ulong dev_addr, uint num_pages);
@@ -137,56 +137,58 @@ struct gasket_driver_desc {
  enum gasket_iommu_mappings iommu_mappings;
  int (*add_dev_cb)(struct gasket_dev *dev);
  int (*remove_dev_cb)(struct gasket_dev *dev);
- int (*device_open_cb)(struct gasket_filp_data *filp_data, struct file *file);
- int (*device_release_cb)(struct gasket_filp_data *filp_data,
-                          struct file *file);
- int (*device_close_cb)(struct gasket_filp_data *filp_data, struct file *file);
+ int (*device_open_cb)(
+  struct gasket_filp_data *filp_data, struct file *file);
+ int (*device_release_cb)(
+  struct gasket_filp_data *filp_data, struct file *file);
+ int (*device_close_cb)(
+  struct gasket_filp_data *filp_data, struct file *file);
  int (*enable_dev_cb)(struct gasket_dev *dev);
  int (*disable_dev_cb)(struct gasket_dev *dev);
  int (*sysfs_setup_cb)(struct gasket_dev *dev);
  int (*sysfs_cleanup_cb)(struct gasket_dev *dev);
  int (*get_mappable_regions_cb)(
-     struct gasket_filp_data *filp_data, int bar_index,
-     struct gasket_mappable_region **mappable_regions,
-     int *num_mappable_regions);
+  struct gasket_filp_data *filp_data, int bar_index,
+  struct gasket_mappable_region **mappable_regions,
+  int *num_mappable_regions);
  int (*ioctl_permissions_cb)(struct file *filp, uint cmd);
- int (*interrupt_permissions_cb)(struct gasket_filp_data *filp_data,
-                                 int interrupt);
- int (*page_table_permissions_cb)(struct gasket_filp_data *filp_data,
-                                  int page_table);
+ int (*interrupt_permissions_cb)(
+  struct gasket_filp_data *filp_data, int interrupt);
+ int (*page_table_permissions_cb)(
+  struct gasket_filp_data *filp_data, int page_table);
  long (*ioctl_handler_cb)(struct file *filp, uint cmd, ulong arg);
  enum gasket_status (*device_status_cb)(struct gasket_dev *dev);
  int (*hardware_revision_cb)(struct gasket_dev *dev);
- int (*firmware_version_cb)(struct gasket_dev *dev, unsigned int *major,
-                            unsigned int *minor, unsigned int *point,
-                            unsigned int *subpoint);
+ int (*firmware_version_cb)(struct gasket_dev *dev,
+       unsigned int *major, unsigned int *minor,
+       unsigned int *point, unsigned int *subpoint);
  int (*device_reset_cb)(struct gasket_dev *dev, uint reset_type);
 };
 struct gasket_device_desc {
-  const char *name;
-  struct gasket_driver_desc *driver_desc;
-  const struct gasket_driver_desc *(*driver_desc_cb)(struct pci_dev *pdev);
-  struct module *module;
-  const struct pci_device_id *pci_id_table;
-  int legacy_support;
-  int legacy_major, legacy_minor;
+ const char *name;
+ struct gasket_driver_desc *driver_desc;
+ const struct gasket_driver_desc *(*driver_desc_cb)(struct pci_dev *pdev);
+ struct module *module;
+ const struct pci_device_id *pci_id_table;
+ int legacy_support;
+ int legacy_major, legacy_minor;
 };
 struct gasket_filp_data {
-  struct gasket_dev *gasket_dev;
-  void *driver_private;
+ struct gasket_dev *gasket_dev;
+ void *driver_private;
 };
 int __gasket_register_device(const struct gasket_device_desc *device_desc,
-                             const char *device_name);
+        const char *device_name);
 #define gasket_register_device(device_desc) \
-  __gasket_register_device(device_desc, KBUILD_MODNAME)
+ __gasket_register_device(device_desc, KBUILD_MODNAME)
 void gasket_unregister_device(const struct gasket_device_desc *device_desc);
 int gasket_clone_create(struct gasket_dev *parent, struct gasket_dev *clone);
 int gasket_clone_cleanup(struct gasket_dev *clone);
 int gasket_reset(struct gasket_dev *gasket_dev, uint reset_type);
 int gasket_reset_nolock(struct gasket_dev *gasket_dev, uint reset_type);
 bool gasket_dev_is_overseer(struct gasket_dev *gasket_dev);
-int gasket_get_mmap_bar_index(const struct gasket_dev *gasket_dev,
-                              ulong mmap_addr);
+int gasket_get_mmap_bar_index(
+ const struct gasket_dev *gasket_dev, ulong mmap_addr);
 int gasket_mm_unmap_region(
  const struct gasket_dev *gasket_dev, struct vm_area_struct *vma,
  int map_bar_index,

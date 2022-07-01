@@ -21,8 +21,8 @@ int gasket_page_table_map(struct gasket_page_table *page_table, ulong host_addr,
 int gasket_page_table_unmap(
  struct gasket_page_table *page_table, ulong dev_addr,
  ulong bytes);
-int gasket_page_table_dma_buf_map(struct gasket_page_table *page_table,
-                                  int dma_buf_fd, ulong dev_addr);
+int gasket_page_table_dma_buf_map(
+ struct gasket_page_table *page_table, int dma_buf_fd, ulong dev_addr);
 void gasket_page_table_unmap_all(struct gasket_page_table *page_table);
 void gasket_page_table_reset(struct gasket_page_table *page_table);
 void gasket_page_table_garbage_collect(struct gasket_page_table *page_table);
