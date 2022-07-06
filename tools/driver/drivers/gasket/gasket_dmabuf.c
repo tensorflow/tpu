@@ -4,12 +4,14 @@
  */
 #include <linux/dma-buf.h>
 #include <linux/fs.h>
+#include <linux/minmax.h>
 #include <linux/scatterlist.h>
 #include <linux/uaccess.h>
 #include <linux/version.h>
 #include "gasket_core.h"
 #include "gasket_dmabuf.h"
 #include "gasket_logging.h"
+#define DMABUF_MMAP_MAXIMUM_BLOCK_SIZE (1 << 14)
 struct gasket_dma_buf_object {
  struct gasket_dev *gasket_dev;
  struct gasket_dma_buf_device_data *device_data;
@@ -26,12 +28,72 @@ static void *gasket_dma_buf_ops_page_map(
 {
  return NULL;
 }
+#endif
+static int gasket_dma_buf_do_remap_pfn(struct vm_area_struct *vma,
+ u64 phys_addr, size_t size, size_t block_size)
+{
+ int ret;
+ size_t mapped_size = 0;
+ while (mapped_size < size) {
+  block_size = min(block_size, (size - mapped_size));
+  cond_resched();
+  ret = io_remap_pfn_range(vma, vma->vm_start + mapped_size,
+   (phys_addr + mapped_size) >> PAGE_SHIFT, block_size,
+   vma->vm_page_prot);
+  if (ret) {
+   zap_vma_ptes(vma, vma->vm_start, mapped_size);
+   return ret;
+  }
+  mapped_size += block_size;
+ }
+ return 0;
+}
 static int gasket_dma_buf_ops_mmap(
  struct dma_buf *dbuf, struct vm_area_struct *vma)
 {
- return -ENOTSUPP;
+ int bar_index;
+ u64 phys_addr;
+ size_t vma_size;
+ struct gasket_dev *gasket_dev;
+ struct gasket_dma_buf_object *gasket_dbuf;
+ int ret;
+ gasket_dbuf = dbuf->priv;
+ gasket_dev = gasket_dbuf->gasket_dev;
+ if (vma->vm_start & (PAGE_SIZE - 1)) {
+  gasket_log_error(gasket_dev,
+   "Base address not page-aligned: 0x%p\n",
+   (void *)vma->vm_start);
+  return -EINVAL;
+ }
+ vma_size = vma->vm_end - vma->vm_start;
+ if (vma_size & (PAGE_SIZE - 1)) {
+  gasket_log_error(gasket_dev,
+   "Mapping size not page-aligned: 0x%lx\n", vma_size);
+  return -EINVAL;
+ }
+ bar_index =
+  gasket_get_mmap_bar_index(gasket_dev, gasket_dbuf->mmap_offset);
+ if (bar_index < 0) {
+  gasket_log_error(gasket_dev, "failed to get mmap bar index: %d",
+   bar_index);
+  return -EINVAL;
+ }
+ vma->vm_flags &= ~(VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC | VM_MAYSHARE);
+ vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
+ phys_addr = gasket_dbuf->mmap_offset + (vma->vm_pgoff << PAGE_SHIFT) -
+      gasket_dev->driver_desc->bar_descriptions[bar_index].base +
+      gasket_dev->bar_data[bar_index].phys_base;
+ ret = gasket_dma_buf_do_remap_pfn(
+  vma, phys_addr, vma_size, DMABUF_MMAP_MAXIMUM_BLOCK_SIZE);
+ if (ret) {
+  gasket_log_error(
+   gasket_dev, "Error remapping PFN range: %d", ret);
+  return ret;
+ }
+ vma->vm_private_data = dbuf;
+ vma->vm_pgoff = phys_addr >> PAGE_SHIFT;
+ return 0;
 }
-#endif
 static struct sg_table *gasket_dma_buf_ops_map(
  struct dma_buf_attachment *attachment,
  enum dma_data_direction direction)
@@ -120,10 +182,10 @@ static const struct dma_buf_ops gasket_dma_buf_ops = {
  .map_dma_buf = gasket_dma_buf_ops_map,
  .unmap_dma_buf = gasket_dma_buf_ops_unmap,
  .release = gasket_dma_buf_ops_release,
+ .mmap = gasket_dma_buf_ops_mmap,
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(4, 18, 20)
  .map_atomic = gasket_dma_buf_ops_map_atomic,
  .map = gasket_dma_buf_ops_page_map,
- .mmap = gasket_dma_buf_ops_mmap,
 #endif
 };
 struct dma_buf *gasket_create_mmap_dma_buf(struct gasket_dev *gasket_dev,

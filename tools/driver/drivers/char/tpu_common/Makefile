@@ -2,7 +2,9 @@
 
 subdir-ccflags-y 		:= -I$(srctree)
 
+obj-y				+= nodriver.o
 obj-y				+= tpuv2_nodriver.o
+obj-y				+= tpuv4common_nodriver.o
 obj-$(CONFIG_TPU_COMMON_COMMON)    += tpu_common.o
 obj-$(CONFIG_TPU_V2_CORE)    += tpu_v2_core.o
 obj-$(CONFIG_TPU_V3_DRIVER)	+= tpu_v3.o

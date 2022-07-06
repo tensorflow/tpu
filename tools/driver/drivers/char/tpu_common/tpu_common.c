@@ -26,18 +26,19 @@ struct gasket_sysfs_attribute sysfs_attrs[] = {
  GASKET_END_OF_ATTR_ARRAY
 };
 int tpu_common_setup_device_data(struct tpu_common_device_data *device_data,
-                                 uint device_open_reset_type,
-                                 int device_owned_bar,
-                                 unsigned long device_owned_offset,
-                                 unsigned long device_firmware_version_offset) {
-  device_data->reset_on_close = 1;
-  device_data->reset_on_open = 1;
-  device_data->device_open_reset_type = device_open_reset_type;
-  device_data->device_owned_bar = device_owned_bar;
-  device_data->device_owned_offset = device_owned_offset;
-  device_data->device_owned_value = 0;
-  device_data->device_firmware_version_offset = device_firmware_version_offset;
-  return 0;
+         uint device_open_reset_type, int device_owned_bar,
+         unsigned long device_owned_offset,
+         unsigned long device_firmware_version_offset)
+{
+ device_data->reset_on_close = 1;
+ device_data->reset_on_open = 1;
+ device_data->device_open_reset_type = device_open_reset_type;
+ device_data->device_owned_bar = device_owned_bar;
+ device_data->device_owned_offset = device_owned_offset;
+ device_data->device_owned_value = 0;
+ device_data->device_firmware_version_offset =
+       device_firmware_version_offset;
+ return 0;
 }
 EXPORT_SYMBOL(tpu_common_setup_device_data);
 int tpu_common_reinit_reset(struct gasket_dev *gasket_dev, int bar_index,
@@ -117,7 +118,7 @@ int tpu_common_device_open(struct gasket_dev *gasket_dev,
   ret = gasket_reset_nolock(gasket_dev,
        device_data->device_open_reset_type);
  } else {
-   gasket_log_warn(gasket_dev, "skipping reset on open");
+  gasket_log_warn(gasket_dev, "skipping reset on open");
  }
  if (ret) {
   gasket_log_error(gasket_dev, "Failed to reset device");
@@ -130,36 +131,38 @@ int tpu_common_device_open(struct gasket_dev *gasket_dev,
 }
 EXPORT_SYMBOL(tpu_common_device_open);
 int tpu_common_get_mappable_regions(
-    struct gasket_dev *gasket_dev, int bar_index,
-    int (*bar_region_count_cb)(struct gasket_dev *gasket_dev, int bar,
-                               enum tpu_common_security_level group),
-    const struct gasket_mappable_region *(*get_bar_regions_cb)(
-        struct gasket_dev *gasket_dev, int bar,
-        enum tpu_common_security_level group),
-    struct gasket_mappable_region **mappable_regions,
-    int *num_mappable_regions) {
-  uint64_t region_size;
-  enum tpu_common_security_level target_security_level;
-  if (capable(CAP_SYS_ADMIN))
-    target_security_level = TPU_COMMON_SECURITY_LEVEL_ROOT;
-  else
-    target_security_level = TPU_COMMON_SECURITY_LEVEL_USER;
-  *num_mappable_regions =
-      bar_region_count_cb(gasket_dev, bar_index, target_security_level);
-  if (*num_mappable_regions == 0) return 0;
-  *mappable_regions =
-      kzalloc(sizeof(struct gasket_mappable_region) * (*num_mappable_regions),
-              GFP_KERNEL);
-  if (*mappable_regions == NULL) {
-    gasket_log_error(gasket_dev, "Unable to alloc mappable region block!");
-    *num_mappable_regions = 0;
-    return -ENOMEM;
-  }
-  region_size = (*num_mappable_regions) * sizeof(struct gasket_mappable_region);
-  memcpy(*mappable_regions,
-         get_bar_regions_cb(gasket_dev, bar_index, target_security_level),
-         region_size);
+ struct gasket_dev *gasket_dev, int bar_index,
+ int (*bar_region_count_cb)(struct gasket_dev *gasket_dev, int bar, enum tpu_common_security_level group),
+ const struct gasket_mappable_region *(*get_bar_regions_cb)(
+  struct gasket_dev *gasket_dev, int bar, enum tpu_common_security_level group),
+ struct gasket_mappable_region **mappable_regions,
+ int *num_mappable_regions)
+{
+ uint64_t region_size;
+ enum tpu_common_security_level target_security_level;
+ if (capable(CAP_SYS_ADMIN))
+  target_security_level = TPU_COMMON_SECURITY_LEVEL_ROOT;
+ else
+  target_security_level = TPU_COMMON_SECURITY_LEVEL_USER;
+ *num_mappable_regions =
+  bar_region_count_cb(gasket_dev, bar_index, target_security_level);
+ if (*num_mappable_regions == 0)
   return 0;
+ *mappable_regions = kzalloc(sizeof(struct gasket_mappable_region) *
+         (*num_mappable_regions),
+        GFP_KERNEL);
+ if (*mappable_regions == NULL) {
+  gasket_log_error(gasket_dev,
+     "Unable to alloc mappable region block!");
+  *num_mappable_regions = 0;
+  return -ENOMEM;
+ }
+ region_size =
+  (*num_mappable_regions) * sizeof(struct gasket_mappable_region);
+ memcpy(*mappable_regions,
+        get_bar_regions_cb(gasket_dev, bar_index, target_security_level),
+        region_size);
+ return 0;
 }
 EXPORT_SYMBOL(tpu_common_get_mappable_regions);
 int tpu_common_sysfs_setup(struct gasket_dev *gasket_dev)
@@ -316,25 +319,27 @@ int tpu_common_clear_fw_device_owned(struct gasket_dev *gasket_dev,
  return 0;
 }
 EXPORT_SYMBOL(tpu_common_clear_fw_device_owned);
-int tpu_common_get_hardware_revision(struct gasket_dev *gasket_dev) {
-  return gasket_dev->pci_dev->revision;
+int tpu_common_get_hardware_revision(struct gasket_dev *gasket_dev)
+{
+ return gasket_dev->pci_dev->revision;
 }
 EXPORT_SYMBOL(tpu_common_get_hardware_revision);
 int tpu_common_get_firmware_version_cb(struct gasket_dev *gasket_dev,
-                                       unsigned int *major, unsigned int *minor,
-                                       unsigned int *point,
-                                       unsigned int *subpoint) {
-  struct tpu_common_device_data *device_data;
-  unsigned long version;
-  device_data = gasket_dev->cb_data;
-  if (!device_data->device_firmware_version_offset) return -EINVAL;
-  version = gasket_dev_read_64(gasket_dev, device_data->device_owned_bar,
-                               device_data->device_firmware_version_offset);
-  *major = (version >> 48);
-  *minor = (version >> 32) & 0xffff;
-  *point = (version >> 16) & 0xffff;
-  *subpoint = version & 0xffff;
-  return 0;
+        unsigned int *major, unsigned int *minor,
+        unsigned int *point, unsigned int *subpoint)
+{
+ struct tpu_common_device_data *device_data;
+ unsigned long version;
+ device_data = gasket_dev->cb_data;
+ if (!device_data->device_firmware_version_offset)
+  return -EINVAL;
+ version = gasket_dev_read_64(gasket_dev, device_data->device_owned_bar,
+   device_data->device_firmware_version_offset);
+ *major = (version >> 48);
+ *minor = (version >> 32) & 0xffff;
+ *point = (version >> 16) & 0xffff;
+ *subpoint = version & 0xffff;
+ return 0;
 }
 EXPORT_SYMBOL(tpu_common_get_firmware_version_cb);
 MODULE_DESCRIPTION("Google tpu_common Common Library");

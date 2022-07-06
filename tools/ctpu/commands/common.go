@@ -136,10 +136,10 @@ var nightlyVersionRegex = regexp.MustCompile("^nightly(.*)$")
 var patchNumberRegex = regexp.MustCompile("^\\.(\\d+)$")
 
 // Expected versions look like one of the following formats:
-//  - 1.6
-//  - 1.7-RC3
-//  - nightly
-//  - nightly-20180218
+//   - 1.6
+//   - 1.7-RC3
+//   - nightly
+//   - nightly-20180218
 type parsedVersion struct {
 	Major     int
 	Minor     int
