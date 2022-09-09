@@ -23,7 +23,7 @@ export PYTHONPATH="$PYTHONPATH:/path/to/models"
 
 ## Hosted APIs
 
-<p align="center">
+<p>
 <a href="https://console.tiyaro.ai/explore?q=tensorflow&pub=tensorflow"> <img src="https://tiyaro-public-docs.s3.us-west-2.amazonaws.com/assets/try_on_tiyaro_badge.svg"></a>
 </p>
 
@@ -31,6 +31,7 @@ Alternatively, you can experiment with models through hosted infrastructure:
 
 - For all tensorflow models hosted on [Tiyaro.ai](https://console.tiyaro.ai/explore?q=tensorflow&pub=tensorflow)
   - Or specifically for [EfficientNet on Tiyaro.ai](https://console.tiyaro.ai/explore?q=efficientnet&pub=tensorflow)
+  - Or specifically for [RCNN on Tiyaro.ai](https://console.tiyaro.ai/explore?q=rcnn&pub=tensorflow)
  
 
 
