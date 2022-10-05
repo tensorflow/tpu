@@ -45,6 +45,7 @@ def efficientnet_x_params(model_name):
       'efficientnet-x-b5': (1.6, 2.2, 456, 0.4, 1),
       'efficientnet-x-b6': (1.8, 2.6, 528, 0.5, 1),
       'efficientnet-x-b7': (2.0, 3.1, 600, 0.5, 1),
+      'efficientnet-x-v2-b6': (2.16, 2.6, 528, 0.5, 1),
       'efficientnet-x-tpu-b0': (1.0, 1.0, 224, 0.2, 4),
       'efficientnet-x-tpu-b1': (1.05, 1.09, 229, 0.2, 2),
       'efficientnet-x-tpu-b2': (1.13, 1.29, 244, 0.3, 1),
@@ -53,6 +54,7 @@ def efficientnet_x_params(model_name):
       'efficientnet-x-tpu-b5': (1.96, 2.76, 332, 0.4, 1),
       'efficientnet-x-tpu-b6': (2.75, 3.01, 328, 0.5, 1),
       'efficientnet-x-tpu-b7': (3.26, 3.44, 350, 0.5, 1),
+      'efficientnet-x-tpu-v2-b6': (3, 3.01, 328, 0.5, 1),
       'efficientnet-x-gpu-b0': (1.0, 1.0, 224, 0.2, 4),
       'efficientnet-x-gpu-b1': (1.05, 1.09, 229, 0.2, 2),
       'efficientnet-x-gpu-b2': (1.13, 1.24, 237, 0.3, 1),
@@ -69,17 +71,32 @@ def efficientnet_x(width_coefficient=None,
                    depth_coefficient=None,
                    se_coefficient=None,
                    dropout_rate=0.2,
-                   survival_prob=0.8):
+                   survival_prob=0.8,
+                   version=1):
   """Creates a efficientnet model."""
-  blocks_args = [
-      'r1_k3_s11_e1_i32_o16_se0.25_d1_a0',
-      'r2_k3_s22_e6_i16_o24_se0.25_f1_d2_a1',
-      'r2_k5_s22_e6_i24_o40_se0.25_f1_a1',
-      'r3_k3_s22_e6_i40_o80_se0.25_a0',
-      'r3_k5_s11_e6_i80_o112_se0.25_a0',
-      'r4_k5_s22_e6_i112_o192_se0.25_a0',
-      'r1_k3_s11_e6_i192_o320_se0.25_a0',
-  ]
+  if version == 1:
+    blocks_args = [
+        'r1_k3_s11_e1_i32_o16_se0.25_d1_a0',
+        'r2_k3_s22_e6_i16_o24_se0.25_f1_d2_a1',
+        'r2_k5_s22_e6_i24_o40_se0.25_f1_a1',
+        'r3_k3_s22_e6_i40_o80_se0.25_a0',
+        'r3_k5_s11_e6_i80_o112_se0.25_a0',
+        'r4_k5_s22_e6_i112_o192_se0.25_a0',
+        'r1_k3_s11_e6_i192_o320_se0.25_a0',
+    ]
+  elif version == 2:
+    blocks_args = [
+        'r1_k3_s11_e1_i32_o16_se0.25_d1_a0',
+        'r2_k3_s22_e4_i16_o24_se0.25_f1_d2_a1',
+        'r2_k5_s22_e4_i24_o40_se0.25_f1_a1',
+        'r3_k3_s22_e4_i40_o80_se0.25_a0',
+        'r3_k5_s11_e6_i80_o112_se0.25_a0',
+        'r4_k5_s22_e6_i112_o192_se0.25_a0',
+        'r1_k3_s11_e6_i192_o320_se0.25_a0',
+    ]
+  else:
+    raise ValueError(f'Unknown EfficientNet-X version: {version}')
+
   global_params = efficientnet_model.GlobalParams(
       batch_norm_momentum=0.99,
       batch_norm_epsilon=1e-3,
@@ -101,13 +118,26 @@ def efficientnet_x(width_coefficient=None,
   return decoder.decode(blocks_args), global_params
 
 
+def _get_model_version(model_name):
+  """Parses model name string and returns the version."""
+  if '-v2-' in model_name:
+    return 2
+  else:
+    return 1
+
+
 def get_model_params(model_name, override_params):
   """Get the block args and global params for a given model."""
+  version = _get_model_version(model_name)
   if model_name.startswith('efficientnet'):
     width_coefficient, depth_coefficient, _, dropout_rate, se_coefficient = (
         efficientnet_x_params(model_name))
     blocks_args, global_params = efficientnet_x(
-        width_coefficient, depth_coefficient, se_coefficient, dropout_rate)
+        width_coefficient,
+        depth_coefficient,
+        se_coefficient,
+        dropout_rate,
+        version=version)
   else:
     raise NotImplementedError('model name is not pre-defined: %s' % model_name)
 

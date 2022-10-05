@@ -14,7 +14,6 @@
 # ==============================================================================
 """Target factory."""
 
-from typing import Any, Mapping
 from absl import logging
 
 from load_test.traffic_handlers import loadgen_handler
@@ -22,7 +21,7 @@ from load_test.traffic_handlers import traffic_handler
 
 
 def get_traffic_handler(
-    name: str, **kwargs: Mapping[str, Any]) -> traffic_handler.TrafficHandler:
+    name: str, **kwargs) -> traffic_handler.TrafficHandler:
   if name == "loadgen":
     logging.info("Creating loadgen traffic handler.")
     return loadgen_handler.LoadGenHandler(**kwargs)

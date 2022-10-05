@@ -14,7 +14,6 @@
 # ==============================================================================
 """Data loader factory."""
 
-from typing import Any, Mapping
 from absl import logging
 
 from load_test.data import criteo
@@ -26,7 +25,7 @@ from load_test.data import synthetic_image
 
 
 def get_data_loader(
-    name: str, **kwargs: Mapping[str, Any]) -> data_loader.DataLoader:
+    name: str, **kwargs) -> data_loader.DataLoader:
   """Returns the data loader."""
 
   if name == "synthetic_images":
