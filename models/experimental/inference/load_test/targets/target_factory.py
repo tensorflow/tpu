@@ -14,8 +14,6 @@
 # ==============================================================================
 """Target factory."""
 
-from typing import Any, Mapping
-
 from absl import logging
 
 from load_test.targets import dummy_target
@@ -28,7 +26,7 @@ from load_test.targets import vertex_rest_target
 
 
 def get_target(
-    name: str, **kwargs: Mapping[str, Any]) -> target.Target:
+    name: str, **kwargs) -> target.Target:
   """Returns the target object."""
   if name == "dummy":
     logging.info("Creating dummy target.")
