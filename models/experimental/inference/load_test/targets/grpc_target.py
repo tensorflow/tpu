@@ -65,8 +65,9 @@ class TfServingGrpcWorker:
           self._request_timeout,
           self._metadata)
       future_response.add_done_callback(_callback)
+      return future_response
 
-    _send_rpc()
+    return _send_rpc()
 
 
 class TfServingGrpcTarget(target.Target):
@@ -116,4 +117,8 @@ class TfServingGrpcTarget(target.Target):
         request=query,
         request_timeout=self._request_timeout,
         query_handle=query_handle)
-    worker.start()
+    return worker.start()
+
+  def parse_response(self, response: Any) -> Any:
+    """Parse the raw response from the model."""
+    return response

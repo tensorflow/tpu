@@ -72,10 +72,10 @@ class BatchNormalization(tf.layers.BatchNormalization):
     return tpu_ops.cross_replica_sum(t, group_assignment) / tf.cast(
         num_shards_per_group, t.dtype)
 
-  def _moments(self, inputs, reduction_axes, keep_dims):
+  def _moments(self, inputs, reduction_axes, keep_dims, mask=None):
     """Compute the mean and variance: it overrides the original _moments."""
     shard_mean, shard_variance = super(BatchNormalization, self)._moments(
-        inputs, reduction_axes, keep_dims=keep_dims)
+        inputs, reduction_axes, keep_dims=keep_dims, mask=mask)
 
     num_shards = tpu_function.get_tpu_context().number_of_shards or 1
     # Skip cross_replica for small slices.

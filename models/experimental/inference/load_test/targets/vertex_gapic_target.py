@@ -76,3 +76,7 @@ class VertexGapicTarget(target.Target):
         request=query,
         query_handle=query_handle)
     worker.start()
+
+  def parse_response(self, response: Any) -> Any:
+    """Parse the raw response from the model."""
+    return response

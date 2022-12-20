@@ -173,6 +173,24 @@ class BoxList(object):
       xcenter = xmin + width / 2.
       return [ycenter, xcenter, height, width]
 
+  def get_center_coordinates_and_sizes_and_corners(self, scope=None):
+    """Computes the center coordinates, height and width of the boxes.
+
+    Args:
+      scope: name scope of the function.
+
+    Returns:
+      a list of 4 1-D tensors [ycenter, xcenter, height, width].
+    """
+    with tf.name_scope(scope, 'get_center_coordinates_and_sizes_and_corners'):
+      box_corners = self.get()
+      ymin, xmin, ymax, xmax = tf.unstack(tf.transpose(box_corners))
+      width = xmax - xmin
+      height = ymax - ymin
+      ycenter = ymin + height / 2.
+      xcenter = xmin + width / 2.
+      return [ycenter, xcenter, height, width, ymin, xmin, ymax, xmax]
+
   def transpose_coordinates(self, scope=None):
     """Transpose the coordinate representation in a boxlist.
 

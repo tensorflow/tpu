@@ -16,8 +16,8 @@
 
 import base64
 from typing import Any, Callable, Mapping, Optional
-from absl import logging
 
+from absl import logging
 import requests
 
 from load_test.targets import target
@@ -26,12 +26,13 @@ from load_test.targets import target
 class ServingRestWorkerPost:
   """A worker that sends a post request via REST."""
 
-  def __init__(self,
-               url: str,
-               model_input_bytes: bytes,
-               auth_header_token: Optional[str] = None,
-               query_handle: target.QueryHandle = None,
-               callback: Optional[Callable[[int], Any]] = None):
+  def __init__(
+      self,
+      url: str,
+      model_input_bytes: bytes,
+      auth_header_token: Optional[str] = None,
+      query_handle: target.QueryHandle = None,
+      callback: Optional[Callable[[int], Any]] = None) -> requests.Response:
     self._url = url
     self._model_input_bytes = model_input_bytes
     self._query_handle = query_handle
@@ -40,16 +41,19 @@ class ServingRestWorkerPost:
     if auth_header_token:
       self._headers['Authorization'] = 'Bearer %s' % auth_header_token
 
-  def start(self):
+  def start(self) -> requests.Response:
     """Starts the post request."""
     response = requests.post(
         self._url, data=self._model_input_bytes, headers=self._headers)
+
     if response.status_code != 200:
       logging.error('Response returned status code %s, content: %s',
                     response.status_code, response.text)
     if self._completion_callback:
       self._completion_callback(
           *[self._query_handle, response.status_code == 200])
+
+    return response
 
 
 class ServingRestTarget(target.Target):
@@ -72,7 +76,7 @@ class ServingRestTarget(target.Target):
   def send(self,
            query: bytes,
            completion_callback: Optional[Callable[[int], Any]],
-           query_handle: target.QueryHandle = None):
+           query_handle: target.QueryHandle = None) -> requests.Response:
     """Sends a request over via POST request in REST."""
 
     worker = ServingRestWorkerPost(
@@ -81,4 +85,8 @@ class ServingRestTarget(target.Target):
         auth_header_token=self._auth_header_token,
         query_handle=query_handle,
         callback=completion_callback)
-    worker.start()
+    return worker.start()
+
+  def parse_response(self, response: Any) -> Any:
+    """Parse the raw response from the model."""
+    return response

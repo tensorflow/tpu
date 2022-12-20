@@ -47,3 +47,8 @@ class Target(abc.ABC):
 
   def flush(self):
     return
+
+  @abc.abstractmethod
+  def parse_response(self, response: Any) -> Any:
+    """Parses the raw response from the model."""
+    pass
