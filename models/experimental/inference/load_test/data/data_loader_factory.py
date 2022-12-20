@@ -18,7 +18,7 @@ from absl import logging
 
 from load_test.data import criteo
 from load_test.data import data_loader
-from load_test.data import sentiment_bert
+from load_test.data import generic_jsonl
 from load_test.data import squad_bert
 from load_test.data import synthetic_bert
 from load_test.data import synthetic_image
@@ -39,9 +39,12 @@ def get_data_loader(
     return squad_bert.SquadBertLoader(**kwargs)
   elif name == "sentiment_bert":
     logging.info("Creating IMDB sentiment analysis data loader.")
-    return sentiment_bert.SentimentBertLoader(**kwargs)
+    return generic_jsonl.GenericJsonlLoader(**kwargs)
   elif name == "criteo":
     logging.info("Creating Criteo data loader.")
     return criteo.CriteoLoader(**kwargs)
+  elif name == "generic_jsonl":
+    logging.info("Creating generic jsonl file data loader.")
+    return generic_jsonl.GenericJsonlLoader(**kwargs)
   else:
     raise ValueError("Unsupported data loader type.")

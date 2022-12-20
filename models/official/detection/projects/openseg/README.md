@@ -2,7 +2,7 @@
 
 
 Golnaz Ghiasi, Xiuye Gu, Yin Cui, Tsung-Yi Lin
-[[arXiv]] (https://arxiv.org/abs/2112.12143)
+[[arXiv]](https://arxiv.org/abs/2112.12143)
 [[demo]](https://colab.sandbox.google.com/github/tensorflow/tpu/blob/master/models/official/detection/projects/openseg/OpenSeg_demo.ipynb)
 [[poster]](https://storage.googleapis.com/cloud-tpu-checkpoints/detection/projects/openseg/OpenSeg-ECCV22-poster.pdf)
 

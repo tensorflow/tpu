@@ -36,3 +36,7 @@ class DummyTarget(target.Target):
 
   def flush(self):
     pass
+
+  def parse_response(self, response: Any) -> Any:
+    """Parse the raw response from the model."""
+    return response

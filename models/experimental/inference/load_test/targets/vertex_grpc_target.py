@@ -14,7 +14,7 @@
 # ==============================================================================
 """Vertex AI gRPC target."""
 
-from typing import Any, Callable, Mapping, Optional
+from typing import Any, Callable, Mapping, Optional, Union
 
 from google.cloud import aiplatform_v1beta1 as aip
 import grpc
@@ -62,20 +62,31 @@ class VertexGrpcTarget(target.Target):
         grpc_channel)
 
   def prepare(self, sample: Mapping[str, Any]) -> predict_pb2.PredictRequest:
-    """Converts a sample into gRPC `PredictRequest`."""
+    """Converts a sample into gRPC `PredictRequest`.
+
+    Will always convert to column-wise format as gRPC cannot be used with
+    row-wise format.
+
+    Args:
+      sample: the data to be used for prediction. This should be a single sample
+        in row-wise format and not captured within brackets.
+
+    Returns:
+      A PredictRequest ready to be sent to the model.
+    """
     request = predict_pb2.PredictRequest()
     request.model_spec.name = 'default'
     request.model_spec.signature_name = self._signature_key
     for k, v in sample.items():
       proto = tf.make_tensor_proto(v, dtype=self._types.get(k))
-      request.inputs[k].CopyFrom(proto)
+      request.inputs[k].CopyFrom(proto)  # Convert to column-wise format
     return request
 
   def send(
       self,
       query: predict_pb2.PredictRequest,
       completion_callback: Optional[Callable[[int], Any]],
-      query_handle: target.QueryHandle = None):
+      query_handle: target.QueryHandle = None) -> grpc.Future:
     """Sends a request over gRPC."""
     worker = TfServingGrpcWorker(
         stub=self._stub,
@@ -85,4 +96,22 @@ class VertexGrpcTarget(target.Target):
         query_handle=query_handle,
         metadata=[('grpc-destination', f'{self._endpoint_id}-{self._model_id}')
                  ])
-    worker.start()
+    return worker.start()
+
+  def parse_response(
+      self, response: grpc.Future) -> Union[Mapping[str, list[Any]], list[Any]]:
+    """Gets output from the model. Waits for the result and is NOT async."""
+    raw_result = response.result().outputs  # Wait for future to resolve
+
+    processed_result = {}
+    for k in raw_result.keys():
+      processed_result[k] = tf.io.parse_tensor(
+          raw_result[k].SerializeToString(),
+          raw_result[k].dtype).numpy().tolist()
+
+    # In REST, if there is only one tensor returned then the key is omitted.
+    # Doing the same here for consistency.
+    if len(processed_result) == 1:
+      processed_result = list(processed_result.values())[0]
+
+    return processed_result

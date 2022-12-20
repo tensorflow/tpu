@@ -69,9 +69,9 @@ class BatchNormalization(tf.layers.BatchNormalization):
       raise ValueError('fused must be `False` when sepcifying'
                        ' cross_replica_average_fn')
 
-  def _moments(self, inputs, reduction_axes, keep_dims):
+  def _moments(self, inputs, reduction_axes, keep_dims, mask=None):
     shard_mean, shard_variance = super(BatchNormalization, self)._moments(
-        inputs, reduction_axes, keep_dims=keep_dims)
+        inputs, reduction_axes, keep_dims=keep_dims, mask=mask)
     if self.cross_replica_average_fn:
       # Uses the definition of Var[X] = E[X^2] - E[X]^2.
       shard_square_of_mean = tf.math.square(shard_mean)

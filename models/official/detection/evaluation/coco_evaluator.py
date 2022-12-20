@@ -335,6 +335,7 @@ class ShapeMaskCOCOEvaluator(COCOEvaluator):
         self._predictions)
     coco_dt = coco_gt.loadRes(predictions=coco_predictions)
     image_ids = [ann['image_id'] for ann in coco_predictions]
+    image_ids = list(set(image_ids))  # Deduplicate
 
     coco_eval = cocoeval.COCOeval(coco_gt, coco_dt, iouType='bbox')
     coco_eval.params.imgIds = image_ids
@@ -489,5 +490,3 @@ class LVISEvaluator(COCOEvaluator):
     self.reset()
 
     return lvis_metrics
-
-
