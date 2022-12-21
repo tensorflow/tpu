@@ -16,6 +16,7 @@
 
 import tempfile
 import threading
+import time
 from typing import Any, Mapping, Iterable
 
 from absl import logging
@@ -72,6 +73,7 @@ class LoadGenHandler(traffic_handler.TrafficHandler):
     self._lock = threading.Lock()
     self._completed_queries = 0
     self._failed_queries = 0
+    self._metrics = {}
 
   def get_test_settings(self) -> lg.TestSettings:
     settings = lg.TestSettings()
@@ -139,7 +141,15 @@ class LoadGenHandler(traffic_handler.TrafficHandler):
         self.load_samples,
         self.unload_samples)
     logging.info("Starting test.")
+    test_start_time = time.time()
     lg.StartTestWithLogSettings(sut, qsl, settings, log_settings)
+    test_duration = time.time() - test_start_time
+    logging.info("test duration: %.2f ms", test_duration * 1000)
+    if self._metrics and "completed_queries" in self._metrics:
+      actual_qps = (self._metrics["completed_queries"] - 1) / test_duration
+      self._metrics["actual_qps"] = actual_qps
+      logging.info("actual qps: %.2f", actual_qps)
+
     lg.DestroyQSL(qsl)
     lg.DestroySUT(sut)
 
@@ -199,11 +209,11 @@ class LoadGenHandler(traffic_handler.TrafficHandler):
                      "qps": self._qps,
                      "scenario": self._scenario}
 
-    logging.info("latencies: [p50:%.5f p90:%.5f p95:%.5f p99:%.5f]\n",
-                 self.metrics["latency"]["p50"],
-                 self.metrics["latency"]["p90"],
-                 self.metrics["latency"]["p95"],
-                 self.metrics["latency"]["p99"])
+    logging.info("latencies in ms: [p50:%.2f p90:%.2f p95:%.2f p99:%.2f]\n",
+                 self.metrics["latency"]["p50"] / 1e6,
+                 self.metrics["latency"]["p90"] / 1e6,
+                 self.metrics["latency"]["p95"] / 1e6,
+                 self.metrics["latency"]["p99"] / 1e6)
 
     logging.info("Completed Queries: %d, Failed Queries: %d\n",
                  self._completed_queries, self._failed_queries)

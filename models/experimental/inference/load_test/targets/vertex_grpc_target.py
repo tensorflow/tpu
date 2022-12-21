@@ -14,7 +14,7 @@
 # ==============================================================================
 """Vertex AI gRPC target."""
 
-from typing import Any, Callable, Mapping, Optional, Union
+from typing import Any, Callable, List, Mapping, Optional, Union
 
 from google.cloud import aiplatform_v1beta1 as aip
 import grpc
@@ -99,7 +99,7 @@ class VertexGrpcTarget(target.Target):
     return worker.start()
 
   def parse_response(
-      self, response: grpc.Future) -> Union[Mapping[str, list[Any]], list[Any]]:
+      self, response: grpc.Future) -> Union[Mapping[str, List[Any]], List[Any]]:
     """Gets output from the model. Waits for the result and is NOT async."""
     raw_result = response.result().outputs  # Wait for future to resolve
 
