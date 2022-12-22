@@ -16,10 +16,12 @@
 
 import dataclasses
 import subprocess
+from typing import List
 
 from absl import app
 from absl import flags
 from absl import logging
+import pandas as pd
 
 from load_test.data import data_loader_factory
 from load_test.targets import target_factory
@@ -45,8 +47,9 @@ class RuntimeSettings:
   target_latency_ns: int
   min_query_count: int
   min_duration_ms: int
-  qps: int
+  qps: List[float]
   cache: str
+  csv_report_filename: str
 
 
 def define_flags():
@@ -74,7 +77,7 @@ def define_flags():
       default="server")
   flags.DEFINE_enum(
       "dataset",
-      enum_values=["criteo", "squad_bert", "sentiment_bert"],
+      enum_values=["criteo", "squad_bert", "sentiment_bert", "generic_jsonl"],
       help="The dataset to use. Possible values: "
            "criteo | squad_bert | sentiment_bert.",
       default=None)
@@ -110,10 +113,11 @@ def define_flags():
       "min_duration_ms",
       help="The minimum duration of the run in milliseconds.",
       default=10000)
-  flags.DEFINE_integer(
+  flags.DEFINE_multi_float(
       "qps",
-      help="The expected target QPS.",
-      default=10)
+      help="The QPS values to run each test at. Specify multiple values "
+           "with multiple flags.  i.e. --qps=10 --qps=12.5.",
+      default=[])
   flags.DEFINE_string(
       "cache",
       help="Path to the cached dataset file. Used in squad_bert benchmark.",
@@ -124,6 +128,10 @@ def define_flags():
       help="API over which requests will be send. Possible values: "
            "rest | gapic | grpc.",
       default=None)
+  flags.DEFINE_string(
+      "csv_report_filename",
+      help="Optional filename to generate report.",
+      default="")
 
 
 def validate_flags() -> RuntimeSettings:
@@ -136,7 +144,7 @@ def validate_flags() -> RuntimeSettings:
   dataset = FLAGS.dataset.lower()
   data_file = FLAGS.data_file
 
-  if dataset in ["criteo", "sentiment_bert"] and not data_file:
+  if dataset in ["criteo", "sentiment_bert", "generic_jsonl"] and not data_file:
     raise ValueError(
         f"Data file (--data_file) with requests is required with the "
         f"{dataset} dataset.")
@@ -156,7 +164,8 @@ def validate_flags() -> RuntimeSettings:
       target_latency_percentile=FLAGS.target_latency_percentile,
       target_latency_ns=FLAGS.target_latency_ns,
       qps=FLAGS.qps,
-      cache=FLAGS.cache)
+      cache=FLAGS.cache,
+      csv_report_filename=FLAGS.csv_report_filename)
 
 
 def get_access_token() -> str:
@@ -173,6 +182,32 @@ def get_access_token() -> str:
   return gcloud_access_token
 
 
+def _metrics_to_series(metrics) -> pd.Series:
+  """Converts a metrics dict to a pandas Series.
+
+  Times are converted from nanoseconds to milliseconds.
+
+  Args:
+    metrics: The metrics returned from execute_vertex_benchmark() or similar.
+
+  Returns:
+    A pandas Series representation of the metrics object.
+  """
+  row = pd.Series(metrics["latency"])
+  for index, value in row.items():
+    row[index] = value / 1000000.0
+
+  row["qps"] = metrics["qps"]
+  row["completed_queries"] = metrics["completed_queries"]
+  row["failed_queries"] = metrics["failed_queries"]
+  row["scenario"] = metrics["scenario"]
+
+  if "actual_qps" in metrics:
+    row["actual_qps"] = metrics["actual_qps"]
+
+  return row
+
+
 def main(_) -> None:
   settings = validate_flags()
 
@@ -180,31 +215,41 @@ def main(_) -> None:
   data_loader = data_loader_factory.get_data_loader(
       name=settings.dataset, **data_kwargs)
 
-  target_kwargs = dict(
-      project_id=settings.project_id,
-      endpoint_id=settings.endpoint_id,
-      region=settings.region,
-      types=data_loader.get_type_overwrites(),
-      access_token=get_access_token())
-  target = target_factory.get_target(
-      name=f"vertex_{settings.api_type}", **target_kwargs)
+  results = []
+  for qps in settings.qps:
+    logging.info("Running benchmark at %s qps", qps)
+    target_kwargs = dict(
+        project_id=settings.project_id,
+        endpoint_id=settings.endpoint_id,
+        region=settings.region,
+        types=data_loader.get_type_overwrites(),
+        access_token=get_access_token())
+    target = target_factory.get_target(
+        name=f"vertex_{settings.api_type}", **target_kwargs)
 
-  total_count = settings.total_sample_count or data_loader.get_samples_count()
-  performance_count = settings.performance_sample_count or total_count
-  handler_kwargs = dict(
-      target=target,
-      data_loader=data_loader,
-      scenario=settings.scenario,
-      performance_sample_count=performance_count,
-      total_sample_count=total_count,
-      target_latency_percentile=settings.target_latency_percentile,
-      duration_ms=settings.min_duration_ms,
-      query_count=settings.min_query_count,
-      target_latency_ns=settings.target_latency_ns,
-      qps=settings.qps)
-  handler = traffic_handler_factory.get_traffic_handler(
-      name="loadgen", **handler_kwargs)
-  handler.start()
+    total_count = settings.total_sample_count or data_loader.get_samples_count()
+    performance_count = settings.performance_sample_count or total_count
+    handler_kwargs = dict(
+        target=target,
+        data_loader=data_loader,
+        scenario=settings.scenario,
+        performance_sample_count=performance_count,
+        total_sample_count=total_count,
+        target_latency_percentile=settings.target_latency_percentile,
+        duration_ms=settings.min_duration_ms,
+        query_count=settings.min_query_count,
+        target_latency_ns=settings.target_latency_ns,
+        qps=qps)
+    handler = traffic_handler_factory.get_traffic_handler(
+        name="loadgen", **handler_kwargs)
+    handler.start()
+    results.append(_metrics_to_series(handler.metrics))
+
+  if settings.csv_report_filename:
+    logging.info("Saving benchmark results to: %s",
+                 settings.csv_report_filename)
+    df = pd.DataFrame(results)
+    df.to_csv(settings.csv_report_filename)
 
 if __name__ == "__main__":
   define_flags()
