@@ -321,8 +321,7 @@ def build_model_graph(features, labels, is_training, params):
       mask_roi_features,
       class_indices,
       num_classes=params['num_classes'],
-      mrcnn_resolution=params['mrcnn_resolution'],
-      is_gpu_inference=is_gpu_inference)
+      mrcnn_resolution=params['mrcnn_resolution'])
 
   # Print #parameters and #FLOPs in model.
   compute_model_statistics(batch_size, is_training=is_training)
@@ -344,8 +343,8 @@ def build_model_graph(features, labels, is_training, params):
   return model_outputs
 
 
-def _build_assigment_map(optimizer, prefix=None, skip_variables_regex=None):
-  """Generate assigment map for loading checkpoints."""
+def _build_assignment_map(optimizer, prefix=None, skip_variables_regex=None):
+  """Generate assignment map for loading checkpoints."""
   optimizer_vars = set([var.name for var in optimizer.variables()])
   all_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=prefix)
   if not prefix:
@@ -501,7 +500,7 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
       def warm_start_scaffold_fn():
         logging.info(
             'model_fn warm start from: %s,', params['warm_start_path'])
-        assignment_map = _build_assigment_map(
+        assignment_map = _build_assignment_map(
             optimizer,
             prefix=None,
             skip_variables_regex=params['skip_checkpoint_variables'])
@@ -515,7 +514,7 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
       def backbone_scaffold_fn():
         """Loads pretrained model through scaffold function."""
         # Exclude all variable of optimizer.
-        vars_to_load = _build_assigment_map(
+        vars_to_load = _build_assignment_map(
             optimizer,
             prefix=params['backbone'] + '/',
             skip_variables_regex=params['skip_checkpoint_variables'])
@@ -639,7 +638,7 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
 
             return tf.summary.all_v2_summary_ops()
 
-      # To log the loss, current learning rate, and epoch for Tensorboard, the
+      # To log the loss, current learning rate, and epoch for TensorBoard, the
       # summary op needs to be run on the host CPU via host_call. host_call
       # expects [batch_size, ...] Tensors, thus reshape to introduce a batch
       # dimension. These Tensors are implicitly concatenated to
