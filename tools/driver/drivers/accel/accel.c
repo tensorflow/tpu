@@ -9,9 +9,6 @@
 #include <linux/slab.h>
 #include <linux/types.h>
 #include <linux/genhd.h>
-#if LINUX_VERSION_CODE > KERNEL_VERSION(6, 1, 0)
-#include <linux/blkdev.h>
-#endif
 #define ACCEL_MAX_DEVICES 512
 static bool accel_class_registered;
 static struct class accel_class;
