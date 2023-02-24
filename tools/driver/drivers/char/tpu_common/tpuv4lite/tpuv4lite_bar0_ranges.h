@@ -8,7 +8,10 @@
 #include "drivers/gasket/gasket_core.h"
 #include <linux/kernel.h>
 #include <linux/types.h>
+#include <linux/version.h>
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0)
 #include <stddef.h>
+#endif
 int tpuv4lite_bar0_get_region_count(enum tpu_common_security_level group);
 const struct gasket_mappable_region *
 tpuv4lite_bar0_get_regions(enum tpu_common_security_level group);

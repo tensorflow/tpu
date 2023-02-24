@@ -624,9 +624,17 @@ static int gasket_map_pci_bar(struct gasket_dev *gasket_dev, int bar_num)
    bar_num, &gasket_dev->pci_dev->resource[bar_num]);
   return -EINVAL;
  }
- gasket_dev->bar_data[bar_num].virt_base =
-  ioremap(gasket_dev->bar_data[bar_num].phys_base,
-   gasket_dev->bar_data[bar_num].length_bytes);
+ switch (driver_desc->bar_descriptions[bar_num].cache_mode) {
+ case GASKET_CACHE_MODE_WC:
+  gasket_dev->bar_data[bar_num].virt_base =
+   ioremap_wc(gasket_dev->bar_data[bar_num].phys_base,
+    gasket_dev->bar_data[bar_num].length_bytes);
+  break;
+ default:
+  gasket_dev->bar_data[bar_num].virt_base =
+   ioremap(gasket_dev->bar_data[bar_num].phys_base,
+    gasket_dev->bar_data[bar_num].length_bytes);
+ }
  if (!gasket_dev->bar_data[bar_num].virt_base) {
   gasket_log_error(gasket_dev,
    "Cannot remap BAR %d memory region %p",
@@ -1391,7 +1399,8 @@ static int gasket_mmap(struct file *filp, struct vm_area_struct *vma)
   gasket_log_info(gasket_dev, "No mappable regions returned!");
   return -EINVAL;
  }
- vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
+ vma->vm_page_prot = gasket_pgprot_apply_cache_mode(
+  vma->vm_page_prot, bar_desc->cache_mode);
  for (i = 0; i < num_map_regions; i++) {
   if ((req_perms & map_regions[i].flags) != req_perms) {
    gasket_log_info(gasket_dev,
@@ -1426,7 +1435,6 @@ static int gasket_mmap(struct file *filp, struct vm_area_struct *vma)
  vma->vm_pgoff =
   (gasket_dev->bar_data[bar_index].phys_base >> PAGE_SHIFT) +
    vma->vm_pgoff - (bar_desc->base >> PAGE_SHIFT);
- vma_set_anonymous(vma);
  ret = 0;
  goto exit;
 map_fail:
@@ -1724,3 +1732,12 @@ bool gasket_dev_is_overseer(struct gasket_dev *gasket_dev)
  return false;
 }
 EXPORT_SYMBOL(gasket_dev_is_overseer);
+pgprot_t gasket_pgprot_apply_cache_mode(
+ pgprot_t prot, enum gasket_cache_mode cache_mode)
+{
+ if (cache_mode == GASKET_CACHE_MODE_WC) {
+  return pgprot_writecombine(prot);
+ }
+ return pgprot_noncached(prot);
+}
+EXPORT_SYMBOL(gasket_pgprot_apply_cache_mode);
