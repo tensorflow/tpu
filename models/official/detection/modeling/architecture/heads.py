@@ -399,20 +399,12 @@ class MaskrcnnHead(object):
         if self._class_agnostic_mask_pred:
           mask_outputs = tf.squeeze(mask_outputs, axis=-1)
         else:
-          # TODO(pengchong): Figure out the way not to use the static inferred
-          # batch size.
-          batch_size, num_masks = class_indices.get_shape().as_list()
-          if batch_size is None:
-            batch_size = tf.shape(class_indices)[0]
-          mask_outputs = tf.transpose(mask_outputs, [0, 1, 4, 2, 3])
-          # Constructs indices for gather.
-          batch_indices = tf.tile(
-              tf.expand_dims(tf.range(batch_size), axis=1), [1, num_masks])
-          mask_indices = tf.tile(
-              tf.expand_dims(tf.range(num_masks), axis=0), [batch_size, 1])
-          gather_indices = tf.stack(
-              [batch_indices, mask_indices, class_indices], axis=2)
-          mask_outputs = tf.gather_nd(mask_outputs, gather_indices)
+          mask_outputs = tf.gather(
+              mask_outputs,
+              tf.cast(class_indices, tf.int32),
+              axis=-1,
+              batch_dims=2,
+          )
     return mask_outputs
 
 

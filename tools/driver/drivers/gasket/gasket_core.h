@@ -74,12 +74,17 @@ struct gasket_mappable_region {
  u64 length_bytes;
  vm_flags_t flags;
 };
+enum gasket_cache_mode {
+ GASKET_CACHE_MODE_UNCACHED = 0,
+ GASKET_CACHE_MODE_WC,
+};
 struct gasket_bar_desc {
  u64 size;
  ulong permissions;
  u64 base;
  int num_mappable_regions;
  const struct gasket_mappable_region *mappable_regions;
+ enum gasket_cache_mode cache_mode;
 };
 enum gasket_mapping_options { GASKET_NOMAP = 0 };
 #define GASKET_UNUSED_BAR \
@@ -227,4 +232,6 @@ static inline void gasket_read_modify_write_64(
  gasket_dev_write_64(dev, tmp, bar, location);
 }
 bool gasket_pci_is_iommu_enabled(struct pci_dev *pdev);
+pgprot_t gasket_pgprot_apply_cache_mode(
+ pgprot_t prot, enum gasket_cache_mode cache_mode);
 #endif

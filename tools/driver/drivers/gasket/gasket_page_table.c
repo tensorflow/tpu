@@ -15,6 +15,9 @@
 #if LINUX_VERSION_CODE > KERNEL_VERSION(5, 7, 19)
 #include <linux/dma-resv.h>
 #endif
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 16, 0)
+MODULE_IMPORT_NS(DMA_BUF);
+#endif
 #include "gasket_logging.h"
 #define GASKET_PAGES_PER_SUBTABLE 512
 #define GASKET_SIMPLE_PAGE_SHIFT 12
@@ -127,6 +130,15 @@ static ulong gasket_extended_lvl0_page_idx(
  struct gasket_page_table *pg_tbl, ulong dev_addr);
 static ulong gasket_extended_lvl1_page_idx(
  struct gasket_page_table *pg_tbl, ulong dev_addr);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0)
+struct vm_area_struct * _find_vma(struct vm_area_struct *vma) {
+   return vma->vm_next;
+}
+#else
+struct vm_area_struct * _find_vma(struct vm_area_struct *vma) {
+  return find_vma(vma->vm_mm, vma->vm_end);
+}
+#endif
 int gasket_page_table_init(struct gasket_page_table **ppg_tbl,
  const struct gasket_bar_data *bar_data,
  const struct gasket_page_table_config *page_table_config,
@@ -386,7 +398,7 @@ int gasket_page_table_are_addrs_bad(struct gasket_page_table *pg_tbl,
   if (end_ptr <= vma->vm_end)
    break;
   current_ptr = vma->vm_end;
-  vma = vma->vm_next;
+  vma = _find_vma(vma);
   if (!vma) {
    gasket_pg_tbl_error(pg_tbl,
     "No more VMAs after [0x%lx, 0x%lx) to search through",

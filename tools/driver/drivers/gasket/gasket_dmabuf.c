@@ -79,7 +79,9 @@ static int gasket_dma_buf_ops_mmap(
   return -EINVAL;
  }
  vma->vm_flags &= ~(VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC | VM_MAYSHARE);
- vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
+ vma->vm_page_prot = gasket_pgprot_apply_cache_mode(vma->vm_page_prot,
+  gasket_dev->driver_desc->bar_descriptions[bar_index]
+   .cache_mode);
  phys_addr = gasket_dbuf->mmap_offset + (vma->vm_pgoff << PAGE_SHIFT) -
       gasket_dev->driver_desc->bar_descriptions[bar_index].base +
       gasket_dev->bar_data[bar_index].phys_base;
