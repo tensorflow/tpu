@@ -1,0 +1,8 @@
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib
+absl-py
+fabric==2.7.1
+patchwork
+ray[default]
+pyOpenSSL==23.0.0
