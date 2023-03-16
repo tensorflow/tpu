@@ -115,6 +115,85 @@ def build_optimizer(learning_rate,
   return optimizer
 
 
+def get_ckpt_var_map(ckpt_path,
+                     ckpt_scope='/',
+                     var_scope='/',
+                     skip_mismatch=None):
+  """Get a var map for restoring from pretrained checkpoints.
+
+  Args:
+    ckpt_path: string. A pretrained checkpoint path.
+    ckpt_scope: string. Scope name for checkpoint variables.
+    var_scope: string. Scope name for model variables.
+    skip_mismatch: skip variables if shape mismatch.
+
+  Returns:
+    var_map: a dictionary from checkpoint name to model variables.
+  """
+  logging.info('Init model from checkpoint {}'.format(ckpt_path))
+  if not ckpt_scope.endswith('/') or not var_scope.endswith('/'):
+    raise ValueError('Please specific scope name ending with /')
+  if ckpt_scope.startswith('/'):
+    ckpt_scope = ckpt_scope[1:]
+  if var_scope.startswith('/'):
+    var_scope = var_scope[1:]
+
+  var_map = {}
+  # Get the list of vars to restore.
+  model_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=var_scope)
+  reader = tf.train.load_checkpoint(ckpt_path)
+  ckpt_var_name_to_shape = reader.get_variable_to_shape_map()
+  ckpt_var_names = set(reader.get_variable_to_shape_map().keys())
+
+  if tf.distribute.get_replica_context():
+    replica_id = tf.get_static_value(
+        tf.distribute.get_replica_context().replica_id_in_sync_group)
+  else:
+    replica_id = 0
+
+  for i, v in enumerate(model_vars):
+    var_op_name = v.op.name
+
+    if replica_id >= 1:
+      var_op_name = ''.join(var_op_name.rsplit(f'/replica_{replica_id}', 1))
+
+    if not var_op_name.startswith(var_scope):
+      logging.info('skip {} -- does not match scope {}'.format(
+          var_op_name, var_scope))
+    ckpt_var = ckpt_scope + var_op_name[len(var_scope):]
+    if 'global_step' in ckpt_var:
+      continue
+
+    if (ckpt_var not in ckpt_var_names and
+        var_op_name.endswith('/ExponentialMovingAverage')):
+      ckpt_var = ckpt_scope + var_op_name[:-len('/ExponentialMovingAverage')]
+
+    if ckpt_var not in ckpt_var_names:
+      if 'Momentum' in ckpt_var or 'RMSProp' in ckpt_var:
+        # Skip optimizer variables.
+        continue
+      if skip_mismatch:
+        logging.info('skip {} ({}) -- not in ckpt'.format(
+            var_op_name, ckpt_var))
+        continue
+      raise ValueError('{} is not in ckpt {}'.format(v.op, ckpt_path))
+
+    if v.shape != ckpt_var_name_to_shape[ckpt_var]:
+      if skip_mismatch:
+        logging.info('skip {} ({} vs {}) -- shape mismatch'.format(
+            var_op_name, v.shape, ckpt_var_name_to_shape[ckpt_var]))
+        continue
+      raise ValueError('shape mismatch {} ({} vs {})'.format(
+          var_op_name, v.shape, ckpt_var_name_to_shape[ckpt_var]))
+
+    if i < 5:
+      # Log the first few elements for sanity check.
+      logging.info('Init {} from ckpt var {}'.format(var_op_name, ckpt_var))
+    var_map[ckpt_var] = v
+
+  return var_map
+
+
 class TpuBatchNormalization(tf.layers.BatchNormalization):
   # class TpuBatchNormalization(tf.layers.BatchNormalization):
   """Cross replica batch normalization."""

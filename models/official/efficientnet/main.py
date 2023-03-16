@@ -90,6 +90,13 @@ flags.DEFINE_string(
     default='efficientnet-b0',
     help=('The model name among existing configurations.'))
 
+flags.DEFINE_string('ckpt', None,
+                    'Start training from this EfficientNet checkpoint.')
+
+flags.DEFINE_bool(
+    'skip_mismatch', default=True,
+    help=('If true, skip loading pretrained weights if shape mismatches.'))
+
 flags.DEFINE_string(
     'mode', default='train_and_eval',
     help='One of {"train_and_eval", "train", "eval"}.')
@@ -554,13 +561,24 @@ def model_fn(features, labels, mode, params):
   num_params = np.sum([np.prod(v.shape) for v in tf.trainable_variables()])
   logging.info('number of trainable parameters: %d', num_params)
 
-  def _scaffold_fn():
-    saver = tf.train.Saver(restore_vars_dict)
-    return tf.train.Scaffold(saver=saver)
+  checkpoint = FLAGS.ckpt
+  if checkpoint and is_training:
+    def scaffold_fn():
+      """Loads pretrained model through scaffold function."""
+      logging.info('restore variables from %s', checkpoint)
 
-  if has_moving_average_decay and not is_training:
+      var_map = utils.get_ckpt_var_map(
+          ckpt_path=checkpoint,
+          skip_mismatch=FLAGS.skip_mismatch)
+
+      tf.train.init_from_checkpoint(checkpoint, var_map)
+      return tf.train.Scaffold()
+
+  elif has_moving_average_decay and not is_training:
     # Only apply scaffold for eval jobs.
-    scaffold_fn = _scaffold_fn
+    def scaffold_fn():
+      saver = tf.train.Saver(restore_vars_dict)
+      return tf.train.Scaffold(saver=saver)
   else:
     scaffold_fn = None
 
