@@ -24,13 +24,13 @@ RUN curl https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py && \
 
 RUN pip3 install pyyaml && \
     pip3 install wheel && \
-    pip3 install tensorflow==2.2.0 && \
+    pip3 install tensorflow==2.12.0 && \
     pip3 install google-cloud-storage && \
     pip3 install google-api-python-client && \
     pip3 install oauth2client
 
 # Checkout tensorflow/models at the appropriate branch
-RUN git clone -b r2.2.0 --depth 1 https://github.com/tensorflow/models.git /tensorflow_models
+RUN git clone -b r2.12 --depth 1 https://github.com/tensorflow/models.git tensorflow_models
 
 # Checkout tensorflow/tpu at the appropriate branch
-RUN git clone -b r2.2.0 --depth 1 https://github.com/tensorflow/tpu.git /tensorflow_tpu_models
+RUN git clone -b r2.12 --depth 1 https://github.com/tensorflow/tpu.git tensorflow_tpu_models
