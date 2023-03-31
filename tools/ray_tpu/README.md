@@ -207,7 +207,7 @@ You will need to do a few things:
 
 Clone `paxml` to your admin VM:
 ```
-$ git clone -b paxml-v0.3.0 https://github.com/google/paxml.git
+$ git clone https://github.com/google/paxml.git
 ```
 
 To demonstrate the ease-of-use that the Ray Runtime Environment provides for making and deploying JAX changes, this example requires you to modify PAX.
@@ -231,7 +231,7 @@ EOT
 
 Then run:
 ```
-$ python3 src/run_pax_autoresume.py
+$ python3 src/run_pax_autoresume.py --model_dir=gs://your/gcs/bucket
 ```
 
 As the workload runs, experiment with what happens when you delete your TPU name (by default, named `$USER-tpu-ray`):

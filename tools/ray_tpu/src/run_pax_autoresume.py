@@ -19,7 +19,6 @@ Detailed instruction:
 git clone https://github.com/google/paxml.git
 
 cd paxml
-git checkout paxml-v0.3.0
 add the new ici mesh shape to LmCloudSpmd2BLimitSteps experiment to
 paxml/tasks/lm/params/lm_cloud.py
 
@@ -71,8 +70,8 @@ def autoresume_jobs(
   working_dir = os.path.expanduser("~/paxml")
   pip_installs = {
       "packages": [
-          "orbax==0.1.1",
-          "paxml",
+          "-e git+https://github.com/google/praxis.git@main#egg=praxis",
+          "-e git+https://github.com/google/paxml.git@main#egg=paxml",
           "jax[tpu]",
           "-f https://storage.googleapis.com/jax-releases/libtpu_releases.html",
       ],
