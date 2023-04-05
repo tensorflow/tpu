@@ -26,7 +26,7 @@ Specifically:
 [`tpu_controller.py`](src/tpu_controller.py) - Class representation of a TPU. This
 is essentially a wrapper for `tpu_api.py`.
 
-[`ray_tpu_controller.py`](src/tpu_controller.py) - TPU controller with Ray
+[`ray_tpu_controller.py`](src/ray_tpu_controller.py) - TPU controller with Ray
 functionality. This abstracts away boilerplate for Ray Cluster and Ray Jobs.
 
 [`run_basic_jax.py`](src/run_basic_jax.py) - Basic example that shows how to use

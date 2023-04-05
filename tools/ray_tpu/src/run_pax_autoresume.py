@@ -45,6 +45,7 @@ from absl import flags
 from absl import logging
 
 
+from ray.job_submission import JobStatus
 from ray_tpu_controller import RayTpuController
 from ray_tpu_controller import TpuRayJob
 from tpu_api import get_default_gcp_project
@@ -87,8 +88,8 @@ def autoresume_jobs(
     controller.maybe_create_and_wait_for_ready()
     if not controller.job_queued_and_healthy():
       controller.queue_tpu_workload(ray_job, reset_queue=True)
-    controller.clean_stale_jobs(ray_job.entrypoint)
-    if controller.jobs_completed():
+    controller.clean_stale_jobs(controller.resource_name)
+    if controller.jobs_in_status(JobStatus.SUCCEEDED):
       logging.info("All jobs are finished successfully.")
       break
     time.sleep(60)

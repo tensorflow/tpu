@@ -43,6 +43,8 @@ def create_tpu(
     version: str,
     startup_script: Optional[List[str]] = None,
     block_until_completion: bool = True,
+    network: Optional[str] = "default",
+    subnetwork: Optional[str] = "default",
 ):
   """Creates a Cloud TPU.
 
@@ -61,6 +63,8 @@ def create_tpu(
       on TPU VM startup.
     block_until_completion: Whether or not to wait until the operation has
       finished running.
+    network: the network name the tpu_vm will use.
+    subnetwork: the subnetwork name the tpu_vm will use.
   """
   tpu_node_url = os.path.join(
       _TPU_BASE_URL, "projects", project, "locations", zone, "nodes"
@@ -80,6 +84,8 @@ def create_tpu(
       "runtimeVersion": version,
       "networkConfig": {
           "enableExternalIps": True,
+          "network": network,
+          "subnetwork": subnetwork,
       },
       "metadata": metadata,
   }
@@ -141,6 +147,17 @@ def get_tpu(tpu_name: str, project: str, zone: str) -> Mapping[str, Any]:
   )
   resp = requests.get(tpu_node_url, headers=get_headers())
   return resp.json()
+
+
+def tpu_exists(tpu_name: str, project: str, zone: str) -> bool:
+  """Check whether a tpu exits or not."""
+  resp = get_tpu(tpu_name, project, zone)
+  not_found = (
+      "error" in resp
+      and "status" in resp["error"]
+      and "NOT_FOUND" == resp["error"]["status"]
+  )
+  return not not_found
 
 
 def update_tpu_startup_script(

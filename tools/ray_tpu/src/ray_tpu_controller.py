@@ -49,12 +49,18 @@ class TpuRayJob:
   entrypoint: str
   working_dir: str
   pip_installs: List[str] = dataclasses.field(default_factory=list)
+  env_vars: Mapping[str, str] = None
+  entrypoint_resources: Mapping[str, int] = None
 
   def to_ray_job(self) -> Mapping[str, Any]:
     return dict(
         entrypoint=self.entrypoint,
-        runtime_env=dict(working_dir=self.working_dir, pip=self.pip_installs),
-        entrypoint_resources=dict(tpu_host=1),
+        runtime_env=dict(
+            working_dir=self.working_dir,
+            pip=self.pip_installs,
+            env_vars=self.env_vars,
+        ),
+        entrypoint_resources=self.entrypoint_resources,
     )
 
 
@@ -84,15 +90,21 @@ class RayTpuController(tpu_controller.TPUController):
 
   def __init__(
       self,
+      tpu_name: str,
       startup_script: Optional[List[str]] = None,
       runtime_env: Optional[RayRuntimeEnv] = None,
+      head_addr: Optional[str] = None,
       **kwargs,
   ):
-    if runtime_env:
-      result = ray.init(runtime_env=dataclasses.asdict(runtime_env))
-    else:
-      result = ray.init()
-    self._head_addr = result.address_info["address"]
+    if not ray.is_initialized():
+      if runtime_env:
+        result = ray.init(runtime_env=dataclasses.asdict(runtime_env))
+      else:
+        result = ray.init()
+      self._head_addr = result.address_info["address"]
+    if head_addr:
+      self._head_addr = head_addr
+    self.resource_name = f"{tpu_name}_tpu_host"
     ray_setup = self.get_ray_setup_commands()
     self._job_client = None
     if startup_script:
@@ -101,7 +113,11 @@ class RayTpuController(tpu_controller.TPUController):
       startup_script = ray_setup
     self._queued_jobs = []
     self._live_nodes = set()
-    super().__init__(startup_script=startup_script, **kwargs)
+    super().__init__(tpu_name=tpu_name, startup_script=startup_script, **kwargs)
+
+  @property
+  def queued_jobs(self):
+    return self._queued_jobs
 
   def maybe_start_ray_on_workers(self):
     if self.tpu_hosts_joined_cluster():
@@ -121,10 +137,8 @@ class RayTpuController(tpu_controller.TPUController):
         "mkdir -p /dev/shm",
         "sudo mount -t tmpfs -o size=100g tmpfs /dev/shm",
         "sudo pip3 install ray[default]",
-        (
-            "ray start --resources='{\"tpu_host\": 1}' --address="
-            + self._head_addr
-        ),
+        "ray start --resources='{\"%s\": 1}' --address=%s"
+        % (self.resource_name, self._head_addr),
     ]
 
   def tpu_hosts_joined_cluster(self) -> bool:
@@ -132,10 +146,12 @@ class RayTpuController(tpu_controller.TPUController):
         limit=10000, filters=[("state", "=", "ALIVE")]
     )
     self._live_nodes.clear()
+    ips_addresses = self.get_ip_addresses()
     for node in ray_nodes:
       if (
           node.get("resources_total")
-          and node["resources_total"].get("tpu_host") == 1
+          and node["resources_total"].get(self.resource_name) == 1
+          and node["node_ip"] in ips_addresses
       ):
         self._live_nodes.add(node["node_id"])
     num_registered_tpu_hosts = len(self._live_nodes)
@@ -185,6 +201,7 @@ class RayTpuController(tpu_controller.TPUController):
   def queue_tpu_workload(self, job: TpuRayJob, reset_queue=False):
     if reset_queue:
       self._queued_jobs = []
+    job.entrypoint_resources = {self.resource_name: 1}
     for _ in range(self.get_num_nodes()):
       self._queued_jobs.append(self.job_client.submit_job(**job.to_ray_job()))
     logging.info("Queued %d jobs.", len(self._queued_jobs))
@@ -224,13 +241,13 @@ class RayTpuController(tpu_controller.TPUController):
         return False
     return True
 
-  def clean_stale_jobs(self, entrypoint: str) -> None:
+  def clean_stale_jobs(self, resource_name: str) -> None:
     """Stops all the jobs with the same entrypoint but not in the job queue."""
     num_jobs_to_stop = 0
     for job in state_api.list_jobs():
       if (
           job["entrypoint_resources"] is None
-          or job["entrypoint_resources"].get("tpu_host", 0) != 1
+          or job["entrypoint_resources"].get(resource_name, 0) != 1
       ):
         continue
       if job["status"] not in {"RUNNING", "PENDING"}:
@@ -262,12 +279,12 @@ class RayTpuController(tpu_controller.TPUController):
     async for line in self.job_client.tail_job_logs(self._queued_jobs[0]):
       print(line, end="")
 
-  def jobs_completed(self) -> bool:
+  def jobs_in_status(self, status) -> bool:
     counter = collections.Counter(
         (self.job_client.get_job_status(job) for job in self._queued_jobs)
     )
-    logging.info("Job status: %s", counter)
-    return counter.get(JobStatus.SUCCEEDED) == len(self._queued_jobs)
+    logging.info("TPU %s Job status: %s", self.tpu_name, counter)
+    return counter.get(status) == len(self._queued_jobs)
 
   def wait_until_tpu_job_completed(self, poll_timeout_in_s=10):
     while self._queued_jobs:

@@ -62,6 +62,8 @@ class TPUController:
       accelerator_topology: str,
       version: str,
       startup_script: Optional[List[str]],
+      network: Optional[str] = "default",
+      subnetwork: Optional[str] = "default",
   ):
     self._tpu_name = tpu_name
     self._zone = zone
@@ -72,11 +74,18 @@ class TPUController:
     self._startup_script = startup_script
     self._ip_addresses = []
     self._connections = {}
+    self._network = network
+    self._subnetwork = subnetwork
+
+  @property
+  def tpu_name(self) -> str:
+    return self._tpu_name
 
   def tpu_exists(self) -> bool:
     """Checks if the TPU exists."""
-    tpu_list = tpu_api.list_tpus(project=self._project, zone=self._zone)
-    return any([self._tpu_name in tpu["name"] for tpu in tpu_list])
+    return tpu_api.tpu_exists(
+        tpu_name=self._tpu_name, project=self._project, zone=self._zone
+    )
 
   def get_ip_addresses(self) -> List[str]:
     """Returns the IP addresses of the workers in the cluster."""
@@ -109,6 +118,8 @@ class TPUController:
         accelerator_topology=self._accelerator_topology,
         version=self._version,
         startup_script=self._startup_script,
+        network=self._network,
+        subnetwork=self._subnetwork,
     )
 
   def maybe_create_tpu(self) -> bool:
