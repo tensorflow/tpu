@@ -64,6 +64,7 @@ class TPUController:
       startup_script: Optional[List[str]],
       network: Optional[str] = "default",
       subnetwork: Optional[str] = "default",
+      preemptible: bool = False,
   ):
     self._tpu_name = tpu_name
     self._zone = zone
@@ -76,6 +77,7 @@ class TPUController:
     self._connections = {}
     self._network = network
     self._subnetwork = subnetwork
+    self._preemptible = preemptible
 
   @property
   def tpu_name(self) -> str:
@@ -120,6 +122,7 @@ class TPUController:
         startup_script=self._startup_script,
         network=self._network,
         subnetwork=self._subnetwork,
+        preemptible=self._preemptible,
     )
 
   def maybe_create_tpu(self) -> bool:

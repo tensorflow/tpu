@@ -18,12 +18,17 @@ import getpass
 import os
 
 from absl import app
+from absl import flags
 from absl import logging
 
 from ray_tpu_controller import BASE_JAX_PIP_INSTALLS
 from ray_tpu_controller import RayTpuController
 from ray_tpu_controller import TpuRayJob
 from tpu_api import get_default_gcp_project
+
+FLAGS = flags.FLAGS
+
+flags.DEFINE_boolean("preemptible", False, "Whether create preemptible tpu.")
 
 
 def main(_):
@@ -38,6 +43,7 @@ def main(_):
       accelerator_topology="2x2x2",
       version="tpu-vm-v4-base",
       startup_script=['echo "hello world"'],
+      preemptible=FLAGS.preemptible,
   )
   controller.maybe_create_and_wait_for_ready()
 

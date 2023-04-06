@@ -55,6 +55,7 @@ FLAGS = flags.FLAGS
 flags.DEFINE_string(
     "model_dir", None, "Directory to store ckpts and tensorboard data etc."
 )
+flags.DEFINE_boolean("preemptible", False, "Whether create preemptible tpu.")
 
 flags.mark_flag_as_required("model_dir")
 
@@ -115,6 +116,7 @@ def main(_):
       accelerator_type="V4",
       accelerator_topology="2x2x2",
       version="tpu-vm-v4-base",
+      preemptible=FLAGS.preemptible,
   )
   job_finished_event = threading.Event()
   autoresume_jobs_p = threading.Thread(

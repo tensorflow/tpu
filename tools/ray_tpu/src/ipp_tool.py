@@ -51,6 +51,7 @@ flags.DEFINE_string(
 flags.DEFINE_enum('mode', None, ['start', 'stop'], 'Start or stop ipp.')
 flags.DEFINE_boolean('delete_tpu', False, 'Whether delete tpus when stop ipp.')
 flags.DEFINE_integer('num_slices', 1, 'Number of slices.')
+flags.DEFINE_boolean('preemptible', False, 'Whether create preemptible tpu.')
 
 
 def get_controller_ip():
@@ -160,6 +161,7 @@ def main(_):
         accelerator_topology=FLAGS.tpu_topology,
         version='tpu-vm-v4-base',
         head_addr=f'{get_controller_ip()}:{_DEFAULT_RAY_PORT}',
+        preemptible=FLAGS.preemptible,
     )
     controllers.append(controller)
   if FLAGS.mode == 'start':

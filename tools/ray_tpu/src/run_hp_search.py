@@ -19,6 +19,7 @@ import os
 from typing import Any, Mapping
 
 from absl import app
+from absl import flags
 from absl import logging
 from flax import linen as nn
 from flax.metrics import tensorboard
@@ -34,6 +35,10 @@ from ray_tpu_controller import RayTpuController
 import tensorflow_datasets as tfds
 from tpu_api import get_default_gcp_project
 
+
+FLAGS = flags.FLAGS
+
+flags.DEFINE_boolean("preemptible", False, "Whether create preemptible tpu.")
 
 NUM_TRIALS = 3
 NUM_SAMPLES = 3
@@ -235,6 +240,7 @@ def main(_):
       runtime_env=RayRuntimeEnv(
           pip=pip_installs, working_dir=os.path.expanduser("~/src")
       ),
+      preemptible=FLAGS.preemptible,
   )
   controller.maybe_create_and_wait_for_ready()
 

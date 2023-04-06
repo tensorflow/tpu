@@ -45,6 +45,7 @@ def create_tpu(
     block_until_completion: bool = True,
     network: Optional[str] = "default",
     subnetwork: Optional[str] = "default",
+    preemptible: bool = False,
 ):
   """Creates a Cloud TPU.
 
@@ -65,6 +66,7 @@ def create_tpu(
       finished running.
     network: the network name the tpu_vm will use.
     subnetwork: the subnetwork name the tpu_vm will use.
+    preemptible: whether to create preemptible TPUs.
   """
   tpu_node_url = os.path.join(
       _TPU_BASE_URL, "projects", project, "locations", zone, "nodes"
@@ -88,6 +90,9 @@ def create_tpu(
           "subnetwork": subnetwork,
       },
       "metadata": metadata,
+      "schedulingConfig": {
+          "preemptible": preemptible,
+      },
   }
   print("Creating TPU: ", tpu_name)
   print("Request: ", request)
