@@ -31,6 +31,8 @@ def get_model_builder(model_name):
     return efficientnet_condconv_builder
   elif model_name.startswith('efficientnet-x-'):
     return efficientnet_x_builder
+  elif model_name.startswith('efficientnet-h-'):
+    return efficientnet_x_builder
   elif model_name.startswith('efficientnet-'):
     return efficientnet_builder
   else:

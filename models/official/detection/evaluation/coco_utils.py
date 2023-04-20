@@ -108,11 +108,21 @@ class COCOWrapper(coco.COCO):
     return res
 
 
-def convert_predictions_to_coco_annotations(predictions):
+def convert_predictions_to_coco_annotations(
+    predictions, remove_invalid_boxes=False
+):
   """Converts a batch of predictions to annotations in COCO format.
 
+  "remove_invalid_boxes" is an indicator whether invalid boxes should be removed
+  when evaluating on coco. Keeping invalid boxes may cause the groundtruth boxes
+  matched to an invalid boxes, making the evaluation inaccurate. However, to
+  make this function backward compatible, we set its default value to be false.
+  Another way to avoid using invalid boxes when evaluating on COCO is to set the
+  coordinates of invalid boxes to be "0" so they won't be matched to any
+  groundtruth boxes.
+
   Args:
-    predictions: a dictionary of lists of numpy arrays including the following
+   predictions: a dictionary of lists of numpy arrays including the following
       fields. K below denotes the maximum number of instances per image.
       Required fields:
         - source_id: a list of numpy arrays of int or string of shape
@@ -128,6 +138,8 @@ def convert_predictions_to_coco_annotations(predictions):
       Optional fields:
         - detection_masks: a list of numpy arrays of float of shape
             [batch_size, K, mask_height, mask_width].
+    remove_invalid_boxes: A boolean indicating whether to remove invalid box
+      during evaluation.
 
   Returns:
     coco_predictions: prediction in COCO annotation format.
@@ -159,7 +171,13 @@ def convert_predictions_to_coco_annotations(predictions):
         encoded_masks = [
             mask_api.encode(np.asfortranarray(binary_mask))
             for binary_mask in list(binary_masks)]
-      for k in range(max_num_detections):
+      if remove_invalid_boxes:
+        num_detections = min(
+            predictions['num_detections'][i][j], max_num_detections
+        )
+      else:
+        num_detections = max_num_detections
+      for k in range(num_detections):
         ann = {}
         ann['image_id'] = predictions['source_id'][i][j]
         ann['category_id'] = predictions['detection_classes'][i][j, k]

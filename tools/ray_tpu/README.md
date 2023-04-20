@@ -72,6 +72,13 @@ Notes:
 
 Instructions:
 
+0. If you do not have a dedicated service account for TPU administration (highly recommended), set one up:
+```
+./create_tpu_service_account.sh
+```
+
+Note: This only needs to be run once!
+
 1. Create a CPU admin:
 ```
 $ ./create_cpu.sh
@@ -93,10 +100,11 @@ $ gcloud compute ssh $USER-admin -- -L8265:localhost:8265
 
 Note that we enable port forwarding here as Ray will automatically start a dashboard at port 8265. From the machine that you SSH to your VM, you will be able to access this dashboard at http://127.0.0.1:8265/.
 
-4. Set up your gcloud credentials within the CPU VM:
+4. If you skipped step 0, set up your gcloud credentials within the CPU VM:
 ```
 $ gcloud auth login --update-adc
 ```
+Note that this command authorizes your VM instance to use your personal Google account which may be a security risk in a production setting.
 
 5. Run the necessary pip installs:
 ```

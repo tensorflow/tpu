@@ -229,7 +229,7 @@ class ImageNetInput(object):
       return dataset
 
     dataset = dataset.apply(
-        contrib_data.parallel_interleave(
+        tf.data.experimental.parallel_interleave(
             prefetch_dataset, cycle_length=FLAGS.num_files_infeed, sloppy=True))
     dataset = dataset.shuffle(FLAGS.shuffle_buffer_size)
 

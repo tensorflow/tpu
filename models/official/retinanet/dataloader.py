@@ -28,7 +28,6 @@ import tensorflow.compat.v1 as tf
 import anchors
 from object_detection import preprocessor
 from object_detection import tf_example_decoder
-from tensorflow.contrib import data as contrib_data
 
 MAX_NUM_INSTANCES = 100
 # Represents the number of bytes in the read buffer.
@@ -370,7 +369,7 @@ class InputReader(object):
       return dataset
 
     dataset = dataset.apply(
-        contrib_data.parallel_interleave(
+        tf.data.experimental.parallel_interleave(
             _prefetch_dataset, cycle_length=32, sloppy=self._is_training))
 
     if params.get('dataset_private_threadpool_size', None):
@@ -484,7 +483,7 @@ class SegmentationInputReader(object):
       return dataset
 
     dataset = dataset.apply(
-        contrib_data.parallel_interleave(
+        tf.data.experimental.parallel_interleave(
             _prefetch_dataset, cycle_length=32, sloppy=self._is_training))
     if self._is_training:
       dataset = dataset.shuffle(64)
