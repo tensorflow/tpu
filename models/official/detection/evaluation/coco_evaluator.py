@@ -48,17 +48,26 @@ from utils import class_utils
 class COCOEvaluator(object):
   """COCO evaluation metric class."""
 
-  def __init__(self,
-               annotation_file,
-               include_mask,
-               need_rescale_bboxes=True,
-               per_category_metrics=False):
+  def __init__(
+      self,
+      annotation_file,
+      include_mask,
+      need_rescale_bboxes=True,
+      per_category_metrics=False,
+      remove_invalid_boxes=False,
+  ):
     """Constructs COCO evaluation class.
 
     The class provides the interface to metrics_fn in TPUEstimator. The
     _update_op() takes detections from each image and push them to
     self.detections. The _evaluate() loads a JSON file in COCO annotation format
     as the groundtruths and runs COCO evaluation.
+
+
+    There are two ways to remove invalid boxes when evaluating on COCO: 1. Set
+    the coordinates of invalid boxes to "0"; 2. Set "remove_invalid_boxes" to be
+    true. To make this function backward compatible, we set the default value of
+    "remove_invalid_boxes" to be false.
 
     Args:
       annotation_file: a JSON file that stores annotations of the eval dataset.
@@ -69,6 +78,8 @@ class COCOEvaluator(object):
       need_rescale_bboxes: If true bboxes in `predictions` will be rescaled back
         to absolute values (`image_info` is needed in this case).
       per_category_metrics: Whether to return per category metrics.
+      remove_invalid_boxes: A boolean indicating whether to remove invalid box
+        during evaluation.
     """
     if annotation_file:
       if annotation_file.startswith('gs://'):
@@ -104,7 +115,7 @@ class COCOEvaluator(object):
       self._metric_names.extend(mask_metric_names)
       self._required_prediction_fields.extend(['detection_masks'])
       self._required_groundtruth_fields.extend(['masks'])
-
+    self.remove_invalid_boxes = remove_invalid_boxes
     self.reset()
 
   def reset(self):
@@ -146,7 +157,9 @@ class COCOEvaluator(object):
       logging.info('Using annotation file: %s', self._annotation_file)
       coco_gt = self._coco_gt
     coco_predictions = coco_utils.convert_predictions_to_coco_annotations(
-        self._predictions)
+        self._predictions,
+        remove_invalid_boxes=self.remove_invalid_boxes,
+    )
     coco_dt = coco_gt.loadRes(predictions=coco_predictions)
     image_ids = [ann['image_id'] for ann in coco_predictions]
 

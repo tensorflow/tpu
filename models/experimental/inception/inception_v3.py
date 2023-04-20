@@ -402,7 +402,7 @@ class InputPipeline(object):
         return dataset
 
       dataset = dataset.apply(
-          contrib_data.parallel_interleave(
+          tf.data.experimental.parallel_interleave(
               prefetch_dataset,
               cycle_length=FLAGS.num_files_infeed,
               sloppy=True))

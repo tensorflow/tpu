@@ -45,9 +45,9 @@ def efficientnet_x_params(model_name):
       'efficientnet-x-b5': (1.6, 2.2, 456, 0.4, 1),
       'efficientnet-x-b6': (1.8, 2.6, 528, 0.5, 1),
       'efficientnet-x-b7': (2.0, 3.1, 600, 0.5, 1),
-      'efficientnet-x-v2-b5': (1.92, 2.2, 456, 0.4, 1),
-      'efficientnet-x-v2-b6': (2.16, 2.6, 528, 0.5, 1),
-      'efficientnet-x-v2-b7': (2.4, 3.1, 600, 0.5, 1),
+      'efficientnet-h-b5': (1.92, 2.2, 456, 0.4, 1),
+      'efficientnet-h-b6': (2.16, 2.6, 528, 0.5, 1),
+      'efficientnet-h-b7': (2.4, 3.1, 600, 0.5, 1),
       'efficientnet-x-tpu-b0': (1.0, 1.0, 224, 0.2, 4),
       'efficientnet-x-tpu-b1': (1.05, 1.09, 229, 0.2, 2),
       'efficientnet-x-tpu-b2': (1.13, 1.29, 244, 0.3, 1),
@@ -56,9 +56,9 @@ def efficientnet_x_params(model_name):
       'efficientnet-x-tpu-b5': (1.96, 2.76, 332, 0.4, 1),
       'efficientnet-x-tpu-b6': (2.75, 3.01, 328, 0.5, 1),
       'efficientnet-x-tpu-b7': (3.26, 3.44, 350, 0.5, 1),
-      'efficientnet-x-v2-tpu-b5': (2.3, 2.76, 332, 0.4, 1),
-      'efficientnet-x-v2-tpu-b6': (3, 3.01, 328, 0.5, 1),
-      'efficientnet-x-v2-tpu-b7': (3.6, 3.44, 350, 0.5, 1),
+      'efficientnet-h-tpu-b5': (2.3, 2.76, 332, 0.4, 1),
+      'efficientnet-h-tpu-b6': (3, 3.01, 328, 0.5, 1),
+      'efficientnet-h-tpu-b7': (3.6, 3.44, 350, 0.5, 1),
       'efficientnet-x-gpu-b0': (1.0, 1.0, 224, 0.2, 4),
       'efficientnet-x-gpu-b1': (1.05, 1.09, 229, 0.2, 2),
       'efficientnet-x-gpu-b2': (1.13, 1.24, 237, 0.3, 1),
@@ -124,7 +124,7 @@ def efficientnet_x(width_coefficient=None,
 
 def _get_model_version(model_name):
   """Parses model name string and returns the version."""
-  if '-v2-' in model_name:
+  if '-h-' in model_name:
     return 2
   else:
     return 1
