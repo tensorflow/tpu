@@ -124,6 +124,7 @@ class TPUController:
         subnetwork=self._subnetwork,
         preemptible=self._preemptible,
     )
+    self._ip_addresses.clear()
 
   def maybe_create_tpu(self) -> bool:
     """Creates the TPU if it doesn't exist.
