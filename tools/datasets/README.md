@@ -50,8 +50,8 @@ mkdir -p $IMAGENET_HOME/validation
 mkdir -p $IMAGENET_HOME/train
 
 # Extract validation and training
-tar xf ILSVRC2012_img_val.tar -C $IMAGENET_HOME/validation
-tar xf ILSVRC2012_img_train.tar -C $IMAGENET_HOME/train
+tar xf $IMAGENET_HOME/ILSVRC2012_img_val.tar -C $IMAGENET_HOME/validation
+tar xf $IMAGENET_HOME/ILSVRC2012_img_train.tar -C $IMAGENET_HOME/train
 
 # Extract and then delete individual training tar files This can be pasted
 # directly into a bash command-line or create a file and execute.
@@ -70,7 +70,7 @@ rm $IMAGENET_HOME/train/*.tar
 
 # Download labels file.
 wget -O $IMAGENET_HOME/synset_labels.txt \
-https://raw.githubusercontent.com/tensorflow/models/master/research/inception/inception/data/imagenet_2012_validation_synset_labels.txt
+https://raw.githubusercontent.com/tensorflow/models/master/research/slim/datasets/imagenet_2012_validation_synset_labels.txt
 
 # Process the files. Remember to get the script from github first. The TFRecords
 # will end up in the --local_scratch_dir. To upload to gcs with this method
