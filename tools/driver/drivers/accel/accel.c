@@ -4,7 +4,6 @@
  */
 #include <linux/accel.h>
 #include <linux/fs.h>
-#include <linux/genhd.h>
 #include <linux/kdev_t.h>
 #include <linux/slab.h>
 #include <linux/types.h>
