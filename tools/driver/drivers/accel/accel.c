@@ -8,9 +8,10 @@
 #include <linux/kdev_t.h>
 #include <linux/slab.h>
 #include <linux/types.h>
-#include <linux/genhd.h>
 #include <linux/version.h>
-#if LINUX_VERSION_CODE > KERNEL_VERSION(6, 1, 0)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0)
+#include <linux/genhd.h>
+#else
 #include <linux/blkdev.h>
 #endif
 #define ACCEL_MAX_DEVICES 512
