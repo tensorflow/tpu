@@ -71,7 +71,7 @@ Within the code directory, two files are generated under `code_dir/ipython/secur
 2.Start Jupyter Notebook
 ```
 # on CPU VM
-juypter-lab
+jupyter-lab
 ```
 3.Use the following code block to connect to ipyparallel in the first cell
 ```
