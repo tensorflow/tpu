@@ -160,7 +160,6 @@ def main(_):
         accelerator_type='V4',
         accelerator_topology=FLAGS.tpu_topology,
         version='tpu-vm-v4-base',
-        head_addr=f'{get_controller_ip()}:{_DEFAULT_RAY_PORT}',
         preemptible=FLAGS.preemptible,
     )
     controllers.append(controller)

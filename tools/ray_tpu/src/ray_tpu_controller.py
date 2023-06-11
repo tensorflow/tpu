@@ -93,17 +93,14 @@ class RayTpuController(tpu_controller.TPUController):
       tpu_name: str,
       startup_script: Optional[List[str]] = None,
       runtime_env: Optional[RayRuntimeEnv] = None,
-      head_addr: Optional[str] = None,
       **kwargs,
   ):
     if not ray.is_initialized():
       if runtime_env:
-        result = ray.init(runtime_env=dataclasses.asdict(runtime_env))
+        ray.init(runtime_env=dataclasses.asdict(runtime_env))
       else:
-        result = ray.init()
-      self._head_addr = result.address_info["address"]
-    if head_addr:
-      self._head_addr = head_addr
+        ray.init()
+    self._head_addr = ray.get_runtime_context().gcs_address
     self.resource_name = f"{tpu_name}_tpu_host"
     ray_setup = self.get_ray_setup_commands()
     self._job_client = None
