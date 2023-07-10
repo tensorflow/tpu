@@ -24,12 +24,12 @@ from __future__ import print_function
 import atexit
 import copy
 import tempfile
+import cv2
 import numpy as np
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
 import pycocotools.mask as maskUtils
 import tensorflow.compat.v1 as tf
-import cv2
 
 
 class MaskCOCO(COCO):

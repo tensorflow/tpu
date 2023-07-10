@@ -46,6 +46,7 @@ def create_tpu(
     network: Optional[str] = "default",
     subnetwork: Optional[str] = "default",
     preemptible: bool = False,
+    reserved: bool = False,
 ):
   """Creates a Cloud TPU.
 
@@ -67,7 +68,13 @@ def create_tpu(
     network: the network name the tpu_vm will use.
     subnetwork: the subnetwork name the tpu_vm will use.
     preemptible: whether to create preemptible TPUs.
+    reserved: whether to create reserved TPUs.
   """
+  if preemptible and reserved:
+    raise ValueError(
+        "Preemptible and Reserved cannot be set to True simultaneously"
+    )
+
   tpu_node_url = os.path.join(
       _TPU_BASE_URL, "projects", project, "locations", zone, "nodes"
   )
@@ -92,6 +99,7 @@ def create_tpu(
       "metadata": metadata,
       "schedulingConfig": {
           "preemptible": preemptible,
+          "reserved": reserved,
       },
   }
   print("Creating TPU: ", tpu_name)

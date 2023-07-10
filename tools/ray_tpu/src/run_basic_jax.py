@@ -29,6 +29,7 @@ from tpu_api import get_default_gcp_project
 FLAGS = flags.FLAGS
 
 flags.DEFINE_boolean("preemptible", False, "Whether create preemptible tpu.")
+flags.DEFINE_boolean("reserved", False, "Whether create reserved tpu.")
 
 
 def main(_):
@@ -44,6 +45,7 @@ def main(_):
       version="tpu-vm-v4-base",
       startup_script=['echo "hello world"'],
       preemptible=FLAGS.preemptible,
+      reserved=FLAGS.reserved,
   )
   controller.maybe_create_and_wait_for_ready()
 

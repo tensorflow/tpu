@@ -65,6 +65,7 @@ class TPUController:
       network: Optional[str] = "default",
       subnetwork: Optional[str] = "default",
       preemptible: bool = False,
+      reserved: bool = False,
   ):
     self._tpu_name = tpu_name
     self._zone = zone
@@ -78,6 +79,7 @@ class TPUController:
     self._network = network
     self._subnetwork = subnetwork
     self._preemptible = preemptible
+    self._reserved = reserved
 
   @property
   def tpu_name(self) -> str:
@@ -123,6 +125,7 @@ class TPUController:
         network=self._network,
         subnetwork=self._subnetwork,
         preemptible=self._preemptible,
+        reserved=self._reserved,
     )
     self._ip_addresses.clear()
 
