@@ -39,6 +39,7 @@ from tpu_api import get_default_gcp_project
 FLAGS = flags.FLAGS
 
 flags.DEFINE_boolean("preemptible", False, "Whether create preemptible tpu.")
+flags.DEFINE_boolean("reserved", False, "Whether create reserved tpu.")
 
 NUM_TRIALS = 3
 NUM_SAMPLES = 3
@@ -241,6 +242,7 @@ def main(_):
           pip=pip_installs, working_dir=os.path.expanduser("~/src")
       ),
       preemptible=FLAGS.preemptible,
+      reserved=FLAGS.reserved,
   )
   controller.maybe_create_and_wait_for_ready()
 

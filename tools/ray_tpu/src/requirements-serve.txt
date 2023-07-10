@@ -1,0 +1,3 @@
+fastapi
+ray[serve]
+pillow
