@@ -24,7 +24,7 @@ RUN curl https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py && \
 
 RUN pip3 install pyyaml && \
     pip3 install wheel && \
-    pip3 install tensorflow==2.2.0 && \
+    pip3 install tensorflow==2.7.0 && \
     pip3 install google-cloud-storage && \
     pip3 install google-api-python-client && \
     pip3 install oauth2client
