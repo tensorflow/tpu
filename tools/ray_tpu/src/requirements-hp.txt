@@ -11,4 +11,4 @@ pandas
 ray[tune]
 tensorflow-cpu==2.9.3
 tensorflow-datasets==4.4.0
-protobuf==3.19.0
+protobuf==3.19.5
