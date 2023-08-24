@@ -80,7 +80,9 @@ resource "google_container_node_pool" "multihost_tpu" {
       "https://www.googleapis.com/auth/logging.write",
       "https://www.googleapis.com/auth/monitoring",
     ]
-
+    host_maintenance_policy {
+      maintenance_interval = var.maintenance_interval
+    }
     labels = {
       env = var.project_id
     }
