@@ -31,6 +31,9 @@ class GenericJsonlLoader(data_loader.DataLoader):
     self._types = None
     self._process_dataset()
 
+    if self.get_samples_count() == 0:
+      logging.error('No samples in datafile %s', self._data_file)
+
   def _process_dataset(self):
     logging.info('Downloading the dataset file...')
     with tf.io.gfile.GFile(self._data_file, 'r') as f:

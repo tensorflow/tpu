@@ -197,15 +197,21 @@ def resize_3d_image_nearest_interpolation(im, res_s):
   new_shape = [res_s, im.shape[1], im.shape[2]]
   ret0 = np.zeros(new_shape, dtype=im.dtype)
   for i in range(im.shape[2]):
-    im_slice = np.array(Image.fromarray(im[..., i]).resize(
-        (im.shape[1], res_s), resample=Image.NEAREST))
+    im_slice = np.array(
+        Image.fromarray(im[..., i]).resize(
+            (im.shape[1], res_s), resample=Image.Resampling.NEAREST
+        )
+    )
     ret0[..., i] = im_slice
 
   new_shape = [res_s, res_s, res_s]
   ret = np.zeros(new_shape, dtype=im.dtype)
   for i in range(res_s):
-    im_slice = np.array(Image.fromarray(ret0[i, ...]).resize(
-        (res_s, res_s), resample=Image.NEAREST))
+    im_slice = np.array(
+        Image.fromarray(ret0[i, ...]).resize(
+            (res_s, res_s), resample=Image.Resampling.NEAREST
+        )
+    )
     ret[i, ...] = im_slice
   return ret
 

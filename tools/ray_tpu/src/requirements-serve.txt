@@ -1,3 +1,0 @@
-fastapi
-ray[serve]
-pillow

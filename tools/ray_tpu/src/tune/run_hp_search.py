@@ -14,7 +14,6 @@
 # ==============================================================================
 
 """Hyperparameter search FLAX MNIST with Ray backend."""
-import getpass
 import os
 from typing import Any, Mapping
 
@@ -30,19 +29,13 @@ import ml_collections
 import numpy as np
 import optax
 from ray import tune
-from ray_tpu_controller import RayRuntimeEnv
-from ray_tpu_controller import RayTpuController
 import tensorflow_datasets as tfds
-from tpu_api import get_default_gcp_project
 
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_boolean("preemptible", False, "Whether create preemptible tpu.")
-flags.DEFINE_boolean("reserved", False, "Whether create reserved tpu.")
-
-NUM_TRIALS = 3
-NUM_SAMPLES = 3
+NUM_TRIALS = 10
+NUM_SAMPLES = 100
 
 
 @jax.jit
@@ -194,9 +187,6 @@ def get_default_run_config():
 
 def hp_search_mnist(tuner_config: Mapping[str, Any]):
   """Runs hyperparameter search given a Ray Tune config."""
-  os.environ["TPU_MIN_LOG_LEVEL"] = "0"
-  os.environ["TPU_STDERR_LOG_LEVEL"] = "0"
-  os.environ["TF_CPP_MIN_LOG_LEVEL"] = "0"
   logging.set_verbosity(logging.INFO)
 
   root_workdir = os.path.join("/tmp", "hp_search_mnist")
@@ -213,48 +203,13 @@ def hp_search_mnist(tuner_config: Mapping[str, Any]):
 
 
 def main(_):
-  tpu_name = getpass.getuser() + "-ray-test"
-  project = get_default_gcp_project()
-  print(project)
-
-  pip_installs = [
-      "absl-py==1.0.0",
-      "clu==0.0.6",
-      "jax[tpu]==0.3.4",
-      "-f https://storage.googleapis.com/jax-releases/libtpu_releases.html",
-      "ray[tune]",
-      "flax==0.4.1",
-      "tensorflow-cpu",
-      "tensorflow-datasets",
-      "ml-collections==0.1.0",
-      "protobuf==3.19.0",
-      "pandas",
-  ]
-
-  controller = RayTpuController(
-      tpu_name=tpu_name,
-      project=project,
-      zone="us-central2-b",
-      accelerator_type="V4",
-      accelerator_topology="2x2x1",
-      version="tpu-vm-v4-base",
-      runtime_env=RayRuntimeEnv(
-          pip=pip_installs, working_dir=os.path.expanduser("~/src")
-      ),
-      preemptible=FLAGS.preemptible,
-      reserved=FLAGS.reserved,
-  )
-  controller.maybe_create_and_wait_for_ready()
-
   search_space = {
       "learning_rate": tune.sample_from(
           lambda spec: 10 ** (-10 * np.random.rand())
       ),
       "momentum": tune.uniform(0.1, 0.9),
   }
-  trainable_with_resources = tune.with_resources(
-      hp_search_mnist, tune.PlacementGroupFactory([{"CPU": 240, "tpu_host": 1}])
-  )
+  trainable_with_resources = tune.with_resources(hp_search_mnist, {"TPU": 1})
   tuner = tune.Tuner(
       trainable_with_resources,
       param_space=search_space,
@@ -266,7 +221,6 @@ def main(_):
   )
   results = tuner.fit()
   logging.info(results.get_dataframe())
-  controller.delete_tpu()
 
 
 if __name__ == "__main__":

@@ -13,6 +13,7 @@
 #  limitations under the License.
 
 """Module to generate Iris dataset for using in custom TPUEstimator."""
+import numpy as np
 import pandas as pd
 import tensorflow.compat.v1 as tf
 
@@ -44,20 +45,32 @@ def load_data(y_name='Species'):
   """Returns the iris dataset as (train_x, train_y), (test_x, test_y)."""
   train_path, test_path = maybe_download()
 
-  train = pd.read_csv(train_path, names=CSV_COLUMN_NAMES, header=0,
-                      dtype={'SepalLength': pd.np.float32,
-                             'SepalWidth': pd.np.float32,
-                             'PetalLength': pd.np.float32,
-                             'PetalWidth': pd.np.float32,
-                             'Species': pd.np.int32})
+  train = pd.read_csv(
+      train_path,
+      names=CSV_COLUMN_NAMES,
+      header=0,
+      dtype={
+          'SepalLength': np.float32,
+          'SepalWidth': np.float32,
+          'PetalLength': np.float32,
+          'PetalWidth': np.float32,
+          'Species': np.int32,
+      },
+  )
   train_x, train_y = train, train.pop(y_name)
 
-  test = pd.read_csv(test_path, names=CSV_COLUMN_NAMES, header=0,
-                     dtype={'SepalLength': pd.np.float32,
-                            'SepalWidth': pd.np.float32,
-                            'PetalLength': pd.np.float32,
-                            'PetalWidth': pd.np.float32,
-                            'Species': pd.np.int32})
+  test = pd.read_csv(
+      test_path,
+      names=CSV_COLUMN_NAMES,
+      header=0,
+      dtype={
+          'SepalLength': np.float32,
+          'SepalWidth': np.float32,
+          'PetalLength': np.float32,
+          'PetalWidth': np.float32,
+          'Species': np.int32,
+      },
+  )
   test_x, test_y = test, test.pop(y_name)
 
   return (train_x, train_y), (test_x, test_y)

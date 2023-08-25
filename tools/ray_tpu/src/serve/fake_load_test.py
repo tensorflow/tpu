@@ -15,11 +15,11 @@
 import argparse
 from concurrent import futures
 import functools
-
 from io import BytesIO  # pylint:disable=g-importing-member
 import numpy as np
 from PIL import Image
 import requests
+from tqdm import tqdm
 
 
 _PROMPTS = [
@@ -74,9 +74,13 @@ _PROMPTS = [
 
 def send_request_and_receive_image(prompt: str, url: str) -> BytesIO:
   """Sends a single prompt request and returns the Image."""
-  inputs = "%20".join(prompt.split(" "))
-  resp = requests.get(f"{url}?prompt={inputs}")
-  return BytesIO(resp.content)
+  try:
+    inputs = "%20".join(prompt.split(" "))
+    resp = requests.get(f"{url}?prompt={inputs}")
+    resp.raise_for_status()
+    return BytesIO(resp.content)
+  except requests.RequestException as e:
+    print(f"An error occurred while sending the request: {e}")
 
 
 def image_grid(imgs, rows, cols):
@@ -90,8 +94,10 @@ def image_grid(imgs, rows, cols):
 def send_requests(num_requests: int, batch_size: int, save_pictures: bool,
                   url: str = "http://localhost:8000/imagine"):
   """Sends a list of requests and processes the responses."""
-  print("Num requests: ", num_requests)
-  print("Batch size: ", batch_size)
+  print("num_requests: ", num_requests)
+  print("batch_size: ", batch_size)
+  print("url: ", url)
+  print("save_pictures: ", save_pictures)
 
   prompts = _PROMPTS
   if num_requests > len(_PROMPTS):
@@ -102,9 +108,15 @@ def send_requests(num_requests: int, batch_size: int, save_pictures: bool,
       prompts, num_requests, replace=False)
 
   with futures.ThreadPoolExecutor(max_workers=batch_size) as executor:
-    raw_images = executor.map(
-        functools.partial(send_request_and_receive_image, url=url),
-        prompts)
+    raw_images = list(
+        tqdm(
+            executor.map(
+                functools.partial(send_request_and_receive_image, url=url),
+                prompts,
+            ),
+            total=len(prompts),
+        )
+    )
 
   if save_pictures:
     print("Saving pictures to diffusion_results.png")
