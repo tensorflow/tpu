@@ -14,7 +14,7 @@
 # limitations under the License.
 # ==============================================================================
 
-RESOURCE_NAME=$USER-admin
+RESOURCE_NAME=$USER-dev
 PROJECT_ID=$(gcloud config get-value project)
 PROJECT_NUMBER=$(gcloud projects describe $PROJECT_ID --format="value(projectNumber)")
 SERVICE_ACCOUNT_NAME=tpuAdmin
@@ -26,12 +26,12 @@ then
     echo "Service account is not created. Creating the CPU without the service account."
     echo "Note: If you would like to create a service account, run ./create_tpu_service_account.sh"
     gcloud compute instances create ${RESOURCE_NAME} \
-      --machine-type=n1-standard-4 --image-family=ubuntu-2004-lts \
-      --image-project=ubuntu-os-cloud --boot-disk-size=200GB \
+      --machine-type=n1-standard-1 --image-family=ubuntu-2004-lts \
+      --image-project=ubuntu-os-cloud --boot-disk-size=20GB \
       --metadata startup-script="#! /bin/bash
   mkdir -p /dev/shm
-  sudo mount -t tmpfs -o size=100g tmpfs /dev/shm
-  sudo apt-get update && sudo apt-get install -y python3-pip && pip3 install 'ray[default]'"
+  sudo apt-get update && sudo apt-get install -y python3-pip && sudo apt-get install python-is-python3
+  pip3 install 'ray[default]'"
   else
     echo "Creating CPU VM with service account $SERVICE_ACCOUNT_NAME"
     gcloud compute instances create ${RESOURCE_NAME} \
@@ -41,10 +41,9 @@ then
       --image-project=ubuntu-os-cloud --boot-disk-size=200GB \
       --metadata startup-script="#! /bin/bash
   mkdir -p /dev/shm
-  sudo mount -t tmpfs -o size=100g tmpfs /dev/shm
-  sudo apt-get update && sudo apt-get install -y python3-pip && pip3 install 'ray[default]'"
+  sudo apt-get update && sudo apt-get install -y python3-pip && sudo apt-get install python-is-python3
+  pip3 install 'ray[default]'"
   fi
-
   while [[ -z $(gcloud compute ssh $RESOURCE_NAME --command="cat /var/log/syslog" | grep "startup-script" | grep "exit status 0") ]]; do
     echo "VM startup script not complete yet, waiting 15s..."
     sleep 15
@@ -52,5 +51,5 @@ then
   echo "VM is set up! SSH using"
   echo "gcloud compute ssh $RESOURCE_NAME -- -L8265:localhost:8265"
 else
-  echo "CPU Admin already exists."
+  echo "CPU node already exists."
 fi

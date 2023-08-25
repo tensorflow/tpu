@@ -13,28 +13,35 @@ for more info. For example:
 
 ```
 gcloud alpha compute tpus tpu-vm create $TPU_NAME \
-  --accelerator-type=v2-32 --version=tpu-vm-tf-2.8.0
+  --accelerator-type=v4-16 --version=tpu-vm-tf-2.13.0
 ```
 
+Note: `tpu-vm-tf-2.13.0` is used here instead of `tpu-vm-tf-2.13.0-pod`. Currently only non-pod versions work for this tutorial.
+
+
 Stop the existing `tpu-runtime` container on all workers:
+
 ```
 gcloud alpha compute tpus tpu-vm ssh $TPU_NAME --worker=all \
   --command="sudo systemctl stop tpu-runtime"
 ```
 
 Get this code
+
 ```
 gcloud alpha compute tpus tpu-vm ssh $TPU_NAME --worker=all \
   --command="wget https://raw.githubusercontent.com/tensorflow/tpu/master/tools/grpc_tpu_worker/grpc_tpu_worker.py"
 ```
 
 Start the `grpc_tpu_worker.py` on all workers:
+
 ```
 gcloud alpha compute tpus tpu-vm ssh $TPU_NAME --worker=all \
   --command="python3 grpc_tpu_worker.py"
 ```
 
 Run a sample ResNet workload:
+
 ```
 gcloud alpha compute tpus tpu-vm ssh $TPU_NAME \
   --command="python3 /usr/share/tpu/tensorflow/resnet50_keras/resnet50.py --tpu=$TPU_NAME --data=gs://cloud-tpu-test-datasets/fake_imagenet"

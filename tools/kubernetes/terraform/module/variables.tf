@@ -36,8 +36,3 @@ variable "tpu_node_pools" {
     topology     = string,
   }))
 }
-
-variable "maintenance_interval" {
-  default = "AS_NEEDED"
-  description = "maintenance interval for TPU machines."
-}

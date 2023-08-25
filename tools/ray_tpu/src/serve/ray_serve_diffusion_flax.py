@@ -38,35 +38,6 @@ class APIIngress:
   def __init__(self, diffusion_model_handle) -> None:
     self.handle = diffusion_model_handle
 
-  @serve.batch(batch_wait_timeout_s=10, max_batch_size=_MAX_BATCH_SIZE)
-  async def batched_generate_handler(self, prompts: List[str]):
-    """Sends a batch of prompts to the TPU model server.
-
-    This takes advantage of @serve.batch, Ray Serve's built-in batching
-    mechanism.
-
-    Args:
-      prompts: A list of input prompts
-
-    Returns:
-      A list of responses which contents are raw PNG.
-
-    """
-    print("Number of input prompts: ", len(prompts))
-    print("Prompts: ", prompts)
-    num_to_pad = _MAX_BATCH_SIZE - len(prompts)
-    prompts += ["Scratch request"] * num_to_pad
-
-    image_ref = await self.handle.generate.remote(prompts)
-    images = await image_ref
-    results = []
-    for image in images[:_MAX_BATCH_SIZE - num_to_pad]:
-      file_stream = BytesIO()
-      image.save(file_stream, "PNG")
-      results.append(
-          Response(content=file_stream.getvalue(), media_type="image/png"))
-    return results
-
   @app.get(
       "/imagine",
       responses={200: {"content": {"image/png": {}}}},
@@ -82,7 +53,8 @@ class APIIngress:
       A Response.
 
     """
-    return await self.batched_generate_handler(prompt)
+    result_handle = await self.handle.generate.remote(prompt)
+    return await result_handle
 
 
 @serve.deployment(
@@ -127,22 +99,16 @@ class StableDiffusion:
     if warmup:
       print("Sending warmup requests.")
       warmup_prompts = ["A warmup request"] * warmup_batch_size
-      self.generate(warmup_prompts)
+      self.generate_tpu(warmup_prompts)
 
-  def generate(self, prompts: List[str]):
+  def generate_tpu(self, prompts: List[str]):
     """Generates a batch of images from Diffusion from a list of prompts.
-
-    Notes:
-      - One "sharp edge" is that we need to run imports within the function
-        as this function is what is called on the raylet. Outside imports
-        cannot be sent over Ray to the raylets.
 
     Args:
       prompts: a list of strings. Should be a factor of 4.
 
     Returns:
       A list of PIL Images.
-
     """
     from flax.training.common_utils import shard  # pylint:disable=g-import-not-at-top,g-importing-member
     import jax   # pylint:disable=g-import-not-at-top
@@ -174,7 +140,36 @@ class StableDiffusion:
     print("Shape of images afterwards: ", images.shape)
     return self._pipeline.numpy_to_pil(np.array(images))
 
+  @serve.batch(batch_wait_timeout_s=10, max_batch_size=_MAX_BATCH_SIZE)
+  async def batched_generate_handler(self, prompts: List[str]):
+    """Sends a batch of prompts to the TPU model server.
+
+    This takes advantage of @serve.batch, Ray Serve's built-in batching
+    mechanism.
+
+    Args:
+      prompts: A list of input prompts
+
+    Returns:
+      A list of responses which contents are raw PNG.
+    """
+    print("Number of input prompts: ", len(prompts))
+    num_to_pad = _MAX_BATCH_SIZE - len(prompts)
+    prompts += ["Scratch request"] * num_to_pad
+
+    images = self.generate_tpu(prompts)
+    results = []
+    for image in images[: _MAX_BATCH_SIZE - num_to_pad]:
+      file_stream = BytesIO()
+      image.save(file_stream, "PNG")
+      results.append(
+          Response(content=file_stream.getvalue(), media_type="image/png")
+      )
+    return results
+
+  async def generate(self, prompt):
+    return await self.batched_generate_handler(prompt)
+
 
 diffusion_bound = StableDiffusion.bind()
 deployment = APIIngress.bind(diffusion_bound)
-

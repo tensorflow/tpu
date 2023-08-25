@@ -1,0 +1,3 @@
+fastapi
+ray[serve]==2.5.1
+pillow
