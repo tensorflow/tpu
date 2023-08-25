@@ -9,6 +9,6 @@ numpy==1.22.0
 optax==0.1.0
 pandas
 ray[tune]==2.5.1
-tensorflow-cpu==2.9.3
+tensorflow-cpu==2.11.1
 tensorflow-datasets==4.4.0
 protobuf==3.19.0
