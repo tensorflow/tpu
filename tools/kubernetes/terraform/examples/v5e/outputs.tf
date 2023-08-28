@@ -9,16 +9,16 @@ output "project_id" {
 }
 
 output "kubernetes_cluster_name" {
-  value       = google_container_cluster.tpu_cluster.name
+  value       = module.tpu-gke.kubernetes_cluster_name
   description = "GKE Cluster Name"
 }
 
 output "kubernetes_cluster_host" {
-  value       = google_container_cluster.tpu_cluster.endpoint
+  value       = module.tpu-gke.kubernetes_cluster_host
   description = "GKE Cluster Host"
 }
 
 output "nodepool_tpu_topology" {
-  value       = flatten(google_container_node_pool.multihost_tpu[*].placement_policy[0].tpu_topology)
+  value       = module.tpu-gke.nodepool_tpu_topology
   description = "GKE TPU topology"
 }

@@ -1,5 +1,5 @@
-project_id           = "your-project-id"
-resource_name_prefix = "tpu-v5e-test"
+project_id           = "project-id"
+resource_name_prefix = "tpu-v5lite-test"
 region               = "us-east5"
 tpu_node_pools = [{
   zone         = "us-east5-b"
@@ -8,7 +8,8 @@ tpu_node_pools = [{
   topology     = "2x2"
   }, {
   zone         = "us-east5-b"
-  node_count   = 4
+  node_count   = 1
   machine_type = "ct5lp-hightpu-4t"
-  topology     = "4x4"
-  }]
+  topology     = "2x2"
+}]
+maintenance_interval = "PERIODIC"
