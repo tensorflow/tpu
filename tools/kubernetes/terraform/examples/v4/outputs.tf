@@ -13,12 +13,12 @@ output "kubernetes_cluster_name" {
   description = "GKE Cluster Name"
 }
 
-output "authorized_cidr_blocks" {
-  value       = var.authorized_cidr_blocks
-  description = "Cluster allowed cidr blocks "
+output "kubernetes_cluster_host" {
+  value       = module.tpu-gke.kubernetes_cluster_host
+  description = "GKE Cluster Host"
 }
 
-output "is_cpu_node_private" {
-  value       = var.is_cpu_node_private
-  description = "whether we want to make CPU node private"
+output "nodepool_tpu_topology" {
+  value       = module.tpu-gke.nodepool_tpu_topology
+  description = "GKE TPU topology"
 }
