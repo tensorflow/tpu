@@ -52,6 +52,7 @@ resource "google_container_cluster" "tpu_cluster" {
   release_channel {
     channel = "UNSPECIFIED"
   }
+  
   network            = google_compute_network.vpc.name
   subnetwork         = google_compute_subnetwork.subnet.name
   logging_service    = "logging.googleapis.com/kubernetes"
@@ -74,6 +75,10 @@ resource "google_container_node_pool" "multihost_tpu" {
   cluster        = google_container_cluster.tpu_cluster.name
 
   initial_node_count = var.tpu_node_pools[count.index].node_count
+  
+  management {
+    auto_upgrade = false
+  }
 
   node_config {
     oauth_scopes = [
@@ -89,7 +94,11 @@ resource "google_container_node_pool" "multihost_tpu" {
     gvnic {
       enabled = true
     }
-
+    gcfs_config {
+      enabled = true
+    }
+   
+    image_type = "COS_CONTAINERD"
     machine_type = var.tpu_node_pools[count.index].machine_type
     tags         = ["gke-node"]
     metadata = {
