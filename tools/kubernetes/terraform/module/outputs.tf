@@ -13,12 +13,12 @@ output "kubernetes_cluster_name" {
   description = "GKE Cluster Name"
 }
 
-output "authorized_cidr_blocks" {
-  value       = var.authorized_cidr_blocks
-  description = "Cluster allowed cidr blocks "
+output "kubernetes_cluster_host" {
+  value       = google_container_cluster.tpu_cluster.endpoint
+  description = "GKE Cluster Host"
 }
 
-output "is_cpu_node_private" {
-  value       = var.is_cpu_node_private
-  description = "whether we want to make CPU node private"
+output "nodepool_tpu_topology" {
+  value       = flatten(google_container_node_pool.multihost_tpu[*].placement_policy[0].tpu_topology)
+  description = "GKE TPU topology"
 }
