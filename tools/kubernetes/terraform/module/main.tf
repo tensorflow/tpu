@@ -76,6 +76,10 @@ resource "google_container_node_pool" "multihost_tpu" {
   initial_node_count = var.tpu_node_pools[count.index].node_count
 
   node_config {
+    management {
+      auto_upgrade = false
+    }
+
     oauth_scopes = [
       "https://www.googleapis.com/auth/logging.write",
       "https://www.googleapis.com/auth/monitoring",
@@ -89,6 +93,11 @@ resource "google_container_node_pool" "multihost_tpu" {
     gvnic {
       enabled = true
     }
+    gcfs_config {
+      enabled = true
+    }
+
+    image_type = "COS_CONTAINERD"
 
     machine_type = var.tpu_node_pools[count.index].machine_type
     tags         = ["gke-node"]
