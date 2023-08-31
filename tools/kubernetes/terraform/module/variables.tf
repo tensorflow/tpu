@@ -22,6 +22,10 @@ variable "region" {
   description = "region"
 }
 
+variable "location" {
+  description = "location"
+}
+
 variable "resource_name_prefix" {
   default     = ""
   description = "prefix for all the resouce naming"
@@ -34,6 +38,7 @@ variable "tpu_node_pools" {
     node_count   = number,
     machine_type = string,
     topology     = string,
+    policy       = string,
   }))
 }
 
