@@ -16,7 +16,7 @@
 
 # GKE cluster
 data "google_container_engine_versions" "gke_version" {
-  location       = var.region
+  location       = var.location
   version_prefix = "1.27."
 }
 
@@ -41,7 +41,7 @@ resource "google_compute_subnetwork" "subnet" {
 
 resource "google_container_cluster" "tpu_cluster" {
   name     = "${var.resource_name_prefix}-gke-cluster"
-  location = var.region
+  location = var.location
 
   # We can't create a cluster with no node pool defined, but we want to only use
   # separately managed node pools. So we create the smallest possible default
@@ -70,7 +70,7 @@ resource "google_container_node_pool" "multihost_tpu" {
   name           = "${google_container_cluster.tpu_cluster.name}-${count.index}"
   provider       = google-beta
   project        = var.project_id
-  location       = var.region
+  location       = var.location
   node_locations = [var.tpu_node_pools[count.index].zone]
   cluster        = google_container_cluster.tpu_cluster.name
 
@@ -107,6 +107,6 @@ resource "google_container_node_pool" "multihost_tpu" {
   }
   placement_policy {
     type         = "COMPACT"
-    tpu_topology = var.tpu_node_pools[count.index].topology
+    policy_name  = var.tpu_node_pools[count.index].policy
   }
 }

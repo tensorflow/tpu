@@ -1,6 +1,7 @@
 project_id           = "project-id"
 resource_name_prefix = "tpu-test"
 region               = "us-central2"
+location             = "us-central2-b"
 tpu_node_pools = [{
   zone         = "us-central2-b"
   node_count   = 4
