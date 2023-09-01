@@ -18,7 +18,7 @@ output "kubernetes_cluster_host" {
   description = "GKE Cluster Host"
 }
 
-output "nodepool_tpu_topology" {
-  value       = module.tpu-gke.nodepool_tpu_topology
-  description = "GKE TPU topology"
+output "placement_policy_names" {
+  value       = module.tpu-gke.placement_policy_names
+  description = "GKE TPU Placement Policy Names"
 }
