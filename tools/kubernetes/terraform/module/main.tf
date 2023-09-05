@@ -98,6 +98,7 @@ resource "google_container_node_pool" "multihost_tpu" {
       enabled = true
     }
    
+    disk_type = "pd-standard"
     image_type = "COS_CONTAINERD"
     machine_type = var.tpu_node_pools[count.index].machine_type
     tags         = ["gke-node"]
