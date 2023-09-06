@@ -22,10 +22,6 @@ variable "region" {
   description = "region"
 }
 
-variable "location" {
-  description = "location"
-}
-
 variable "resource_name_prefix" {
   default     = ""
   description = "prefix for all the resouce naming"
