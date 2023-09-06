@@ -1,7 +1,6 @@
 variable "project_id" {}
 variable "resource_name_prefix" {}
 variable "region" {}
-variable "location" {}
 variable "tpu_node_pools" {}
 variable "maintenance_interval" {}
 
@@ -11,7 +10,6 @@ module "tpu-gke" {
   project_id           = var.project_id
   resource_name_prefix = var.resource_name_prefix
   region               = var.region
-  location             = var.location
   tpu_node_pools       = var.tpu_node_pools
   maintenance_interval = var.maintenance_interval
 }
