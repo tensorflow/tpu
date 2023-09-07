@@ -38,8 +38,11 @@ class TfExampleDecoder(object):
       # copypara:strip_end
       regenerate_source_id=False,
       label_key='image/object/class/label',
-      label_dtype=tf.int64):
+      label_dtype=tf.int64,
+      include_keypoint=False,
+      num_keypoints_per_instance=0):
     self._include_mask = include_mask
+    self._include_keypoint = include_keypoint
     # copypara:strip_begin
     self._include_polygon = include_polygon
     # copypara:strip_end
@@ -62,6 +65,13 @@ class TfExampleDecoder(object):
         self._label_dtype)
     if include_mask:
       self._keys_to_features['image/object/mask'] = tf.VarLenFeature(tf.string)
+    if include_keypoint:
+      self._num_keypoints_per_instance = num_keypoints_per_instance
+      self._keys_to_features.update({
+          'image/object/keypoint/visibility': tf.io.VarLenFeature(tf.int64),
+          'image/object/keypoint/x': tf.io.VarLenFeature(tf.float32),
+          'image/object/keypoint/y': tf.io.VarLenFeature(tf.float32),
+      })
 
   def _decode_image(self, parsed_tensors):
     """Decodes the image and set its static shape."""
@@ -105,6 +115,17 @@ class TfExampleDecoder(object):
         tf.greater(tf.shape(parsed_tensors['image/object/area'])[0], 0),
         lambda: parsed_tensors['image/object/area'],
         lambda: (xmax - xmin) * (ymax - ymin) * height * width)
+
+  def _decode_keypoints(self, parsed_tensors):
+    """Decode keypoint coordinates and visibilities."""
+    keypoint_x = parsed_tensors['image/object/keypoint/x']
+    keypoint_y = parsed_tensors['image/object/keypoint/y']
+    keypoints = tf.stack([keypoint_y, keypoint_x], axis=-1)
+    keypoints = tf.reshape(keypoints, [-1, self._num_keypoints_per_instance, 2])
+    keypoint_visibilities = parsed_tensors['image/object/keypoint/visibility']
+    keypoint_visibilities = tf.reshape(keypoint_visibilities,
+                                       [-1, self._num_keypoints_per_instance])
+    return keypoints, keypoint_visibilities
 
   def decode(self, serialized_example):
     """Decode the serialized example.
@@ -165,6 +186,8 @@ class TfExampleDecoder(object):
           lambda: _get_source_id_from_encoded_image(parsed_tensors))
     if self._include_mask:
       masks = self._decode_masks(parsed_tensors)
+    if self._include_keypoint:
+      keypoints, keypoint_visibilities = self._decode_keypoints(parsed_tensors)
 
     groundtruth_classes = parsed_tensors[self._label_key]
     decoded_tensors = {
@@ -181,5 +204,10 @@ class TfExampleDecoder(object):
       decoded_tensors.update({
           'groundtruth_instance_masks': masks,
           'groundtruth_instance_masks_png': parsed_tensors['image/object/mask'],
+      })
+    if self._include_keypoint:
+      decoded_tensors.update({
+          'groundtruth_keypoints': keypoints,
+          'groundtruth_keypoint_visibilities': keypoint_visibilities,
       })
     return decoded_tensors
