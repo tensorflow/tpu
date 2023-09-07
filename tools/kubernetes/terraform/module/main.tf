@@ -48,6 +48,12 @@ resource "google_container_cluster" "tpu_cluster" {
   # node pool and immediately delete it.
   remove_default_node_pool = true
   initial_node_count       = 1
+  networking_mode          = "VPC_NATIVE"
+  ip_allocation_policy {
+    cluster_ipv4_cidr_block  = "/14"
+    services_ipv4_cidr_block = "/20"
+  }
+  default_max_pods_per_node = 50
 
   release_channel {
     channel = "UNSPECIFIED"
