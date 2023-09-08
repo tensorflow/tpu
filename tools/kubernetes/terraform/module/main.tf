@@ -58,7 +58,7 @@ resource "google_container_cluster" "tpu_cluster" {
   release_channel {
     channel = "UNSPECIFIED"
   }
-  
+
   network            = google_compute_network.vpc.name
   subnetwork         = google_compute_subnetwork.subnet.name
   logging_service    = "logging.googleapis.com/kubernetes"
@@ -81,7 +81,7 @@ resource "google_container_node_pool" "multihost_tpu" {
   cluster        = google_container_cluster.tpu_cluster.name
 
   initial_node_count = var.tpu_node_pools[count.index].node_count
-  
+
   management {
     auto_upgrade = false
   }
@@ -104,16 +104,18 @@ resource "google_container_node_pool" "multihost_tpu" {
     gcfs_config {
       enabled = true
     }
-   
-    image_type = "COS_CONTAINERD"
+
+    image_type   = "COS_CONTAINERD"
     machine_type = var.tpu_node_pools[count.index].machine_type
+    disk_type    = var.tpu_node_pools[count.index].disk_type
+    disk_size_gb = var.tpu_node_pools[count.index].disk_size_gb
     tags         = ["gke-node"]
     metadata = {
       disable-legacy-endpoints = "true"
     }
   }
   placement_policy {
-    type         = "COMPACT"
-    policy_name  = var.tpu_node_pools[count.index].policy
+    type        = "COMPACT"
+    policy_name = var.tpu_node_pools[count.index].policy
   }
 }

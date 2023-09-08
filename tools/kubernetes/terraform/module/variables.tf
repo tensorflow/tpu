@@ -35,10 +35,12 @@ variable "tpu_node_pools" {
     machine_type = string,
     topology     = string,
     policy       = string,
+    disk_type    = string,
+    disk_size_gb = number,
   }))
 }
 
 variable "maintenance_interval" {
-  default = "AS_NEEDED"
+  default     = "AS_NEEDED"
   description = "maintenance interval for TPU machines."
 }
