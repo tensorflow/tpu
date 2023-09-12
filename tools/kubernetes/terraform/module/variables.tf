@@ -38,8 +38,8 @@ variable "tpu_node_pools" {
   }))
 }
 
-variable "default_pool" {
-  description = "default nodepool config"
+variable "cpu_node_pool" {
+  description = "cpu nodepool config"
   type = object({
     zone         = list(string),
     machine_type = string,
@@ -49,9 +49,9 @@ variable "default_pool" {
   })
   validation {
     condition = (
-      (var.default_pool.min_node_count_per_zone >=0 && var.default_pool.min_node_count_per_zone <= var.default_pool.max_node_count_per_zone)
+      (var.cpu_node_pool.min_node_count_per_zone >=0 && var.cpu_node_pool.min_node_count_per_zone <= var.cpu_node_pool.max_node_count_per_zone)
     )
-    error_message = "default_pool.min_node_count_per_zone must be >= 0 and <= default_pool.max_node_count_per_zone."
+    error_message = "cpu_node_pool.min_node_count_per_zone must be >= 0 and <= cpu_node_pool.max_node_count_per_zone."
   }
 }
 
