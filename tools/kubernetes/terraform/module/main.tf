@@ -134,7 +134,6 @@ resource "google_container_node_pool" "default_pool" {
     oauth_scopes = [
       "https://www.googleapis.com/auth/cloud-platform"
     ]
-    spot  = true
     machine_type = var.default_pool.machine_type
     
     metadata = {
