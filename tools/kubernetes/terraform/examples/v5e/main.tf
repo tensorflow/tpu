@@ -2,6 +2,7 @@ variable "project_id" {}
 variable "resource_name_prefix" {}
 variable "region" {}
 variable "tpu_node_pools" {}
+variable "default_pool" {}
 variable "maintenance_interval" {}
 
 
@@ -11,5 +12,6 @@ module "tpu-gke" {
   resource_name_prefix = var.resource_name_prefix
   region               = var.region
   tpu_node_pools       = var.tpu_node_pools
+  default_pool         = var.default_pool
   maintenance_interval = var.maintenance_interval
 }

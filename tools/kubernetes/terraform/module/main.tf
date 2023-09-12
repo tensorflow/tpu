@@ -117,3 +117,31 @@ resource "google_container_node_pool" "multihost_tpu" {
     policy_name  = var.tpu_node_pools[count.index].policy
   }
 }
+
+resource "google_container_node_pool" "default_pool" {
+  provider           = google-beta
+  project            = var.project_id
+  name               = "default-pool"
+  location           = var.region
+  node_locations     = var.default_pool.zone
+  cluster            = google_container_cluster.tpu_cluster.name
+  initial_node_count = var.default_pool.initial_node_count_per_zone
+  autoscaling {
+    min_node_count = var.default_pool.min_node_count_per_zone
+    max_node_count = var.default_pool.max_node_count_per_zone
+  }
+  node_config {
+    oauth_scopes = [
+      "https://www.googleapis.com/auth/cloud-platform"
+    ]
+    spot  = true
+    machine_type = var.default_pool.machine_type
+    
+    metadata = {
+      disable-legacy-endpoints = "true"
+    }
+    gcfs_config {
+      enabled = true
+    }
+  }
+}

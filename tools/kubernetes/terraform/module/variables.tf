@@ -38,6 +38,23 @@ variable "tpu_node_pools" {
   }))
 }
 
+variable "default_pool" {
+  description = "default nodepool config"
+  type = object({
+    zone         = list(string),
+    machine_type = string,
+    initial_node_count_per_zone = number,
+    min_node_count_per_zone = number,
+    max_node_count_per_zone = number
+  })
+  validation {
+    condition = (
+      (var.default_pool.min_node_count_per_zone >=0 && var.default_pool.min_node_count_per_zone <= var.default_pool.max_node_count_per_zone)
+    )
+    error_message = "default_pool.min_node_count_per_zone must be >= 0 and <= default_pool.max_node_count_per_zone."
+  }
+}
+
 variable "maintenance_interval" {
   default = "AS_NEEDED"
   description = "maintenance interval for TPU machines."
