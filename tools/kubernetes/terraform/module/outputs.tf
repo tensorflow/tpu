@@ -18,7 +18,9 @@ output "kubernetes_cluster_host" {
   description = "GKE Cluster Host"
 }
 
-output "nodepool_tpu_topology" {
-  value       = flatten(google_container_node_pool.multihost_tpu[*].placement_policy[0].tpu_topology)
-  description = "GKE TPU topology"
+output "placement_policy_names" {
+  value = flatten([
+    google_container_node_pool.multihost_tpu[*].placement_policy[0].policy_name
+  ])
+  description = "GKE TPU Placement Policy Names"
 }

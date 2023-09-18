@@ -6,4 +6,4 @@ tpu_node_pools = [{
   node_count   = 2
   machine_type = "ct4p-hightpu-4t"
   topology     = "2x2x2"
-  }]
+}]

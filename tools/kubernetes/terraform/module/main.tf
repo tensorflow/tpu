@@ -36,7 +36,7 @@ resource "google_compute_subnetwork" "subnet" {
   name          = "${var.resource_name_prefix}-subnet"
   region        = var.region
   network       = google_compute_network.vpc.name
-  ip_cidr_range = "10.10.0.0/24"
+  ip_cidr_range = "10.10.0.0/19"
 }
 
 resource "google_container_cluster" "tpu_cluster" {
@@ -48,6 +48,12 @@ resource "google_container_cluster" "tpu_cluster" {
   # node pool and immediately delete it.
   remove_default_node_pool = true
   initial_node_count       = 1
+  networking_mode          = "VPC_NATIVE"
+  ip_allocation_policy {
+    cluster_ipv4_cidr_block  = "/14"
+    services_ipv4_cidr_block = "/20"
+  }
+  default_max_pods_per_node = 50
 
   release_channel {
     channel = "UNSPECIFIED"
@@ -84,6 +90,7 @@ resource "google_container_node_pool" "multihost_tpu" {
     oauth_scopes = [
       "https://www.googleapis.com/auth/logging.write",
       "https://www.googleapis.com/auth/monitoring",
+      "https://www.googleapis.com/auth/cloud-platform",
     ]
     host_maintenance_policy {
       maintenance_interval = var.maintenance_interval
@@ -98,7 +105,7 @@ resource "google_container_node_pool" "multihost_tpu" {
       enabled = true
     }
 
-    image_type = "COS_CONTAINERD"
+    image_type   = "COS_CONTAINERD"
     machine_type = var.tpu_node_pools[count.index].machine_type
     tags         = ["gke-node"]
     metadata = {
@@ -106,7 +113,7 @@ resource "google_container_node_pool" "multihost_tpu" {
     }
   }
   placement_policy {
-    type         = "COMPACT"
-    tpu_topology = var.tpu_node_pools[count.index].topology
+    type        = "COMPACT"
+    policy_name = var.tpu_node_pools[count.index].policy
   }
 }
