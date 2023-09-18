@@ -6,26 +6,98 @@ tpu_node_pools = [{
   node_count   = 64
   machine_type = "ct5lp-hightpu-4t"
   topology     = "16x16"
-  policy       = "sb-compact-1"
+  policy       = "sb-compact-4a"
   }, {
   zone         = "us-east5-b"
   node_count   = 64
   machine_type = "ct5lp-hightpu-4t"
   topology     = "16x16"
-  policy       = "sb-compact-1"
+  policy       = "sb-compact-4a"
   }, {
   zone         = "us-east5-b"
   node_count   = 64
   machine_type = "ct5lp-hightpu-4t"
   topology     = "16x16"
-  policy       = "sb-compact-1"
+  policy       = "sb-compact-4a"
   }, {
   zone         = "us-east5-b"
   node_count   = 64
   machine_type = "ct5lp-hightpu-4t"
   topology     = "16x16"
-  policy       = "sb-compact-1"
-  }]
+  policy       = "sb-compact-4a"
+  }, {
+  zone         = "us-east5-b"
+  node_count   = 64
+  machine_type = "ct5lp-hightpu-4t"
+  topology     = "16x16"
+  policy       = "sb-compact-4b"
+  }, {
+  zone         = "us-east5-b"
+  node_count   = 64
+  machine_type = "ct5lp-hightpu-4t"
+  topology     = "16x16"
+  policy       = "sb-compact-4b"
+  }, {
+  zone         = "us-east5-b"
+  node_count   = 64
+  machine_type = "ct5lp-hightpu-4t"
+  topology     = "16x16"
+  policy       = "sb-compact-4b"
+  }, {
+  zone         = "us-east5-b"
+  node_count   = 64
+  machine_type = "ct5lp-hightpu-4t"
+  topology     = "16x16"
+  policy       = "sb-compact-4b"
+  }, {
+  zone         = "us-east5-b"
+  node_count   = 64
+  machine_type = "ct5lp-hightpu-4t"
+  topology     = "16x16"
+  policy       = "sb-compact-4c"
+  }, {
+  zone         = "us-east5-b"
+  node_count   = 64
+  machine_type = "ct5lp-hightpu-4t"
+  topology     = "16x16"
+  policy       = "sb-compact-4c"
+  }, {
+  zone         = "us-east5-b"
+  node_count   = 64
+  machine_type = "ct5lp-hightpu-4t"
+  topology     = "16x16"
+  policy       = "sb-compact-4c"
+  }, {
+  zone         = "us-east5-b"
+  node_count   = 64
+  machine_type = "ct5lp-hightpu-4t"
+  topology     = "16x16"
+  policy       = "sb-compact-4c"
+  }, {
+  zone         = "us-east5-b"
+  node_count   = 64
+  machine_type = "ct5lp-hightpu-4t"
+  topology     = "16x16"
+  policy       = "sb-compact-4d"
+  }, {
+  zone         = "us-east5-b"
+  node_count   = 64
+  machine_type = "ct5lp-hightpu-4t"
+  topology     = "16x16"
+  policy       = "sb-compact-4d"
+  }, {
+  zone         = "us-east5-b"
+  node_count   = 64
+  machine_type = "ct5lp-hightpu-4t"
+  topology     = "16x16"
+  policy       = "sb-compact-4d"
+  }, {
+  zone         = "us-east5-b"
+  node_count   = 64
+  machine_type = "ct5lp-hightpu-4t"
+  topology     = "16x16"
+  policy       = "sb-compact-4d"
+}]
 cpu_node_pool = {
   zone = ["us-east5-a", "us-east5-b", "us-east5-c"]
   machine_type = "n2-standard-64",
