@@ -69,3 +69,30 @@ resource "google_container_cluster" "tpu_cluster" {
     update = "120m"
   }
 }
+
+resource "google_container_node_pool" "cpu_node_pool" {
+  provider           = google-beta
+  project            = var.project_id
+  name               = "cpu-node-pool"
+  location           = var.region
+  node_locations     = var.cpu_node_pool.zone
+  cluster            = google_container_cluster.tpu_cluster.name
+  initial_node_count = var.cpu_node_pool.initial_node_count_per_zone
+  autoscaling {
+    min_node_count = var.cpu_node_pool.min_node_count_per_zone
+    max_node_count = var.cpu_node_pool.max_node_count_per_zone
+  }
+  node_config {
+    oauth_scopes = [
+      "https://www.googleapis.com/auth/cloud-platform"
+    ]
+    machine_type = var.cpu_node_pool.machine_type
+
+    metadata = {
+      disable-legacy-endpoints = "true"
+    }
+    gcfs_config {
+      enabled = true
+    }
+  }
+}

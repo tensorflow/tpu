@@ -27,3 +27,19 @@ variable "resource_name_prefix" {
   description = "prefix for all the resouce naming"
 }
 
+variable "cpu_node_pool" {
+  description = "cpu nodepool config"
+  type = object({
+    zone                        = list(string),
+    machine_type                = string,
+    initial_node_count_per_zone = number,
+    min_node_count_per_zone     = number,
+    max_node_count_per_zone     = number
+  })
+  validation {
+    condition = (
+      (var.cpu_node_pool.min_node_count_per_zone >= 0 && var.cpu_node_pool.min_node_count_per_zone <= var.cpu_node_pool.max_node_count_per_zone)
+    )
+    error_message = "cpu_node_pool.min_node_count_per_zone must be >= 0 and <= cpu_node_pool.max_node_count_per_zone."
+  }
+}
