@@ -40,6 +40,8 @@ variable "tpu_node_pools" {
     machine_type = string,
     topology     = string,
     policy       = string,
+    disk_type    = optional(string),
+    disk_size_gb = optional(number),
   }))
 }
 

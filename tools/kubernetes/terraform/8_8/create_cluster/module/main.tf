@@ -53,7 +53,7 @@ resource "google_container_cluster" "tpu_cluster" {
     cluster_ipv4_cidr_block  = "/14"
     services_ipv4_cidr_block = "/20"
   }
-  default_max_pods_per_node = 50
+  default_max_pods_per_node = 15
 
   release_channel {
     channel = "UNSPECIFIED"
@@ -69,4 +69,3 @@ resource "google_container_cluster" "tpu_cluster" {
     update = "120m"
   }
 }
-

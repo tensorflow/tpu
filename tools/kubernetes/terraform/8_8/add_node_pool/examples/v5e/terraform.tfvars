@@ -8,5 +8,7 @@ tpu_node_pools = [{
   machine_type = "ct5lp-hightpu-4t"
   topology     = "8x8"
   policy       = "sb-compact-old8b"
+  disk_type    = "pd-balanced"
+  disk_size_gb = 50
   }]
 maintenance_interval = "PERIODIC"

@@ -62,6 +62,8 @@ resource "google_container_node_pool" "multihost_tpu" {
 
     image_type   = "COS_CONTAINERD"
     machine_type = var.tpu_node_pools[count.index].machine_type
+    disk_type    = var.tpu_node_pools[count.index].disk_type
+    disk_size_gb = var.tpu_node_pools[count.index].disk_size_gb
     tags         = ["gke-node"]
     metadata = {
       disable-legacy-endpoints = "true"
