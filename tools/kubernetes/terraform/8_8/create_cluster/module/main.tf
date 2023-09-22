@@ -82,7 +82,7 @@ resource "google_container_node_pool" "cpu_node_pool" {
     min_node_count = var.cpu_node_pool.min_node_count_per_zone
     max_node_count = var.cpu_node_pool.max_node_count_per_zone
   }
-  max_pods_per_node = 50
+  max_pods_per_node = 63
   node_config {
     oauth_scopes = [
       "https://www.googleapis.com/auth/cloud-platform"
