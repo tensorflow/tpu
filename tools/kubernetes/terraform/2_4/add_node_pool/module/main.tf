@@ -73,4 +73,8 @@ resource "google_container_node_pool" "multihost_tpu" {
     type         = "COMPACT"
     tpu_topology = var.tpu_node_pools[count.index].topology
   }
+
+  network_config {
+    enable_private_nodes = true
+  }
 }

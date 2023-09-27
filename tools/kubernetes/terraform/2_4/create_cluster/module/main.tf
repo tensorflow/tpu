@@ -64,6 +64,16 @@ resource "google_container_cluster" "tpu_cluster" {
   logging_service    = "logging.googleapis.com/kubernetes"
   monitoring_service = "monitoring.googleapis.com/kubernetes"
 
+  master_authorized_networks_config {
+    gcp_public_cidrs_access_enabled = false
+  }
+
+  // Needs to be false when creating GKE flexible cluster.
+  // After that, set as true to disable public endpoint of cluster master.
+  private_cluster_config {
+    enable_private_endpoint = false
+  }
+
   timeouts {
     create = "120m"
     update = "120m"
@@ -95,5 +105,9 @@ resource "google_container_node_pool" "cpu_node_pool" {
     gcfs_config {
       enabled = true
     }
+  }
+
+  network_config {
+    enable_private_nodes = true
   }
 }
