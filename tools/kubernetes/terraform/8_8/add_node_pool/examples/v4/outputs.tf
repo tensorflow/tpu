@@ -17,8 +17,3 @@ output "kubernetes_cluster_host" {
   value       = module.tpu-gke.kubernetes_cluster_host
   description = "GKE Cluster Host"
 }
-
-output "nodepool_tpu_topology" {
-  value       = module.tpu-gke.nodepool_tpu_topology
-  description = "GKE TPU topology"
-}

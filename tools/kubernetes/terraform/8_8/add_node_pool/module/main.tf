@@ -70,8 +70,8 @@ resource "google_container_node_pool" "multihost_tpu" {
     }
   }
   placement_policy {
-    type        = "COMPACT"
-    policy_name = var.tpu_node_pools[count.index].policy
+    type         = "COMPACT"
+    tpu_topology = var.tpu_node_pools[count.index].topology
   }
 
   network_config {
