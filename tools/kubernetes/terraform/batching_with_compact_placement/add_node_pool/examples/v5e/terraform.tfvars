@@ -10,5 +10,5 @@ tpu_node_pools = [{
   policy       = "sb-compact-rp1"
   disk_type    = "pd-balanced"
   disk_size_gb = 50
-  }]
+}]
 maintenance_interval = "PERIODIC"

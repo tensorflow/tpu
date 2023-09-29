@@ -9,5 +9,5 @@ tpu_node_pools = [{
   topology     = "8x8"
   disk_type    = "pd-balanced"
   disk_size_gb = 50
-  }]
+}]
 maintenance_interval = "PERIODIC"

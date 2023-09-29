@@ -12,4 +12,3 @@ output "kubernetes_cluster_name" {
   value       = module.tpu-gke.kubernetes_cluster_name
   description = "GKE Cluster Name"
 }
-
