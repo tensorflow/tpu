@@ -75,6 +75,6 @@ resource "google_container_node_pool" "multihost_tpu" {
   }
 
   network_config {
-    enable_private_nodes = true
+    enable_private_nodes = var.is_tpu_node_private
   }
 }

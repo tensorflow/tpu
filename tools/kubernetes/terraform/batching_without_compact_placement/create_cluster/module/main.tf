@@ -66,9 +66,17 @@ resource "google_container_cluster" "tpu_cluster" {
 
   master_authorized_networks_config {
     gcp_public_cidrs_access_enabled = false
+
+    dynamic "cidr_blocks" {
+      for_each = var.authorized_cidr_blocks
+      content {
+        cidr_block = cidr_blocks.value
+        display_name = "cidr-blocks-group-${cidr_blocks.key}"
+      }
+    }
   }
 
-  // Needs to be false when creating GKE flexible cluster.
+  // Needs to be false when creating a GKE flexible cluster.
   // After that, set as true to disable public endpoint of cluster master.
   private_cluster_config {
     enable_private_endpoint = false
@@ -108,6 +116,6 @@ resource "google_container_node_pool" "cpu_node_pool" {
   }
 
   network_config {
-    enable_private_nodes = true
+    enable_private_nodes = var.is_cpu_node_private
   }
 }

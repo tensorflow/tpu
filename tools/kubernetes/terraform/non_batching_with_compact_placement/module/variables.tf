@@ -45,6 +45,12 @@ variable "tpu_node_pools" {
   }))
 }
 
+variable "authorized_cidr_blocks" {
+  description = "cluster allowed cidr blocks to access with kubectl CLI"
+  type        = list(string)
+  default     = []
+}
+
 variable "cpu_node_pool" {
   description = "cpu nodepool config"
   type = object({
@@ -60,6 +66,16 @@ variable "cpu_node_pool" {
     )
     error_message = "cpu_node_pool.min_node_count_per_zone must be >= 0 and <= cpu_node_pool.max_node_count_per_zone."
   }
+}
+
+variable "is_cpu_node_private" {
+  description = "whether we want to make CPU node private"
+  default = false
+}
+
+variable "is_tpu_node_private" {
+  description = "whether we want to make TPU node private"
+  default = false
 }
 
 variable "maintenance_interval" {

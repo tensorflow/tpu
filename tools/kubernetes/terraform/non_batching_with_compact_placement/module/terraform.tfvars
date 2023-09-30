@@ -1,6 +1,7 @@
 project_id           = "project-id"
 resource_name_prefix = "tpu-test"
 region               = "us-central2"
+authorized_cidr_blocks = []
 cpu_node_pool = {
   zone = ["us-central2-a", "us-central2-b", "us-central2-c"]
   machine_type = "n2-standard-64",

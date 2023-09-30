@@ -44,6 +44,11 @@ variable "tpu_node_pools" {
   }))
 }
 
+variable "is_tpu_node_private" {
+  description = "whether we want to make TPU node private"
+  default = false
+}
+
 variable "maintenance_interval" {
   default     = "AS_NEEDED"
   description = "maintenance interval for TPU machines."

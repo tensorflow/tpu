@@ -17,3 +17,8 @@ output "placement_policy_names" {
   value       = module.tpu-gke.placement_policy_names
   description = "GKE TPU Placement Policy Names"
 }
+
+output "is_tpu_node_private" {
+  value       = var.is_tpu_node_private
+  description = "whether we want to make TPU node private"
+}
