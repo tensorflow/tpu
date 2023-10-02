@@ -76,7 +76,7 @@ resource "google_container_cluster" "tpu_cluster" {
     }
   }
 
-  // Needs to be false when creating a GKE flexible cluster.
+  // Needs to be false when creating a PSC-based GKE cluster.
   // After that, set as true to disable public endpoint of cluster master.
   private_cluster_config {
     enable_private_endpoint = false
