@@ -9,16 +9,18 @@ output "project_id" {
 }
 
 output "kubernetes_cluster_name" {
-  value       = module.tpu-gke.kubernetes_cluster_name
+  value       = google_container_node_pool.multihost_tpu[0].cluster
   description = "GKE Cluster Name"
 }
 
-output "kubernetes_cluster_host" {
-  value       = module.tpu-gke.kubernetes_cluster_host
-  description = "GKE Cluster Host"
+output "placement_policy_names" {
+  value = flatten([
+    google_container_node_pool.multihost_tpu[*].placement_policy[0].policy_name
+  ])
+  description = "GKE TPU Placement Policy Names"
 }
 
-output "placement_policy_names" {
-  value       = module.tpu-gke.placement_policy_names
-  description = "GKE TPU Placement Policy Names"
+output "is_tpu_node_private" {
+  value       = var.is_tpu_node_private
+  description = "whether we want to make TPU node private"
 }

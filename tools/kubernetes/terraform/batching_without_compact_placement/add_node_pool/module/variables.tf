@@ -27,6 +27,11 @@ variable "resource_name_prefix" {
   description = "prefix for all the resouce naming"
 }
 
+variable "node_pool_prefix" {
+  default     = ""
+  description = "prefix for all the resouce naming"
+}
+
 variable "tpu_node_pools" {
   description = "tpu podslice config"
   type = list(object({
@@ -34,11 +39,17 @@ variable "tpu_node_pools" {
     node_count   = number,
     machine_type = string,
     topology     = string,
-    policy       = string,
+    disk_type    = optional(string),
+    disk_size_gb = optional(number),
   }))
 }
 
+variable "is_tpu_node_private" {
+  description = "whether we want to make TPU node private"
+  default = false
+}
+
 variable "maintenance_interval" {
-  default = "AS_NEEDED"
+  default     = "AS_NEEDED"
   description = "maintenance interval for TPU machines."
 }

@@ -19,8 +19,23 @@ output "kubernetes_cluster_host" {
 }
 
 output "placement_policy_names" {
-  value       = flatten([
+  value = flatten([
     google_container_node_pool.multihost_tpu[*].placement_policy[0].policy_name
   ])
   description = "GKE TPU Placement Policy Names"
+}
+
+output "authorized_cidr_blocks" {
+  value       = var.authorized_cidr_blocks
+  description = "Cluster allowed cidr blocks "
+}
+
+output "is_cpu_node_private" {
+  value       = var.is_cpu_node_private
+  description = "whether we want to make CPU node private"
+}
+
+output "is_tpu_node_private" {
+  value       = var.is_tpu_node_private
+  description = "whether we want to make TPU node private"
 }
