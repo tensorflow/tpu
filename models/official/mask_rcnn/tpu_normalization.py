@@ -94,7 +94,7 @@ def cross_replica_batch_normalization(inputs,
   For detailed information of arguments and implementation, refer to:
   https://www.tensorflow.org/api_docs/python/tf/keras/layers/BatchNormalization
 
-  Arguments:
+  Args:
     inputs: Tensor input.
     training: Either a Python boolean, or a TensorFlow boolean scalar tensor
       (e.g. a placeholder). Whether to return the output in training mode
