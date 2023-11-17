@@ -37,6 +37,7 @@ import functools
 from absl import flags
 import tensorflow.compat.v1 as tf
 from tensorflow.compat.v1 import estimator as tf_estimator
+from tensorflow_estimator.python.estimator.tpu import tpu_config  # pylint: disable=g-deprecated-tf-checker
 
 import sys
 sys.path.insert(0, 'tpu/models')
@@ -44,7 +45,6 @@ from common import inference_warmup
 from hyperparameters import params_dict
 import serving
 from configs import mask_rcnn_config
-from tensorflow.python.tpu import tpu_config  # pylint: disable=g-direct-tensorflow-import
 
 FLAGS = flags.FLAGS
 
