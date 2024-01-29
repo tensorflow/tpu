@@ -229,7 +229,7 @@ class COCOEvaluator(object):
     return metrics_dict
 
   def _retrieve_per_category_metrics(self, coco_eval, prefix=''):
-    """Retrieves and per-category metrics and retuns them in a dict.
+    """Retrieves and per-category metrics and returns them in a dict.
 
     Args:
       coco_eval: a cocoeval.COCOeval object containing evaluation data.
@@ -519,6 +519,7 @@ class LVISEvaluator(COCOEvaluator):
       self._metric_names.extend(mask_metric_names)
       self._required_prediction_fields.extend(['detection_masks'])
       self._required_groundtruth_fields.extend(['masks'])
+    self._need_rescale_keypoints = False
 
     self.reset()
 
