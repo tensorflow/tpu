@@ -361,6 +361,20 @@ class COCOEvaluator(object):
         else:
           self._groundtruths[k].append(v)
 
+  def merge(self, other):
+    """Merges the states from the other CocoEvaluator."""
+    for k, v in other._predictions.items():  # pylint: disable=protected-access
+      if k not in self._predictions:
+        self._predictions[k] = v
+      else:
+        self._predictions[k].extend(v)
+
+    for k, v in other._groundtruths.items():  # pylint: disable=protected-access
+      if k not in self._groundtruths:
+        self._groundtruths[k] = v
+      else:
+        self._groundtruths[k].extend(v)
+
 
 class ShapeMaskCOCOEvaluator(COCOEvaluator):
   """COCO evaluation metric class for ShapeMask."""
