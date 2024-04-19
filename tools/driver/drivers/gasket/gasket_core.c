@@ -552,8 +552,8 @@ static void gasket_setup_pci_iommu(struct gasket_dev *gasket_dev)
  } else if (driver_desc->iommu_mappings == GASKET_IOMMU_PREFER) {
 #if 0
 #else
-  gasket_log_warn(gasket_dev,
-   "IOMMU Mappings: Cannot enable");
+                gasket_log_warn(gasket_dev,
+                                "IOMMU Mappings: Cannot enable");
 #endif
  }
 }
@@ -1255,6 +1255,8 @@ int gasket_mm_unmap_region(
  int bar_index;
  ulong bar_offset;
  ulong virt_offset;
+ ulong address;
+ ulong size;
  struct gasket_mappable_region mappable_region;
  if (vma->vm_private_data != gasket_dev)
   return -EINVAL;
@@ -1279,9 +1281,14 @@ int gasket_mm_unmap_region(
  if (!gasket_mm_get_mapping_addrs(map_region, bar_offset,
   vma->vm_end - vma->vm_start, &mappable_region, &virt_offset))
   return 1;
- zap_vma_ptes(vma, vma->vm_start + virt_offset,
-  DIV_ROUND_UP(mappable_region.length_bytes, PAGE_SIZE) *
-   PAGE_SIZE); return 0;
+ address = vma->vm_start + virt_offset;
+ size = DIV_ROUND_UP(mappable_region.length_bytes, PAGE_SIZE) *
+   PAGE_SIZE;
+ if (address < vma->vm_start || address + size > vma->vm_end ||
+   !(vma->vm_flags & VM_PFNMAP))
+  return -1;
+ zap_vma_ptes(vma, address, size);
+ return 0;
 }
 EXPORT_SYMBOL(gasket_mm_unmap_region);
 static enum do_map_region_status do_map_region(

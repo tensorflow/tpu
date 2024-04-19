@@ -133,7 +133,6 @@ static struct sg_table *gasket_dma_buf_ops_map(
  phys_addr = gasket_dbuf->mmap_offset -
       gasket_dev->driver_desc->bar_descriptions[bar_index].base +
       gasket_dev->bar_data[bar_index].phys_base;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0)
  addr = dma_map_resource(attachment->dev, phys_addr, dbuf->size,
   direction, DMA_ATTR_SKIP_CPU_SYNC);
  ret = dma_mapping_error(attachment->dev, addr);
@@ -143,9 +142,6 @@ static struct sg_table *gasket_dma_buf_ops_map(
   sg_free_table(sgt);
   goto error_alloc_table;
  }
-#else
- addr = phys_addr;
-#endif
  sg_set_page(sgt->sgl, NULL, dbuf->size, 0);
  sg_dma_address(sgt->sgl) = addr;
  sg_dma_len(sgt->sgl) = dbuf->size;
@@ -157,7 +153,6 @@ error_alloc_table:
 static void gasket_dma_buf_ops_unmap(struct dma_buf_attachment *attachment,
  struct sg_table *sgt, enum dma_data_direction direction)
 {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0)
  struct scatterlist *sg;
  int i;
  for_each_sg((sgt)->sgl, sg, (sgt)->orig_nents, i)
@@ -165,7 +160,6 @@ static void gasket_dma_buf_ops_unmap(struct dma_buf_attachment *attachment,
   dma_unmap_resource(attachment->dev, sg_dma_address(sg),
    sg_dma_len(sg), direction, DMA_ATTR_SKIP_CPU_SYNC);
  }
-#endif
  sg_free_table(sgt);
  kfree(sgt);
 }

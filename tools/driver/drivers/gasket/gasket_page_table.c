@@ -12,9 +12,7 @@
 #include <linux/pagemap.h>
 #include <linux/version.h>
 #include <linux/vmalloc.h>
-#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 7, 19)
 #include <linux/dma-resv.h>
-#endif
 #if LINUX_VERSION_CODE > KERNEL_VERSION(5, 16, 0)
 MODULE_IMPORT_NS(DMA_BUF);
 #endif
@@ -915,7 +913,6 @@ static size_t gasket_sgt_get_contiguous_size(
  }
  return sz;
 }
-#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 7, 19)
 static void gasket_page_table_dma_buf_move_notify(
  struct dma_buf_attachment *attachment)
 {
@@ -941,7 +938,6 @@ static const struct dma_buf_attach_ops gasket_dma_buf_attach_ops = {
  .allow_peer2peer = true,
  .move_notify = gasket_page_table_dma_buf_move_notify,
 };
-#endif
 static struct gasket_sgt_mapping *gasket_page_table_import_dma_buf(
  struct gasket_page_table *pg_tbl, int dma_buf_fd)
 {
@@ -971,12 +967,8 @@ static struct gasket_sgt_mapping *gasket_page_table_import_dma_buf(
   ret = -ENOMEM;
   goto failed_mapping_alloc;
  }
-#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 7, 19)
  mapping->dbuf_attach = dma_buf_dynamic_attach(dbuf,
   &gasket_dev->pci_dev->dev, &gasket_dma_buf_attach_ops, pg_tbl);
-#else
- mapping->dbuf_attach = dma_buf_attach(dbuf, &gasket_dev->pci_dev->dev);
-#endif
  if (IS_ERR(mapping->dbuf_attach)) {
   ret = PTR_ERR(mapping->dbuf_attach);
   gasket_log_error(
@@ -984,14 +976,10 @@ static struct gasket_sgt_mapping *gasket_page_table_import_dma_buf(
   goto failed_attach;
  }
  mapping->size = dbuf->size;
-#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 7, 19)
  dma_resv_lock(dbuf->resv, NULL);
-#endif
  mapping->sgt =
   dma_buf_map_attachment(mapping->dbuf_attach, DMA_BIDIRECTIONAL);
-#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 7, 19)
  dma_resv_unlock(dbuf->resv);
-#endif
  if (IS_ERR(mapping->sgt)) {
   ret = PTR_ERR(mapping->sgt);
   gasket_log_error(gasket_dev,
@@ -1016,14 +1004,10 @@ static void gasket_page_table_detach_sgt_mapping(
   list_del_init(&mapping->entry);
  if (mapping->dbuf_attach) {
   dbuf = mapping->dbuf_attach->dmabuf;
-#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 7, 19)
   dma_resv_lock(dbuf->resv, NULL);
-#endif
   dma_buf_unmap_attachment(
    mapping->dbuf_attach, mapping->sgt, DMA_BIDIRECTIONAL);
-#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 7, 19)
   dma_resv_unlock(dbuf->resv);
-#endif
   dma_buf_detach(dbuf, mapping->dbuf_attach);
   dma_buf_put(dbuf);
  }

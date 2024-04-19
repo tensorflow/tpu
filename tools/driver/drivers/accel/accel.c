@@ -299,7 +299,11 @@ static struct attribute *accel_dev_attrs[] = {
  NULL,
 };
 ATTRIBUTE_GROUPS(accel_dev);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 2, 0)
 static int accel_dev_uevent(struct device *dev, struct kobj_uevent_env *env)
+#else
+static int accel_dev_uevent(const struct device *dev, struct kobj_uevent_env *env)
+#endif
 {
  struct accel_dev *adev = to_accel_dev(dev);
  int retval = 0;
