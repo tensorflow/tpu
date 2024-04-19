@@ -1,10 +1,20 @@
 project_id           = "project-id"
 resource_name_prefix = "tpu-test"
-region               = "us-east5"
+region               = "us-central2"
 tpu_node_pools = [{
-  zone         = "us-east5-b"
-  node_count   = 16
-  machine_type = "ct5lp-hightpu-4t"
-  topology     = "8x8"
+  zone         = "us-central2-b"
+  node_count   = 4
+  machine_type = "ct4p-hightpu-4t"
+  topology     = "2x2x4"
+  }, {
+  zone         = "us-central2-b"
+  node_count   = 4
+  machine_type = "ct4p-hightpu-4t"
+  topology     = "2x2x4"
+  }, {
+  zone         = "us-central2-b"
+  node_count   = 2
+  machine_type = "ct4p-hightpu-4t"
+  topology     = "2x2x2"
 }]
 maintenance_interval = "AS_NEEDED"

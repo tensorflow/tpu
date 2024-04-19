@@ -56,7 +56,8 @@ def distorted_bounding_box_crop(image_bytes,
     cropped image `Tensor`
   """
   with tf.name_scope(scope, 'distorted_bounding_box_crop', [image_bytes, bbox]):
-    shape = tf.image.extract_jpeg_shape(image_bytes)
+    image = tf.io.decode_image(image_bytes, channels=3, expand_animations=False)
+    shape = tf.shape(image)
     sample_distorted_bounding_box = tf.image.sample_distorted_bounding_box(
         shape,
         bounding_boxes=bbox,
@@ -70,8 +71,9 @@ def distorted_bounding_box_crop(image_bytes,
     # Crop the image to the specified bounding box.
     offset_y, offset_x, _ = tf.unstack(bbox_begin)
     target_height, target_width, _ = tf.unstack(bbox_size)
-    crop_window = tf.stack([offset_y, offset_x, target_height, target_width])
-    image = tf.image.decode_and_crop_jpeg(image_bytes, crop_window, channels=3)
+    image = tf.image.crop_to_bounding_box(
+        image, offset_y, offset_x, target_height, target_width
+    )
 
     return image
 

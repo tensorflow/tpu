@@ -39,7 +39,6 @@ from tensorflow.contrib import tpu as contrib_tpu
 from tensorflow.contrib import training as contrib_training
 from tensorflow.core.protobuf import rewriter_config_pb2  # pylint: disable=g-direct-tensorflow-import
 from tensorflow.python.client import device_lib  # pylint: disable=g-direct-tensorflow-import
-from tensorflow.python.eager import profiler  # pylint: disable=g-direct-tensorflow-import
 
 _COLLECTIVE_COMMUNICATION_OPTIONS = {
     None: tf.distribute.experimental.CollectiveCommunication.AUTO,
@@ -242,7 +241,7 @@ def main(argv):
 
   if FLAGS.start_profiler_server:
     # Starts profiler. It will perform profiling when receive profiling request.
-    profiler.start_profiler_server(FLAGS.profiler_port_number)
+    tf.profiler.experimental.server.start(FLAGS.profiler_port_number)
 
   if FLAGS.use_tpu:
     if FLAGS.distribution_strategy is None:

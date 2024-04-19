@@ -55,6 +55,9 @@ class COCOEvaluator(object):
       need_rescale_bboxes=True,
       per_category_metrics=False,
       remove_invalid_boxes=False,
+      include_keypoint=False,
+      need_rescale_keypoints=False,
+      kpt_oks_sigmas=None
   ):
     """Constructs COCO evaluation class.
 
@@ -80,6 +83,13 @@ class COCOEvaluator(object):
       per_category_metrics: Whether to return per category metrics.
       remove_invalid_boxes: A boolean indicating whether to remove invalid box
         during evaluation.
+      include_keypoint: a boolean to indicate whether or not to include the
+        keypoint eval.
+      need_rescale_keypoints: If true keypoints in `predictions` will be
+        rescaled back to absolute values (`image_info` is needed in this case).
+      kpt_oks_sigmas: The sigmas used to calculate keypoint OKS. See
+        http://cocodataset.org/#keypoints-eval. When None, it will use the
+        defaults in COCO.
     """
     if annotation_file:
       if annotation_file.startswith('gs://'):
@@ -105,7 +115,8 @@ class COCOEvaluator(object):
         'detection_boxes'
     ]
     self._need_rescale_bboxes = need_rescale_bboxes
-    if self._need_rescale_bboxes:
+    self._need_rescale_keypoints = need_rescale_keypoints
+    if self._need_rescale_bboxes or self._need_rescale_keypoints:
       self._required_prediction_fields.append('image_info')
     self._required_groundtruth_fields = [
         'source_id', 'height', 'width', 'classes', 'boxes'
@@ -116,6 +127,18 @@ class COCOEvaluator(object):
       self._required_prediction_fields.extend(['detection_masks'])
       self._required_groundtruth_fields.extend(['masks'])
     self.remove_invalid_boxes = remove_invalid_boxes
+    self._include_keypoint = include_keypoint
+    self._kpt_oks_sigmas = kpt_oks_sigmas
+    if self._include_keypoint:
+      keypoint_metric_names = [
+          'AP', 'AP50', 'AP75', 'APm', 'APl', 'ARmax1', 'ARmax10', 'ARmax100',
+          'ARm', 'ARl'
+      ]
+      keypoint_metric_names = ['keypoint_' + x for x in keypoint_metric_names]
+      self._metric_names.extend(keypoint_metric_names)
+      self._required_prediction_fields.extend(['detection_keypoints'])
+      self._required_groundtruth_fields.extend(['keypoints'])
+
     self.reset()
 
   def reset(self):
@@ -168,7 +191,7 @@ class COCOEvaluator(object):
     coco_eval.evaluate()
     coco_eval.accumulate()
     coco_eval.summarize()
-    coco_metrics = coco_eval.stats
+    metrics = coco_eval.stats
 
     if self._include_mask:
       mcoco_eval = cocoeval.COCOeval(coco_gt, coco_dt, iouType='segm')
@@ -177,11 +200,17 @@ class COCOEvaluator(object):
       mcoco_eval.accumulate()
       mcoco_eval.summarize()
       mask_coco_metrics = mcoco_eval.stats
+      metrics = np.hstack((metrics, mask_coco_metrics))
 
-    if self._include_mask:
-      metrics = np.hstack((coco_metrics, mask_coco_metrics))
-    else:
-      metrics = coco_metrics
+    if self._include_keypoint:
+      kcoco_eval = cocoeval.COCOeval(coco_gt, coco_dt, iouType='keypoints',
+                                     kpt_oks_sigmas=self._kpt_oks_sigmas)
+      kcoco_eval.params.imgIds = image_ids
+      kcoco_eval.evaluate()
+      kcoco_eval.accumulate()
+      kcoco_eval.summarize()
+      keypoint_coco_metrics = kcoco_eval.stats
+      metrics = np.hstack((metrics, keypoint_coco_metrics))
 
     # Cleans up the internal variables in order for a fresh eval next time.
     self.reset()
@@ -192,46 +221,64 @@ class COCOEvaluator(object):
 
     # Adds metrics per category.
     if self._per_category_metrics and hasattr(coco_eval, 'category_stats'):
-      for category_index, category_id in enumerate(coco_eval.params.catIds):
-        metrics_dict['Precision mAP ByCategory/{}'.format(
-            category_id)] = coco_eval.category_stats[0][category_index].astype(
-                np.float32)
-        metrics_dict['Precision mAP ByCategory@50IoU/{}'.format(
-            category_id)] = coco_eval.category_stats[1][category_index].astype(
-                np.float32)
-        metrics_dict['Precision mAP ByCategory@75IoU/{}'.format(
-            category_id)] = coco_eval.category_stats[2][category_index].astype(
-                np.float32)
-        metrics_dict['Precision mAP ByCategory (small) /{}'.format(
-            category_id)] = coco_eval.category_stats[3][category_index].astype(
-                np.float32)
-        metrics_dict['Precision mAP ByCategory (medium) /{}'.format(
-            category_id)] = coco_eval.category_stats[4][category_index].astype(
-                np.float32)
-        metrics_dict['Precision mAP ByCategory (large) /{}'.format(
-            category_id)] = coco_eval.category_stats[5][category_index].astype(
-                np.float32)
-        metrics_dict['Recall AR@1 ByCategory/{}'.format(
-            category_id)] = coco_eval.category_stats[6][category_index].astype(
-                np.float32)
-        metrics_dict['Recall AR@10 ByCategory/{}'.format(
-            category_id)] = coco_eval.category_stats[7][category_index].astype(
-                np.float32)
-        metrics_dict['Recall AR@100 ByCategory/{}'.format(
-            category_id)] = coco_eval.category_stats[8][category_index].astype(
-                np.float32)
-        metrics_dict['Recall AR (small) ByCategory/{}'.format(
-            category_id)] = coco_eval.category_stats[9][category_index].astype(
-                np.float32)
-        metrics_dict['Recall AR (medium) ByCategory/{}'.format(
-            category_id)] = coco_eval.category_stats[10][category_index].astype(
-                np.float32)
-        metrics_dict['Recall AR (large) ByCategory/{}'.format(
-            category_id)] = coco_eval.category_stats[11][category_index].astype(
-                np.float32)
+      metrics_dict.update(self._retrieve_per_category_metrics(coco_eval))
+
+      if self._include_keypoint:
+        metrics_dict.update(self._retrieve_per_category_metrics(
+            kcoco_eval, prefix='keypoints'))
     return metrics_dict
 
-  def _process_predictions(self, predictions):
+  def _retrieve_per_category_metrics(self, coco_eval, prefix=''):
+    """Retrieves and per-category metrics and returns them in a dict.
+
+    Args:
+      coco_eval: a cocoeval.COCOeval object containing evaluation data.
+      prefix: str, A string used to prefix metric names.
+
+    Returns:
+      metrics_dict: A dictionary with per category metrics.
+    """
+
+    metrics_dict = {}
+    if prefix:
+      prefix = prefix + ' '
+
+    for category_index, category_id in enumerate(coco_eval.params.catIds):
+      if 'keypoints' in prefix:
+        metrics_dict_keys = [
+            'Precision mAP ByCategory',
+            'Precision mAP ByCategory@50IoU',
+            'Precision mAP ByCategory@75IoU',
+            'Precision mAP ByCategory (medium)',
+            'Precision mAP ByCategory (large)',
+            'Recall AR@1 ByCategory',
+            'Recall AR@10 ByCategory',
+            'Recall AR@100 ByCategory',
+            'Recall AR (medium) ByCategory',
+            'Recall AR (large) ByCategory',
+        ]
+      else:
+        metrics_dict_keys = [
+            'Precision mAP ByCategory',
+            'Precision mAP ByCategory@50IoU',
+            'Precision mAP ByCategory@75IoU',
+            'Precision mAP ByCategory (small)',
+            'Precision mAP ByCategory (medium)',
+            'Precision mAP ByCategory (large)',
+            'Recall AR@1 ByCategory',
+            'Recall AR@10 ByCategory',
+            'Recall AR@100 ByCategory',
+            'Recall AR (small) ByCategory',
+            'Recall AR (medium) ByCategory',
+            'Recall AR (large) ByCategory',
+        ]
+      for idx, key in enumerate(metrics_dict_keys):
+        metrics_dict[prefix + key + '/{}'.format(
+            category_id)] = coco_eval.category_stats[idx][
+                category_index].astype(np.float32)
+    return metrics_dict
+
+  def _process_bboxes_predictions(self, predictions):
     image_scale = np.tile(predictions['image_info'][:, 2:3, :], (1, 1, 2))
     predictions['detection_boxes'] = (
         predictions['detection_boxes'].astype(np.float32))
@@ -240,6 +287,13 @@ class COCOEvaluator(object):
       predictions['detection_outer_boxes'] = (
           predictions['detection_outer_boxes'].astype(np.float32))
       predictions['detection_outer_boxes'] /= image_scale
+
+  def _process_keypoints_predictions(self, predictions):
+    image_scale = tf.reshape(predictions['image_info'][:, 2:3, :],
+                             [-1, 1, 1, 2])
+    predictions['detection_keypoints'] = (
+        predictions['detection_keypoints'].astype(np.float32))
+    predictions['detection_keypoints'] /= image_scale
 
   def update(self, predictions, groundtruths=None):
     """Update and aggregate detection results and groundtruth data.
@@ -286,7 +340,9 @@ class COCOEvaluator(object):
         raise ValueError(
             'Missing the required key `{}` in predictions!'.format(k))
     if self._need_rescale_bboxes:
-      self._process_predictions(predictions)
+      self._process_bboxes_predictions(predictions)
+    if self._need_rescale_keypoints:
+      self._process_keypoints_predictions(predictions)
     for k, v in six.iteritems(predictions):
       if k not in self._predictions:
         self._predictions[k] = [v]
@@ -304,6 +360,20 @@ class COCOEvaluator(object):
           self._groundtruths[k] = [v]
         else:
           self._groundtruths[k].append(v)
+
+  def merge(self, other):
+    """Merges the states from the other CocoEvaluator."""
+    for k, v in other._predictions.items():  # pylint: disable=protected-access
+      if k not in self._predictions:
+        self._predictions[k] = v
+      else:
+        self._predictions[k].extend(v)
+
+    for k, v in other._groundtruths.items():  # pylint: disable=protected-access
+      if k not in self._groundtruths:
+        self._groundtruths[k] = v
+      else:
+        self._groundtruths[k].extend(v)
 
 
 class ShapeMaskCOCOEvaluator(COCOEvaluator):
@@ -463,6 +533,7 @@ class LVISEvaluator(COCOEvaluator):
       self._metric_names.extend(mask_metric_names)
       self._required_prediction_fields.extend(['detection_masks'])
       self._required_groundtruth_fields.extend(['masks'])
+    self._need_rescale_keypoints = False
 
     self.reset()
 

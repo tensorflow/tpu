@@ -112,6 +112,38 @@ def keypoint_flip_horizontal(keypoints, flip_point, flip_permutation,
     return new_keypoints
 
 
+def flip_keypoint_visibility(
+    keypoint_visibilities, flip_permutation, scope=None):
+  """Flips the keypoint visibilities.
+
+  This operation flips the visibility for each keypoint in a manner specified by
+  flip_permutation.
+
+  Args:
+    keypoint_visibilities: an int32 tensor of shape [num_instances,
+      num_keypoints] indicates the visibility of each keypoint, with 0
+      representing an out-of-frame keypoint and a positive value representing a
+      visible or occluded keypoint.
+    flip_permutation: a tf.Tensor with type int32 and rank 1 containing the
+      keypoint visibility flip permutation. This specifies the mapping from
+      original keypoint visibility indices to the flipped keypoint visibility
+      indices. This is used primarily for keypoints associated with the
+      visibilities that are not reflection invariant. E.g. suppose there are 3
+      keypoints representing ['head', 'right_eye', 'left_eye'], then a logical
+      choice for flip_permutation might be [0, 2, 1] since we want to swap the
+      'left_eye' and 'right_eye' after a horizontal flip.
+    scope: an optional string indicating the name scope.
+
+  Returns:
+    new_keypoint_visibilities: a tensor of shape [num_instances, num_keypoints]
+  """
+  with tf.name_scope(scope, 'FlipKeypointVisibility'):
+    keypoint_visibilities = tf.transpose(keypoint_visibilities, [1, 0])
+    keypoint_visibilities = tf.gather(keypoint_visibilities, flip_permutation)
+    new_keypoint_visibilities = tf.transpose(keypoint_visibilities, [1, 0])
+    return new_keypoint_visibilities
+
+
 def keypoint_change_coordinate_frame(keypoints, window, scope=None):
   """Changes coordinate frame of the keypoints to be relative to window's frame.
 
@@ -178,7 +210,8 @@ def random_horizontal_flip(image,
                            roi_boxes=None,
                            keypoints=None,
                            keypoint_flip_permutation=None,
-                           seed=None):
+                           seed=None,
+                           keypoint_visibilities=None):
   """Randomly flips the image and detections horizontally.
 
   The probability of flipping the image is 50%.
@@ -204,6 +237,10 @@ def random_horizontal_flip(image,
     keypoint_flip_permutation: rank 1 int32 tensor containing the keypoint flip
                                permutation.
     seed: random seed
+    keypoint_visibilities: an int32 tensor of shape [num_instances,
+      num_keypoints] indicates the visibility of each keypoint, with 0
+      representing an out-of-frame keypoint and a positive value representing a
+      visible or occluded keypoint.
 
   Returns:
     image: image which is the same shape as input image.
@@ -221,6 +258,8 @@ def random_horizontal_flip(image,
            between [0, 1].
     keypoints: rank 3 float32 tensor with shape
                [num_instances, num_keypoints, 2]
+    keypoint_visibilities: rank 2 int32 tensor with shape [num_instances,
+                           num_keypoints]
 
   Raises:
     ValueError: if keypoints are provided but keypoint_flip_permutation is not.
@@ -271,6 +310,19 @@ def random_horizontal_flip(image,
           lambda: keypoint_flip_horizontal(keypoints, 0.5, permutation),
           lambda: keypoints)
       result.append(keypoints)
+
+    # flip keypoint visibilities
+    if (
+        keypoint_visibilities is not None
+        and keypoint_flip_permutation is not None
+    ):
+      permutation = keypoint_flip_permutation
+      keypoint_visibilities = tf.cond(
+          do_a_flip_random,
+          lambda: flip_keypoint_visibility(keypoint_visibilities, permutation),
+          lambda: keypoint_visibilities,
+      )
+      result.append(keypoint_visibilities)
 
     return tuple(result)
 
