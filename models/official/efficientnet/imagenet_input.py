@@ -138,7 +138,7 @@ class ImageNetTFExampleInput(six.with_metaclass(abc.ABCMeta, object)):
       Mixup: Beyond Empirical Risk Minimization.
       ICLR'18, https://arxiv.org/abs/1710.09412
 
-    Arguments:
+    Args:
       batch_size: The input batch size for images and labels.
       alpha: Float that controls the strength of Mixup regularization.
       images: A batch of images of shape [batch_size, ...]
