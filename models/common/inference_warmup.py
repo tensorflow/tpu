@@ -35,11 +35,11 @@ def _encode_image(image_array, fmt):
   Returns:
     encoded image string
   """
-  from PIL import Image  # pylint: disable=g-import-not-at-top
-  pil_image = Image.fromarray(image_array)
-  image_io = io.BytesIO()
-  pil_image.save(image_io, format=fmt)
-  return image_io.getvalue()
+    from PIL import Image
+    pil_image = Image.fromarray(image_array)
+    with io.BytesIO() as image_io:
+        pil_image.save(image_io, format=fmt)
+        return image_io.getvalue()
 
 
 def write_warmup_requests(savedmodel_dir,
