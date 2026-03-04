@@ -78,7 +78,7 @@ SpineNet-190 trained with stochastic depth and swish activation for a longer she
 | model        | resolution    | epochs  | FLOPs (B)    | params (M)  |  Top-1  |  Top-5   |   download |
 | ------------ |:-------------:| ---------:|-----------:|--------:|--------:|---------:|-----------:|
 | ResNet-34    | 224x224       |    200    | 3.7 | 21.8 | 74.4 | 92.0 | [ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/classification/resnet-34-imagenet.tar.gz?organizationId=433637338589) \| config|
-| ResNet-50    | 224x224       |    200    | 4.1 | 25.6 | 77.1 | 93.6 | [ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/classification/resnet-34-imagenet.tar.gz?organizationId=433637338589) \| config|
+| ResNet-50    | 224x224       |    200    | 4.1 | 25.6 | 77.1 | 93.6 | [ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/classification/resnet-50-imagenet.tar.gz?organizationId=433637338589) \| config|
 | ResNet-101   | 224x224       |    200    | 7.8 | 44.6 | 78.2 | 94.2 | [ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/classification/resnet-101-imagenet.tar.gz?organizationId=433637338589) \| config |
 | ResNet-152   | 224x224       |    200    | 11.5 | 60.2 | 78.4 | 94.2 | [ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/classification/resnet-152-imagenet.tar.gz?organizationId=433637338589) \| config |
 | SpineNet-49  | 224x224       |    200    | 3.5 | 22.1 | 77.0 | 93.3 | [ckpt](https://storage.cloud.google.com/cloud-tpu-checkpoints/detection/classification/spinenet-49-imagenet.tar.gz?organizationId=433637338589) \| [config](https://github.com/tensorflow/tpu/blob/master/models/official/detection/configs/spinenet/spinenet49_classification.yaml)|
