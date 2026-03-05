@@ -35,7 +35,7 @@ def get_condconv_initializer(initializer, num_experts, expert_shape):
   is correctly initialized with the given initializer before being flattened
   into the correctly shaped CondConv variable.
 
-  Arguments:
+  Args:
     initializer: The initializer to apply for each individual expert.
     num_experts: The number of experts to be initialized.
     expert_shape: The original shape of each individual expert.

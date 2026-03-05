@@ -40,7 +40,7 @@ class BatchNormalization(tf.layers.BatchNormalization):
   def __init__(self, fused=False, max_shards_for_local=8, **kwargs):
     """Builds the batch normalization layer.
 
-    Arguments:
+    Args:
       fused: If `False`, use the system recommended implementation. Only support
         `False` in the current implementation.
       max_shards_for_local: The maximum number of TPU shards that should use
