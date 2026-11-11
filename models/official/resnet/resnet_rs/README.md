@@ -45,7 +45,7 @@ We release configs and checkpoints of the ResNet-RS model family trained on Imag
 *  Latencies on TPUv3 are measured using `bfloat16` precision.
 *  All latencies are measured with an initial training batch size of 128 images, which is divided by 2 until it fits onto the accelerator.
 
-Code and checkpoints are avaliable in Tensorflow 2 at the official Tensorflow [Model Garden](https://github.com/tensorflow/models/tree/master/official/vision/beta).
+Code and checkpoints are available in Tensorflow 2 at the official Tensorflow [Model Garden](https://github.com/tensorflow/models/tree/master/official/vision/beta).
 
 ## Citation
 ```make
