@@ -19,7 +19,7 @@
 # The outputs of this script are TFRecord files containing serialized
 # tf.Example protocol buffers. See create_coco_tf_record.py for details of how
 # the tf.Example protocol buffers are constructed and see
-# http://cocodataset.org/#overview for an overview of the dataset.
+# https://cocodataset.org/#overview for an overview of the dataset.
 #
 # usage:
 #  bash download_and_preprocess_coco.sh /data-dir/coco
@@ -40,7 +40,7 @@ pip3 install git+https://github.com/cocodataset/cocoapi#subdirectory=PythonAPI
 
 echo "Cloning Tensorflow models directory (for conversion utilities)"
 if [ ! -e tf-models ]; then
-  git clone http://github.com/tensorflow/models tf-models
+  git clone https://github.com/tensorflow/models tf-models
 fi
 
 (cd tf-models/research && protoc object_detection/protos/*.proto --python_out=.)
@@ -73,7 +73,11 @@ function download_and_unzip() {
 }
 
 # Download all annotations.
-BASE_ANNOTATION_URL="http://images.cocodataset.org/annotations"
+# The COCO files are hosted in the "images.cocodataset.org" S3 bucket. That
+# host name only serves plain HTTP (its TLS certificate does not match), so we
+# use the S3 path-style HTTPS URL for the same bucket. This keeps downloads
+# encrypted and authenticated.
+BASE_ANNOTATION_URL="https://s3.amazonaws.com/images.cocodataset.org/annotations"
 INSTANCES_FILE="annotations_trainval2017.zip"
 download_and_unzip ${BASE_ANNOTATION_URL} ${INSTANCES_FILE}
 IMAGE_INFO_FILE="image_info_test2017.zip"
@@ -87,7 +91,7 @@ touch tf-models/research/__init__.py
 
 function create_train_dataset() {
   SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
-  BASE_IMAGE_URL="http://images.cocodataset.org/zips"
+  BASE_IMAGE_URL="https://s3.amazonaws.com/images.cocodataset.org/zips"
   TRAIN_IMAGE_FILE="train2017.zip"
   download_and_unzip ${BASE_IMAGE_URL} ${TRAIN_IMAGE_FILE}
   TRAIN_IMAGE_DIR="${SCRATCH_DIR}/train2017"
@@ -105,7 +109,7 @@ function create_train_dataset() {
 
 function create_val_dataset() {
   SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
-  BASE_IMAGE_URL="http://images.cocodataset.org/zips"
+  BASE_IMAGE_URL="https://s3.amazonaws.com/images.cocodataset.org/zips"
   VAL_IMAGE_FILE="val2017.zip"
   download_and_unzip ${BASE_IMAGE_URL} ${VAL_IMAGE_FILE}
   VAL_IMAGE_DIR="${SCRATCH_DIR}/val2017"
@@ -123,7 +127,7 @@ function create_val_dataset() {
 
 function create_testdev_and_test_dataset() {
   SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
-  BASE_IMAGE_URL="http://images.cocodataset.org/zips"
+  BASE_IMAGE_URL="https://s3.amazonaws.com/images.cocodataset.org/zips"
   TEST_IMAGE_FILE="test2017.zip"
   download_and_unzip ${BASE_IMAGE_URL} ${TEST_IMAGE_FILE}
   TEST_IMAGE_DIR="${SCRATCH_DIR}/test2017"
@@ -148,7 +152,7 @@ function create_testdev_and_test_dataset() {
 
 function create_unlabeled_dataset() {
   SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
-  BASE_IMAGE_URL="http://images.cocodataset.org/zips"
+  BASE_IMAGE_URL="https://s3.amazonaws.com/images.cocodataset.org/zips"
   UNLABELED_IMAGE_FILE="unlabeled2017.zip"
   download_and_unzip ${BASE_IMAGE_URL} ${UNLABELED_IMAGE_FILE}
   UNLABELED_IMAGE_DIR="${SCRATCH_DIR}/unlabeled2017"
