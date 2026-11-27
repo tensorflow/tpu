@@ -357,6 +357,7 @@ def main(argv):
         resnet_checkpoint=FLAGS.resnet_checkpoint,
         val_json_file=FLAGS.val_json_file,
         mode=FLAGS.mode,
+        auto_mixed_precision=FLAGS.auto_mixed_precision,
     )
     tpu_config = contrib_tpu.TPUConfig(
         FLAGS.iterations_per_loop,
